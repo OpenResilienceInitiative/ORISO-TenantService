@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?> 
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                      http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.2.xsd">
+  <include file="db/changelog/changeset/0001_initsql/initSql.xml"/>
+  <include file="db/changelog/changeset/0003_change_tenant_attributes/0003-changeSet.xml"/>
+  <include file="db/changelog/changeset/0004_add_tenant_settings/0004-changeSet.xml"/>
+  <include file="db/changelog/changeset/0005_change_tenant_settings_structure/0005-changeSet.xml"/>
+  <include file="db/changelog/changeset/0006_migrate_content_to_multilingual_structure/0006-changeSet.xml"/>
+  <include file="db/changelog/changeset/0007_content_activation_dates/0007-changeSet.xml"/>
+  <include file="db/changelog/changeset/0008_drop_unique_constraint_for_subdomain/0008-changeSet.xml"/>
+  <include file="db/changelog/changeset/0009_fix_sequence_start_value/0009-fixSequenceStartValue.xml"/>
+<!--  <include file="db/changelog/changeset/0010_tenant_id_default_value/tenantIdDefaultValue.xml"/>-->
+  <include file="db/changelog/changeset/0011_tenant_add_is_video_call_allowed/tenantAddIsVideoCallAllowed.xml"/>
+  <include file="db/changelog/changeset/0012_tenant_remove_is_video_call_allowed/tenantRemoveIsVideoCallAllowed.xml"/>
+  <include file="db/changelog/changeset/0010_add_association_logo/0010-addAssociationLogo.xml"/>
+</databaseChangeLog>
