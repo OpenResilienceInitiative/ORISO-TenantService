@@ -1,0 +1,57 @@
+{
+  "tenantId": null,
+  "groups": [],
+  "slug": "beratung",
+  "lockedAgencies": false,
+  "whiteSpot": {},
+  "groupChat": {
+    "isGroupChat": false
+  },
+  "consultantBoundedToConsultingType": false,
+  "welcomeMessage": {
+    "sendWelcomeMessage": false
+  },
+  "sendFurtherStepsMessage": true,
+  "sendSaveSessionDataMessage": false,
+  "isSetEmailAllowed": true,
+  "sessionDataInitializing": {
+    "addictiveDrugs": false,
+    "age": false,
+    "gender": false,
+    "relation": false,
+    "state": false
+  },
+  "monitoring": {
+    "initializeMonitoring": false
+  },
+  "languageFormal": true,
+  "roles": {
+    "consultant": {
+      "default": [
+        "consultant"
+      ]
+    }
+  },
+  "registration": {
+    "minPostcodeSize": 5,
+    "autoSelectAgency": false,
+    "autoSelectPostcode": true,
+    "notes": {},
+    "mandatoryFields": {
+      "age": false,
+      "state": false
+    }
+  },
+  "titles": {
+    "default": "Beratung",
+    "short": "Beratung",
+    "long": "Beratung",
+    "welcome": "Herzlich Willkommen!",
+    "registrationDropdown": "Beratung"
+  },
+  "urls": {},
+  "showAskerProfile": true,
+  "isVideoCallAllowed": true,
+  "isSubsequentRegistrationAllowed": false,
+  "voluntaryComponents": []
+}

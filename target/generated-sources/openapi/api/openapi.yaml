@@ -1,0 +1,2726 @@
+openapi: 3.0.1
+info:
+  description: This information will be replaced by the SpringFox config information
+  title: will be replaced
+  version: 0.0.1
+servers:
+- url: /
+paths:
+  /useradmin:
+    get:
+      operationId: getRoot
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/RootDTO'
+          description: OK - successfull operation
+      security:
+      - Bearer: []
+      summary: "Returns the hal root entry point. [Authorization: Role: user-admin]"
+      tags:
+      - root-controller
+      x-accepts: application/hal+json
+  /useradmin/sessions:
+    get:
+      operationId: getSessions
+      parameters:
+      - description: The filter parameters to search for. If no filter is set all
+          sessions are being returned. If more than one filter is set the first given
+          filter is used only.
+        explode: true
+        in: query
+        name: filter
+        required: false
+        schema:
+          $ref: '#/components/schemas/SessionFilter'
+        style: form
+      - description: Number of page where to start in the query (1 = first page)
+        explode: true
+        in: query
+        name: page
+        required: true
+        schema:
+          type: integer
+        style: form
+      - description: Number of items which are being returned per page
+        explode: true
+        in: query
+        name: perPage
+        required: true
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/SessionAdminResultDTO'
+          description: OK - successfull operation
+        "400":
+          description: BAD REQUEST - invalid/incomplete request or body object
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Returns the list of sessions by filter query parameter. [Authorization:\
+        \ Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/hal+json
+  /useradmin/consultants:
+    get:
+      operationId: getConsultants
+      parameters:
+      - description: The filter parameters to search for. If no filter is set all
+          consultant are being returned.
+        explode: true
+        in: query
+        name: filter
+        required: false
+        schema:
+          $ref: '#/components/schemas/ConsultantFilter'
+        style: form
+      - description: Number of page where to start in the query (1 = first page)
+        explode: true
+        in: query
+        name: page
+        required: true
+        schema:
+          type: integer
+        style: form
+      - description: Number of items which are being returned per page
+        explode: true
+        in: query
+        name: perPage
+        required: true
+        schema:
+          type: integer
+        style: form
+      - description: The sort parameter containing field and order the response should
+          be sorted
+        explode: true
+        in: query
+        name: sort
+        required: false
+        schema:
+          $ref: '#/components/schemas/Sort'
+        style: form
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/ConsultantSearchResultDTO'
+          description: OK - successfull operation
+        "400":
+          description: BAD REQUEST - invalid/incomplete request or body object
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Returns the list of consultants by filter query parameter. [Authorization:\
+        \ Role: consultant-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/hal+json
+    post:
+      operationId: createConsultant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConsultantDTO'
+        required: true
+      responses:
+        "201":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/ConsultantAdminResponseDTO'
+          description: CREATED - consultant was created successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request or body object
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "409":
+          description: CONFLICT - invalid/unavailable username or email address
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Creates a new consultant [Authorization: Role: consultant-admin]"
+      tags:
+      - admin-user-controller
+      x-content-type: application/json
+      x-accepts: application/hal+json
+  /useradmin/consultants/{consultantId}:
+    delete:
+      operationId: markConsultantForDeletion
+      parameters:
+      - description: consultant id
+        explode: false
+        in: path
+        name: consultantId
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: parameter specifying if consultant sessions need to be removed
+          prior the deletion
+        explode: true
+        in: query
+        name: forceDeleteSessions
+        required: false
+        schema:
+          type: boolean
+        style: form
+      responses:
+        "200":
+          description: OK - consultant was marked for deletion successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "404":
+          description: NOT FOUND - consultant not found
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Mark a consultant for deletion [Authorization: Role: consultant-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+    get:
+      operationId: getConsultant
+      parameters:
+      - description: consultant id
+        explode: false
+        in: path
+        name: consultantId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultantAdminResponseDTO'
+          description: OK - consultant found
+        "204":
+          description: NO CONTENT - consultant with the specific id was not found
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Get a consultant by given id [Authorization: Role: consultant-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+    put:
+      operationId: updateConsultant
+      parameters:
+      - description: consultant id
+        explode: false
+        in: path
+        name: consultantId
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdminConsultantDTO'
+        required: true
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/ConsultantAdminResponseDTO'
+          description: OK - consultant was updated successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Updates a consultant [Authorization: Role: consultant-admin]"
+      tags:
+      - admin-user-controller
+      x-content-type: application/json
+      x-accepts: application/hal+json
+  /useradmin/askers/{askerId}:
+    delete:
+      operationId: markAskerForDeletion
+      parameters:
+      - description: asker id
+        explode: false
+        in: path
+        name: askerId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          description: OK - asker was marked for deletion successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "404":
+          description: NOT FOUND - asker not found
+        "409":
+          description: CONFLICT - asker is already marked for deletion
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Delete a asker by given id [Authorization: Role: consultant-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+    get:
+      operationId: getAsker
+      parameters:
+      - description: asker id
+        explode: false
+        in: path
+        name: askerId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AskerResponseDTO'
+          description: OK - asker found
+        "204":
+          description: NO CONTENT - asker with the specific id was not found
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Get an asker by given id [Authorization: Role: consultant-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+  /useradmin/report:
+    get:
+      operationId: generateViolationReport
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ViolationDTO'
+                type: array
+          description: OK - successfull operation
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Returns an generated report containing data integration violations.\
+        \ [Authorization: Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+  /useradmin/agencies/{agencyId}/consultants:
+    get:
+      operationId: getAgencyConsultants
+      parameters:
+      - description: Agency Id
+        explode: false
+        in: path
+        name: agencyId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/AgencyConsultantResponseDTO'
+          description: OK - successfull operation
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "404":
+          description: NOT FOUND - agency with given id does not exist
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Returns the list of consultants for a given agency Id. [Authorization:\
+        \ Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/hal+json
+  /useradmin/consultants/{consultantId}/agencies:
+    get:
+      operationId: getConsultantAgencies
+      parameters:
+      - description: Consultant Id
+        explode: false
+        in: path
+        name: consultantId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/ConsultantAgencyResponseDTO'
+          description: OK - successfull operation
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "404":
+          description: NOT FOUND - consultant with given id does not exist
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Returns the list of agencies for a given consultant Id. [Authorization:\
+        \ Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/hal+json
+    post:
+      operationId: createConsultantAgency
+      parameters:
+      - description: Consultant Id
+        explode: false
+        in: path
+        name: consultantId
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateConsultantAgencyDTO'
+        required: true
+      responses:
+        "201":
+          description: CREATED - consultant-agency relation was created successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Create a consultant-agency relation [Authorization: Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-content-type: application/json
+      x-accepts: application/json
+    put:
+      description: "Existing relations are deleted, passed relations added."
+      operationId: setConsultantAgencies
+      parameters:
+      - explode: false
+        in: path
+        name: consultantId
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: '#/components/schemas/CreateConsultantAgencyDTO'
+              type: array
+        required: true
+      responses:
+        "200":
+          description: OK - consultant-agency relations have been set
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Set consultant-agency relations [Authorization: Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-content-type: application/json
+      x-accepts: application/json
+  /useradmin/consultants/{consultantId}/agencies/{agencyId}:
+    delete:
+      operationId: deleteConsultantAgency
+      parameters:
+      - description: Consultant Id
+        explode: false
+        in: path
+        name: consultantId
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Agency Id
+        explode: false
+        in: path
+        name: agencyId
+        required: true
+        schema:
+          format: int64
+          type: integer
+        style: simple
+      responses:
+        "200":
+          description: OK - consultant-agency relation was deleted successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Delete a consultant-agency relation [Authorization: Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+  /useradmin/agencyadmins:
+    get:
+      operationId: getAgencyAdmins
+      parameters:
+      - description: The filter parameters to search for. If no filter is set all
+          admins are being returned.
+        explode: true
+        in: query
+        name: filter
+        required: false
+        schema:
+          $ref: '#/components/schemas/AdminFilter'
+        style: form
+      - description: Number of page where to start in the query (1 = first page)
+        explode: true
+        in: query
+        name: page
+        required: true
+        schema:
+          type: integer
+        style: form
+      - description: Number of items which are being returned per page
+        explode: true
+        in: query
+        name: perPage
+        required: true
+        schema:
+          type: integer
+        style: form
+      - description: The sort parameter containing field and order the response should
+          be sorted
+        explode: true
+        in: query
+        name: sort
+        required: false
+        schema:
+          $ref: '#/components/schemas/Sort'
+        style: form
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/AdminSearchResultDTO'
+          description: OK - successfull operation
+        "400":
+          description: BAD REQUEST - invalid/incomplete request or body object
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Returns the list of agency admins by filter query parameter. [Authorization:\
+        \ Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/hal+json
+    post:
+      operationId: createAgencyAdmin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdminDTO'
+        required: true
+      responses:
+        "201":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/AdminResponseDTO'
+          description: CREATED - Agency Admin was created successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request or body object
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "409":
+          description: CONFLICT - invalid/unavailable username or email address
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Creates a new Agency Admin [Authorization: Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-content-type: application/json
+      x-accepts: application/hal+json
+  /useradmin/agencyadmins/search:
+    get:
+      operationId: searchAgencyAdmins
+      parameters:
+      - description: "URL-encoded infix to search for in id first name, last name,\
+          \ or email. A non-encoded star symbol searches for all."
+        explode: true
+        in: query
+        name: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+        style: form
+      - description: Page number (first page = 1)
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Number of items returned per page
+        explode: true
+        in: query
+        name: perPage
+        required: false
+        schema:
+          default: 10
+          minimum: 1
+          type: integer
+        style: form
+      - description: field to sort by
+        explode: true
+        in: query
+        name: field
+        required: false
+        schema:
+          default: FIRSTNAME
+          enum:
+          - FIRSTNAME
+          - LASTNAME
+          - EMAIL
+          pattern: ^(FIRSTNAME|LASTNAME|EMAIL)$
+          type: string
+        style: form
+      - description: sort order
+        explode: true
+        in: query
+        name: order
+        required: false
+        schema:
+          default: ASC
+          enum:
+          - ASC
+          - DESC
+          pattern: ^(ASC|DESC)$
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/AdminSearchResultDTO'
+          description: OK - successful operation
+        "400":
+          description: BAD REQUEST - invalid/incomplete request or body object
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Get Agency admins matching the given query [Auth: user-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/hal+json
+  /useradmin/agencyadmins/{adminId}:
+    delete:
+      operationId: deleteAgencyAdmin
+      parameters:
+      - description: admin id
+        explode: false
+        in: path
+        name: adminId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          description: OK - agency admin was marked for deletion successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "404":
+          description: NOT FOUND - agency admin not found
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "delete an agency admin [Authorization: Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+    get:
+      operationId: getAgencyAdmin
+      parameters:
+      - description: admin id
+        explode: false
+        in: path
+        name: adminId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResponseDTO'
+          description: OK - consultant found
+        "204":
+          description: NO CONTENT - agency admin with the specific id was not found
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Get an agency admin by given id [Authorization: Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+    put:
+      operationId: updateAgencyAdmin
+      parameters:
+      - description: agency admin id
+        explode: false
+        in: path
+        name: adminId
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAgencyAdminDTO'
+        required: true
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/AdminResponseDTO'
+          description: OK - agency admin was updated successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Updates an agency admin [Authorization: Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-content-type: application/json
+      x-accepts: application/hal+json
+  /useradmin/agencyadmins/{adminId}/agencies:
+    get:
+      operationId: getAdminAgencies
+      parameters:
+      - description: admin Id
+        explode: false
+        in: path
+        name: adminId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  format: int64
+                  type: integer
+                type: array
+          description: OK - successful operation
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "404":
+          description: NOT FOUND - consultant with given id does not exist
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Returns the list of agencies for a given admin Id. [Authorization:\
+        \ Role: restricted-agency-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+    post:
+      operationId: createAdminAgencyRelation
+      parameters:
+      - description: admin Id
+        explode: false
+        in: path
+        name: adminId
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdminAgencyRelationDTO'
+        required: true
+      responses:
+        "201":
+          description: CREATED - admin-agency relation was created successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Create an admin-agency relation [Authorization: Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-content-type: application/json
+      x-accepts: application/json
+    put:
+      description: "Existing relations are deleted, passed relations added."
+      operationId: setAdminAgenciesRelation
+      parameters:
+      - explode: false
+        in: path
+        name: adminId
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: '#/components/schemas/CreateAdminAgencyRelationDTO'
+              type: array
+        required: true
+      responses:
+        "200":
+          description: OK - admin-agency relations have been set
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Set admin-agency relations [Authorization: Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-content-type: application/json
+      x-accepts: application/json
+  /useradmin/agencyadmins/{adminId}/agencies/{agencyId}:
+    delete:
+      operationId: deleteAdminAgencyRelation
+      parameters:
+      - description: Admin Id
+        explode: false
+        in: path
+        name: adminId
+        required: true
+        schema:
+          type: string
+        style: simple
+      - description: Agency Id
+        explode: false
+        in: path
+        name: agencyId
+        required: true
+        schema:
+          format: int64
+          type: integer
+        style: simple
+      responses:
+        "200":
+          description: OK - admin-agency relation was deleted successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Delete a admin-agency relation [Authorization: Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+  /useradmin/tenantadmins:
+    get:
+      operationId: getTenantAdmins
+      parameters:
+      - description: tenant id
+        explode: true
+        in: query
+        name: tenantId
+        required: true
+        schema:
+          type: integer
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/AdminResponseDTO'
+                type: array
+          description: OK - successful operation
+        "400":
+          description: BAD REQUEST - invalid/incomplete request or body object
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Returns the list of tenant admins by filter query parameter. [Authorization:\
+        \ Role: user-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+    post:
+      operationId: createTenantAdmin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdminDTO'
+        required: true
+      responses:
+        "201":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/AdminResponseDTO'
+          description: CREATED - Agency Admin was created successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request or body object
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "409":
+          description: CONFLICT - invalid/unavailable username or email address
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Creates a new Tenant Admin [Authorization: Role: tenant-admin]"
+      tags:
+      - admin-user-controller
+      x-content-type: application/json
+      x-accepts: application/hal+json
+  /useradmin/tenantadmins/search:
+    get:
+      operationId: searchTenantAdmins
+      parameters:
+      - description: "URL-encoded infix to search for in first name, last name, email\
+          \ or tenant id. A non-encoded star symbol searches for all."
+        explode: true
+        in: query
+        name: query
+        required: true
+        schema:
+          minLength: 1
+          type: string
+        style: form
+      - description: Page number (first page = 1)
+        explode: true
+        in: query
+        name: page
+        required: false
+        schema:
+          default: 1
+          minimum: 1
+          type: integer
+        style: form
+      - description: Number of items returned per page
+        explode: true
+        in: query
+        name: perPage
+        required: false
+        schema:
+          default: 10
+          minimum: 1
+          type: integer
+        style: form
+      - description: field to sort by
+        explode: true
+        in: query
+        name: field
+        required: false
+        schema:
+          default: FIRSTNAME
+          enum:
+          - FIRSTNAME
+          - LASTNAME
+          - EMAIL
+          - TENANT_ID
+          pattern: ^(FIRSTNAME|LASTNAME|EMAIL|TENANT_ID)$
+          type: string
+        style: form
+      - description: sort order
+        explode: true
+        in: query
+        name: order
+        required: false
+        schema:
+          default: ASC
+          enum:
+          - ASC
+          - DESC
+          pattern: ^(ASC|DESC)$
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/AdminSearchResultDTO'
+          description: OK - successful operation
+        "400":
+          description: BAD REQUEST - invalid/incomplete request or body object
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Get tenant admins matching the given query [Auth: tenant-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/hal+json
+  /useradmin/tenantadmins/{adminId}:
+    delete:
+      operationId: deleteTenantAdmin
+      parameters:
+      - description: admin id
+        explode: false
+        in: path
+        name: adminId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          description: OK - agency admin was marked for deletion successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "404":
+          description: NOT FOUND - agency admin not found
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "delete tenant admin [Authorization: Role: tenant-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+    get:
+      operationId: getTenantAdmin
+      parameters:
+      - description: admin id
+        explode: false
+        in: path
+        name: adminId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminResponseDTO'
+          description: OK - consultant found
+        "204":
+          description: NO CONTENT - agency admin with the specific id was not found
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Get a tenant admin by given id [Authorization: Role: tenant-admin]"
+      tags:
+      - admin-user-controller
+      x-accepts: application/json
+    put:
+      operationId: updateTenantAdmin
+      parameters:
+      - description: agency admin id
+        explode: false
+        in: path
+        name: adminId
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTenantAdminDTO'
+        required: true
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/AdminResponseDTO'
+          description: OK - agency admin was updated successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request
+        "401":
+          description: UNAUTHORIZED - no/invalid role/authorization
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Updates a tenant admin [Authorization: Role: tenant-admin]"
+      tags:
+      - admin-user-controller
+      x-content-type: application/json
+      x-accepts: application/hal+json
+  /useradmin/data:
+    patch:
+      operationId: patchAdminData
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchAdminDTO'
+        required: true
+      responses:
+        "200":
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/AdminResponseDTO'
+          description: OK - admin was updated successfully
+        "400":
+          description: BAD REQUEST - invalid/incomplete request or body object
+        "401":
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        "403":
+          description: FORBIDDEN - no/invalid role/authorization or CSRF token
+        "409":
+          description: CONFLICT - invalid/unavailable email
+        "500":
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+      - Bearer: []
+      summary: "Sets or updates the email, first and lastname of authorized admin\
+        \ account [Authorization:  Role: single-tenant-admin, restricted-agency-admin]"
+      tags:
+      - admin-user-controller
+      x-content-type: application/json
+      x-accepts: application/hal+json
+components:
+  schemas:
+    RootDTO:
+      properties:
+        _links:
+          $ref: '#/components/schemas/RootLinks'
+      required:
+      - _links
+      type: object
+    RootLinks:
+      properties:
+        self:
+          $ref: '#/components/schemas/HalLink'
+        sessions:
+          $ref: '#/components/schemas/HalLink'
+        consultantAgencies:
+          $ref: '#/components/schemas/HalLink'
+        consultants:
+          $ref: '#/components/schemas/HalLink'
+        createConsultant:
+          $ref: '#/components/schemas/HalLink'
+        deleteAsker:
+          $ref: '#/components/schemas/HalLink'
+      required:
+      - self
+      type: object
+    HalLink:
+      example:
+        method: GET
+        templated: true
+        href: href
+      properties:
+        href:
+          type: string
+        method:
+          enum:
+          - GET
+          - POST
+          - DELETE
+          - PUT
+          type: string
+        templated:
+          type: boolean
+      required:
+      - href
+      type: object
+    SessionAdminResultDTO:
+      properties:
+        _embedded:
+          items:
+            $ref: '#/components/schemas/SessionAdminDTO'
+          type: array
+        _links:
+          $ref: '#/components/schemas/PaginationLinks'
+        total:
+          type: integer
+      type: object
+    SessionAdminDTO:
+      properties:
+        id:
+          example: 94
+          format: int64
+          type: integer
+        userId:
+          example: 1da238c6-cd46-4162-80f1-bff74eafe77f
+          type: string
+        consultantId:
+          example: 1da238c6-cd46-4162-80f1-bff74eafe77f
+          type: string
+        username:
+          example: enc.OBSXEZTPOJWWC3TDMUWWC43LMVZC2NZS
+          type: string
+        email:
+          example: email@beratungcaritas.de
+          type: string
+        consultingType:
+          example: 1
+          type: integer
+        postcode:
+          example: "12345"
+          type: string
+        agencyId:
+          example: 1
+          type: integer
+        messageDate:
+          type: string
+        createDate:
+          type: string
+        updateDate:
+          type: string
+      type: object
+    PaginationLinks:
+      properties:
+        self:
+          $ref: '#/components/schemas/HalLink'
+        next:
+          $ref: '#/components/schemas/HalLink'
+        previous:
+          $ref: '#/components/schemas/HalLink'
+      required:
+      - self
+      type: object
+    CreateConsultantDTO:
+      example:
+        isGroupchatConsultant: true
+        firstname: Max
+        absenceMessage: I am absent until...
+        tenantId: 1
+        absent: true
+        email: max@mustermann.de
+        formalLanguage: true
+        username: max.mustermann
+        lastname: Mustermann
+      properties:
+        username:
+          example: max.mustermann
+          maxLength: 255
+          minLength: 1
+          type: string
+        firstname:
+          example: Max
+          maxLength: 255
+          minLength: 1
+          type: string
+        lastname:
+          example: Mustermann
+          maxLength: 255
+          minLength: 1
+          type: string
+        email:
+          example: max@mustermann.de
+          maxLength: 255
+          minLength: 1
+          type: string
+        formalLanguage:
+          example: true
+          type: boolean
+        absent:
+          example: true
+          type: boolean
+        absenceMessage:
+          example: I am absent until...
+          maxLength: 10000
+          minLength: 1
+          type: string
+        tenantId:
+          example: 1
+          format: int64
+          type: integer
+        isGroupchatConsultant:
+          example: true
+          type: boolean
+      required:
+      - absent
+      - email
+      - firstname
+      - formalLanguage
+      - lastname
+      - username
+      type: object
+    IsGroupchatConsultant:
+      example: true
+      type: boolean
+    UpdateAdminConsultantDTO:
+      example:
+        termsAndConditionsConfirmation: true
+        isGroupchatConsultant: true
+        firstname: Max
+        absenceMessage: I am absent until...
+        languages:
+        - "de, en"
+        - "de, en"
+        absent: true
+        dataPrivacyConfirmation: true
+        email: max@mustermann.de
+        formalLanguage: true
+        lastname: Mustermann
+      properties:
+        firstname:
+          example: Max
+          maxLength: 255
+          minLength: 1
+          type: string
+        lastname:
+          example: Mustermann
+          maxLength: 255
+          minLength: 1
+          type: string
+        email:
+          example: max@mustermann.de
+          maxLength: 255
+          minLength: 1
+          type: string
+        formalLanguage:
+          example: true
+          type: boolean
+        absent:
+          example: true
+          type: boolean
+        absenceMessage:
+          example: I am absent until...
+          maxLength: 10000
+          minLength: 1
+          type: string
+        languages:
+          items:
+            description: each an ISO 639-1 code
+            example: "de, en"
+            type: string
+          type: array
+        termsAndConditionsConfirmation:
+          description: Flag that indicates has the user accepted new terms and conditions
+            text
+          example: true
+          type: boolean
+        dataPrivacyConfirmation:
+          description: Flag that indicates does the user accepted new data privacy
+            text
+          example: true
+          type: boolean
+        isGroupchatConsultant:
+          example: true
+          type: boolean
+      required:
+      - absent
+      - email
+      - firstname
+      - formalLanguage
+      - lastname
+      type: object
+    ConsultantDTO:
+      example:
+        isGroupchatConsultant: true
+        firstname: Max
+        updateDate: updateDate
+        displayName: displayName
+        agencies:
+        - updateDate: 2019-12-02T13:12:08
+          consultingType: 1
+          city: Bonn
+          topics:
+          - internalIdentifier: "identifier for data exports for example: alcohol"
+            name: Topic name
+            description: Description
+            id: 12132
+            status: Active
+          - internalIdentifier: "identifier for data exports for example: alcohol"
+            name: Topic name
+            description: Description
+            id: 12132
+            status: Active
+          postcode: "79106"
+          description: "Our agency provides help for the following topics: Lorem ipsum.."
+          agencyLogo: base64 encoded image
+          url: https://www.domain.com
+          dataProtection:
+            dataProtectionResponsibleEntity: AGENCY_RESPONSIBLE
+            alternativeDataProtectionRepresentativeContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+            agencyDataProtectionResponsibleContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+            dataProtectionOfficerContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+          offline: false
+          external: false
+          counsellingRelations:
+          - RELATIVE_COUNSELLING
+          - RELATIVE_COUNSELLING
+          name: Suchtberatung Freiburg
+          tenantId: 12
+          id: 684
+          demographics:
+            ageFrom: 25
+            genders: "[MALE,FEMALE,DIVERS]"
+            ageTo: 55
+          createDate: 2019-08-23T08:52:05
+          deleteDate: 2020-09-02T15:53:23
+        - updateDate: 2019-12-02T13:12:08
+          consultingType: 1
+          city: Bonn
+          topics:
+          - internalIdentifier: "identifier for data exports for example: alcohol"
+            name: Topic name
+            description: Description
+            id: 12132
+            status: Active
+          - internalIdentifier: "identifier for data exports for example: alcohol"
+            name: Topic name
+            description: Description
+            id: 12132
+            status: Active
+          postcode: "79106"
+          description: "Our agency provides help for the following topics: Lorem ipsum.."
+          agencyLogo: base64 encoded image
+          url: https://www.domain.com
+          dataProtection:
+            dataProtectionResponsibleEntity: AGENCY_RESPONSIBLE
+            alternativeDataProtectionRepresentativeContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+            agencyDataProtectionResponsibleContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+            dataProtectionOfficerContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+          offline: false
+          external: false
+          counsellingRelations:
+          - RELATIVE_COUNSELLING
+          - RELATIVE_COUNSELLING
+          name: Suchtberatung Freiburg
+          tenantId: 12
+          id: 684
+          demographics:
+            ageFrom: 25
+            genders: "[MALE,FEMALE,DIVERS]"
+            ageTo: 55
+          createDate: 2019-08-23T08:52:05
+          deleteDate: 2020-09-02T15:53:23
+        formalLanguage: true
+        lastname: Mustermann
+        absenceMessage: I am absent until...
+        tenantName: tenantName
+        tenantId: 0
+        absent: true
+        id: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
+        email: max@mustermann.de
+        username: max.mustermann
+        createDate: createDate
+        deleteDate: deleteDate
+        status: status
+      properties:
+        id:
+          example: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
+          type: string
+        username:
+          example: max.mustermann
+          type: string
+        firstname:
+          example: Max
+          type: string
+        lastname:
+          example: Mustermann
+          type: string
+        email:
+          example: max@mustermann.de
+          type: string
+        formalLanguage:
+          example: true
+          type: boolean
+        absent:
+          example: true
+          type: boolean
+        absenceMessage:
+          example: I am absent until...
+          type: string
+        createDate:
+          type: string
+        updateDate:
+          type: string
+        deleteDate:
+          type: string
+        status:
+          type: string
+        agencies:
+          items:
+            $ref: '#/components/schemas/AgencyAdminResponseDTO'
+          type: array
+        isGroupchatConsultant:
+          example: true
+          type: boolean
+        tenantId:
+          type: integer
+        tenantName:
+          type: string
+        displayName:
+          type: string
+      type: object
+    CreateAdminDTO:
+      example:
+        firstname: Max
+        tenantId: 1
+        email: max@mustermann.de
+        username: max.mustermann
+        lastname: Mustermann
+      properties:
+        username:
+          example: max.mustermann
+          maxLength: 255
+          minLength: 1
+          type: string
+        firstname:
+          example: Max
+          maxLength: 255
+          minLength: 1
+          type: string
+        lastname:
+          example: Mustermann
+          maxLength: 255
+          minLength: 1
+          type: string
+        email:
+          example: max@mustermann.de
+          maxLength: 255
+          minLength: 1
+          type: string
+        tenantId:
+          example: 1
+          type: integer
+      required:
+      - email
+      - firstname
+      - lastname
+      - username
+      type: object
+    PatchAdminDTO:
+      example:
+        firstname: Max
+        email: maxmuster@mann.com
+        lastname: Mustermann
+      properties:
+        firstname:
+          example: Max
+          maxLength: 255
+          minLength: 1
+          type: string
+        lastname:
+          example: Mustermann
+          maxLength: 255
+          minLength: 1
+          type: string
+        email:
+          example: maxmuster@mann.com
+          format: email
+          type: string
+      required:
+      - email
+      - firstname
+      - lastname
+      type: object
+    UpdateAgencyAdminDTO:
+      allOf:
+      - $ref: '#/components/schemas/PatchAdminDTO'
+    UpdateTenantAdminDTO:
+      allOf:
+      - $ref: '#/components/schemas/PatchAdminDTO'
+      example:
+        tenantId: 1
+      properties:
+        tenantId:
+          example: 1
+          type: integer
+    AdminDTO:
+      example:
+        firstname: Max
+        updateDate: updateDate
+        tenantName: tenantName
+        tenantId: tenantId
+        agencies:
+        - updateDate: 2019-12-02T13:12:08
+          consultingType: 1
+          city: Bonn
+          topics:
+          - internalIdentifier: "identifier for data exports for example: alcohol"
+            name: Topic name
+            description: Description
+            id: 12132
+            status: Active
+          - internalIdentifier: "identifier for data exports for example: alcohol"
+            name: Topic name
+            description: Description
+            id: 12132
+            status: Active
+          postcode: "79106"
+          description: "Our agency provides help for the following topics: Lorem ipsum.."
+          agencyLogo: base64 encoded image
+          url: https://www.domain.com
+          dataProtection:
+            dataProtectionResponsibleEntity: AGENCY_RESPONSIBLE
+            alternativeDataProtectionRepresentativeContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+            agencyDataProtectionResponsibleContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+            dataProtectionOfficerContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+          offline: false
+          external: false
+          counsellingRelations:
+          - RELATIVE_COUNSELLING
+          - RELATIVE_COUNSELLING
+          name: Suchtberatung Freiburg
+          tenantId: 12
+          id: 684
+          demographics:
+            ageFrom: 25
+            genders: "[MALE,FEMALE,DIVERS]"
+            ageTo: 55
+          createDate: 2019-08-23T08:52:05
+          deleteDate: 2020-09-02T15:53:23
+        - updateDate: 2019-12-02T13:12:08
+          consultingType: 1
+          city: Bonn
+          topics:
+          - internalIdentifier: "identifier for data exports for example: alcohol"
+            name: Topic name
+            description: Description
+            id: 12132
+            status: Active
+          - internalIdentifier: "identifier for data exports for example: alcohol"
+            name: Topic name
+            description: Description
+            id: 12132
+            status: Active
+          postcode: "79106"
+          description: "Our agency provides help for the following topics: Lorem ipsum.."
+          agencyLogo: base64 encoded image
+          url: https://www.domain.com
+          dataProtection:
+            dataProtectionResponsibleEntity: AGENCY_RESPONSIBLE
+            alternativeDataProtectionRepresentativeContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+            agencyDataProtectionResponsibleContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+            dataProtectionOfficerContact:
+              nameAndLegalForm: Max Mustermann
+              phoneNumber: 0761 123456
+              city: Freiburg
+              street: Musterstraße 1
+              postcode: "79106"
+              email: email
+          offline: false
+          external: false
+          counsellingRelations:
+          - RELATIVE_COUNSELLING
+          - RELATIVE_COUNSELLING
+          name: Suchtberatung Freiburg
+          tenantId: 12
+          id: 684
+          demographics:
+            ageFrom: 25
+            genders: "[MALE,FEMALE,DIVERS]"
+            ageTo: 55
+          createDate: 2019-08-23T08:52:05
+          deleteDate: 2020-09-02T15:53:23
+        id: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
+        email: max@mustermann.de
+        username: max.mustermann
+        lastname: Mustermann
+        createDate: createDate
+        deleteDate: deleteDate
+        tenantSubdomain: tenantSubdomain
+      properties:
+        id:
+          example: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
+          type: string
+        username:
+          example: max.mustermann
+          type: string
+        firstname:
+          example: Max
+          type: string
+        lastname:
+          example: Mustermann
+          type: string
+        email:
+          example: max@mustermann.de
+          type: string
+        createDate:
+          type: string
+        updateDate:
+          type: string
+        deleteDate:
+          type: string
+        tenantId:
+          type: string
+        tenantName:
+          type: string
+        tenantSubdomain:
+          type: string
+        agencies:
+          items:
+            $ref: '#/components/schemas/AgencyAdminResponseDTO'
+          type: array
+      type: object
+    AskerResponseDTO:
+      example:
+        id: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
+        email: max@mustermann.de
+        username: max94
+      properties:
+        id:
+          example: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
+          type: string
+        username:
+          example: max94
+          type: string
+        email:
+          example: max@mustermann.de
+          type: string
+      type: object
+    AskerDTO:
+      properties:
+        id:
+          example: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
+          type: string
+        email:
+          example: max@mustermann.de
+          type: string
+      type: object
+    ConsultantAdminResponseDTO:
+      example:
+        _embedded:
+          isGroupchatConsultant: true
+          firstname: Max
+          updateDate: updateDate
+          displayName: displayName
+          agencies:
+          - updateDate: 2019-12-02T13:12:08
+            consultingType: 1
+            city: Bonn
+            topics:
+            - internalIdentifier: "identifier for data exports for example: alcohol"
+              name: Topic name
+              description: Description
+              id: 12132
+              status: Active
+            - internalIdentifier: "identifier for data exports for example: alcohol"
+              name: Topic name
+              description: Description
+              id: 12132
+              status: Active
+            postcode: "79106"
+            description: "Our agency provides help for the following topics: Lorem\
+              \ ipsum.."
+            agencyLogo: base64 encoded image
+            url: https://www.domain.com
+            dataProtection:
+              dataProtectionResponsibleEntity: AGENCY_RESPONSIBLE
+              alternativeDataProtectionRepresentativeContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+              agencyDataProtectionResponsibleContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+              dataProtectionOfficerContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+            offline: false
+            external: false
+            counsellingRelations:
+            - RELATIVE_COUNSELLING
+            - RELATIVE_COUNSELLING
+            name: Suchtberatung Freiburg
+            tenantId: 12
+            id: 684
+            demographics:
+              ageFrom: 25
+              genders: "[MALE,FEMALE,DIVERS]"
+              ageTo: 55
+            createDate: 2019-08-23T08:52:05
+            deleteDate: 2020-09-02T15:53:23
+          - updateDate: 2019-12-02T13:12:08
+            consultingType: 1
+            city: Bonn
+            topics:
+            - internalIdentifier: "identifier for data exports for example: alcohol"
+              name: Topic name
+              description: Description
+              id: 12132
+              status: Active
+            - internalIdentifier: "identifier for data exports for example: alcohol"
+              name: Topic name
+              description: Description
+              id: 12132
+              status: Active
+            postcode: "79106"
+            description: "Our agency provides help for the following topics: Lorem\
+              \ ipsum.."
+            agencyLogo: base64 encoded image
+            url: https://www.domain.com
+            dataProtection:
+              dataProtectionResponsibleEntity: AGENCY_RESPONSIBLE
+              alternativeDataProtectionRepresentativeContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+              agencyDataProtectionResponsibleContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+              dataProtectionOfficerContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+            offline: false
+            external: false
+            counsellingRelations:
+            - RELATIVE_COUNSELLING
+            - RELATIVE_COUNSELLING
+            name: Suchtberatung Freiburg
+            tenantId: 12
+            id: 684
+            demographics:
+              ageFrom: 25
+              genders: "[MALE,FEMALE,DIVERS]"
+              ageTo: 55
+            createDate: 2019-08-23T08:52:05
+            deleteDate: 2020-09-02T15:53:23
+          formalLanguage: true
+          lastname: Mustermann
+          absenceMessage: I am absent until...
+          tenantName: tenantName
+          tenantId: 0
+          absent: true
+          id: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
+          email: max@mustermann.de
+          username: max.mustermann
+          createDate: createDate
+          deleteDate: deleteDate
+          status: status
+        _links:
+          self:
+            method: GET
+            templated: true
+            href: href
+          update:
+            method: GET
+            templated: true
+            href: href
+          agencies:
+            method: GET
+            templated: true
+            href: href
+          delete:
+            method: GET
+            templated: true
+            href: href
+          addAgency:
+            method: GET
+            templated: true
+            href: href
+      properties:
+        _embedded:
+          $ref: '#/components/schemas/ConsultantDTO'
+        _links:
+          $ref: '#/components/schemas/ConsultantLinks'
+      type: object
+    ConsultantSearchResultDTO:
+      properties:
+        _embedded:
+          items:
+            $ref: '#/components/schemas/ConsultantAdminResponseDTO'
+          type: array
+        _links:
+          $ref: '#/components/schemas/PaginationLinks'
+        total:
+          type: integer
+      type: object
+    ConsultantLinks:
+      example:
+        self:
+          method: GET
+          templated: true
+          href: href
+        update:
+          method: GET
+          templated: true
+          href: href
+        agencies:
+          method: GET
+          templated: true
+          href: href
+        delete:
+          method: GET
+          templated: true
+          href: href
+        addAgency:
+          method: GET
+          templated: true
+          href: href
+      properties:
+        self:
+          $ref: '#/components/schemas/HalLink'
+        update:
+          $ref: '#/components/schemas/HalLink'
+        delete:
+          $ref: '#/components/schemas/HalLink'
+        agencies:
+          $ref: '#/components/schemas/HalLink'
+        addAgency:
+          $ref: '#/components/schemas/HalLink'
+      required:
+      - self
+      type: object
+    AdminResponseDTO:
+      example:
+        _embedded:
+          firstname: Max
+          updateDate: updateDate
+          tenantName: tenantName
+          tenantId: tenantId
+          agencies:
+          - updateDate: 2019-12-02T13:12:08
+            consultingType: 1
+            city: Bonn
+            topics:
+            - internalIdentifier: "identifier for data exports for example: alcohol"
+              name: Topic name
+              description: Description
+              id: 12132
+              status: Active
+            - internalIdentifier: "identifier for data exports for example: alcohol"
+              name: Topic name
+              description: Description
+              id: 12132
+              status: Active
+            postcode: "79106"
+            description: "Our agency provides help for the following topics: Lorem\
+              \ ipsum.."
+            agencyLogo: base64 encoded image
+            url: https://www.domain.com
+            dataProtection:
+              dataProtectionResponsibleEntity: AGENCY_RESPONSIBLE
+              alternativeDataProtectionRepresentativeContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+              agencyDataProtectionResponsibleContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+              dataProtectionOfficerContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+            offline: false
+            external: false
+            counsellingRelations:
+            - RELATIVE_COUNSELLING
+            - RELATIVE_COUNSELLING
+            name: Suchtberatung Freiburg
+            tenantId: 12
+            id: 684
+            demographics:
+              ageFrom: 25
+              genders: "[MALE,FEMALE,DIVERS]"
+              ageTo: 55
+            createDate: 2019-08-23T08:52:05
+            deleteDate: 2020-09-02T15:53:23
+          - updateDate: 2019-12-02T13:12:08
+            consultingType: 1
+            city: Bonn
+            topics:
+            - internalIdentifier: "identifier for data exports for example: alcohol"
+              name: Topic name
+              description: Description
+              id: 12132
+              status: Active
+            - internalIdentifier: "identifier for data exports for example: alcohol"
+              name: Topic name
+              description: Description
+              id: 12132
+              status: Active
+            postcode: "79106"
+            description: "Our agency provides help for the following topics: Lorem\
+              \ ipsum.."
+            agencyLogo: base64 encoded image
+            url: https://www.domain.com
+            dataProtection:
+              dataProtectionResponsibleEntity: AGENCY_RESPONSIBLE
+              alternativeDataProtectionRepresentativeContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+              agencyDataProtectionResponsibleContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+              dataProtectionOfficerContact:
+                nameAndLegalForm: Max Mustermann
+                phoneNumber: 0761 123456
+                city: Freiburg
+                street: Musterstraße 1
+                postcode: "79106"
+                email: email
+            offline: false
+            external: false
+            counsellingRelations:
+            - RELATIVE_COUNSELLING
+            - RELATIVE_COUNSELLING
+            name: Suchtberatung Freiburg
+            tenantId: 12
+            id: 684
+            demographics:
+              ageFrom: 25
+              genders: "[MALE,FEMALE,DIVERS]"
+              ageTo: 55
+            createDate: 2019-08-23T08:52:05
+            deleteDate: 2020-09-02T15:53:23
+          id: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
+          email: max@mustermann.de
+          username: max.mustermann
+          lastname: Mustermann
+          createDate: createDate
+          deleteDate: deleteDate
+          tenantSubdomain: tenantSubdomain
+        _links:
+          self:
+            method: GET
+            templated: true
+            href: href
+          update:
+            method: GET
+            templated: true
+            href: href
+          agencies:
+            method: GET
+            templated: true
+            href: href
+          delete:
+            method: GET
+            templated: true
+            href: href
+          addAgency:
+            method: GET
+            templated: true
+            href: href
+      properties:
+        _embedded:
+          $ref: '#/components/schemas/AdminDTO'
+        _links:
+          $ref: '#/components/schemas/AdminLinks'
+      type: object
+    AdminSearchResultDTO:
+      properties:
+        _embedded:
+          items:
+            $ref: '#/components/schemas/AdminResponseDTO'
+          type: array
+        _links:
+          $ref: '#/components/schemas/PaginationLinks'
+        total:
+          type: integer
+      type: object
+    AdminLinks:
+      example:
+        self:
+          method: GET
+          templated: true
+          href: href
+        update:
+          method: GET
+          templated: true
+          href: href
+        agencies:
+          method: GET
+          templated: true
+          href: href
+        delete:
+          method: GET
+          templated: true
+          href: href
+        addAgency:
+          method: GET
+          templated: true
+          href: href
+      properties:
+        self:
+          $ref: '#/components/schemas/HalLink'
+        update:
+          $ref: '#/components/schemas/HalLink'
+        delete:
+          $ref: '#/components/schemas/HalLink'
+        agencies:
+          $ref: '#/components/schemas/HalLink'
+        addAgency:
+          $ref: '#/components/schemas/HalLink'
+      required:
+      - self
+      type: object
+    SessionFilter:
+      properties:
+        agency:
+          type: integer
+        asker:
+          type: string
+        consultant:
+          type: string
+        consultingType:
+          type: integer
+      type: object
+    ConsultantFilter:
+      properties:
+        username:
+          type: string
+        lastname:
+          type: string
+        email:
+          type: string
+        agencyId:
+          format: int64
+          type: integer
+        absent:
+          type: boolean
+      type: object
+    AdminFilter:
+      properties:
+        username:
+          type: string
+        lastname:
+          type: string
+        email:
+          type: string
+        agencyId:
+          format: int64
+          type: integer
+      type: object
+    Sort:
+      properties:
+        field:
+          enum:
+          - firstName
+          - lastName
+          - username
+          - email
+          example: firstName|lastName|username|email
+          type: string
+        order:
+          enum:
+          - ASC
+          - DESC
+          example: ASC|DESC
+          type: string
+      type: object
+    CreateConsultantAgencyDTO:
+      example:
+        agencyId: 15
+        roleSetKey: roleSetKey
+      properties:
+        agencyId:
+          example: 15
+          format: int64
+          type: integer
+        roleSetKey:
+          maxLength: 255
+          minLength: 1
+          type: string
+      required:
+      - agencyId
+      - role
+      type: object
+    ConsultantAgencyResponseDTO:
+      properties:
+        _embedded:
+          items:
+            $ref: '#/components/schemas/AgencyAdminFullResponseDTO'
+          type: array
+        _links:
+          $ref: '#/components/schemas/AgencyLinks'
+        total:
+          type: integer
+      required:
+      - _embedded
+      - _links
+      type: object
+    CreateAdminAgencyRelationDTO:
+      example:
+        agencyId: 15
+      properties:
+        agencyId:
+          example: 15
+          format: int64
+          type: integer
+      required:
+      - agencyId
+      type: object
+    AdminAgencyResponseDTO:
+      properties:
+        _embedded:
+          items:
+            $ref: '#/components/schemas/AgencyAdminFullResponseDTO'
+          type: array
+        _links:
+          $ref: '#/components/schemas/AgencyLinks'
+        total:
+          type: integer
+      required:
+      - _embedded
+      - _links
+      type: object
+    AgencyLinks:
+      properties:
+        self:
+          $ref: '#/components/schemas/HalLink'
+      required:
+      - self
+      type: object
+    ConsultantAgencyLinks:
+      properties:
+        self:
+          $ref: '#/components/schemas/HalLink'
+      required:
+      - self
+      type: object
+    AgencyConsultantResponseDTO:
+      properties:
+        _embedded:
+          items:
+            $ref: '#/components/schemas/ConsultantAdminResponseDTO'
+          type: array
+        _links:
+          $ref: '#/components/schemas/ConsultantAgencyLinks'
+        total:
+          type: integer
+      required:
+      - _embedded
+      - _links
+      type: object
+    ViolationDTO:
+      example:
+        identifier: identifier
+        reason: reason
+        additionalInformation:
+        - name: name
+          value: value
+        - name: name
+          value: value
+        violationType: CONSULTANT
+      properties:
+        violationType:
+          enum:
+          - CONSULTANT
+          - ASKER
+          type: string
+        identifier:
+          type: string
+        reason:
+          type: string
+        additionalInformation:
+          items:
+            $ref: '#/components/schemas/AdditionalInformationDTO'
+          type: array
+      type: object
+    AdditionalInformationDTO:
+      example:
+        name: name
+        value: value
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+      type: object
+    AgencyAdminResponseDTO:
+      example:
+        updateDate: 2019-12-02T13:12:08
+        consultingType: 1
+        city: Bonn
+        topics:
+        - internalIdentifier: "identifier for data exports for example: alcohol"
+          name: Topic name
+          description: Description
+          id: 12132
+          status: Active
+        - internalIdentifier: "identifier for data exports for example: alcohol"
+          name: Topic name
+          description: Description
+          id: 12132
+          status: Active
+        postcode: "79106"
+        description: "Our agency provides help for the following topics: Lorem ipsum.."
+        agencyLogo: base64 encoded image
+        url: https://www.domain.com
+        dataProtection:
+          dataProtectionResponsibleEntity: AGENCY_RESPONSIBLE
+          alternativeDataProtectionRepresentativeContact:
+            nameAndLegalForm: Max Mustermann
+            phoneNumber: 0761 123456
+            city: Freiburg
+            street: Musterstraße 1
+            postcode: "79106"
+            email: email
+          agencyDataProtectionResponsibleContact:
+            nameAndLegalForm: Max Mustermann
+            phoneNumber: 0761 123456
+            city: Freiburg
+            street: Musterstraße 1
+            postcode: "79106"
+            email: email
+          dataProtectionOfficerContact:
+            nameAndLegalForm: Max Mustermann
+            phoneNumber: 0761 123456
+            city: Freiburg
+            street: Musterstraße 1
+            postcode: "79106"
+            email: email
+        offline: false
+        external: false
+        counsellingRelations:
+        - RELATIVE_COUNSELLING
+        - RELATIVE_COUNSELLING
+        name: Suchtberatung Freiburg
+        tenantId: 12
+        id: 684
+        demographics:
+          ageFrom: 25
+          genders: "[MALE,FEMALE,DIVERS]"
+          ageTo: 55
+        createDate: 2019-08-23T08:52:05
+        deleteDate: 2020-09-02T15:53:23
+      properties:
+        id:
+          example: 684
+          format: int64
+          maximum: 9223372036854775807
+          minimum: 0
+          type: integer
+        name:
+          example: Suchtberatung Freiburg
+          maxLength: 100
+          type: string
+        description:
+          example: "Our agency provides help for the following topics: Lorem ipsum.."
+          maxLength: 65534
+          type: string
+        postcode:
+          example: "79106"
+          maxLength: 5
+          minLength: 5
+          type: string
+        city:
+          example: Bonn
+          maxLength: 100
+          type: string
+        offline:
+          example: false
+          type: boolean
+        consultingType:
+          example: 1
+          minimum: 0
+          type: integer
+        url:
+          example: https://www.domain.com
+          maxLength: 500
+          type: string
+        external:
+          example: false
+          type: boolean
+        topics:
+          items:
+            $ref: '#/components/schemas/TopicDTO'
+          type: array
+        demographics:
+          $ref: '#/components/schemas/DemographicsDTO'
+        createDate:
+          example: 2019-08-23T08:52:05
+          type: string
+        updateDate:
+          example: 2019-12-02T13:12:08
+          type: string
+        deleteDate:
+          example: 2020-09-02T15:53:23
+          type: string
+        counsellingRelations:
+          items:
+            enum:
+            - RELATIVE_COUNSELLING
+            - SELF_COUNSELLING
+            - PARENTAL_COUNSELLING
+            type: string
+          type: array
+        tenantId:
+          example: 12
+          format: int64
+          type: integer
+        dataProtection:
+          $ref: '#/components/schemas/DataProtectionDTO'
+        agencyLogo:
+          example: base64 encoded image
+          type: string
+      type: object
+    TopicDTO:
+      example:
+        internalIdentifier: "identifier for data exports for example: alcohol"
+        name: Topic name
+        description: Description
+        id: 12132
+        status: Active
+      properties:
+        id:
+          example: 12132
+          type: long
+        name:
+          example: Topic name
+          type: string
+        description:
+          example: Description
+          type: string
+        internalIdentifier:
+          example: "identifier for data exports for example: alcohol"
+          type: string
+        status:
+          example: Active
+          type: string
+      type: object
+    DemographicsDTO:
+      example:
+        ageFrom: 25
+        genders: "[MALE,FEMALE,DIVERS]"
+        ageTo: 55
+      properties:
+        ageFrom:
+          example: 25
+          maximum: 200
+          minimum: 0
+          type: integer
+        ageTo:
+          example: 55
+          maximum: 200
+          minimum: 0
+          type: integer
+        genders:
+          example: "[MALE,FEMALE,DIVERS]"
+          items:
+            type: string
+          type: array
+      type: object
+    DataProtectionDTO:
+      example:
+        dataProtectionResponsibleEntity: AGENCY_RESPONSIBLE
+        alternativeDataProtectionRepresentativeContact:
+          nameAndLegalForm: Max Mustermann
+          phoneNumber: 0761 123456
+          city: Freiburg
+          street: Musterstraße 1
+          postcode: "79106"
+          email: email
+        agencyDataProtectionResponsibleContact:
+          nameAndLegalForm: Max Mustermann
+          phoneNumber: 0761 123456
+          city: Freiburg
+          street: Musterstraße 1
+          postcode: "79106"
+          email: email
+        dataProtectionOfficerContact:
+          nameAndLegalForm: Max Mustermann
+          phoneNumber: 0761 123456
+          city: Freiburg
+          street: Musterstraße 1
+          postcode: "79106"
+          email: email
+      properties:
+        dataProtectionResponsibleEntity:
+          enum:
+          - AGENCY_RESPONSIBLE
+          - ALTERNATIVE_REPRESENTATIVE
+          - DATA_PROTECTION_OFFICER
+          type: string
+        agencyDataProtectionResponsibleContact:
+          $ref: '#/components/schemas/DataProtectionContactDTO'
+        alternativeDataProtectionRepresentativeContact:
+          $ref: '#/components/schemas/DataProtectionContactDTO'
+        dataProtectionOfficerContact:
+          $ref: '#/components/schemas/DataProtectionContactDTO'
+      type: object
+    DataProtectionContactDTO:
+      example:
+        nameAndLegalForm: Max Mustermann
+        phoneNumber: 0761 123456
+        city: Freiburg
+        street: Musterstraße 1
+        postcode: "79106"
+        email: email
+      properties:
+        nameAndLegalForm:
+          example: Max Mustermann
+          type: string
+        street:
+          example: Musterstraße 1
+          maxLength: 100
+          type: string
+        postcode:
+          example: "79106"
+          maxLength: 5
+          minLength: 5
+          type: string
+        city:
+          example: Freiburg
+          maxLength: 100
+          type: string
+        phoneNumber:
+          example: 0761 123456
+          maxLength: 100
+          type: string
+        email:
+          maxLength: 100
+          type: string
+      type: object
+    AgencyAdminFullResponseDTO:
+      properties:
+        _embedded:
+          $ref: '#/components/schemas/AgencyAdminResponseDTO'
+        _links:
+          $ref: '#/components/schemas/AgencyLinks_1'
+      type: object
+    AgencyLinks_1:
+      allOf:
+      - $ref: '#/components/schemas/DefaultLinks'
+      - $ref: '#/components/schemas/AgencyLinks_1_allOf'
+    DefaultLinks:
+      properties:
+        self:
+          $ref: '#/components/schemas/HalLink'
+        update:
+          $ref: '#/components/schemas/HalLink'
+        delete:
+          $ref: '#/components/schemas/HalLink'
+      required:
+      - self
+      type: object
+    AgencyLinks_1_allOf:
+      properties:
+        postcodeRanges:
+          $ref: '#/components/schemas/HalLink'
+      type: object
+      example: null
+  securitySchemes:
+    Bearer:
+      in: header
+      name: Authorization
+      type: apiKey
+

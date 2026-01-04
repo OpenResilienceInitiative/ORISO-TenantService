@@ -1,0 +1,1 @@
+ALTER TABLE `tenantservice`.`tenant` DROP CONSTRAINT unique_subdomain;
