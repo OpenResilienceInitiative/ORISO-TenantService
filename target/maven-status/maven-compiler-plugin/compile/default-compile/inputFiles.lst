@@ -58,6 +58,7 @@
 /root/online-beratung/ORISO-Complete/caritas-workspace/ORISO-TenantService/src/main/java/com/vi/tenantservice/api/model/TenantSettings.java
 /root/online-beratung/ORISO-Complete/caritas-workspace/ORISO-TenantService/target/generated-sources/openapi/com/vi/tenantservice/useradminservice/generated/ServerVariable.java
 /root/online-beratung/ORISO-Complete/caritas-workspace/ORISO-TenantService/target/generated-sources/openapi/com/vi/tenantservice/useradminservice/generated/web/model/ViolationDTO.java
+/root/online-beratung/ORISO-Complete/caritas-workspace/ORISO-TenantService/src/main/java/com/vi/tenantservice/api/controller/VersionController.java
 /root/online-beratung/ORISO-Complete/caritas-workspace/ORISO-TenantService/target/generated-sources/openapi/com/vi/tenantservice/applicationsettingsservice/generated/web/ApplicationsettingsControllerApi.java
 /root/online-beratung/ORISO-Complete/caritas-workspace/ORISO-TenantService/target/generated-sources/openapi/com/vi/tenantservice/useradminservice/generated/web/model/DataProtectionDTO.java
 /root/online-beratung/ORISO-Complete/caritas-workspace/ORISO-TenantService/src/main/java/com/vi/tenantservice/api/converter/TenantConverter.java

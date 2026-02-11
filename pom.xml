@@ -18,7 +18,10 @@
         <relativePath/>
     </parent>
 
-    <properties>
+    <properties> <!-- upper version is used to add the new features with the new versions of Java and spring boot, basic code changes are already made and as new features arrive they will use the upper version -->
+        <java.upper.version>21</java.upper.version>
+        <springboot.upper.version>4.0.1</springboot.upper.version>
+        <spring.upper.version>6.2.0</spring.upper.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>17</java.version>

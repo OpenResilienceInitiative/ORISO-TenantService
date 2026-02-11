@@ -1,0 +1,16 @@
+{
+  "featureStatisticsEnabled": false,
+  "featureTopicsEnabled": true,
+  "topicsInRegistrationEnabled": true,
+  "featureDemographicsEnabled": false,
+  "featureAppointmentsEnabled": false,
+  "featureGroupChatV2Enabled": false,
+  "featureToolsEnabled": false,
+  "featureAnonymousChatEnabled": true,
+  "featureAttachmentUploadDisabled": true,
+  "featureToolsOIDCToken": "token",
+  "activeLanguages": [
+    "de",
+    "en"
+  ]
+}

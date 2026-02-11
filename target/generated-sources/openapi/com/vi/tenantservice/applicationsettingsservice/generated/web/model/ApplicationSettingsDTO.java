@@ -42,7 +42,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   ApplicationSettingsDTO.JSON_PROPERTY_CALENDAR_APP_URL,
   ApplicationSettingsDTO.JSON_PROPERTY_LEGAL_CONTENT_CHANGES_BY_SINGLE_TENANT_ADMINS_ALLOWED
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2025-12-25T23:21:39.902151275Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:07.033600218Z[Etc/UTC]")
 public class ApplicationSettingsDTO {
   public static final String JSON_PROPERTY_MULTITENANCY_WITH_SINGLE_DOMAIN_ENABLED = "multitenancyWithSingleDomainEnabled";
   private ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled multitenancyWithSingleDomainEnabled;

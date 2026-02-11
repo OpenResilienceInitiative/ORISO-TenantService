@@ -30,7 +30,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   RegistrationNotesDTO.JSON_PROPERTY_AGENCY_SELECTION,
   RegistrationNotesDTO.JSON_PROPERTY_PASSWORD
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2025-12-25T23:21:39.589894428Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:06.669551376Z[Etc/UTC]")
 public class RegistrationNotesDTO {
   public static final String JSON_PROPERTY_AGENCY_SELECTION = "agencySelection";
   private String agencySelection;

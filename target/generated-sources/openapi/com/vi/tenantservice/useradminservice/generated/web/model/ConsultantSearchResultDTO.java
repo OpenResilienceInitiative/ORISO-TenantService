@@ -35,7 +35,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   ConsultantSearchResultDTO.JSON_PROPERTY_LINKS,
   ConsultantSearchResultDTO.JSON_PROPERTY_TOTAL
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2025-12-25T23:21:40.085179316Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:07.181277208Z[Etc/UTC]")
 public class ConsultantSearchResultDTO {
   public static final String JSON_PROPERTY_EMBEDDED = "_embedded";
   private List<ConsultantAdminResponseDTO> embedded;

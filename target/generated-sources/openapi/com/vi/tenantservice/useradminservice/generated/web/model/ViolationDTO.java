@@ -35,7 +35,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   ViolationDTO.JSON_PROPERTY_REASON,
   ViolationDTO.JSON_PROPERTY_ADDITIONAL_INFORMATION
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2025-12-25T23:21:40.085179316Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:07.181277208Z[Etc/UTC]")
 public class ViolationDTO {
   /**
    * Gets or Sets violationType

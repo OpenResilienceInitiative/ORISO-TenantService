@@ -21,7 +21,7 @@ import jakarta.annotation.Generated;
  * Settings
  */
 
-@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2025-12-25T23:21:38.920585706Z[Etc/UTC]")
+@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2026-02-11T19:22:06.273372057Z[Etc/UTC]")
 public class Settings {
 
   private Boolean featureStatisticsEnabled;
@@ -37,6 +37,10 @@ public class Settings {
   private Boolean featureGroupChatV2Enabled;
 
   private Boolean featureToolsEnabled;
+
+  private Boolean featureAnonymousChatEnabled;
+
+  private Boolean featureCallsEnabled;
 
   private Boolean featureAttachmentUploadDisabled;
 
@@ -191,6 +195,46 @@ public class Settings {
 
   public void setFeatureToolsEnabled(Boolean featureToolsEnabled) {
     this.featureToolsEnabled = featureToolsEnabled;
+  }
+
+  public Settings featureAnonymousChatEnabled(Boolean featureAnonymousChatEnabled) {
+    this.featureAnonymousChatEnabled = featureAnonymousChatEnabled;
+    return this;
+  }
+
+  /**
+   * Get featureAnonymousChatEnabled
+   * @return featureAnonymousChatEnabled
+  */
+  
+  @Schema(name = "featureAnonymousChatEnabled", example = "true", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+  @JsonProperty("featureAnonymousChatEnabled")
+  public Boolean getFeatureAnonymousChatEnabled() {
+    return featureAnonymousChatEnabled;
+  }
+
+  public void setFeatureAnonymousChatEnabled(Boolean featureAnonymousChatEnabled) {
+    this.featureAnonymousChatEnabled = featureAnonymousChatEnabled;
+  }
+
+  public Settings featureCallsEnabled(Boolean featureCallsEnabled) {
+    this.featureCallsEnabled = featureCallsEnabled;
+    return this;
+  }
+
+  /**
+   * Get featureCallsEnabled
+   * @return featureCallsEnabled
+  */
+  
+  @Schema(name = "featureCallsEnabled", example = "true", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+  @JsonProperty("featureCallsEnabled")
+  public Boolean getFeatureCallsEnabled() {
+    return featureCallsEnabled;
+  }
+
+  public void setFeatureCallsEnabled(Boolean featureCallsEnabled) {
+    this.featureCallsEnabled = featureCallsEnabled;
   }
 
   public Settings featureAttachmentUploadDisabled(Boolean featureAttachmentUploadDisabled) {
@@ -357,6 +401,8 @@ public class Settings {
         Objects.equals(this.featureAppointmentsEnabled, settings.featureAppointmentsEnabled) &&
         Objects.equals(this.featureGroupChatV2Enabled, settings.featureGroupChatV2Enabled) &&
         Objects.equals(this.featureToolsEnabled, settings.featureToolsEnabled) &&
+        Objects.equals(this.featureAnonymousChatEnabled, settings.featureAnonymousChatEnabled) &&
+        Objects.equals(this.featureCallsEnabled, settings.featureCallsEnabled) &&
         Objects.equals(this.featureAttachmentUploadDisabled, settings.featureAttachmentUploadDisabled) &&
         Objects.equals(this.featureToolsOICDToken, settings.featureToolsOICDToken) &&
         Objects.equals(this.activeLanguages, settings.activeLanguages) &&
@@ -368,7 +414,7 @@ public class Settings {
 
   @Override
   public int hashCode() {
-    return Objects.hash(featureStatisticsEnabled, featureTopicsEnabled, topicsInRegistrationEnabled, featureDemographicsEnabled, featureAppointmentsEnabled, featureGroupChatV2Enabled, featureToolsEnabled, featureAttachmentUploadDisabled, featureToolsOICDToken, activeLanguages, showAskerProfile, isVideoCallAllowed, extendedSettings, featureCentralDataProtectionTemplateEnabled);
+    return Objects.hash(featureStatisticsEnabled, featureTopicsEnabled, topicsInRegistrationEnabled, featureDemographicsEnabled, featureAppointmentsEnabled, featureGroupChatV2Enabled, featureToolsEnabled, featureAnonymousChatEnabled, featureCallsEnabled, featureAttachmentUploadDisabled, featureToolsOICDToken, activeLanguages, showAskerProfile, isVideoCallAllowed, extendedSettings, featureCentralDataProtectionTemplateEnabled);
   }
 
   @Override
@@ -382,6 +428,8 @@ public class Settings {
     sb.append("    featureAppointmentsEnabled: ").append(toIndentedString(featureAppointmentsEnabled)).append("\n");
     sb.append("    featureGroupChatV2Enabled: ").append(toIndentedString(featureGroupChatV2Enabled)).append("\n");
     sb.append("    featureToolsEnabled: ").append(toIndentedString(featureToolsEnabled)).append("\n");
+    sb.append("    featureAnonymousChatEnabled: ").append(toIndentedString(featureAnonymousChatEnabled)).append("\n");
+    sb.append("    featureCallsEnabled: ").append(toIndentedString(featureCallsEnabled)).append("\n");
     sb.append("    featureAttachmentUploadDisabled: ").append(toIndentedString(featureAttachmentUploadDisabled)).append("\n");
     sb.append("    featureToolsOICDToken: ").append(toIndentedString(featureToolsOICDToken)).append("\n");
     sb.append("    activeLanguages: ").append(toIndentedString(activeLanguages)).append("\n");

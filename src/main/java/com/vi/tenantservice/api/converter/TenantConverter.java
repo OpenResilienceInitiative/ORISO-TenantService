@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.converter;
 
 import static com.vi.tenantservice.api.converter.ConverterUtils.nullAsFalse;
 import static com.vi.tenantservice.api.converter.ConverterUtils.nullAsGerman;
+import static com.vi.tenantservice.api.converter.ConverterUtils.nullAsTrue;
 import static com.vi.tenantservice.api.model.DataProtectionPlaceHolderType.DATA_PROTECTION_OFFICER;
 import static com.vi.tenantservice.api.model.DataProtectionPlaceHolderType.DATA_PROTECTION_RESPONSIBLE;
 import static com.vi.tenantservice.api.util.JsonConverter.convertMapFromJson;
@@ -76,6 +77,8 @@ public class TenantConverter {
         .featureStatisticsEnabled(nullAsFalse(settings.getFeatureStatisticsEnabled()))
         .featureGroupChatV2Enabled(nullAsFalse(settings.getFeatureGroupChatV2Enabled()))
         .featureToolsEnabled(nullAsFalse(settings.getFeatureToolsEnabled()))
+        .featureAnonymousChatEnabled(nullAsTrue(settings.getFeatureAnonymousChatEnabled()))
+        .featureCallsEnabled(nullAsTrue(settings.getFeatureCallsEnabled()))
         .featureToolsOIDCToken(settings.getFeatureToolsOICDToken())
         .featureAttachmentUploadDisabled(nullAsFalse(settings.getFeatureAttachmentUploadDisabled()))
         .activeLanguages(nullAsGerman(settings.getActiveLanguages()))
@@ -173,6 +176,14 @@ public class TenantConverter {
 
   private Settings getSettingsIfNotNull(String settingsJson) {
     TenantSettings tenantSettings = JsonConverter.convertFromJson(settingsJson);
+    final boolean anonymousChatEnabled =
+        settingsJson != null && settingsJson.contains("\"featureAnonymousChatEnabled\"")
+            ? tenantSettings.isFeatureAnonymousChatEnabled()
+            : true;
+    final boolean callsEnabled =
+        settingsJson != null && settingsJson.contains("\"featureCallsEnabled\"")
+            ? tenantSettings.isFeatureCallsEnabled()
+            : true;
     return new Settings()
         .topicsInRegistrationEnabled(tenantSettings.isTopicsInRegistrationEnabled())
         .featureDemographicsEnabled(tenantSettings.isFeatureDemographicsEnabled())
@@ -182,6 +193,8 @@ public class TenantConverter {
         .featureGroupChatV2Enabled(tenantSettings.isFeatureGroupChatV2Enabled())
         .featureToolsOICDToken(tenantSettings.getFeatureToolsOIDCToken())
         .featureToolsEnabled(tenantSettings.isFeatureToolsEnabled())
+        .featureAnonymousChatEnabled(anonymousChatEnabled)
+        .featureCallsEnabled(callsEnabled)
         .featureAttachmentUploadDisabled(tenantSettings.isFeatureAttachmentUploadDisabled())
         .isVideoCallAllowed(tenantSettings.isVideoCallAllowed())
         .showAskerProfile(tenantSettings.isShowAskerProfile())

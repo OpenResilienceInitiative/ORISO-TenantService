@@ -30,7 +30,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   OptionDTO.JSON_PROPERTY_LABEL,
   OptionDTO.JSON_PROPERTY_VALUE
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2025-12-25T23:21:39.589894428Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:06.669551376Z[Etc/UTC]")
 public class OptionDTO {
   public static final String JSON_PROPERTY_LABEL = "label";
   private String label;

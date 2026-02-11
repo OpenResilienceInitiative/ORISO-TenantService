@@ -30,7 +30,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   SettingDTO.JSON_PROPERTY_VALUE,
   SettingDTO.JSON_PROPERTY_READ_ONLY
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2025-12-25T23:21:39.902151275Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:07.033600218Z[Etc/UTC]")
 public class SettingDTO {
   public static final String JSON_PROPERTY_VALUE = "value";
   private String value;

@@ -6,6 +6,8 @@
   "featureAppointmentsEnabled": false,
   "featureGroupChatV2Enabled": false,
   "featureToolsEnabled": false,
+  "featureAnonymousChatEnabled": true,
+  "featureCallsEnabled": true,
   "featureAttachmentUploadDisabled": true,
   "featureToolsOIDCToken": "token",
   "activeLanguages": [

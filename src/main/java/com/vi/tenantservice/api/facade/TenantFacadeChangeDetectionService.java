@@ -98,6 +98,14 @@ public class TenantFacadeChangeDetectionService {
         existingSettingsToCompare.isFeatureToolsEnabled())) {
       resultList.add(TenantSetting.FEATURE_TOOLS_ENABLED);
     }
+    if (nullAsTrue(inputSettings.getFeatureAnonymousChatEnabled())
+        != existingSettingsToCompare.isFeatureAnonymousChatEnabled()) {
+      resultList.add(TenantSetting.FEATURE_ANONYMOUS_CHAT_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureCallsEnabled())
+        != existingSettingsToCompare.isFeatureCallsEnabled()) {
+      resultList.add(TenantSetting.FEATURE_CALLS_ENABLED);
+    }
     if (isChanged(
         inputSettings.getFeatureAttachmentUploadDisabled(),
         existingSettingsToCompare.isFeatureAttachmentUploadDisabled())) {
@@ -135,13 +143,28 @@ public class TenantFacadeChangeDetectionService {
     TenantSettings existingSettingsToCompare;
     if (existingTenant.getSettings() == null) {
       existingSettingsToCompare = new TenantSettings();
+      // Default should be enabled if missing completely.
+      existingSettingsToCompare.setFeatureAnonymousChatEnabled(true);
+      existingSettingsToCompare.setFeatureCallsEnabled(true);
     } else {
-      existingSettingsToCompare = JsonConverter.convertFromJson(existingTenant.getSettings());
+      final String settingsJson = existingTenant.getSettings();
+      existingSettingsToCompare = JsonConverter.convertFromJson(settingsJson);
+      // Default should be enabled if the setting is not present in stored JSON (backward compat).
+      if (!settingsJson.contains("\"featureAnonymousChatEnabled\"")) {
+        existingSettingsToCompare.setFeatureAnonymousChatEnabled(true);
+      }
+      if (!settingsJson.contains("\"featureCallsEnabled\"")) {
+        existingSettingsToCompare.setFeatureCallsEnabled(true);
+      }
     }
     return existingSettingsToCompare;
   }
 
   boolean nullAsFalse(Boolean value) {
     return value != null && value;
+  }
+
+  boolean nullAsTrue(Boolean value) {
+    return value == null || value;
   }
 }

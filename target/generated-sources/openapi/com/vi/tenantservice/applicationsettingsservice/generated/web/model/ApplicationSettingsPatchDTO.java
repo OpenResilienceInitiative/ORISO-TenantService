@@ -32,7 +32,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   ApplicationSettingsPatchDTO.JSON_PROPERTY_LEGAL_CONTENT_CHANGES_BY_SINGLE_TENANT_ADMINS_ALLOWED,
   ApplicationSettingsPatchDTO.JSON_PROPERTY_MAIN_TENANT_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2025-12-25T23:21:39.902151275Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:07.033600218Z[Etc/UTC]")
 public class ApplicationSettingsPatchDTO {
   public static final String JSON_PROPERTY_LEGAL_CONTENT_CHANGES_BY_SINGLE_TENANT_ADMINS_ALLOWED = "legalContentChangesBySingleTenantAdminsAllowed";
   private ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled legalContentChangesBySingleTenantAdminsAllowed;

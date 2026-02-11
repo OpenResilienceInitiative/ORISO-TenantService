@@ -31,7 +31,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   ExtendedConsultingTypeResponseDTOAllOfWelcomeMessage.JSON_PROPERTY_WELCOME_MESSAGE_TEXT
 })
 @JsonTypeName("ExtendedConsultingTypeResponseDTO_allOf_welcomeMessage")
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2025-12-25T23:21:39.589894428Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:06.669551376Z[Etc/UTC]")
 public class ExtendedConsultingTypeResponseDTOAllOfWelcomeMessage {
   public static final String JSON_PROPERTY_SEND_WELCOME_MESSAGE = "sendWelcomeMessage";
   private Boolean sendWelcomeMessage;

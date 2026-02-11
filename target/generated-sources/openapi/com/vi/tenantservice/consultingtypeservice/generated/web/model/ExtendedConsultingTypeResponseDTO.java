@@ -54,7 +54,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   ExtendedConsultingTypeResponseDTO.JSON_PROPERTY_SESSION_DATA_INITIALIZING,
   ExtendedConsultingTypeResponseDTO.JSON_PROPERTY_ROLES
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2025-12-25T23:21:39.589894428Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:06.669551376Z[Etc/UTC]")
 public class ExtendedConsultingTypeResponseDTO {
   public static final String JSON_PROPERTY_ID = "id";
   private Integer id;

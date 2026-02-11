@@ -4,7 +4,7 @@ will be replaced
 
 - API version: 0.0.1
 
-- Build date: 2025-12-25T23:21:40.085179316Z[Etc/UTC]
+- Build date: 2026-02-11T19:22:07.181277208Z[Etc/UTC]
 
 This information will be replaced by the SpringFox config information
 

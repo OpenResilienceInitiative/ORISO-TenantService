@@ -556,6 +556,12 @@ components:
         featureToolsEnabled:
           type: boolean
           example: "false"
+        featureAnonymousChatEnabled:
+          type: boolean
+          example: "true"
+        featureCallsEnabled:
+          type: boolean
+          example: "true"
         featureAttachmentUploadDisabled:
           type: boolean
           example: "false"

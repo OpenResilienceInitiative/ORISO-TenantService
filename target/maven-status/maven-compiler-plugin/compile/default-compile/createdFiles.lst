@@ -172,6 +172,7 @@ com/vi/tenantservice/api/config/CustomResponseErrorHandler.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/BasicConsultingTypeResponseDTO.class
 com/vi/tenantservice/api/authorisation/UserRole.class
 com/vi/tenantservice/useradminservice/generated/web/model/PatchAdminDTO.class
+com/vi/tenantservice/api/controller/VersionController.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/ConsultingTypeDTO.class
 com/vi/tenantservice/consultingtypeservice/generated/auth/ApiKeyAuth.class
 com/vi/tenantservice/api/validation/InputSanitizer.class

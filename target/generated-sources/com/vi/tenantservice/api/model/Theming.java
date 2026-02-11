@@ -18,7 +18,7 @@ import jakarta.annotation.Generated;
  * Theming
  */
 
-@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2025-12-25T23:21:38.920585706Z[Etc/UTC]")
+@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2026-02-11T19:22:06.273372057Z[Etc/UTC]")
 public class Theming {
 
   private String logo;

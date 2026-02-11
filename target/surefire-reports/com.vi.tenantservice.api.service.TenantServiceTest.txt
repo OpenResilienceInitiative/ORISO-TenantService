@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.vi.tenantservice.api.service.TenantServiceTest
+-------------------------------------------------------------------------------
+Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.15 s - in com.vi.tenantservice.api.service.TenantServiceTest
