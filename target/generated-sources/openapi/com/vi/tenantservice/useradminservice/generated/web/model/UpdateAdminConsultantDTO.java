@@ -40,7 +40,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   UpdateAdminConsultantDTO.JSON_PROPERTY_DATA_PRIVACY_CONFIRMATION,
   UpdateAdminConsultantDTO.JSON_PROPERTY_IS_GROUPCHAT_CONSULTANT
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:07.181277208Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.959949522Z[Etc/UTC]")
 public class UpdateAdminConsultantDTO {
   public static final String JSON_PROPERTY_FIRSTNAME = "firstname";
   private String firstname;

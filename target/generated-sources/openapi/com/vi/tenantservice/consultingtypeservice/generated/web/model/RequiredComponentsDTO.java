@@ -32,7 +32,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   RequiredComponentsDTO.JSON_PROPERTY_AGE,
   RequiredComponentsDTO.JSON_PROPERTY_STATE
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:06.669551376Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.370737295Z[Etc/UTC]")
 public class RequiredComponentsDTO {
   public static final String JSON_PROPERTY_AGE = "age";
   private RequiredComponentsDTOAge age;

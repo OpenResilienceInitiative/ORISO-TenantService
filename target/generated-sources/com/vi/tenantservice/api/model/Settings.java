@@ -21,7 +21,7 @@ import jakarta.annotation.Generated;
  * Settings
  */
 
-@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2026-02-11T19:22:06.273372057Z[Etc/UTC]")
+@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2026-02-12T13:20:44.782841866Z[Etc/UTC]")
 public class Settings {
 
   private Boolean featureStatisticsEnabled;
@@ -41,6 +41,12 @@ public class Settings {
   private Boolean featureAnonymousChatEnabled;
 
   private Boolean featureCallsEnabled;
+
+  private Boolean featureThreadsEnabled;
+
+  private Boolean featureThreadsGroupChatsEnabled;
+
+  private Boolean featureThreadsOneOnOneEnabled;
 
   private Boolean featureAttachmentUploadDisabled;
 
@@ -237,6 +243,66 @@ public class Settings {
     this.featureCallsEnabled = featureCallsEnabled;
   }
 
+  public Settings featureThreadsEnabled(Boolean featureThreadsEnabled) {
+    this.featureThreadsEnabled = featureThreadsEnabled;
+    return this;
+  }
+
+  /**
+   * Get featureThreadsEnabled
+   * @return featureThreadsEnabled
+  */
+  
+  @Schema(name = "featureThreadsEnabled", example = "true", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+  @JsonProperty("featureThreadsEnabled")
+  public Boolean getFeatureThreadsEnabled() {
+    return featureThreadsEnabled;
+  }
+
+  public void setFeatureThreadsEnabled(Boolean featureThreadsEnabled) {
+    this.featureThreadsEnabled = featureThreadsEnabled;
+  }
+
+  public Settings featureThreadsGroupChatsEnabled(Boolean featureThreadsGroupChatsEnabled) {
+    this.featureThreadsGroupChatsEnabled = featureThreadsGroupChatsEnabled;
+    return this;
+  }
+
+  /**
+   * Get featureThreadsGroupChatsEnabled
+   * @return featureThreadsGroupChatsEnabled
+  */
+  
+  @Schema(name = "featureThreadsGroupChatsEnabled", example = "true", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+  @JsonProperty("featureThreadsGroupChatsEnabled")
+  public Boolean getFeatureThreadsGroupChatsEnabled() {
+    return featureThreadsGroupChatsEnabled;
+  }
+
+  public void setFeatureThreadsGroupChatsEnabled(Boolean featureThreadsGroupChatsEnabled) {
+    this.featureThreadsGroupChatsEnabled = featureThreadsGroupChatsEnabled;
+  }
+
+  public Settings featureThreadsOneOnOneEnabled(Boolean featureThreadsOneOnOneEnabled) {
+    this.featureThreadsOneOnOneEnabled = featureThreadsOneOnOneEnabled;
+    return this;
+  }
+
+  /**
+   * Get featureThreadsOneOnOneEnabled
+   * @return featureThreadsOneOnOneEnabled
+  */
+  
+  @Schema(name = "featureThreadsOneOnOneEnabled", example = "true", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+  @JsonProperty("featureThreadsOneOnOneEnabled")
+  public Boolean getFeatureThreadsOneOnOneEnabled() {
+    return featureThreadsOneOnOneEnabled;
+  }
+
+  public void setFeatureThreadsOneOnOneEnabled(Boolean featureThreadsOneOnOneEnabled) {
+    this.featureThreadsOneOnOneEnabled = featureThreadsOneOnOneEnabled;
+  }
+
   public Settings featureAttachmentUploadDisabled(Boolean featureAttachmentUploadDisabled) {
     this.featureAttachmentUploadDisabled = featureAttachmentUploadDisabled;
     return this;
@@ -403,6 +469,9 @@ public class Settings {
         Objects.equals(this.featureToolsEnabled, settings.featureToolsEnabled) &&
         Objects.equals(this.featureAnonymousChatEnabled, settings.featureAnonymousChatEnabled) &&
         Objects.equals(this.featureCallsEnabled, settings.featureCallsEnabled) &&
+        Objects.equals(this.featureThreadsEnabled, settings.featureThreadsEnabled) &&
+        Objects.equals(this.featureThreadsGroupChatsEnabled, settings.featureThreadsGroupChatsEnabled) &&
+        Objects.equals(this.featureThreadsOneOnOneEnabled, settings.featureThreadsOneOnOneEnabled) &&
         Objects.equals(this.featureAttachmentUploadDisabled, settings.featureAttachmentUploadDisabled) &&
         Objects.equals(this.featureToolsOICDToken, settings.featureToolsOICDToken) &&
         Objects.equals(this.activeLanguages, settings.activeLanguages) &&
@@ -414,7 +483,7 @@ public class Settings {
 
   @Override
   public int hashCode() {
-    return Objects.hash(featureStatisticsEnabled, featureTopicsEnabled, topicsInRegistrationEnabled, featureDemographicsEnabled, featureAppointmentsEnabled, featureGroupChatV2Enabled, featureToolsEnabled, featureAnonymousChatEnabled, featureCallsEnabled, featureAttachmentUploadDisabled, featureToolsOICDToken, activeLanguages, showAskerProfile, isVideoCallAllowed, extendedSettings, featureCentralDataProtectionTemplateEnabled);
+    return Objects.hash(featureStatisticsEnabled, featureTopicsEnabled, topicsInRegistrationEnabled, featureDemographicsEnabled, featureAppointmentsEnabled, featureGroupChatV2Enabled, featureToolsEnabled, featureAnonymousChatEnabled, featureCallsEnabled, featureThreadsEnabled, featureThreadsGroupChatsEnabled, featureThreadsOneOnOneEnabled, featureAttachmentUploadDisabled, featureToolsOICDToken, activeLanguages, showAskerProfile, isVideoCallAllowed, extendedSettings, featureCentralDataProtectionTemplateEnabled);
   }
 
   @Override
@@ -430,6 +499,9 @@ public class Settings {
     sb.append("    featureToolsEnabled: ").append(toIndentedString(featureToolsEnabled)).append("\n");
     sb.append("    featureAnonymousChatEnabled: ").append(toIndentedString(featureAnonymousChatEnabled)).append("\n");
     sb.append("    featureCallsEnabled: ").append(toIndentedString(featureCallsEnabled)).append("\n");
+    sb.append("    featureThreadsEnabled: ").append(toIndentedString(featureThreadsEnabled)).append("\n");
+    sb.append("    featureThreadsGroupChatsEnabled: ").append(toIndentedString(featureThreadsGroupChatsEnabled)).append("\n");
+    sb.append("    featureThreadsOneOnOneEnabled: ").append(toIndentedString(featureThreadsOneOnOneEnabled)).append("\n");
     sb.append("    featureAttachmentUploadDisabled: ").append(toIndentedString(featureAttachmentUploadDisabled)).append("\n");
     sb.append("    featureToolsOICDToken: ").append(toIndentedString(featureToolsOICDToken)).append("\n");
     sb.append("    activeLanguages: ").append(toIndentedString(activeLanguages)).append("\n");

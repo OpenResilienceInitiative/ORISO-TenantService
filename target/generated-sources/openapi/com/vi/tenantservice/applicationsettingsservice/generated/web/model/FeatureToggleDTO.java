@@ -30,7 +30,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   FeatureToggleDTO.JSON_PROPERTY_VALUE,
   FeatureToggleDTO.JSON_PROPERTY_READ_ONLY
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:07.033600218Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.810398291Z[Etc/UTC]")
 public class FeatureToggleDTO {
   public static final String JSON_PROPERTY_VALUE = "value";
   private Boolean value;

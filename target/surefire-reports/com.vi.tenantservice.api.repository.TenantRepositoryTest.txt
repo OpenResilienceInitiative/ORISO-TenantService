@@ -1,54 +1,9 @@
 -------------------------------------------------------------------------------
 Test set: com.vi.tenantservice.api.repository.TenantRepositoryTest
 -------------------------------------------------------------------------------
-Tests run: 5, Failures: 0, Errors: 5, Skipped: 0, Time elapsed: 2.044 s <<< FAILURE! - in com.vi.tenantservice.api.repository.TenantRepositoryTest
-delete_Should_removeTenantById  Time elapsed: 0.051 s  <<< ERROR!
-org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement; SQL [select t1_0.id,t1_0.content_claim,t1_0.content_impressum,t1_0.content_privacy,t1_0.privacy_activation_date,t1_0.content_termsandconditions,t1_0.termsandconditions_activation_date,t1_0.create_date,t1_0.licensing_allowed_users,t1_0.name,t1_0.settings,t1_0.subdomain,t1_0.theming_association_logo,t1_0.theming_favicon,t1_0.theming_logo,t1_0.theming_primary_color,t1_0.theming_secondary_color,t1_0.update_date from tenant t1_0 where t1_0.id=?]
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.delete_Should_removeTenantById(TenantRepositoryTest.java:38)
-Caused by: org.hibernate.exception.SQLGrammarException: could not prepare statement
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.delete_Should_removeTenantById(TenantRepositoryTest.java:38)
-Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: 
-Table "TENANT" not found (this database is empty); SQL statement:
-select t1_0.id,t1_0.content_claim,t1_0.content_impressum,t1_0.content_privacy,t1_0.privacy_activation_date,t1_0.content_termsandconditions,t1_0.termsandconditions_activation_date,t1_0.create_date,t1_0.licensing_allowed_users,t1_0.name,t1_0.settings,t1_0.subdomain,t1_0.theming_association_logo,t1_0.theming_favicon,t1_0.theming_logo,t1_0.theming_primary_color,t1_0.theming_secondary_color,t1_0.update_date from tenant t1_0 where t1_0.id=? [42104-214]
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.delete_Should_removeTenantById(TenantRepositoryTest.java:38)
-
-findBySubdomain_Should_FindTenantBySubdomain  Time elapsed: 0.036 s  <<< ERROR!
-org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement; SQL [select t1_0.id,t1_0.content_claim,t1_0.content_impressum,t1_0.content_privacy,t1_0.privacy_activation_date,t1_0.content_termsandconditions,t1_0.termsandconditions_activation_date,t1_0.create_date,t1_0.licensing_allowed_users,t1_0.name,t1_0.settings,t1_0.subdomain,t1_0.theming_association_logo,t1_0.theming_favicon,t1_0.theming_logo,t1_0.theming_primary_color,t1_0.theming_secondary_color,t1_0.update_date from tenant t1_0 where t1_0.subdomain=?]
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.findBySubdomain_Should_FindTenantBySubdomain(TenantRepositoryTest.java:83)
-Caused by: org.hibernate.exception.SQLGrammarException: could not prepare statement
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.findBySubdomain_Should_FindTenantBySubdomain(TenantRepositoryTest.java:83)
-Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: 
-Table "TENANT" not found (this database is empty); SQL statement:
-select t1_0.id,t1_0.content_claim,t1_0.content_impressum,t1_0.content_privacy,t1_0.privacy_activation_date,t1_0.content_termsandconditions,t1_0.termsandconditions_activation_date,t1_0.create_date,t1_0.licensing_allowed_users,t1_0.name,t1_0.settings,t1_0.subdomain,t1_0.theming_association_logo,t1_0.theming_favicon,t1_0.theming_logo,t1_0.theming_primary_color,t1_0.theming_secondary_color,t1_0.update_date from tenant t1_0 where t1_0.subdomain=? [42104-214]
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.findBySubdomain_Should_FindTenantBySubdomain(TenantRepositoryTest.java:83)
-
-findById_Should_findTenantById  Time elapsed: 0.005 s  <<< ERROR!
-org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement; SQL [select t1_0.id,t1_0.content_claim,t1_0.content_impressum,t1_0.content_privacy,t1_0.privacy_activation_date,t1_0.content_termsandconditions,t1_0.termsandconditions_activation_date,t1_0.create_date,t1_0.licensing_allowed_users,t1_0.name,t1_0.settings,t1_0.subdomain,t1_0.theming_association_logo,t1_0.theming_favicon,t1_0.theming_logo,t1_0.theming_primary_color,t1_0.theming_secondary_color,t1_0.update_date from tenant t1_0 where t1_0.id=?]
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.findById_Should_findTenantById(TenantRepositoryTest.java:30)
-Caused by: org.hibernate.exception.SQLGrammarException: could not prepare statement
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.findById_Should_findTenantById(TenantRepositoryTest.java:30)
-Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: 
-Table "TENANT" not found (this database is empty); SQL statement:
-select t1_0.id,t1_0.content_claim,t1_0.content_impressum,t1_0.content_privacy,t1_0.privacy_activation_date,t1_0.content_termsandconditions,t1_0.termsandconditions_activation_date,t1_0.create_date,t1_0.licensing_allowed_users,t1_0.name,t1_0.settings,t1_0.subdomain,t1_0.theming_association_logo,t1_0.theming_favicon,t1_0.theming_logo,t1_0.theming_primary_color,t1_0.theming_secondary_color,t1_0.update_date from tenant t1_0 where t1_0.id=? [42104-214]
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.findById_Should_findTenantById(TenantRepositoryTest.java:30)
-
-save_Should_saveTenant  Time elapsed: 0.038 s  <<< ERROR!
-org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement; SQL [insert into tenant (content_claim, content_impressum, content_privacy, privacy_activation_date, content_termsandconditions, termsandconditions_activation_date, create_date, licensing_allowed_users, name, settings, subdomain, theming_association_logo, theming_favicon, theming_logo, theming_primary_color, theming_secondary_color, update_date, id) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.save_Should_saveTenant(TenantRepositoryTest.java:54)
-Caused by: org.hibernate.exception.SQLGrammarException: could not prepare statement
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.save_Should_saveTenant(TenantRepositoryTest.java:54)
-Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: 
-Table "TENANT" not found (this database is empty); SQL statement:
-insert into tenant (content_claim, content_impressum, content_privacy, privacy_activation_date, content_termsandconditions, termsandconditions_activation_date, create_date, licensing_allowed_users, name, settings, subdomain, theming_association_logo, theming_favicon, theming_logo, theming_primary_color, theming_secondary_color, update_date, id) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) [42104-214]
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.save_Should_saveTenant(TenantRepositoryTest.java:54)
-
-save_Should_updateTenant  Time elapsed: 0.005 s  <<< ERROR!
-org.springframework.dao.InvalidDataAccessResourceUsageException: could not prepare statement; SQL [select t1_0.id,t1_0.content_claim,t1_0.content_impressum,t1_0.content_privacy,t1_0.privacy_activation_date,t1_0.content_termsandconditions,t1_0.termsandconditions_activation_date,t1_0.create_date,t1_0.licensing_allowed_users,t1_0.name,t1_0.settings,t1_0.subdomain,t1_0.theming_association_logo,t1_0.theming_favicon,t1_0.theming_logo,t1_0.theming_primary_color,t1_0.theming_secondary_color,t1_0.update_date from tenant t1_0 where t1_0.id=?]
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.save_Should_updateTenant(TenantRepositoryTest.java:65)
-Caused by: org.hibernate.exception.SQLGrammarException: could not prepare statement
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.save_Should_updateTenant(TenantRepositoryTest.java:65)
-Caused by: org.h2.jdbc.JdbcSQLSyntaxErrorException: 
-Table "TENANT" not found (this database is empty); SQL statement:
-select t1_0.id,t1_0.content_claim,t1_0.content_impressum,t1_0.content_privacy,t1_0.privacy_activation_date,t1_0.content_termsandconditions,t1_0.termsandconditions_activation_date,t1_0.create_date,t1_0.licensing_allowed_users,t1_0.name,t1_0.settings,t1_0.subdomain,t1_0.theming_association_logo,t1_0.theming_favicon,t1_0.theming_logo,t1_0.theming_primary_color,t1_0.theming_secondary_color,t1_0.update_date from tenant t1_0 where t1_0.id=? [42104-214]
-	at com.vi.tenantservice.api.repository.TenantRepositoryTest.save_Should_updateTenant(TenantRepositoryTest.java:65)
+Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.012 s <<< FAILURE! - in com.vi.tenantservice.api.repository.TenantRepositoryTest
+com.vi.tenantservice.api.repository.TenantRepositoryTest  Time elapsed: 0.012 s  <<< ERROR!
+org.springframework.beans.factory.BeanDefinitionStoreException: Failed to read candidate component class: file [/root/online-beratung/ORISO-Complete/caritas-workspace/ORISO-TenantService/target/test-classes/com/vi/tenantservice/api/repository/TenantRepositoryTest.class]
+Caused by: java.io.IOException: ASM ClassReader failed to parse class file - probably due to a new Java class file version that isn't supported yet: file [/root/online-beratung/ORISO-Complete/caritas-workspace/ORISO-TenantService/target/test-classes/com/vi/tenantservice/api/repository/TenantRepositoryTest.class]
+Caused by: java.lang.IllegalArgumentException: Unsupported class file major version 65
 

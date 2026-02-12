@@ -48,7 +48,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   ConsultantDTO.JSON_PROPERTY_TENANT_NAME,
   ConsultantDTO.JSON_PROPERTY_DISPLAY_NAME
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:07.181277208Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.959949522Z[Etc/UTC]")
 public class ConsultantDTO {
   public static final String JSON_PROPERTY_ID = "id";
   private String id;

@@ -7,6 +7,10 @@
   "featureGroupChatV2Enabled": false,
   "featureToolsEnabled": false,
   "featureAnonymousChatEnabled": true,
+  "featureCallsEnabled": true,
+  "featureThreadsEnabled": true,
+  "featureThreadsGroupChatsEnabled": true,
+  "featureThreadsOneOnOneEnabled": true,
   "featureAttachmentUploadDisabled": true,
   "featureToolsOIDCToken": "token",
   "activeLanguages": [

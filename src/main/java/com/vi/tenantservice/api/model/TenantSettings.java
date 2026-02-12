@@ -21,6 +21,9 @@ public class TenantSettings {
   boolean featureToolsEnabled;
   boolean featureAnonymousChatEnabled;
   boolean featureCallsEnabled;
+  boolean featureThreadsEnabled;
+  boolean featureThreadsGroupChatsEnabled;
+  boolean featureThreadsOneOnOneEnabled;
   boolean featureAttachmentUploadDisabled;
   boolean isVideoCallAllowed;
   boolean showAskerProfile;

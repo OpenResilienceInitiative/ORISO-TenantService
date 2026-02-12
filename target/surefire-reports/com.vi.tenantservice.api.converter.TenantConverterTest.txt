@@ -1,4 +1,102 @@
 -------------------------------------------------------------------------------
 Test set: com.vi.tenantservice.api.converter.TenantConverterTest
 -------------------------------------------------------------------------------
-Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.142 s - in com.vi.tenantservice.api.converter.TenantConverterTest
+Tests run: 4, Failures: 2, Errors: 0, Skipped: 0, Time elapsed: 0.062 s <<< FAILURE! - in com.vi.tenantservice.api.converter.TenantConverterTest
+toRestrictedTenantDTO_should_convertAttributesProperly  Time elapsed: 0.017 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: 
+
+expected: 
+  class Settings {
+      featureStatisticsEnabled: true
+      featureTopicsEnabled: true
+      topicsInRegistrationEnabled: true
+      featureDemographicsEnabled: true
+      featureAppointmentsEnabled: true
+      featureGroupChatV2Enabled: true
+      featureToolsEnabled: true
+      featureAnonymousChatEnabled: null
+      featureCallsEnabled: null
+      featureThreadsEnabled: null
+      featureThreadsGroupChatsEnabled: null
+      featureThreadsOneOnOneEnabled: null
+      featureAttachmentUploadDisabled: false
+      featureToolsOICDToken: 1234
+      activeLanguages: [de, en]
+      showAskerProfile: true
+      isVideoCallAllowed: true
+      extendedSettings: null
+      featureCentralDataProtectionTemplateEnabled: true
+  }
+ but was: 
+  class Settings {
+      featureStatisticsEnabled: true
+      featureTopicsEnabled: true
+      topicsInRegistrationEnabled: true
+      featureDemographicsEnabled: true
+      featureAppointmentsEnabled: true
+      featureGroupChatV2Enabled: true
+      featureToolsEnabled: true
+      featureAnonymousChatEnabled: true
+      featureCallsEnabled: true
+      featureThreadsEnabled: true
+      featureThreadsGroupChatsEnabled: true
+      featureThreadsOneOnOneEnabled: true
+      featureAttachmentUploadDisabled: false
+      featureToolsOICDToken: 1234
+      activeLanguages: [de, en]
+      showAskerProfile: true
+      isVideoCallAllowed: true
+      extendedSettings: null
+      featureCentralDataProtectionTemplateEnabled: true
+  }
+	at com.vi.tenantservice.api.converter.TenantConverterTest.toRestrictedTenantDTO_should_convertAttributesProperly(TenantConverterTest.java:99)
+
+toEntity_should_convertToEntityAndBackToDTO  Time elapsed: 0.006 s  <<< FAILURE!
+org.opentest4j.AssertionFailedError: 
+
+expected: 
+  class Settings {
+      featureStatisticsEnabled: true
+      featureTopicsEnabled: true
+      topicsInRegistrationEnabled: true
+      featureDemographicsEnabled: true
+      featureAppointmentsEnabled: true
+      featureGroupChatV2Enabled: true
+      featureToolsEnabled: true
+      featureAnonymousChatEnabled: null
+      featureCallsEnabled: null
+      featureThreadsEnabled: null
+      featureThreadsGroupChatsEnabled: null
+      featureThreadsOneOnOneEnabled: null
+      featureAttachmentUploadDisabled: false
+      featureToolsOICDToken: 1234
+      activeLanguages: [de, en]
+      showAskerProfile: true
+      isVideoCallAllowed: true
+      extendedSettings: null
+      featureCentralDataProtectionTemplateEnabled: true
+  }
+ but was: 
+  class Settings {
+      featureStatisticsEnabled: true
+      featureTopicsEnabled: true
+      topicsInRegistrationEnabled: true
+      featureDemographicsEnabled: true
+      featureAppointmentsEnabled: true
+      featureGroupChatV2Enabled: true
+      featureToolsEnabled: true
+      featureAnonymousChatEnabled: true
+      featureCallsEnabled: true
+      featureThreadsEnabled: true
+      featureThreadsGroupChatsEnabled: true
+      featureThreadsOneOnOneEnabled: true
+      featureAttachmentUploadDisabled: false
+      featureToolsOICDToken: 1234
+      activeLanguages: [de, en]
+      showAskerProfile: true
+      isVideoCallAllowed: true
+      extendedSettings: null
+      featureCentralDataProtectionTemplateEnabled: true
+  }
+	at com.vi.tenantservice.api.converter.TenantConverterTest.toEntity_should_convertToEntityAndBackToDTO(TenantConverterTest.java:58)
+

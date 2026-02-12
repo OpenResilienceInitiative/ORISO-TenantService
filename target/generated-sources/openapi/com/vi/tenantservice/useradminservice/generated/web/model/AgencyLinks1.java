@@ -34,7 +34,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   AgencyLinks1.JSON_PROPERTY_POSTCODE_RANGES
 })
 @JsonTypeName("AgencyLinks_1")
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:07.181277208Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.959949522Z[Etc/UTC]")
 public class AgencyLinks1 {
   public static final String JSON_PROPERTY_SELF = "self";
   private HalLink self;

@@ -146,6 +146,9 @@ public class TenantFacadeChangeDetectionService {
       // Default should be enabled if missing completely.
       existingSettingsToCompare.setFeatureAnonymousChatEnabled(true);
       existingSettingsToCompare.setFeatureCallsEnabled(true);
+      existingSettingsToCompare.setFeatureThreadsEnabled(true);
+      existingSettingsToCompare.setFeatureThreadsGroupChatsEnabled(true);
+      existingSettingsToCompare.setFeatureThreadsOneOnOneEnabled(true);
     } else {
       final String settingsJson = existingTenant.getSettings();
       existingSettingsToCompare = JsonConverter.convertFromJson(settingsJson);
@@ -155,6 +158,15 @@ public class TenantFacadeChangeDetectionService {
       }
       if (!settingsJson.contains("\"featureCallsEnabled\"")) {
         existingSettingsToCompare.setFeatureCallsEnabled(true);
+      }
+      if (!settingsJson.contains("\"featureThreadsEnabled\"")) {
+        existingSettingsToCompare.setFeatureThreadsEnabled(true);
+      }
+      if (!settingsJson.contains("\"featureThreadsGroupChatsEnabled\"")) {
+        existingSettingsToCompare.setFeatureThreadsGroupChatsEnabled(true);
+      }
+      if (!settingsJson.contains("\"featureThreadsOneOnOneEnabled\"")) {
+        existingSettingsToCompare.setFeatureThreadsOneOnOneEnabled(true);
       }
     }
     return existingSettingsToCompare;

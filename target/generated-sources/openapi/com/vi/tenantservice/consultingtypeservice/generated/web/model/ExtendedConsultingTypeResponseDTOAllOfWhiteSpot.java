@@ -31,7 +31,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   ExtendedConsultingTypeResponseDTOAllOfWhiteSpot.JSON_PROPERTY_WHITE_SPOT_AGENCY_ID
 })
 @JsonTypeName("ExtendedConsultingTypeResponseDTO_allOf_whiteSpot")
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:06.669551376Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.370737295Z[Etc/UTC]")
 public class ExtendedConsultingTypeResponseDTOAllOfWhiteSpot {
   public static final String JSON_PROPERTY_WHITE_SPOT_AGENCY_ASSIGNED = "whiteSpotAgencyAssigned";
   private Boolean whiteSpotAgencyAssigned;

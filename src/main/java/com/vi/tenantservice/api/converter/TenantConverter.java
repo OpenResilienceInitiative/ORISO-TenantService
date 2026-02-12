@@ -79,6 +79,9 @@ public class TenantConverter {
         .featureToolsEnabled(nullAsFalse(settings.getFeatureToolsEnabled()))
         .featureAnonymousChatEnabled(nullAsTrue(settings.getFeatureAnonymousChatEnabled()))
         .featureCallsEnabled(nullAsTrue(settings.getFeatureCallsEnabled()))
+        .featureThreadsEnabled(nullAsTrue(settings.getFeatureThreadsEnabled()))
+        .featureThreadsGroupChatsEnabled(nullAsTrue(settings.getFeatureThreadsGroupChatsEnabled()))
+        .featureThreadsOneOnOneEnabled(nullAsTrue(settings.getFeatureThreadsOneOnOneEnabled()))
         .featureToolsOIDCToken(settings.getFeatureToolsOICDToken())
         .featureAttachmentUploadDisabled(nullAsFalse(settings.getFeatureAttachmentUploadDisabled()))
         .activeLanguages(nullAsGerman(settings.getActiveLanguages()))
@@ -184,6 +187,18 @@ public class TenantConverter {
         settingsJson != null && settingsJson.contains("\"featureCallsEnabled\"")
             ? tenantSettings.isFeatureCallsEnabled()
             : true;
+    final boolean threadsEnabled =
+        settingsJson != null && settingsJson.contains("\"featureThreadsEnabled\"")
+            ? tenantSettings.isFeatureThreadsEnabled()
+            : true;
+    final boolean threadsGroupChatsEnabled =
+        settingsJson != null && settingsJson.contains("\"featureThreadsGroupChatsEnabled\"")
+            ? tenantSettings.isFeatureThreadsGroupChatsEnabled()
+            : true;
+    final boolean threadsOneOnOneEnabled =
+        settingsJson != null && settingsJson.contains("\"featureThreadsOneOnOneEnabled\"")
+            ? tenantSettings.isFeatureThreadsOneOnOneEnabled()
+            : true;
     return new Settings()
         .topicsInRegistrationEnabled(tenantSettings.isTopicsInRegistrationEnabled())
         .featureDemographicsEnabled(tenantSettings.isFeatureDemographicsEnabled())
@@ -195,6 +210,9 @@ public class TenantConverter {
         .featureToolsEnabled(tenantSettings.isFeatureToolsEnabled())
         .featureAnonymousChatEnabled(anonymousChatEnabled)
         .featureCallsEnabled(callsEnabled)
+        .featureThreadsEnabled(threadsEnabled)
+        .featureThreadsGroupChatsEnabled(threadsGroupChatsEnabled)
+        .featureThreadsOneOnOneEnabled(threadsOneOnOneEnabled)
         .featureAttachmentUploadDisabled(tenantSettings.isFeatureAttachmentUploadDisabled())
         .isVideoCallAllowed(tenantSettings.isVideoCallAllowed())
         .showAskerProfile(tenantSettings.isShowAskerProfile())

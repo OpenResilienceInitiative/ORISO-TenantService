@@ -562,6 +562,15 @@ components:
         featureCallsEnabled:
           type: boolean
           example: "true"
+        featureThreadsEnabled:
+          type: boolean
+          example: "true"
+        featureThreadsGroupChatsEnabled:
+          type: boolean
+          example: "true"
+        featureThreadsOneOnOneEnabled:
+          type: boolean
+          example: "true"
         featureAttachmentUploadDisabled:
           type: boolean
           example: "false"

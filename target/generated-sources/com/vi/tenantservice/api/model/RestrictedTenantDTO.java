@@ -21,7 +21,7 @@ import jakarta.annotation.Generated;
  * RestrictedTenantDTO
  */
 
-@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2026-02-11T19:22:06.273372057Z[Etc/UTC]")
+@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2026-02-12T13:20:44.782841866Z[Etc/UTC]")
 public class RestrictedTenantDTO {
 
   private Long id = null;

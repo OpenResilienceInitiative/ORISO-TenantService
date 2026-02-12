@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.vi.tenantservice.api.facade.TenantServiceFacadeTest
 -------------------------------------------------------------------------------
-Tests run: 20, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.785 s - in com.vi.tenantservice.api.facade.TenantServiceFacadeTest
+Tests run: 20, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.438 s - in com.vi.tenantservice.api.facade.TenantServiceFacadeTest

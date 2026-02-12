@@ -33,7 +33,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   ConsultantFilter.JSON_PROPERTY_AGENCY_ID,
   ConsultantFilter.JSON_PROPERTY_ABSENT
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-11T19:22:07.181277208Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.959949522Z[Etc/UTC]")
 public class ConsultantFilter {
   public static final String JSON_PROPERTY_USERNAME = "username";
   private String username;

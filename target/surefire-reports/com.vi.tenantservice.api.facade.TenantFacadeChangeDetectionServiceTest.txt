@@ -1,28 +1,32 @@
 -------------------------------------------------------------------------------
 Test set: com.vi.tenantservice.api.facade.TenantFacadeChangeDetectionServiceTest
 -------------------------------------------------------------------------------
-Tests run: 12, Failures: 6, Errors: 0, Skipped: 0, Time elapsed: 0.065 s <<< FAILURE! - in com.vi.tenantservice.api.facade.TenantFacadeChangeDetectionServiceTest
-determineChangedSettings_Should_DetectFeatureAttachmentUploadDisabledChanges_When_InputDTOContainsDifferentSettingsAsEntity  Time elapsed: 0.035 s  <<< FAILURE!
+Tests run: 12, Failures: 5, Errors: 0, Skipped: 0, Time elapsed: 0.036 s <<< FAILURE! - in com.vi.tenantservice.api.facade.TenantFacadeChangeDetectionServiceTest
+determineChangedSettings_Should_DetectFeatureAttachmentUploadDisabledChanges_When_InputDTOContainsDifferentSettingsAsEntity  Time elapsed: 0.005 s  <<< FAILURE!
 java.lang.AssertionError: 
 
 Expecting ArrayList:
-  [FEATURE_ANONYMOUS_CHAT_ENABLED, FEATURE_ATTACHMENT_UPLOAD_DISABLED]
+  [FEATURE_ANONYMOUS_CHAT_ENABLED,
+    FEATURE_CALLS_ENABLED,
+    FEATURE_ATTACHMENT_UPLOAD_DISABLED]
 to contain only:
   [FEATURE_ATTACHMENT_UPLOAD_DISABLED]
 but the following element(s) were unexpected:
-  [FEATURE_ANONYMOUS_CHAT_ENABLED]
+  [FEATURE_ANONYMOUS_CHAT_ENABLED, FEATURE_CALLS_ENABLED]
 
 	at com.vi.tenantservice.api.facade.TenantFacadeChangeDetectionServiceTest.determineChangedSettings_Should_DetectFeatureAttachmentUploadDisabledChanges_When_InputDTOContainsDifferentSettingsAsEntity(TenantFacadeChangeDetectionServiceTest.java:228)
 
-determineChangedSettings_Should_DetectStatisticsFeatureChanges_When_InputDTOContainsDifferentSettingsAsEntity  Time elapsed: 0.006 s  <<< FAILURE!
+determineChangedSettings_Should_DetectStatisticsFeatureChanges_When_InputDTOContainsDifferentSettingsAsEntity  Time elapsed: 0.005 s  <<< FAILURE!
 java.lang.AssertionError: 
 
 Expecting ArrayList:
-  [FEATURE_STATISTICS_ENABLED, FEATURE_ANONYMOUS_CHAT_ENABLED]
+  [FEATURE_STATISTICS_ENABLED,
+    FEATURE_ANONYMOUS_CHAT_ENABLED,
+    FEATURE_CALLS_ENABLED]
 to contain only:
   [FEATURE_STATISTICS_ENABLED]
 but the following element(s) were unexpected:
-  [FEATURE_ANONYMOUS_CHAT_ENABLED]
+  [FEATURE_ANONYMOUS_CHAT_ENABLED, FEATURE_CALLS_ENABLED]
 
 	at com.vi.tenantservice.api.facade.TenantFacadeChangeDetectionServiceTest.determineChangedSettings_Should_DetectStatisticsFeatureChanges_When_InputDTOContainsDifferentSettingsAsEntity(TenantFacadeChangeDetectionServiceTest.java:122)
 
@@ -30,35 +34,33 @@ determineChangedSettings_Should_DetectGroupChatV2FeatureChanges_When_InputDTOCon
 java.lang.AssertionError: 
 
 Expecting ArrayList:
-  [FEATURE_GROUP_CHAT_V2_ENABLED, FEATURE_ANONYMOUS_CHAT_ENABLED]
+  [FEATURE_GROUP_CHAT_V2_ENABLED,
+    FEATURE_ANONYMOUS_CHAT_ENABLED,
+    FEATURE_CALLS_ENABLED]
 to contain only:
   [FEATURE_GROUP_CHAT_V2_ENABLED]
 but the following element(s) were unexpected:
-  [FEATURE_ANONYMOUS_CHAT_ENABLED]
+  [FEATURE_ANONYMOUS_CHAT_ENABLED, FEATURE_CALLS_ENABLED]
 
 	at com.vi.tenantservice.api.facade.TenantFacadeChangeDetectionServiceTest.determineChangedSettings_Should_DetectGroupChatV2FeatureChanges_When_InputDTOContainsDifferentSettingsAsEntity(TenantFacadeChangeDetectionServiceTest.java:210)
 
-determineChangedSettings_Should_NotDetectAnyChanges_When_InputDTOIsEmptyAndEntitySettingsAreNull  Time elapsed: 0.001 s  <<< FAILURE!
+determineChangedSettings_Should_Not_DetectChanges_When_InputDTOContainsSameSettingsAsEntity  Time elapsed: 0.004 s  <<< FAILURE!
 java.lang.AssertionError: 
 
-Expecting empty but was: [FEATURE_ANONYMOUS_CHAT_ENABLED]
-	at com.vi.tenantservice.api.facade.TenantFacadeChangeDetectionServiceTest.determineChangedSettings_Should_NotDetectAnyChanges_When_InputDTOIsEmptyAndEntitySettingsAreNull(TenantFacadeChangeDetectionServiceTest.java:53)
-
-determineChangedSettings_Should_Not_DetectChanges_When_InputDTOContainsSameSettingsAsEntity  Time elapsed: 0.002 s  <<< FAILURE!
-java.lang.AssertionError: 
-
-Expecting empty but was: [FEATURE_ANONYMOUS_CHAT_ENABLED]
+Expecting empty but was: [FEATURE_ANONYMOUS_CHAT_ENABLED, FEATURE_CALLS_ENABLED]
 	at com.vi.tenantservice.api.facade.TenantFacadeChangeDetectionServiceTest.determineChangedSettings_Should_Not_DetectChanges_When_InputDTOContainsSameSettingsAsEntity(TenantFacadeChangeDetectionServiceTest.java:104)
 
-determineChangedSettings_Should_DetectAppointmentFeatureChanges_When_InputDTOContainsDifferentSettingsAsEntity  Time elapsed: 0.002 s  <<< FAILURE!
+determineChangedSettings_Should_DetectAppointmentFeatureChanges_When_InputDTOContainsDifferentSettingsAsEntity  Time elapsed: 0.003 s  <<< FAILURE!
 java.lang.AssertionError: 
 
 Expecting ArrayList:
-  [FEATURE_APPOINTMENTS_ENABLED, FEATURE_ANONYMOUS_CHAT_ENABLED]
+  [FEATURE_APPOINTMENTS_ENABLED,
+    FEATURE_ANONYMOUS_CHAT_ENABLED,
+    FEATURE_CALLS_ENABLED]
 to contain only:
   [FEATURE_APPOINTMENTS_ENABLED]
 but the following element(s) were unexpected:
-  [FEATURE_ANONYMOUS_CHAT_ENABLED]
+  [FEATURE_ANONYMOUS_CHAT_ENABLED, FEATURE_CALLS_ENABLED]
 
 	at com.vi.tenantservice.api.facade.TenantFacadeChangeDetectionServiceTest.determineChangedSettings_Should_DetectAppointmentFeatureChanges_When_InputDTOContainsDifferentSettingsAsEntity(TenantFacadeChangeDetectionServiceTest.java:140)
 
