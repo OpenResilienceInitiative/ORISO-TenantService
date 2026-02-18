@@ -32,9 +32,6 @@
         <liquibase.maven.plugin.version>4.23.1</liquibase.maven.plugin.version>
         <openapi.generator.maven.version>6.6.0</openapi.generator.maven.version>
         <jackson.databind.nullable.version>0.2.3</jackson.databind.nullable.version>
-        <keycloak-spring-boot-starter.version>19.0.3</keycloak-spring-boot-starter.version>
-        <keycloak-spring-security-adapter.version>16.0.0</keycloak-spring-security-adapter.version>
-        <keycloak-admin-client.version>16.0.0</keycloak-admin-client.version>
         <lombok.version>1.18.24</lombok.version>
         <commons-lang3.version>3.12.0</commons-lang3.version>
         <commons-collections4.version>4.4</commons-collections4.version>
