@@ -1,0 +1,1 @@
+ALTER TABLE `tenantservice`.`tenant` DROP IF EXISTS is_video_call_allowed;

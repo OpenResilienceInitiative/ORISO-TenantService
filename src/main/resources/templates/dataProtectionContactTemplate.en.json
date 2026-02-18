@@ -1,0 +1,14 @@
+{
+  "agencyContext": {
+      "responsibleContact": "<#if name?exists>${name}<br/></#if><#if postCode?exists>postcode: ${postCode}<br/></#if><#if city?exists> city: ${city}<br/></#if><#if phoneNumber?exists>phoneNumber: ${phoneNumber}<br/></#if><#if email?exists>email: ${email}</#if>",
+    "dataProtectionOfficer": {
+      "agencyResponsibleContact": "The responsible party has not appointed a data protection officer. For enquiries regarding data protection, please use the contact details of the responsible provider.",
+      "alternativeRepresentativeContact": "The responsible party has not appointed a data protection officer. Please use the following contact data for inquiries regarding data protection: ${phoneNumber} ${email}",
+      "dataProtectionOfficerContact": "<#if name?exists>${name}<br/></#if><#if postCode?exists>postcode: ${postCode}<br/></#if><#if city?exists> city: ${city}<br/></#if><#if phoneNumber?exists>phoneNumber: ${phoneNumber}<br/></#if><#if email?exists>email: ${email}</#if>"
+    }
+  },
+  "noAgencyContext": {
+    "responsibleContact": "The responsible party can only be displayed once a counselling centre has been selected. Please select a counselling centre.",
+    "dataProtectionOfficerContact": "The contact details of the data protection office can only be displayed once counselling centre has been selected. Please select a counselling centre."
+  }
+}
