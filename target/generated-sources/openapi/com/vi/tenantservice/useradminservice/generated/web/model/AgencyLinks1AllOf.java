@@ -31,7 +31,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   AgencyLinks1AllOf.JSON_PROPERTY_POSTCODE_RANGES
 })
 @JsonTypeName("AgencyLinks_1_allOf")
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.959949522Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:32.695809354Z[Etc/UTC]")
 public class AgencyLinks1AllOf {
   public static final String JSON_PROPERTY_POSTCODE_RANGES = "postcodeRanges";
   private HalLink postcodeRanges;

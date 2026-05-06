@@ -51,7 +51,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   AgencyAdminResponseDTO.JSON_PROPERTY_DATA_PROTECTION,
   AgencyAdminResponseDTO.JSON_PROPERTY_AGENCY_LOGO
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.959949522Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:32.695809354Z[Etc/UTC]")
 public class AgencyAdminResponseDTO {
   public static final String JSON_PROPERTY_ID = "id";
   private Long id;

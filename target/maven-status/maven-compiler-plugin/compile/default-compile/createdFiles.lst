@@ -5,6 +5,7 @@ com/vi/tenantservice/consultingtypeservice/generated/web/model/FurtherInformatio
 com/vi/tenantservice/api/service/consultingtype/ApplicationSettingsService.class
 com/vi/tenantservice/useradminservice/generated/web/model/ConsultantLinks.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/RegistrationNotesDTO.class
+com/vi/tenantservice/api/model/TenantAdminControls.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/RoleConsultantDTO.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/OptionDTO.class
 com/vi/tenantservice/api/tenant/TenantHeaderSupplier.class
@@ -38,6 +39,7 @@ com/vi/tenantservice/applicationsettingsservice/generated/auth/HttpBasicAuth.cla
 com/vi/tenantservice/api/tenant/TenantResolverService.class
 com/vi/tenantservice/useradminservice/generated/web/model/AdminLinks.class
 com/vi/tenantservice/useradminservice/generated/web/model/UpdateTenantAdminDTO.class
+com/vi/tenantservice/api/model/TenantAdminControlsSettings.class
 com/vi/tenantservice/applicationsettingsservice/generated/auth/ApiKeyAuth.class
 com/vi/tenantservice/useradminservice/generated/web/model/ConsultantFilter.class
 com/vi/tenantservice/useradminservice/generated/web/AdminUserControllerApi$16.class
@@ -158,6 +160,7 @@ com/vi/tenantservice/api/model/AdminTenantDTO.class
 com/vi/tenantservice/useradminservice/generated/web/model/AskerDTO.class
 com/vi/tenantservice/consultingtypeservice/generated/web/ConsultingTypeControllerApi$3.class
 com/vi/tenantservice/api/converter/ConsultingTypePatchDTOConverter.class
+com/vi/tenantservice/api/model/TenantSmtpSettings$TenantSmtpSettingsBuilder.class
 com/vi/tenantservice/generated/api/controller/TenantApi.class
 com/vi/tenantservice/useradminservice/generated/web/model/ConsultantDTO.class
 com/vi/tenantservice/useradminservice/generated/web/AdminUserControllerApi$25.class
@@ -169,6 +172,7 @@ com/vi/tenantservice/useradminservice/generated/web/AdminUserControllerApi$12.cl
 com/vi/tenantservice/useradminservice/generated/web/model/HalLink.class
 com/vi/tenantservice/applicationsettingsservice/generated/web/model/ApplicationSettingsPatchDTO.class
 com/vi/tenantservice/api/config/CustomResponseErrorHandler.class
+com/vi/tenantservice/api/model/TenantAdminControlsSettings$TenantAdminControlsSettingsBuilder.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/BasicConsultingTypeResponseDTO.class
 com/vi/tenantservice/api/authorisation/UserRole.class
 com/vi/tenantservice/useradminservice/generated/web/model/PatchAdminDTO.class
@@ -190,17 +194,20 @@ com/vi/tenantservice/consultingtypeservice/generated/web/model/RolesDTO.class
 com/vi/tenantservice/api/service/TemplateRenderer.class
 com/vi/tenantservice/api/model/TenantEntity$TenantEntityBuilder.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/BasicConsultingTypeResponseDTOGroupChat.class
+com/vi/tenantservice/api/model/SmtpConfig.class
 com/vi/tenantservice/api/model/ConsultingTypePatchDTOWelcomeMessage.class
 com/vi/tenantservice/useradminservice/generated/web/model/AdminAgencyResponseDTO.class
 com/vi/tenantservice/useradminservice/generated/web/model/DataProtectionDTO$DataProtectionResponsibleEntityEnum.class
 com/vi/tenantservice/useradminservice/generated/ApiClient.class
 com/vi/tenantservice/useradminservice/generated/web/AdminUserControllerApi$17.class
 com/vi/tenantservice/useradminservice/generated/web/model/AgencyConsultantResponseDTO.class
+com/vi/tenantservice/api/model/TenantAdminAllowedPermissionTogglesSettings.class
 com/vi/tenantservice/useradminservice/generated/web/model/Sort$OrderEnum.class
 com/vi/tenantservice/api/model/AgencyContextDTO.class
 com/vi/tenantservice/useradminservice/generated/web/model/CreateAdminDTO.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/ConsultingTypeCoreDTOTitles.class
 com/vi/tenantservice/useradminservice/generated/web/RootControllerApi$1.class
+com/vi/tenantservice/api/model/TenantSmtpSettings.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/ExtendedConsultingTypeResponseDTOAllOfSessionDataInitializing.class
 com/vi/tenantservice/applicationsettingsservice/generated/web/model/FeatureToggleDTO.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/WelcomeMessageDTO.class
@@ -209,10 +216,12 @@ com/vi/tenantservice/api/config/SpringFoxConfig$1.class
 com/vi/tenantservice/api/model/Content.class
 com/vi/tenantservice/api/exception/ApplicationSettingsUpdateException.class
 com/vi/tenantservice/useradminservice/generated/web/AdminUserControllerApi$31.class
+com/vi/tenantservice/api/model/TenantAdminAllowedPermissionTogglesSettings$TenantAdminAllowedPermissionTogglesSettingsBuilder.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/RegistrationDTO.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/ExtendedConsultingTypeResponseDTO.class
 com/vi/tenantservice/api/model/Licensing.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/UrlsDTO.class
+com/vi/tenantservice/api/model/TenantAdminAllowedPermissionToggles.class
 com/vi/tenantservice/consultingtypeservice/generated/web/model/ConsultingTypePatchDTO.class
 com/vi/tenantservice/useradminservice/generated/ServerConfiguration.class
 com/vi/tenantservice/api/tenant/HttpUrlUtils.class

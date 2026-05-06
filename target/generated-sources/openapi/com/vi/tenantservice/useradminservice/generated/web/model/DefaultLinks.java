@@ -32,7 +32,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   DefaultLinks.JSON_PROPERTY_UPDATE,
   DefaultLinks.JSON_PROPERTY_DELETE
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.959949522Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:32.695809354Z[Etc/UTC]")
 public class DefaultLinks {
   public static final String JSON_PROPERTY_SELF = "self";
   private HalLink self;

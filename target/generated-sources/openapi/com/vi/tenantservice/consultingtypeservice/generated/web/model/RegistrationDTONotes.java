@@ -31,7 +31,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   RegistrationDTONotes.JSON_PROPERTY_PASSWORD
 })
 @JsonTypeName("RegistrationDTO_notes")
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.370737295Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:31.682009407Z[Etc/UTC]")
 public class RegistrationDTONotes {
   public static final String JSON_PROPERTY_AGENCY_SELECTION = "agencySelection";
   private String agencySelection;

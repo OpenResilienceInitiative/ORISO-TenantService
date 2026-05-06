@@ -29,7 +29,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
 @JsonPropertyOrder({
   RolesDTO.JSON_PROPERTY_CONSULTANT
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.370737295Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:31.682009407Z[Etc/UTC]")
 public class RolesDTO {
   public static final String JSON_PROPERTY_CONSULTANT = "consultant";
   private com.vi.tenantservice.api.manager.consultingtype.roles.Consultant consultant;

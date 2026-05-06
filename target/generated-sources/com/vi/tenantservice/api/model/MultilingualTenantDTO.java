@@ -24,7 +24,7 @@ import jakarta.annotation.Generated;
  * MultilingualTenantDTO
  */
 
-@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2026-02-12T13:20:44.782841866Z[Etc/UTC]")
+@Generated(value = "org.openapitools.codegen.languages.SpringCodegen", date = "2026-03-11T15:41:30.641955926Z[Etc/UTC]")
 public class MultilingualTenantDTO {
 
   private Long id = null;

@@ -1,9 +1,0 @@
--------------------------------------------------------------------------------
-Test set: com.vi.tenantservice.api.repository.TenantRepositoryTest
--------------------------------------------------------------------------------
-Tests run: 1, Failures: 0, Errors: 1, Skipped: 0, Time elapsed: 0.012 s <<< FAILURE! - in com.vi.tenantservice.api.repository.TenantRepositoryTest
-com.vi.tenantservice.api.repository.TenantRepositoryTest  Time elapsed: 0.012 s  <<< ERROR!
-org.springframework.beans.factory.BeanDefinitionStoreException: Failed to read candidate component class: file [/root/online-beratung/ORISO-Complete/caritas-workspace/ORISO-TenantService/target/test-classes/com/vi/tenantservice/api/repository/TenantRepositoryTest.class]
-Caused by: java.io.IOException: ASM ClassReader failed to parse class file - probably due to a new Java class file version that isn't supported yet: file [/root/online-beratung/ORISO-Complete/caritas-workspace/ORISO-TenantService/target/test-classes/com/vi/tenantservice/api/repository/TenantRepositoryTest.class]
-Caused by: java.lang.IllegalArgumentException: Unsupported class file major version 65
-

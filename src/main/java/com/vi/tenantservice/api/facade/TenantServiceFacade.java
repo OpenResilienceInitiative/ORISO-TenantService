@@ -163,6 +163,21 @@ public class TenantServiceFacade {
     return updateWithSanitizedInput(id, sanitizedTenantDTO);
   }
 
+  public void deleteTenant(Long id) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
+
+    if (id == TECHNICAL_TENANT_ID) {
+      throw new BadRequestException("Technical tenant cannot be deleted.");
+    }
+
+    TenantEntity tenant =
+        tenantService
+            .findTenantById(id)
+            .orElseThrow(() -> new TenantNotFoundException("Tenant with id " + id + " not found"));
+
+    tenantService.delete(tenant);
+  }
+
   private boolean isAttemptToCreateFirstNonTechnicalTenant(Long tenantId) {
     return tenantId != 0L && multitenancyWithSingleDomain && onlyTechnicalTenantExists();
   }
@@ -523,8 +538,15 @@ public class TenantServiceFacade {
     map.put("name", tenantBase.getName());
     map.put("subdomain", fullTenant.getSubdomain());
     map.put("beraterCount", fullTenant.getLicensingAllowedNumberOfUsers());
-    List<AdminResponseDTO> tenantAdmins =
-        userAdminService.getTenantAdmins(tenantBase.getId().intValue());
+    List<AdminResponseDTO> tenantAdmins = new ArrayList<>();
+    try {
+      tenantAdmins = userAdminService.getTenantAdmins(tenantBase.getId().intValue());
+    } catch (Exception ex) {
+      log.warn(
+          "Could not resolve tenant-admin emails for tenant {}. Returning tenant without adminEmails.",
+          tenantBase.getId(),
+          ex);
+    }
     map.put("adminEmails", getAdminEmails(tenantAdmins));
     map.put(
         "createDate",

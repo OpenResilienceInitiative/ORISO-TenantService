@@ -33,7 +33,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   DataProtectionDTO.JSON_PROPERTY_ALTERNATIVE_DATA_PROTECTION_REPRESENTATIVE_CONTACT,
   DataProtectionDTO.JSON_PROPERTY_DATA_PROTECTION_OFFICER_CONTACT
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.959949522Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:32.695809354Z[Etc/UTC]")
 public class DataProtectionDTO {
   /**
    * Gets or Sets dataProtectionResponsibleEntity

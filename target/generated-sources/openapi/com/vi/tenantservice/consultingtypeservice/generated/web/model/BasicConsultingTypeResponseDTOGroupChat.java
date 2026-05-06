@@ -33,7 +33,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   BasicConsultingTypeResponseDTOGroupChat.JSON_PROPERTY_GROUP_CHAT_RULES
 })
 @JsonTypeName("BasicConsultingTypeResponseDTO_groupChat")
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.370737295Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:31.682009407Z[Etc/UTC]")
 public class BasicConsultingTypeResponseDTOGroupChat {
   public static final String JSON_PROPERTY_IS_GROUP_CHAT = "isGroupChat";
   private Boolean isGroupChat;

@@ -31,7 +31,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   HalLink.JSON_PROPERTY_METHOD,
   HalLink.JSON_PROPERTY_TEMPLATED
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.959949522Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:32.695809354Z[Etc/UTC]")
 public class HalLink {
   public static final String JSON_PROPERTY_HREF = "href";
   private String href;

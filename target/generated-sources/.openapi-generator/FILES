@@ -15,6 +15,9 @@ com/vi/tenantservice/api/model/NoAgencyContextDTO.java
 com/vi/tenantservice/api/model/PaginationLinks.java
 com/vi/tenantservice/api/model/RestrictedTenantDTO.java
 com/vi/tenantservice/api/model/Settings.java
+com/vi/tenantservice/api/model/SmtpConfig.java
+com/vi/tenantservice/api/model/TenantAdminAllowedPermissionToggles.java
+com/vi/tenantservice/api/model/TenantAdminControls.java
 com/vi/tenantservice/api/model/TenantDTO.java
 com/vi/tenantservice/api/model/TenantsSearchResultDTO.java
 com/vi/tenantservice/api/model/Theming.java

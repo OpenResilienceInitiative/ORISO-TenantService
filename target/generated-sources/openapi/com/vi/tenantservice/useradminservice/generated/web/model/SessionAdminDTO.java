@@ -39,7 +39,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   SessionAdminDTO.JSON_PROPERTY_CREATE_DATE,
   SessionAdminDTO.JSON_PROPERTY_UPDATE_DATE
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.959949522Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:32.695809354Z[Etc/UTC]")
 public class SessionAdminDTO {
   public static final String JSON_PROPERTY_ID = "id";
   private Long id;

@@ -529,7 +529,6 @@ components:
           example: 2022-12-07T11:51:01
           description: "Datetime stamp when new privacy defined"
         dataProtectionContactTemplate:
-          type: object
           $ref: '#/components/schemas/DataProtectionContactTemplateDTO'
 
     Settings:
@@ -562,15 +561,98 @@ components:
         featureCallsEnabled:
           type: boolean
           example: "true"
+        featureSupervisionEnabled:
+          type: boolean
+          example: "true"
+          description: "Master toggle for supervision functionality (adding/removing supervisors, supervision views)."
+        featureSupervisionAnonymousChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable supervision functionality in anonymous chats."
+        featureSupervisionOneOnOneChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable supervision functionality in 1-on-1 chats."
+        featureAudioCallsEnabled:
+          type: boolean
+          example: "true"
+          description: "Master toggle for audio call button availability (all chat types)."
+        featureAudioCallsAnonymousChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable audio call button in anonymous chats."
+        featureAudioCallsOneOnOneChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable audio call button in 1-on-1 chats."
+        featureAudioCallsGroupChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable audio call button in group chats."
+        featureAudioCallsSupervisionChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable audio call button when a user is in supervision mode."
+        featureVideoCallsEnabled:
+          type: boolean
+          example: "true"
+          description: "Master toggle for video call button availability (all chat types)."
+        featureVideoCallsAnonymousChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable video call button in anonymous chats."
+        featureVideoCallsOneOnOneChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable video call button in 1-on-1 chats."
+        featureVideoCallsGroupChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable video call button in group chats."
+        featureVideoCallsSupervisionChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable video call button when a user is in supervision mode."
         featureThreadsEnabled:
           type: boolean
           example: "true"
+          description: "Master toggle for threads availability (all chat types)."
+        featureThreadsAnonymousChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable threads in anonymous chats."
         featureThreadsGroupChatsEnabled:
           type: boolean
           example: "true"
+          description: "Enable threads in group chats."
         featureThreadsOneOnOneEnabled:
           type: boolean
           example: "true"
+          description: "Enable threads in 1-on-1 chats."
+        featureThreadsSupervisionChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable threads when a user is in supervision mode."
+        featureVoiceMessagesEnabled:
+          type: boolean
+          example: "true"
+          description: "Master toggle for voice messages availability (all chat types)."
+        featureVoiceMessagesAnonymousChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable voice messages in anonymous chats."
+        featureVoiceMessagesOneOnOneChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable voice messages in 1-on-1 chats."
+        featureVoiceMessagesGroupChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable voice messages in group chats."
+        featureVoiceMessagesSupervisionChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable voice messages when a user is in supervision mode."
         featureAttachmentUploadDisabled:
           type: boolean
           example: "false"
@@ -590,11 +672,134 @@ components:
           type: boolean
           default: false
           example: "false"
+        featureSystemNotificationEmailsEnabled:
+          type: boolean
+          example: "false"
+        smtp:
+          $ref: '#/components/schemas/SmtpConfig'
         extendedSettings:
           $ref: './../services/consultingtypeservice.yaml#/components/schemas/ConsultingTypePatchDTO'
         featureCentralDataProtectionTemplateEnabled:
           type: boolean
           example: "false"
+        tenantAdminControls:
+          $ref: '#/components/schemas/TenantAdminControls'
+
+    TenantAdminControls:
+      type: object
+      properties:
+        permissionsPageEnabled:
+          type: boolean
+          example: "true"
+        allowedPermissionToggles:
+          $ref: '#/components/schemas/TenantAdminAllowedPermissionToggles'
+
+    TenantAdminAllowedPermissionToggles:
+      type: object
+      properties:
+        anonymousChat:
+          type: boolean
+          example: "true"
+        calls:
+          type: boolean
+          example: "true"
+        supervision:
+          type: boolean
+          example: "true"
+        supervisionAnonymousChats:
+          type: boolean
+          example: "true"
+        supervisionOneOnOneChats:
+          type: boolean
+          example: "true"
+        audioCalls:
+          type: boolean
+          example: "true"
+        audioCallsAnonymousChats:
+          type: boolean
+          example: "true"
+        audioCallsOneOnOneChats:
+          type: boolean
+          example: "true"
+        audioCallsGroupChats:
+          type: boolean
+          example: "true"
+        audioCallsSupervisionChats:
+          type: boolean
+          example: "true"
+        videoCalls:
+          type: boolean
+          example: "true"
+        videoCallsAnonymousChats:
+          type: boolean
+          example: "true"
+        videoCallsOneOnOneChats:
+          type: boolean
+          example: "true"
+        videoCallsGroupChats:
+          type: boolean
+          example: "true"
+        videoCallsSupervisionChats:
+          type: boolean
+          example: "true"
+        threads:
+          type: boolean
+          example: "true"
+        threadsAnonymousChats:
+          type: boolean
+          example: "true"
+        threadsOneOnOneChats:
+          type: boolean
+          example: "true"
+        threadsGroupChats:
+          type: boolean
+          example: "true"
+        threadsSupervisionChats:
+          type: boolean
+          example: "true"
+        voiceMessages:
+          type: boolean
+          example: "true"
+        voiceMessagesAnonymousChats:
+          type: boolean
+          example: "true"
+        voiceMessagesOneOnOneChats:
+          type: boolean
+          example: "true"
+        voiceMessagesGroupChats:
+          type: boolean
+          example: "true"
+        voiceMessagesSupervisionChats:
+          type: boolean
+          example: "true"
+
+    SmtpConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          example: "false"
+        host:
+          type: string
+          example: "smtp.titan.email"
+        port:
+          type: integer
+          example: 587
+        secure:
+          type: boolean
+          example: "false"
+        username:
+          type: string
+          example: "notifications@oriso-dev.site"
+        password:
+          type: string
+          example: "********"
+        from:
+          type: string
+          example: "notifications@oriso-dev.site"
+        emailThemeColor:
+          type: string
+          example: "#0f3b8f"
 
     MultilingualContent:
       type: object
@@ -624,17 +829,14 @@ components:
         dataProtectionContactTemplate:
           type: object
           additionalProperties:
-            type: object
             $ref: '#/components/schemas/DataProtectionContactTemplateDTO'
 
     DataProtectionContactTemplateDTO:
         type: object
         properties:
             agencyContext:
-              type: object
               $ref: '#/components/schemas/AgencyContextDTO'
             noAgencyContext:
-              type: object
               $ref: '#/components/schemas/NoAgencyContextDTO'
 
     AgencyContextDTO:

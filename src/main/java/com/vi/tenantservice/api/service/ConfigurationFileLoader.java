@@ -5,7 +5,6 @@ import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Paths;
-import javax.ws.rs.InternalServerErrorException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -19,7 +18,7 @@ public class ConfigurationFileLoader {
       return new File(fileUrl.toURI());
     } catch (URISyntaxException | MalformedURLException | InvalidPathException exception) {
       log.error("Could not load configuration file {}", filePath, exception);
-      throw new InternalServerErrorException();
+      throw new IllegalStateException("Could not load configuration file " + filePath, exception);
     }
   }
 }

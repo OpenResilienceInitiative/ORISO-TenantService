@@ -34,7 +34,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   AdminLinks.JSON_PROPERTY_AGENCIES,
   AdminLinks.JSON_PROPERTY_ADD_AGENCY
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.959949522Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:32.695809354Z[Etc/UTC]")
 public class AdminLinks {
   public static final String JSON_PROPERTY_SELF = "self";
   private HalLink self;

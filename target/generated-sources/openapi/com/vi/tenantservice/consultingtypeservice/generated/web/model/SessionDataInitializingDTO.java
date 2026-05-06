@@ -33,7 +33,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   SessionDataInitializingDTO.JSON_PROPERTY_RELATION,
   SessionDataInitializingDTO.JSON_PROPERTY_STATE
 })
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.370737295Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:31.682009407Z[Etc/UTC]")
 public class SessionDataInitializingDTO {
   public static final String JSON_PROPERTY_ADDICTIVE_DRUGS = "addictiveDrugs";
   private Boolean addictiveDrugs;

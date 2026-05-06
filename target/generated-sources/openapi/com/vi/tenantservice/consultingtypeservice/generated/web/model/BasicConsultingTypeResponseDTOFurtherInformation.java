@@ -31,7 +31,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
   BasicConsultingTypeResponseDTOFurtherInformation.JSON_PROPERTY_URL
 })
 @JsonTypeName("BasicConsultingTypeResponseDTO_furtherInformation")
-@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-02-12T13:20:45.370737295Z[Etc/UTC]")
+@javax.annotation.Generated(value = "org.openapitools.codegen.languages.JavaClientCodegen", date = "2026-03-11T15:41:31.682009407Z[Etc/UTC]")
 public class BasicConsultingTypeResponseDTOFurtherInformation {
   public static final String JSON_PROPERTY_LABEL = "label";
   private String label;
