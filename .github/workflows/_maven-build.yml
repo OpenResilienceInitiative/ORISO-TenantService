@@ -1,12 +1,14 @@
-name: Build using Maven
+name: Reusable Maven Build workflow
 
 on:
-  push:
-    branches-ignore: [ "main" ]
+  workflow_call:
+    inputs:
+      java_version: 
+        required: true
+        type: string
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -16,7 +18,7 @@ jobs:
     - name: Set up JDK and Maven
       uses: actions/setup-java@v5
       with:
-        java-version: '17'
+        java-version: ${{ inputs.java_version }}
         distribution: 'temurin'
         cache: maven
         
