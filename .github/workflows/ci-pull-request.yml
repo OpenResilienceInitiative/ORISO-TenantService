@@ -11,4 +11,5 @@ jobs:
   docker-build-push:
     uses: ./.github/workflows/_docker-build-push.yml
     with:
-      java_version: '17'
+      push_to_ghcr: false
+      image_name: oriso-tenantservice
