@@ -1,0 +1,14 @@
+name: CI - Pull Request
+
+on:
+  pull_request
+
+jobs:
+  maven-build:
+    uses: ./.github/workflows/_maven-build.yml
+    with:
+      java_version: '17'
+  docker-build-push:
+    uses: ./.github/workflows/_docker-build-push.yml
+    with:
+      java_version: '17'

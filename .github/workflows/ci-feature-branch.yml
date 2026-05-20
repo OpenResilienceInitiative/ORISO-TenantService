@@ -9,4 +9,4 @@ jobs:
   maven-build:
     uses: ./.github/workflows/_maven-build.yml
     with:
-      java_version: '17'        
+      java_version: '17'
