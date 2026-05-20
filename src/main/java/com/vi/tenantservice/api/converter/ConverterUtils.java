@@ -14,8 +14,8 @@ public class ConverterUtils {
   }
 
   /**
-   * Some features should default to enabled unless explicitly disabled.
-   * This helper treats null as true.
+   * Some features should default to enabled unless explicitly disabled. This helper treats null as
+   * true.
    */
   public static boolean nullAsTrue(Boolean value) {
     return value == null || Boolean.TRUE.equals(value);

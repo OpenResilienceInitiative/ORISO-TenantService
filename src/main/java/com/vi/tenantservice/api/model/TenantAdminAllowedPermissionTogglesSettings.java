@@ -36,4 +36,3 @@ public class TenantAdminAllowedPermissionTogglesSettings {
   Boolean voiceMessagesGroupChats;
   Boolean voiceMessagesSupervisionChats;
 }
-
