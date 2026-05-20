@@ -1,1 +1,0 @@
-alter sequence sequence_tenant start with 1;
