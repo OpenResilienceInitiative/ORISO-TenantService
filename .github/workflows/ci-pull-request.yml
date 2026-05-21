@@ -16,12 +16,12 @@ jobs:
       uses: actions/checkout@v6
       
     - name: Compile and Package Java application
-      uses: ./.github/actions/maven-build.yml
+      uses: ./.github/actions/maven-build
       with:
         java_version: '17'
 
     - name: Create and Publish Docker image
-      uses: ./.github/actions/docker-build-push.yml
+      uses: ./.github/actions/docker-build-push
       with:
         push_to_ghcr: false
         image_name: oriso-tenantservice
