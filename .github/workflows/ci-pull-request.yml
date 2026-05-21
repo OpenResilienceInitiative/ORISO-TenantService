@@ -25,3 +25,4 @@ jobs:
       with:
         push_to_ghcr: false
         image_name: oriso-tenantservice
+        github_token: ${{ secrets.GITHUB_TOKEN }}
