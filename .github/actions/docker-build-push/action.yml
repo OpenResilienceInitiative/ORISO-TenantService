@@ -38,6 +38,7 @@ runs:
     id: build
     uses: docker/build-push-action@v7
     with:
+      context: .
       push: ${{ inputs.push_to_ghcr }}
       tags: ${{ steps.meta.outputs.tags }}
       labels: ${{ steps.meta.outputs.labels }}
