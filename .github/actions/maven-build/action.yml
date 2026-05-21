@@ -6,7 +6,7 @@ inputs:
     type: string
 
 runs:
-  using: 'composite' # Tells GitHub this is a sequence of steps
+  using: 'composite'
   steps:
   - name: Set up JDK and Maven
     uses: actions/setup-java@v5
@@ -16,6 +16,7 @@ runs:
       cache: maven
       
   - name: Build with Maven Wrapper
+    shell: bash
     run: ./mvnw -B package
 
   # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
