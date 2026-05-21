@@ -1,7 +1,9 @@
 name: CI - Pull Request
 
 on:
-  pull_request
+  push:
+    branches:
+      - main
 
 env:
   REGISTRY: ghcr.io
@@ -20,9 +22,9 @@ jobs:
       with:
         java_version: '17'
 
-    - name: Create Docker image
+    - name: Create and Publish Docker image
       uses: ./.github/actions/docker-build-push
       with:
-        push_to_ghcr: false
+        push_to_ghcr: true
         image_name: oriso-tenantservice
         github_token: ${{ secrets.GITHUB_TOKEN }}
