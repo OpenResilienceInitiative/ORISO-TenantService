@@ -6,7 +6,12 @@ on:
     - main
 
 jobs:
-  maven-build:
-    uses: ./.github/workflows/_maven-build.yml
-    with:
-      java_version: '17'
+  build:
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      
+    - name: Compile and Package Java application
+      uses: ./.github/actions/maven-build.yml
+      with:
+        java_version: '17'

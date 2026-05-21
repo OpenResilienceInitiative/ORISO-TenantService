@@ -3,13 +3,23 @@ name: CI - Pull Request
 on:
   pull_request
 
+env:
+  REGISTRY: ghcr.io
+  ORG: openresilienceinitiative
+
 jobs:
-  maven-build:
-    uses: ./.github/workflows/_maven-build.yml
-    with:
-      java_version: '17'
-  docker-build-push:
-    uses: ./.github/workflows/_docker-build-push.yml
-    with:
-      push_to_ghcr: false
-      image_name: oriso-tenantservice
+  build:
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      
+    - name: Compile and Package Java application
+      uses: ./.github/actions/maven-build.yml
+      with:
+        java_version: '17'
+
+    - name: Create and Publish Docker image
+      uses: ./.github/actions/docker-build-push.yml
+      with:
+        push_to_ghcr: false
+        image_name: oriso-tenantservice

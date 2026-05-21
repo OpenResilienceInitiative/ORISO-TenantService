@@ -1,18 +1,12 @@
-name: Reusable Docker Build and Publish workflow
+name: Reusable Docker Build and Publish steps
 
-on:
-  workflow_call:
-    inputs:
-      push_to_ghcr: 
-        required: true
-        type: boolean
-      image_name: 
-        required: true
-        type: string
-
-env:
-  REGISTRY: ghcr.io
-  ORG: openresilienceinitiative
+inputs:
+  push_to_ghcr: 
+    required: true
+    type: boolean
+  image_name: 
+    required: true
+    type: string
 
 jobs:
   build:
