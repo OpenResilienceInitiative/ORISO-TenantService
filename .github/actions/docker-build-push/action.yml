@@ -32,7 +32,7 @@ runs:
       tags: |
         type=sha
         type=ref,event=branch
-        type=raw,value=latest,enable=${{ github.ref == 'refs/head/main' }}
+        type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
       
   - name: Build and Push Docker image
     id: build
