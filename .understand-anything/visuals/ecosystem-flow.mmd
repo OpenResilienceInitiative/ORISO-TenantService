@@ -1,0 +1,10 @@
+flowchart LR
+  Frontend[ORISO frontend and admin clients] --> TenantAPI[TenantService API]
+  TenantAPI --> TenantDB[(Tenant registry)]
+  TenantAPI --> Keycloak[Keycloak JWT roles and tenant claim]
+  TenantAPI --> Consulting[ConsultingTypeService]
+  TenantAPI --> AppSettings[ApplicationSettingsService]
+  TenantAPI --> UserAdmin[UserAdminService]
+  Consulting --> Defaults[Default consulting type settings]
+  AppSettings --> SingleDomain[Single-domain main tenant settings]
+  UserAdmin --> Emails[Tenant admin emails]
