@@ -1,0 +1,19 @@
+{
+  "projectRoot": "/Users/nikunjchampakbhairohit/Developer/freelance/Germany/Oriso-frank-client/ORISO/ORISO-TenantService",
+  "gitCommitHash": "ae493711592d601202e40829ba45c73f117babf8",
+  "generatedAt": "2026-05-28T03:00:43.003Z",
+  "skill": "understand-anything",
+  "scope": "current repository only",
+  "stats": {
+    "filesScanned": 160,
+    "nodes": 380,
+    "edges": 623,
+    "layers": 10,
+    "endpoints": 66,
+    "javaClasses": 98
+  },
+  "notes": [
+    "Generated without analyzing parent folders or sibling repositories.",
+    "Existing README.md deletion in the working tree was not modified."
+  ]
+}
