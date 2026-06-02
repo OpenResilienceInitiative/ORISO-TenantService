@@ -1,0 +1,19 @@
+name: CI - Feature Branch
+
+on:
+  push:
+    branches-ignore: 
+    - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      
+    - name: Compile and Package Java application
+      uses: ./.github/actions/maven-build
+      with:
+        java_version: '17'

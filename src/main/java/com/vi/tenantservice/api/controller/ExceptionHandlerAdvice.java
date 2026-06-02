@@ -3,7 +3,7 @@ package com.vi.tenantservice.api.controller;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
-import jakarta.ws.rs.BadRequestException;
+import javax.ws.rs.BadRequestException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;

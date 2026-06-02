@@ -1,0 +1,14 @@
+# Understand-Anything ignore rules for ORISO-TenantService
+# Syntax: same as .gitignore.
+
+.understand-anything/
+node_modules/
+target/
+.git/
+.idea/
+.vscode/
+.DS_Store
+*.class
+*.jar
+*.log
+log/

@@ -23,6 +23,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.CollectionUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.NativeWebRequest;
 
@@ -81,6 +83,14 @@ public class TenantController implements TenantApi, TenantadminApi {
     log.info("Updating tenant with id {} by user {} ", id, authorisationService.getUsername());
     var updatedTenantDTO = tenantServiceFacade.updateTenant(id, tenantDTO);
     return new ResponseEntity<>(updatedTenantDTO, HttpStatus.OK);
+  }
+
+  @DeleteMapping("/tenant/{id}")
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<Void> deleteTenant(@PathVariable("id") Long id) {
+    log.info("Deleting tenant with id {} by user {} ", id, authorisationService.getUsername());
+    tenantServiceFacade.deleteTenant(id);
+    return new ResponseEntity<>(HttpStatus.NO_CONTENT);
   }
 
   @Override

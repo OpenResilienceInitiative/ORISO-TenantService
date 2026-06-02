@@ -8,12 +8,16 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Component
 public class CustomSwaggerPathWebMvcConfigurer implements WebMvcConfigurer {
 
-  @Value("${springdoc.swagger-ui.path:${springfox.docuPath:/swagger-ui.html}}")
-  private String swaggerUiPath;
+  @Value("${springfox.docuPath}")
+  private String docuPath;
 
   @Override
   public void addResourceHandlers(ResourceHandlerRegistry registry) {
-    registry.addResourceHandler(swaggerUiPath + "/**")
+    registry
+        .addResourceHandler(docuPath + "/swagger-ui/**")
+        .addResourceLocations("classpath:/META-INF/resources/webjars/springfox-swagger-ui/");
+    registry
+        .addResourceHandler(docuPath + "/**")
         .addResourceLocations("classpath:/META-INF/resources/");
   }
 }

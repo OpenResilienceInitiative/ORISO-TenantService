@@ -15,7 +15,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
-import jakarta.ws.rs.InternalServerErrorException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -121,12 +120,24 @@ public class TenantService {
   }
 
   public TenantSettings getDefaultTenantSettings() {
+    if (StringUtils.isBlank(defaultTenantSettingsFilePath)) {
+      log.warn("default.tenant.settings.json.path is empty - using empty default tenant settings");
+      return TenantSettings.builder().build();
+    }
+
     final File file = configurationFileLoader.loadFrom(defaultTenantSettingsFilePath);
+    if (!file.exists() || file.isDirectory()) {
+      log.warn(
+          "Default tenant settings file does not exist or is not a file (path: {}) - using empty defaults",
+          defaultTenantSettingsFilePath);
+      return TenantSettings.builder().build();
+    }
+
     try {
       return new ObjectMapper().readValue(file, TenantSettings.class);
     } catch (IOException ioException) {
       log.error("Error while reading default tenant settings configuration file", ioException);
-      throw new InternalServerErrorException();
+      return TenantSettings.builder().build();
     }
   }
 

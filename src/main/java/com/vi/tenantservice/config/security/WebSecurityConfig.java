@@ -2,10 +2,10 @@ package com.vi.tenantservice.config.security;
 
 import com.vi.tenantservice.api.config.SpringFoxConfig;
 import lombok.RequiredArgsConstructor;
+import org.keycloak.adapters.springsecurity.KeycloakConfiguration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -14,8 +14,8 @@ import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
 
 /** Configuration class to provide the keycloak security configuration. */
-@Configuration
-@EnableMethodSecurity(prePostEnabled = true)
+@KeycloakConfiguration
+@EnableGlobalMethodSecurity(prePostEnabled = true)
 @EnableWebSecurity
 @RequiredArgsConstructor
 public class WebSecurityConfig {
@@ -31,22 +31,35 @@ public class WebSecurityConfig {
 
   @Bean
   public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-    http.csrf(csrf -> csrf.disable())
-        .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-        .authorizeHttpRequests(auth -> auth
-            .requestMatchers(new AntPathRequestMatcher("/tenant")).authenticated()
-            .requestMatchers(new AntPathRequestMatcher("/tenant/*")).authenticated()
-            .requestMatchers(new AntPathRequestMatcher("/tenantadmin")).authenticated()
-            .requestMatchers(new AntPathRequestMatcher("/tenantadmin/*")).authenticated()
-            .requestMatchers(new AntPathRequestMatcher("/tenant/public/**")).permitAll()
-            .requestMatchers(SpringFoxConfig.WHITE_LIST).permitAll()
-            .requestMatchers(new NegatedRequestMatcher(new AntPathRequestMatcher("/tenant"))).permitAll()
-            .requestMatchers(new NegatedRequestMatcher(new AntPathRequestMatcher("/tenant/**"))).permitAll()
-            .anyRequest().permitAll())
-        .headers(headers -> headers
-            .xssProtection(xss -> {})
-            .contentSecurityPolicy(csp -> csp.policyDirectives("script-src 'self'")))
-        .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthConverter())));
+    http.csrf()
+        .disable()
+        .sessionManagement()
+        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+        //        .sessionAuthenticationStrategy(sessionAuthenticationStrategy())
+        .and()
+        .authorizeRequests()
+        .requestMatchers(new AntPathRequestMatcher("/tenant"))
+        .authenticated()
+        .requestMatchers(new AntPathRequestMatcher("/tenant/*"))
+        .authenticated()
+        .requestMatchers(new AntPathRequestMatcher("/tenantadmin"))
+        .authenticated()
+        .requestMatchers(new AntPathRequestMatcher("/tenantadmin/*"))
+        .authenticated()
+        .requestMatchers(new AntPathRequestMatcher("/tenant/public/**"))
+        .permitAll()
+        .requestMatchers(SpringFoxConfig.WHITE_LIST)
+        .permitAll()
+        .requestMatchers(new NegatedRequestMatcher(new AntPathRequestMatcher("/tenant")))
+        .permitAll()
+        .requestMatchers(new NegatedRequestMatcher(new AntPathRequestMatcher("/tenant/**")))
+        .permitAll()
+        .and()
+        .headers()
+        .xssProtection()
+        .and()
+        .contentSecurityPolicy("script-src 'self'");
+    http.oauth2ResourceServer().jwt().jwtAuthenticationConverter(jwtAuthConverter());
 
     return http.build();
   }

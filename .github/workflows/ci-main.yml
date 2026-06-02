@@ -1,0 +1,30 @@
+name: CI - Main
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  ORG: openresilienceinitiative
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      
+    - name: Compile and Package Java application
+      uses: ./.github/actions/maven-build
+      with:
+        java_version: '17'
+
+    - name: Create and Publish Docker image
+      uses: ./.github/actions/docker-build-push
+      with:
+        push_to_ghcr: true
+        image_name: oriso-tenantservice
+        github_token: ${{ secrets.GITHUB_TOKEN }}

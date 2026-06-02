@@ -14,6 +14,7 @@ import java.util.Optional;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
@@ -33,7 +34,22 @@ public class ConsultingTypeService {
   private String defaultConsultingTypesFilePath;
 
   public void createDefaultConsultingTypes(Long tenantId) {
+    if (StringUtils.isBlank(defaultConsultingTypesFilePath)) {
+      log.warn(
+          "default.consulting.types.json.path is empty - skipping default consulting type bootstrap for tenant {}",
+          tenantId);
+      return;
+    }
+
     final File file = configurationFileLoader.loadFrom(defaultConsultingTypesFilePath);
+    if (!file.exists() || file.isDirectory()) {
+      log.warn(
+          "Default consulting types file does not exist or is not a file (path: {}) - skipping bootstrap for tenant {}",
+          defaultConsultingTypesFilePath,
+          tenantId);
+      return;
+    }
+
     try {
       ConsultingTypeDTO consultingTypeDTO =
           new ObjectMapper().readValue(file, ConsultingTypeDTO.class);

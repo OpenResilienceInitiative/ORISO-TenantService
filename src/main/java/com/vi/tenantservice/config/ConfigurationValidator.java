@@ -2,7 +2,7 @@ package com.vi.tenantservice.config;
 
 import java.util.ArrayList;
 import java.util.List;
-import jakarta.annotation.PostConstruct;
+import javax.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
