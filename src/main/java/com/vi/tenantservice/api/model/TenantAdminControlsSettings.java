@@ -13,4 +13,3 @@ public class TenantAdminControlsSettings {
   boolean permissionsPageEnabled;
   TenantAdminAllowedPermissionTogglesSettings allowedPermissionToggles;
 }
-

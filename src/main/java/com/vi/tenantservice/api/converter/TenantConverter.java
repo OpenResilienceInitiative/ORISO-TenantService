@@ -95,7 +95,8 @@ public class TenantConverter {
             nullAsTrue(settings.getFeatureAudioCallsAnonymousChatsEnabled()))
         .featureAudioCallsOneOnOneChatsEnabled(
             nullAsTrue(settings.getFeatureAudioCallsOneOnOneChatsEnabled()))
-        .featureAudioCallsGroupChatsEnabled(nullAsTrue(settings.getFeatureAudioCallsGroupChatsEnabled()))
+        .featureAudioCallsGroupChatsEnabled(
+            nullAsTrue(settings.getFeatureAudioCallsGroupChatsEnabled()))
         .featureAudioCallsSupervisionChatsEnabled(
             nullAsTrue(settings.getFeatureAudioCallsSupervisionChatsEnabled()))
         .featureVideoCallsEnabled(nullAsTrue(settings.getFeatureVideoCallsEnabled()))
@@ -103,7 +104,8 @@ public class TenantConverter {
             nullAsTrue(settings.getFeatureVideoCallsAnonymousChatsEnabled()))
         .featureVideoCallsOneOnOneChatsEnabled(
             nullAsTrue(settings.getFeatureVideoCallsOneOnOneChatsEnabled()))
-        .featureVideoCallsGroupChatsEnabled(nullAsTrue(settings.getFeatureVideoCallsGroupChatsEnabled()))
+        .featureVideoCallsGroupChatsEnabled(
+            nullAsTrue(settings.getFeatureVideoCallsGroupChatsEnabled()))
         .featureVideoCallsSupervisionChatsEnabled(
             nullAsTrue(settings.getFeatureVideoCallsSupervisionChatsEnabled()))
         .featureThreadsEnabled(nullAsTrue(settings.getFeatureThreadsEnabled()))
@@ -260,7 +262,8 @@ public class TenantConverter {
             ? tenantSettings.isFeatureAudioCallsGroupChatsEnabled()
             : true;
     final boolean audioCallsSupervisionChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureAudioCallsSupervisionChatsEnabled\"")
+        settingsJson != null
+                && settingsJson.contains("\"featureAudioCallsSupervisionChatsEnabled\"")
             ? tenantSettings.isFeatureAudioCallsSupervisionChatsEnabled()
             : true;
     final boolean videoCallsEnabled =
@@ -280,7 +283,8 @@ public class TenantConverter {
             ? tenantSettings.isFeatureVideoCallsGroupChatsEnabled()
             : true;
     final boolean videoCallsSupervisionChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureVideoCallsSupervisionChatsEnabled\"")
+        settingsJson != null
+                && settingsJson.contains("\"featureVideoCallsSupervisionChatsEnabled\"")
             ? tenantSettings.isFeatureVideoCallsSupervisionChatsEnabled()
             : true;
     final boolean threadsEnabled =
@@ -308,11 +312,13 @@ public class TenantConverter {
             ? tenantSettings.isFeatureVoiceMessagesEnabled()
             : true;
     final boolean voiceMessagesAnonymousChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureVoiceMessagesAnonymousChatsEnabled\"")
+        settingsJson != null
+                && settingsJson.contains("\"featureVoiceMessagesAnonymousChatsEnabled\"")
             ? tenantSettings.isFeatureVoiceMessagesAnonymousChatsEnabled()
             : true;
     final boolean voiceMessagesOneOnOneChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureVoiceMessagesOneOnOneChatsEnabled\"")
+        settingsJson != null
+                && settingsJson.contains("\"featureVoiceMessagesOneOnOneChatsEnabled\"")
             ? tenantSettings.isFeatureVoiceMessagesOneOnOneChatsEnabled()
             : true;
     final boolean voiceMessagesGroupChatsEnabled =
@@ -399,37 +405,28 @@ public class TenantConverter {
         .audioCalls(nullAsTrue(allowedPermissionToggles.getAudioCalls()))
         .audioCallsAnonymousChats(
             nullAsTrue(allowedPermissionToggles.getAudioCallsAnonymousChats()))
-        .audioCallsOneOnOneChats(
-            nullAsTrue(allowedPermissionToggles.getAudioCallsOneOnOneChats()))
-        .audioCallsGroupChats(
-            nullAsTrue(allowedPermissionToggles.getAudioCallsGroupChats()))
+        .audioCallsOneOnOneChats(nullAsTrue(allowedPermissionToggles.getAudioCallsOneOnOneChats()))
+        .audioCallsGroupChats(nullAsTrue(allowedPermissionToggles.getAudioCallsGroupChats()))
         .audioCallsSupervisionChats(
             nullAsTrue(allowedPermissionToggles.getAudioCallsSupervisionChats()))
         .videoCalls(nullAsTrue(allowedPermissionToggles.getVideoCalls()))
         .videoCallsAnonymousChats(
             nullAsTrue(allowedPermissionToggles.getVideoCallsAnonymousChats()))
-        .videoCallsOneOnOneChats(
-            nullAsTrue(allowedPermissionToggles.getVideoCallsOneOnOneChats()))
-        .videoCallsGroupChats(
-            nullAsTrue(allowedPermissionToggles.getVideoCallsGroupChats()))
+        .videoCallsOneOnOneChats(nullAsTrue(allowedPermissionToggles.getVideoCallsOneOnOneChats()))
+        .videoCallsGroupChats(nullAsTrue(allowedPermissionToggles.getVideoCallsGroupChats()))
         .videoCallsSupervisionChats(
             nullAsTrue(allowedPermissionToggles.getVideoCallsSupervisionChats()))
         .threads(nullAsTrue(allowedPermissionToggles.getThreads()))
-        .threadsAnonymousChats(
-            nullAsTrue(allowedPermissionToggles.getThreadsAnonymousChats()))
-        .threadsOneOnOneChats(
-            nullAsTrue(allowedPermissionToggles.getThreadsOneOnOneChats()))
-        .threadsGroupChats(
-            nullAsTrue(allowedPermissionToggles.getThreadsGroupChats()))
-        .threadsSupervisionChats(
-            nullAsTrue(allowedPermissionToggles.getThreadsSupervisionChats()))
+        .threadsAnonymousChats(nullAsTrue(allowedPermissionToggles.getThreadsAnonymousChats()))
+        .threadsOneOnOneChats(nullAsTrue(allowedPermissionToggles.getThreadsOneOnOneChats()))
+        .threadsGroupChats(nullAsTrue(allowedPermissionToggles.getThreadsGroupChats()))
+        .threadsSupervisionChats(nullAsTrue(allowedPermissionToggles.getThreadsSupervisionChats()))
         .voiceMessages(nullAsTrue(allowedPermissionToggles.getVoiceMessages()))
         .voiceMessagesAnonymousChats(
             nullAsTrue(allowedPermissionToggles.getVoiceMessagesAnonymousChats()))
         .voiceMessagesOneOnOneChats(
             nullAsTrue(allowedPermissionToggles.getVoiceMessagesOneOnOneChats()))
-        .voiceMessagesGroupChats(
-            nullAsTrue(allowedPermissionToggles.getVoiceMessagesGroupChats()))
+        .voiceMessagesGroupChats(nullAsTrue(allowedPermissionToggles.getVoiceMessagesGroupChats()))
         .voiceMessagesSupervisionChats(
             nullAsTrue(allowedPermissionToggles.getVoiceMessagesSupervisionChats()))
         .build();
@@ -483,8 +480,7 @@ public class TenantConverter {
             nullAsTrue(allowedPermissionTogglesSettings.getThreadsAnonymousChats()))
         .threadsOneOnOneChats(
             nullAsTrue(allowedPermissionTogglesSettings.getThreadsOneOnOneChats()))
-        .threadsGroupChats(
-            nullAsTrue(allowedPermissionTogglesSettings.getThreadsGroupChats()))
+        .threadsGroupChats(nullAsTrue(allowedPermissionTogglesSettings.getThreadsGroupChats()))
         .threadsSupervisionChats(
             nullAsTrue(allowedPermissionTogglesSettings.getThreadsSupervisionChats()))
         .voiceMessages(nullAsTrue(allowedPermissionTogglesSettings.getVoiceMessages()))

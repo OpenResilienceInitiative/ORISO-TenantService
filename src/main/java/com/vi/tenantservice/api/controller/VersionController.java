@@ -1,16 +1,15 @@
 package com.vi.tenantservice.api.controller;
 
-import org.springframework.core.io.ClassPathResource;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/version")
@@ -27,7 +26,8 @@ public class VersionController {
   public VersionController() {
     Properties props = loadVersionProperties();
     this.javaUpperVersion = props.getProperty("java.upper.version", DEFAULT_JAVA_VERSION);
-    this.springbootUpperVersion = props.getProperty("springboot.upper.version", DEFAULT_SPRING_BOOT_VERSION);
+    this.springbootUpperVersion =
+        props.getProperty("springboot.upper.version", DEFAULT_SPRING_BOOT_VERSION);
     this.springUpperVersion = props.getProperty("spring.upper.version", DEFAULT_SPRING_VERSION);
   }
 
@@ -60,21 +60,25 @@ public class VersionController {
   @GetMapping("/info")
   public ResponseEntity<Map<String, Object>> getVersionInfo() {
     Map<String, Object> info = new HashMap<>();
-    info.put("java", Map.of(
-        "version", javaUpperVersion,
-        "vmVersion", javaUpperVersion + ".0.0",
-        "vendor", "Eclipse Adoptium"
-    ));
-    info.put("spring", Map.of(
-        "boot", springbootUpperVersion,
-        "framework", springUpperVersion
-    ));
-    info.put("application", Map.of(
-        "name", "TenantService",
-        "version", "0.0.1-SNAPSHOT"
-    ));
+    info.put(
+        "java",
+        Map.of(
+            "version",
+            javaUpperVersion,
+            "vmVersion",
+            javaUpperVersion + ".0.0",
+            "vendor",
+            "Eclipse Adoptium"));
+    info.put(
+        "spring",
+        Map.of(
+            "boot", springbootUpperVersion,
+            "framework", springUpperVersion));
+    info.put(
+        "application",
+        Map.of(
+            "name", "TenantService",
+            "version", "0.0.1-SNAPSHOT"));
     return ResponseEntity.ok(info);
   }
 }
-
-
