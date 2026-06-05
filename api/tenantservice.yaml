@@ -790,13 +790,13 @@ components:
           example: "false"
         username:
           type: string
-          example: "notifications@oriso-dev.site"
+          example: "notifications@oriso.org"
         password:
           type: string
           example: "********"
         from:
           type: string
-          example: "notifications@oriso-dev.site"
+          example: "notifications@oriso.org"
         emailThemeColor:
           type: string
           example: "#0f3b8f"
