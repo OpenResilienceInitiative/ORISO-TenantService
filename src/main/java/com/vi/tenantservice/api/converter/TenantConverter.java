@@ -395,6 +395,7 @@ public class TenantConverter {
       return null;
     }
     return TenantAdminAllowedPermissionTogglesSettings.builder()
+        .appearance(nullAsTrue(allowedPermissionToggles.getAppearance()))
         .anonymousChat(nullAsTrue(allowedPermissionToggles.getAnonymousChat()))
         .calls(nullAsTrue(allowedPermissionToggles.getCalls()))
         .supervision(nullAsTrue(allowedPermissionToggles.getSupervision()))
@@ -450,6 +451,7 @@ public class TenantConverter {
       return null;
     }
     return new TenantAdminAllowedPermissionToggles()
+        .appearance(nullAsTrue(allowedPermissionTogglesSettings.getAppearance()))
         .anonymousChat(nullAsTrue(allowedPermissionTogglesSettings.getAnonymousChat()))
         .calls(nullAsTrue(allowedPermissionTogglesSettings.getCalls()))
         .supervision(nullAsTrue(allowedPermissionTogglesSettings.getSupervision()))

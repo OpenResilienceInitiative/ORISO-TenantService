@@ -9,6 +9,8 @@ import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NoAgencyContextDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
+import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
+import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
@@ -55,7 +57,7 @@ class TenantConverterTest {
     assertThat(converted.getName()).isEqualTo(tenantDTO.getName());
     assertThat(converted.getSubdomain()).isEqualTo(tenantDTO.getSubdomain());
     assertThat(converted.getLicensing()).isEqualTo(tenantDTO.getLicensing());
-    assertThat(converted.getSettings()).isEqualTo(tenantDTO.getSettings());
+    assertCoreSettingsAreConverted(tenantDTO.getSettings(), converted.getSettings());
     assertThat(converted.getTheming()).isEqualTo(tenantDTO.getTheming());
     assertThat(converted.getSettings().getIsVideoCallAllowed()).isTrue();
     assertThat(converted.getSettings().getShowAskerProfile()).isTrue();
@@ -96,7 +98,7 @@ class TenantConverterTest {
     assertThat(restrictedTenantDTO.getSubdomain()).isEqualTo(tenantDTO.getSubdomain());
     assertThat(restrictedTenantDTO.getTheming()).isEqualTo(tenantDTO.getTheming());
     assertContentIsProperlyConverted(tenantDTO, restrictedTenantDTO);
-    assertThat(restrictedTenantDTO.getSettings()).isEqualTo(tenantDTO.getSettings());
+    assertCoreSettingsAreConverted(tenantDTO.getSettings(), restrictedTenantDTO.getSettings());
     Mockito.verify(templateRenderer).renderTemplate(Mockito.anyString(), Mockito.anyMap());
     assertThat(restrictedTenantDTO.getContent().getRenderedPrivacy()).isEqualTo("renderedPrivacy");
   }
@@ -128,6 +130,55 @@ class TenantConverterTest {
     assertThat(restrictedTenantDTO.getSettings()).isEqualTo(new Settings());
   }
 
+  @Test
+  void toDTO_should_preserveAppearancePermissionToggle() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .tenantAdminControls(
+            new TenantAdminControls()
+                .allowedPermissionToggles(
+                    new TenantAdminAllowedPermissionToggles().appearance(false)));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(
+            converted
+                .getSettings()
+                .getTenantAdminControls()
+                .getAllowedPermissionToggles()
+                .getAppearance())
+        .isFalse();
+  }
+
+  @Test
+  void toDTO_should_defaultMissingAppearancePermissionToggleToTrue() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .tenantAdminControls(
+            new TenantAdminControls()
+                .allowedPermissionToggles(new TenantAdminAllowedPermissionToggles()));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(
+            converted
+                .getSettings()
+                .getTenantAdminControls()
+                .getAllowedPermissionToggles()
+                .getAppearance())
+        .isTrue();
+  }
+
   private static void assertContentIsProperlyConverted(
       MultilingualTenantDTO tenantDTO, RestrictedTenantDTO restrictedTenantDTO) {
     assertThat(restrictedTenantDTO.getContent().getClaim())
@@ -138,6 +189,30 @@ class TenantConverterTest {
         .isEqualTo(getGermanTranslation(tenantDTO.getContent().getTermsAndConditions()));
     assertThat(restrictedTenantDTO.getContent().getImpressum())
         .isEqualTo(getGermanTranslation(tenantDTO.getContent().getImpressum()));
+  }
+
+  private static void assertCoreSettingsAreConverted(Settings expected, Settings actual) {
+    assertThat(actual.getFeatureStatisticsEnabled())
+        .isEqualTo(expected.getFeatureStatisticsEnabled());
+    assertThat(actual.getFeatureTopicsEnabled()).isEqualTo(expected.getFeatureTopicsEnabled());
+    assertThat(actual.getTopicsInRegistrationEnabled())
+        .isEqualTo(expected.getTopicsInRegistrationEnabled());
+    assertThat(actual.getFeatureDemographicsEnabled())
+        .isEqualTo(expected.getFeatureDemographicsEnabled());
+    assertThat(actual.getFeatureAppointmentsEnabled())
+        .isEqualTo(expected.getFeatureAppointmentsEnabled());
+    assertThat(actual.getFeatureGroupChatV2Enabled())
+        .isEqualTo(expected.getFeatureGroupChatV2Enabled());
+    assertThat(actual.getFeatureToolsEnabled()).isEqualTo(expected.getFeatureToolsEnabled());
+    assertThat(actual.getFeatureAttachmentUploadDisabled())
+        .isEqualTo(expected.getFeatureAttachmentUploadDisabled());
+    assertThat(actual.getFeatureToolsOICDToken()).isEqualTo(expected.getFeatureToolsOICDToken());
+    assertThat(actual.getActiveLanguages()).isEqualTo(expected.getActiveLanguages());
+    assertThat(actual.getShowAskerProfile()).isEqualTo(expected.getShowAskerProfile());
+    assertThat(actual.getIsVideoCallAllowed()).isEqualTo(expected.getIsVideoCallAllowed());
+    assertThat(actual.getFeatureCentralDataProtectionTemplateEnabled())
+        .isEqualTo(expected.getFeatureCentralDataProtectionTemplateEnabled());
+    assertThat(actual.getTenantAdminControls()).isEqualTo(expected.getTenantAdminControls());
   }
 
   private static String getGermanTranslation(Map<String, String> translations) {
