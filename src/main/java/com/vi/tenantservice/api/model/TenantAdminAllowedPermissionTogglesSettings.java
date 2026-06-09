@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class TenantAdminAllowedPermissionTogglesSettings {
+  Boolean appearance;
   Boolean anonymousChat;
   Boolean calls;
   Boolean supervision;

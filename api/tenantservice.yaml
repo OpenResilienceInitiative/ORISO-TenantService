@@ -697,6 +697,9 @@ components:
     TenantAdminAllowedPermissionToggles:
       type: object
       properties:
+        appearance:
+          type: boolean
+          example: "true"
         anonymousChat:
           type: boolean
           example: "true"
