@@ -328,11 +328,13 @@ public class TenantServiceFacade {
   public Optional<TenantDTO> findTenantById(Long id) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
     var tenantById = tenantService.findTenantById(id);
-    return tenantById.isEmpty()
-        ? Optional.empty()
-        : Optional.of(
-            tenantConverter.toDTO(
-                tenantById.get(), translationService.getCurrentLanguageContext()));
+    if (tenantById.isEmpty()) {
+      return Optional.empty();
+    }
+    var tenantDTO =
+        tenantConverter.toDTO(tenantById.get(), translationService.getCurrentLanguageContext());
+    tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(tenantDTO);
+    return Optional.of(tenantDTO);
   }
 
   private MultilingualTenantDTO getConvertedAndEnrichedTenant(TenantEntity tenantEntity) {
