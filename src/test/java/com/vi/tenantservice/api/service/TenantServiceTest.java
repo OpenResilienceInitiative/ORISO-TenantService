@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -13,6 +14,7 @@ import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsServic
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTO;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTOMainTenantSubdomainForSingleDomainMultitenancy;
 import java.time.LocalDateTime;
+import java.util.Map;
 import org.jeasy.random.EasyRandom;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -178,6 +180,30 @@ class TenantServiceTest {
                 .mainTenantSubdomainForSingleDomainMultitenancy(
                     new ApplicationSettingsDTOMainTenantSubdomainForSingleDomainMultitenancy()
                         .value(subdomain)));
+  }
+
+  @Test
+  void updateTenantSettingsBatch_Should_SaveSettingsWithoutSubdomainValidation() {
+    TenantEntity tenantEntity = new TenantEntity();
+    tenantEntity.setId(2L);
+    tenantEntity.setSubdomain("duplicate-subdomain");
+    when(tenantRepository.findAllByIdIn(java.util.List.of(2L)))
+        .thenReturn(java.util.List.of(tenantEntity));
+
+    tenantService.updateTenantSettingsBatch(Map.of(2L, "{\"tenantAdminControls\":{}}"));
+
+    verify(tenantRepository).findAllByIdIn(java.util.List.of(2L));
+    verify(tenantRepository).saveAll(java.util.List.of(tenantEntity));
+    verify(tenantRepository, never()).findBySubdomain(org.mockito.ArgumentMatchers.any());
+    assertThat(tenantEntity.getSettings()).isEqualTo("{\"tenantAdminControls\":{}}");
+    assertThat(tenantEntity.getUpdateDate()).isNotNull();
+  }
+
+  @Test
+  void updateTenantSettingsBatch_Should_DoNothing_When_settingsMapIsEmpty() {
+    tenantService.updateTenantSettingsBatch(Map.of());
+
+    verifyNoMoreInteractions(tenantRepository);
   }
 
   @Test
