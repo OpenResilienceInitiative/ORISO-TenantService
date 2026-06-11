@@ -104,6 +104,8 @@ class TenantServiceFacadeTest {
   @Mock
   private TenantFacadeDependentSettingsOverrideService tenantFacadeDependentSettingsOverrideService;
 
+  @Mock private TenantAdminControlsCascadeService tenantAdminControlsCascadeService;
+
   @Mock private SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
   @InjectMocks private TenantServiceFacade tenantServiceFacade;

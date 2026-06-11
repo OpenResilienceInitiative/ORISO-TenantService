@@ -83,6 +83,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantFacadeDependentSettingsOverrideService
       tenantFacadeDependentSettingsOverrideService;
 
+  private final @NonNull TenantAdminControlsCascadeService tenantAdminControlsCascadeService;
+
   private final @NonNull TenantResolverService tenantResolverService;
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
@@ -292,10 +294,15 @@ public class TenantServiceFacade {
         sanitizedTenantDTO, existingTenantEntity);
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
         sanitizedTenantDTO, existingTenantEntity);
+    tenantAdminControlsCascadeService.preserveTenantAdminControlsUnlessPlatformTenant(
+        sanitizedTenantDTO, existingTenantEntity);
+    String previousSettingsJson = existingTenantEntity.getSettings();
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     updatedEntity = tenantService.update(updatedEntity);
     updateExtendedSettingsAsConsultingType(sanitizedTenantDTO, existingTenantEntity.getId());
+    tenantAdminControlsCascadeService.cascadeTenantAdminControlsIfPlatformTenant(
+        sanitizedTenantDTO, existingTenantEntity.getId(), previousSettingsJson);
     log.info("Tenant with id {} updated", existingTenantEntity.getId());
     return getConvertedAndEnrichedTenant(updatedEntity);
   }

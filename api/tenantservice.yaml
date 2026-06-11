@@ -706,6 +706,9 @@ components:
         calls:
           type: boolean
           example: "true"
+        groupChat:
+          type: boolean
+          example: "true"
         supervision:
           type: boolean
           example: "true"

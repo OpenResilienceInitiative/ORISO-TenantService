@@ -376,7 +376,7 @@ public class TenantConverter {
         .activeLanguages(nullAsGerman(tenantSettings.getActiveLanguages()));
   }
 
-  private TenantAdminControlsSettings toTenantAdminControlsSettings(
+  public TenantAdminControlsSettings toTenantAdminControlsSettings(
       TenantAdminControls tenantAdminControls) {
     if (tenantAdminControls == null) {
       return null;
@@ -398,6 +398,7 @@ public class TenantConverter {
         .appearance(nullAsTrue(allowedPermissionToggles.getAppearance()))
         .anonymousChat(nullAsTrue(allowedPermissionToggles.getAnonymousChat()))
         .calls(nullAsTrue(allowedPermissionToggles.getCalls()))
+        .groupChat(nullAsTrue(allowedPermissionToggles.getGroupChat()))
         .supervision(nullAsTrue(allowedPermissionToggles.getSupervision()))
         .supervisionAnonymousChats(
             nullAsTrue(allowedPermissionToggles.getSupervisionAnonymousChats()))
@@ -433,7 +434,7 @@ public class TenantConverter {
         .build();
   }
 
-  private TenantAdminControls toTenantAdminControls(
+  public TenantAdminControls toTenantAdminControls(
       TenantAdminControlsSettings tenantAdminControlsSettings) {
     if (tenantAdminControlsSettings == null) {
       return null;
@@ -454,6 +455,7 @@ public class TenantConverter {
         .appearance(nullAsTrue(allowedPermissionTogglesSettings.getAppearance()))
         .anonymousChat(nullAsTrue(allowedPermissionTogglesSettings.getAnonymousChat()))
         .calls(nullAsTrue(allowedPermissionTogglesSettings.getCalls()))
+        .groupChat(nullAsTrue(allowedPermissionTogglesSettings.getGroupChat()))
         .supervision(nullAsTrue(allowedPermissionTogglesSettings.getSupervision()))
         .supervisionAnonymousChats(
             nullAsTrue(allowedPermissionTogglesSettings.getSupervisionAnonymousChats()))
