@@ -1,0 +1,13 @@
+CREATE SEQUENCE sequence_tenant_admin_controls
+INCREMENT BY 1
+MINVALUE = 1
+NOMAXVALUE
+START WITH 1
+CACHE 0;
+
+CREATE TABLE tenant_admin_controls (
+  id BIGINT NOT NULL,
+  controls LONGTEXT NOT NULL,
+  update_date DATETIME NOT NULL DEFAULT (UTC_TIMESTAMP),
+  PRIMARY KEY (id)
+);

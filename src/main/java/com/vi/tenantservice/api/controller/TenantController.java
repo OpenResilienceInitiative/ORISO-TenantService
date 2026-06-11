@@ -5,6 +5,7 @@ import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
+import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
 import com.vi.tenantservice.config.security.AuthorisationService;
@@ -56,6 +57,20 @@ public class TenantController implements TenantApi, TenantadminApi {
     return !CollectionUtils.isEmpty(tenants)
         ? new ResponseEntity<>(tenants, HttpStatus.OK)
         : new ResponseEntity<>(HttpStatus.NO_CONTENT);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<TenantAdminControls> getTenantAdminControls() {
+    return new ResponseEntity<>(tenantServiceFacade.getTenantAdminControls(), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<TenantAdminControls> updateTenantAdminControls(
+      @Valid TenantAdminControls tenantAdminControls) {
+    return new ResponseEntity<>(
+        tenantServiceFacade.updateTenantAdminControls(tenantAdminControls), HttpStatus.OK);
   }
 
   @Override
