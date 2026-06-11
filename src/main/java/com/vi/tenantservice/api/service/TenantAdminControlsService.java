@@ -9,6 +9,7 @@ import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
+import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -47,10 +48,20 @@ public class TenantAdminControlsService {
     if (tenantDTO == null) {
       return;
     }
-    if (tenantDTO.getSettings() == null) {
-      tenantDTO.setSettings(new Settings());
+    tenantDTO.setSettings(enrichSettingsWithTenantAdminControls(tenantDTO.getSettings()));
+  }
+
+  public void enrichTenantDtoWithTenantAdminControls(TenantDTO tenantDTO) {
+    if (tenantDTO == null) {
+      return;
     }
-    tenantDTO.getSettings().setTenantAdminControls(getControls());
+    tenantDTO.setSettings(enrichSettingsWithTenantAdminControls(tenantDTO.getSettings()));
+  }
+
+  private Settings enrichSettingsWithTenantAdminControls(Settings settings) {
+    Settings enrichedSettings = settings != null ? settings : new Settings();
+    enrichedSettings.setTenantAdminControls(getControls());
+    return enrichedSettings;
   }
 
   private TenantAdminControlsSettings getControlsSettings() {

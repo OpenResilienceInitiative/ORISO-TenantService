@@ -13,6 +13,7 @@ import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionTogglesSetting
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
+import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -61,6 +62,21 @@ class TenantAdminControlsServiceTest {
                     .build()));
 
     MultilingualTenantDTO tenantDTO = new MultilingualTenantDTO().settings(new Settings());
+
+    tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(tenantDTO);
+
+    assertThat(tenantDTO.getSettings().getTenantAdminControls()).isEqualTo(globalControls);
+  }
+
+  @Test
+  void enrichTenantDtoWithTenantAdminControls_Should_setControlsOnTenantDto() {
+    TenantAdminControls globalControls =
+        new TenantAdminControls()
+            .allowedPermissionToggles(new TenantAdminAllowedPermissionToggles().calls(false));
+    when(tenantConverter.toTenantAdminControls(any())).thenReturn(globalControls);
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc()).thenReturn(Optional.empty());
+
+    TenantDTO tenantDTO = new TenantDTO(1L, "tenant", "subdomain").settings(new Settings());
 
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(tenantDTO);
 
