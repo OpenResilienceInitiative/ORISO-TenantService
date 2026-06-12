@@ -1,19 +1,8 @@
 {
-  "projectRoot": "/Users/nikunjchampakbhairohit/Developer/freelance/Germany/Oriso-frank-client/ORISO/ORISO-TenantService",
-  "gitCommitHash": "ae493711592d601202e40829ba45c73f117babf8",
-  "generatedAt": "2026-05-28T03:00:43.003Z",
-  "skill": "understand-anything",
-  "scope": "current repository only",
-  "stats": {
-    "filesScanned": 160,
-    "nodes": 380,
-    "edges": 623,
-    "layers": 10,
-    "endpoints": 66,
-    "javaClasses": 98
-  },
-  "notes": [
-    "Generated without analyzing parent folders or sibling repositories.",
-    "Existing README.md deletion in the working tree was not modified."
-  ]
+  "lastAnalyzedAt": "2026-06-12T03:44:12.472Z",
+  "gitCommitHash": "a777c69447609d16db33ae1a1b54fd4efe5366b6",
+  "version": "1.0.0",
+  "analyzedFiles": 177,
+  "generator": "oriso-tenant-ua-generate.mjs deterministic Understand-Anything fallback",
+  "scope": "current repository only"
 }

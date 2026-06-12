@@ -1,11 +1,5 @@
 flowchart TD
-  Source[Repository source] --> Maven[Maven package]
-  Maven --> Jar[TenantService.jar]
-  Jar --> Docker[Dockerfile image]
-  Docker --> K3s[k3s image import]
-  K3s --> Rollout[Kubernetes rollout restart]
-  Config[application*.properties and environment] --> Validator[ConfigurationValidator]
-  Validator --> App[Spring Boot TenantService]
-  DB[(MariaDB)] --> App
-  Keycloak[Keycloak JWT issuer] --> App
-  Services[ORISO service URLs] --> App
+  PR[Pull Request] --> CI[GitHub Actions]
+  CI --> Maven[Maven Build]
+  Maven --> Docker[Docker Image]
+  Docker --> Runtime[TenantService Runtime]

@@ -1,9 +1,4 @@
 {
-  "autoUpdate": false,
-  "outputLanguage": "en",
-  "scope": "current-repository-only",
-  "dashboard": {
-    "graphFile": ".understand-anything/knowledge-graph.json",
-    "command": "cd /Users/nikunjchampakbhairohit/.understand-anything/repo/understand-anything-plugin/packages/dashboard && GRAPH_DIR=\"/Users/nikunjchampakbhairohit/Developer/freelance/Germany/Oriso-frank-client/ORISO/ORISO-TenantService\" pnpm exec vite --host 127.0.0.1"
-  }
+  "autoUpdate": true,
+  "outputLanguage": "en"
 }
