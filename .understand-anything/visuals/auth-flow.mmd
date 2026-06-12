@@ -1,15 +1,7 @@
-sequenceDiagram
-  participant Client
-  participant Security as WebSecurityConfig
-  participant Jwt as JwtAuthConverter
-  participant Auth as AuthorisationService
-  participant Controller as TenantController
-  participant Resolver as TenantResolverService
-  Client->>Security: Request with Bearer JWT
-  Security->>Jwt: Convert JWT to Authentication
-  Jwt->>Auth: Extract realm roles
-  Auth-->>Jwt: Local AUTHORIZATION_* authorities
-  Security->>Controller: Invoke protected endpoint
-  Controller->>Auth: @PreAuthorize / tenant checks
-  Controller->>Resolver: Resolve tenant context when needed
-  Resolver-->>Controller: token, cookie, or subdomain tenant id
+flowchart TD
+  Request[Request] --> Security[WebSecurityConfig]
+  Security --> Jwt[JWT Converter]
+  Jwt --> Authority[Authority Mapping]
+  Authority --> Controller[TenantController]
+  Controller --> TenantContext[TenantResolverService]
+  TenantContext --> Facade[TenantServiceFacade]
