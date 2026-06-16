@@ -9,6 +9,7 @@ import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NoAgencyContextDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
+import com.vi.tenantservice.api.model.SmtpConfig;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
@@ -98,9 +99,52 @@ class TenantConverterTest {
     assertThat(restrictedTenantDTO.getSubdomain()).isEqualTo(tenantDTO.getSubdomain());
     assertThat(restrictedTenantDTO.getTheming()).isEqualTo(tenantDTO.getTheming());
     assertContentIsProperlyConverted(tenantDTO, restrictedTenantDTO);
-    assertCoreSettingsAreConverted(tenantDTO.getSettings(), restrictedTenantDTO.getSettings());
+    assertRestrictedPublicSettingsAreConverted(
+        tenantDTO.getSettings(), restrictedTenantDTO.getSettings());
     Mockito.verify(templateRenderer).renderTemplate(Mockito.anyString(), Mockito.anyMap());
     assertThat(restrictedTenantDTO.getContent().getRenderedPrivacy()).isEqualTo("renderedPrivacy");
+  }
+
+  @Test
+  void toRestrictedTenantDTO_should_redactSensitivePublicSettings() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder()
+            .tenantDTO()
+            .withContent()
+            .withTheming()
+            .withLicensing()
+            .withSettings()
+            .build();
+    tenantDTO
+        .getSettings()
+        .featureToolsOICDToken("secret-oidc-token")
+        .smtp(
+            new SmtpConfig()
+                .enabled(true)
+                .host("smtp.example.org")
+                .port(587)
+                .secure(false)
+                .username("smtp-user")
+                .password("smtp-pass")
+                .from("notifications@example.org")
+                .emailThemeColor("#123456"));
+
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // when
+    RestrictedTenantDTO restrictedTenantDTO =
+        tenantConverter.toRestrictedTenantDTO(entity, TenantConverter.DE);
+
+    // then
+    assertThat(restrictedTenantDTO.getSettings().getFeatureToolsOICDToken()).isNull();
+    assertThat(restrictedTenantDTO.getSettings().getSmtp()).isNotNull();
+    assertThat(restrictedTenantDTO.getSettings().getSmtp().getHost()).isEqualTo("smtp.example.org");
+    assertThat(restrictedTenantDTO.getSettings().getSmtp().getPort()).isEqualTo(587);
+    assertThat(restrictedTenantDTO.getSettings().getSmtp().getFrom())
+        .isEqualTo("notifications@example.org");
+    assertThat(restrictedTenantDTO.getSettings().getSmtp().getUsername()).isNull();
+    assertThat(restrictedTenantDTO.getSettings().getSmtp().getPassword()).isNull();
   }
 
   @Test
@@ -179,6 +223,35 @@ class TenantConverterTest {
         .isTrue();
   }
 
+  @Test
+  void toDTO_should_preserveSensitiveSettingsForNonPublicDtos() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .featureToolsOICDToken("secret-oidc-token")
+        .smtp(
+            new SmtpConfig()
+                .enabled(true)
+                .host("smtp.example.org")
+                .port(587)
+                .secure(false)
+                .username("smtp-user")
+                .password("smtp-pass")
+                .from("notifications@example.org")
+                .emailThemeColor("#123456"));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(converted.getSettings().getFeatureToolsOICDToken()).isEqualTo("secret-oidc-token");
+    assertThat(converted.getSettings().getSmtp()).isNotNull();
+    assertThat(converted.getSettings().getSmtp().getUsername()).isEqualTo("smtp-user");
+    assertThat(converted.getSettings().getSmtp().getPassword()).isEqualTo("smtp-pass");
+  }
+
   private static void assertContentIsProperlyConverted(
       MultilingualTenantDTO tenantDTO, RestrictedTenantDTO restrictedTenantDTO) {
     assertThat(restrictedTenantDTO.getContent().getClaim())
@@ -213,6 +286,46 @@ class TenantConverterTest {
     assertThat(actual.getFeatureCentralDataProtectionTemplateEnabled())
         .isEqualTo(expected.getFeatureCentralDataProtectionTemplateEnabled());
     assertThat(actual.getTenantAdminControls()).isEqualTo(expected.getTenantAdminControls());
+  }
+
+  private static void assertRestrictedPublicSettingsAreConverted(
+      Settings expected, Settings actual) {
+    assertThat(actual.getFeatureStatisticsEnabled())
+        .isEqualTo(expected.getFeatureStatisticsEnabled());
+    assertThat(actual.getFeatureTopicsEnabled()).isEqualTo(expected.getFeatureTopicsEnabled());
+    assertThat(actual.getTopicsInRegistrationEnabled())
+        .isEqualTo(expected.getTopicsInRegistrationEnabled());
+    assertThat(actual.getFeatureDemographicsEnabled())
+        .isEqualTo(expected.getFeatureDemographicsEnabled());
+    assertThat(actual.getFeatureAppointmentsEnabled())
+        .isEqualTo(expected.getFeatureAppointmentsEnabled());
+    assertThat(actual.getFeatureGroupChatV2Enabled())
+        .isEqualTo(expected.getFeatureGroupChatV2Enabled());
+    assertThat(actual.getFeatureToolsEnabled()).isEqualTo(expected.getFeatureToolsEnabled());
+    assertThat(actual.getFeatureAttachmentUploadDisabled())
+        .isEqualTo(expected.getFeatureAttachmentUploadDisabled());
+    assertThat(actual.getActiveLanguages()).isEqualTo(expected.getActiveLanguages());
+    assertThat(actual.getShowAskerProfile()).isEqualTo(expected.getShowAskerProfile());
+    assertThat(actual.getIsVideoCallAllowed()).isEqualTo(expected.getIsVideoCallAllowed());
+    assertThat(actual.getFeatureCentralDataProtectionTemplateEnabled())
+        .isEqualTo(expected.getFeatureCentralDataProtectionTemplateEnabled());
+    assertThat(actual.getTenantAdminControls()).isEqualTo(expected.getTenantAdminControls());
+    assertThat(actual.getFeatureToolsOICDToken()).isNull();
+    if (expected.getSmtp() == null) {
+      assertThat(actual.getSmtp()).isNull();
+      return;
+    }
+
+    assertThat(actual.getSmtp()).isNotNull();
+    assertThat(actual.getSmtp().getEnabled()).isEqualTo(expected.getSmtp().getEnabled());
+    assertThat(actual.getSmtp().getHost()).isEqualTo(expected.getSmtp().getHost());
+    assertThat(actual.getSmtp().getPort()).isEqualTo(expected.getSmtp().getPort());
+    assertThat(actual.getSmtp().getSecure()).isEqualTo(expected.getSmtp().getSecure());
+    assertThat(actual.getSmtp().getFrom()).isEqualTo(expected.getSmtp().getFrom());
+    assertThat(actual.getSmtp().getEmailThemeColor())
+        .isEqualTo(expected.getSmtp().getEmailThemeColor());
+    assertThat(actual.getSmtp().getUsername()).isNull();
+    assertThat(actual.getSmtp().getPassword()).isNull();
   }
 
   private static String getGermanTranslation(Map<String, String> translations) {
