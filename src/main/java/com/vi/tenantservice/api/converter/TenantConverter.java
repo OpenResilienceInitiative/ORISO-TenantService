@@ -534,7 +534,27 @@ public class TenantConverter {
         .content(toContentDTO(tenant, lang))
         .theming(toThemingDTO(tenant))
         .subdomain(tenant.getSubdomain())
-        .settings(getSettings(tenant));
+        .settings(getRestrictedPublicSettings(tenant));
+  }
+
+  private Settings getRestrictedPublicSettings(TenantEntity tenant) {
+    Settings settings = getSettings(tenant);
+    settings.setFeatureToolsOICDToken(null);
+    settings.setSmtp(toPublicSmtpConfig(settings.getSmtp()));
+    return settings;
+  }
+
+  private SmtpConfig toPublicSmtpConfig(SmtpConfig smtpConfig) {
+    if (smtpConfig == null) {
+      return null;
+    }
+    return new SmtpConfig()
+        .enabled(smtpConfig.getEnabled())
+        .host(smtpConfig.getHost())
+        .port(smtpConfig.getPort())
+        .secure(smtpConfig.getSecure())
+        .from(smtpConfig.getFrom())
+        .emailThemeColor(smtpConfig.getEmailThemeColor());
   }
 
   public BasicTenantLicensingDTO toBasicLicensingTenantDTO(TenantEntity tenant) {
