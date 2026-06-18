@@ -376,7 +376,7 @@ public class TenantConverter {
         .activeLanguages(nullAsGerman(tenantSettings.getActiveLanguages()));
   }
 
-  private TenantAdminControlsSettings toTenantAdminControlsSettings(
+  public TenantAdminControlsSettings toTenantAdminControlsSettings(
       TenantAdminControls tenantAdminControls) {
     if (tenantAdminControls == null) {
       return null;
@@ -395,8 +395,10 @@ public class TenantConverter {
       return null;
     }
     return TenantAdminAllowedPermissionTogglesSettings.builder()
+        .appearance(nullAsTrue(allowedPermissionToggles.getAppearance()))
         .anonymousChat(nullAsTrue(allowedPermissionToggles.getAnonymousChat()))
         .calls(nullAsTrue(allowedPermissionToggles.getCalls()))
+        .groupChat(nullAsTrue(allowedPermissionToggles.getGroupChat()))
         .supervision(nullAsTrue(allowedPermissionToggles.getSupervision()))
         .supervisionAnonymousChats(
             nullAsTrue(allowedPermissionToggles.getSupervisionAnonymousChats()))
@@ -432,7 +434,7 @@ public class TenantConverter {
         .build();
   }
 
-  private TenantAdminControls toTenantAdminControls(
+  public TenantAdminControls toTenantAdminControls(
       TenantAdminControlsSettings tenantAdminControlsSettings) {
     if (tenantAdminControlsSettings == null) {
       return null;
@@ -450,8 +452,10 @@ public class TenantConverter {
       return null;
     }
     return new TenantAdminAllowedPermissionToggles()
+        .appearance(nullAsTrue(allowedPermissionTogglesSettings.getAppearance()))
         .anonymousChat(nullAsTrue(allowedPermissionTogglesSettings.getAnonymousChat()))
         .calls(nullAsTrue(allowedPermissionTogglesSettings.getCalls()))
+        .groupChat(nullAsTrue(allowedPermissionTogglesSettings.getGroupChat()))
         .supervision(nullAsTrue(allowedPermissionTogglesSettings.getSupervision()))
         .supervisionAnonymousChats(
             nullAsTrue(allowedPermissionTogglesSettings.getSupervisionAnonymousChats()))
@@ -530,7 +534,27 @@ public class TenantConverter {
         .content(toContentDTO(tenant, lang))
         .theming(toThemingDTO(tenant))
         .subdomain(tenant.getSubdomain())
-        .settings(getSettings(tenant));
+        .settings(getRestrictedPublicSettings(tenant));
+  }
+
+  private Settings getRestrictedPublicSettings(TenantEntity tenant) {
+    Settings settings = getSettings(tenant);
+    settings.setFeatureToolsOICDToken(null);
+    settings.setSmtp(toPublicSmtpConfig(settings.getSmtp()));
+    return settings;
+  }
+
+  private SmtpConfig toPublicSmtpConfig(SmtpConfig smtpConfig) {
+    if (smtpConfig == null) {
+      return null;
+    }
+    return new SmtpConfig()
+        .enabled(smtpConfig.getEnabled())
+        .host(smtpConfig.getHost())
+        .port(smtpConfig.getPort())
+        .secure(smtpConfig.getSecure())
+        .from(smtpConfig.getFrom())
+        .emailThemeColor(smtpConfig.getEmailThemeColor());
   }
 
   public BasicTenantLicensingDTO toBasicLicensingTenantDTO(TenantEntity tenant) {

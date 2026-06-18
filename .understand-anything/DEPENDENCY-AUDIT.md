@@ -1,51 +1,105 @@
-# Dependency Audit
+# Dependency Audit: ORISO-TenantService
 
-## Navigation
+## Detected Manifests
 
-- [Build and runtime](#build-and-runtime)
-- [Generated API clients](#generated-api-clients)
-- [Security dependencies](#security-dependencies)
-- [Persistence dependencies](#persistence-dependencies)
-- [Frontend/tooling dependencies](#frontendtooling-dependencies)
-- [Risk register](#risk-register)
+- `package.json`
+- `pom.xml`
 
-## Build and Runtime
+## Detected Dependencies
 
-`pom.xml` is the main dependency boundary. It targets Java 17 and enables preview features for compile, tests, and runtime. Spring Boot parent is `3.0.0`.
+- npm: `release`
+- npm: `@commitlint/cli`
+- npm: `@commitlint/config-conventional`
+- npm: `cz-conventional-changelog`
+- npm: `husky`
+- npm: `standard-version`
+- npm: `path`
+- npm: `commit-msg`
+- npm: `dotenv`
+- Maven: `tenantservice`
+- Maven: `spring-boot-starter-parent`
+- Maven: `spring-cloud-dependencies`
+- Maven: `spring-security-web`
+- Maven: `spring-security-config`
+- Maven: `spring-security-core`
+- Maven: `owasp-java-html-sanitizer`
+- Maven: `spring-boot-starter-cache`
+- Maven: `spring-boot-starter-web`
+- Maven: `spring-boot-starter-oauth2-resource-server`
+- Maven: `spring-boot-starter-hateoas`
+- Maven: `micrometer-tracing-bridge-otel`
+- Maven: `opentelemetry-exporter-zipkin`
+- Maven: `spring-boot-starter-actuator`
+- Maven: `spring-boot-actuator-autoconfigure`
+- Maven: `spring-boot-starter-data-jpa`
+- Maven: `hibernate-validator`
+- Maven: `liquibase-maven-plugin`
+- Maven: `liquibase-core`
+- Maven: `mariadb-java-client`
+- Maven: `h2`
+- Maven: `spring-boot-starter-freemarker`
+- Maven: `openapi-generator-maven-plugin`
+- Maven: `plexus-utils`
+- Maven: `jackson-databind-nullable`
+- Maven: `swagger-annotations`
+- Maven: `springfox-boot-starter`
+- Maven: `swagger-parser`
+- Maven: `springdoc-openapi-starter-webmvc-ui`
+- Maven: `snakeyaml`
+- Maven: `keycloak-spring-boot-starter`
+- Maven: `logback-classic`
+- Maven: `javax.ws.rs-api`
+- Maven: `httpclient5`
+- Maven: `lombok`
+- Maven: `commons-lang3`
+- Maven: `commons-collections4`
+- Maven: `handlebars`
+- Maven: `slf4j-api`
+- Maven: `slf4j-simple`
+- Maven: `spring-boot-starter-test`
+- Maven: `spring-security-test`
+- Maven: `awaitility`
+- Maven: `awaitility-proxy`
+- Maven: `easy-random-core`
+- Maven: `assertj-core`
+- Maven: `mockito-core`
+- Maven: `byte-buddy`
+- Maven: `spring-security-oauth2-test-webmvc-addons`
+- Maven: `ehcache`
+- Maven: `jackson-databind`
+- Maven: `spring-boot-properties-migrator`
+- Maven: `spring-boot-maven-plugin`
+- Maven: `maven-surefire-plugin`
+- Maven: `spotless-maven-plugin`
+- Maven: `maven-compiler-plugin`
 
-Core runtime dependencies include Spring Boot web, validation, HATEOAS, security, OAuth2 resource server, JPA, MariaDB, Liquibase, FreeMarker, Ehcache/JCache, OpenAPI/Swagger tooling, Keycloak, Jackson, Guava, and Lombok.
+## Operational Dependency Files
 
-## Generated API Clients
-
-OpenAPI Generator 6.6.0 generates:
-
-- Server interfaces/models from `api/tenantservice.yaml`.
-- ConsultingType client from `services/consultingtypeservice.yaml`.
-- ApplicationSettings client from `services/applicationsettingsservice.yml`.
-- UserAdmin client from `services/useradminservice.yaml`.
-
-`services/agencyadminservice.yaml` is used as a referenced schema source by UserAdmin specs, not as a directly generated client in this repo.
-
-## Security Dependencies
-
-Security mixes modern Spring Security resource-server JWT support with older Keycloak adapter dependencies. The code uses `@KeycloakConfiguration` and `@EnableGlobalMethodSecurity`; both deserve review before Spring Boot/Spring Security upgrades.
-
-Local authorities are defined in code rather than coming directly from Keycloak scopes. That makes `Authority`, `UserRole`, and `RoleAuthorizationAuthorityMapper` part of the authorization contract.
-
-## Persistence Dependencies
-
-MariaDB is configured through Spring Data JPA and Liquibase changelogs. Runtime profiles disable Liquibase, so schema migration ownership is likely external or manual. `liquibase.properties` appears stale and still references MySQL-era local values.
-
-## Frontend/Tooling Dependencies
-
-`package.json` is only release/commit tooling: standard-version, commitlint, commitizen, Husky, and dotenv. It does not define application runtime behavior.
-
-## Risk Register
-
-- Spring Boot 3.0.0 is old for a Boot 3 application and should be tested before upgrading because of Keycloak/Springfox/Jakarta interactions.
-- Springfox 3 and Springdoc 2 are both present; pick one documentation stack if possible.
-- Old Keycloak adapters are the highest security/compatibility upgrade concern.
-- Java preview features should be isolated or removed before JDK upgrades.
-- `spring-boot-properties-migrator` should remain temporary.
-- `byte-buddy` scope should be confirmed.
-- Docker uses Java 17 while `pom.xml` also declares a Java upper version of 21; keep the declared runtime and tested runtime aligned.
+- `.github/actions/docker-build-push/action.yml` - config, yaml
+- `.github/actions/maven-build/action.yml` - config, yaml
+- `.github/workflows/ci-feature-branch.yml` - pipeline, yaml
+- `.github/workflows/ci-main.yml` - pipeline, yaml
+- `.github/workflows/ci-pull-request.yml` - pipeline, yaml
+- `.mvn/wrapper/maven-wrapper.properties` - config, properties
+- `Dockerfile` - infra, dockerfile
+- `api/tenantservice.yaml` - config, yaml
+- `package-lock.json` - config, json
+- `package.json` - config, json
+- `pom.xml` - config, xml
+- `services/agencyadminservice.yaml` - config, yaml
+- `services/applicationsettingsservice.yml` - config, yaml
+- `services/consultingtypeservice.yaml` - config, yaml
+- `services/useradminservice.yaml` - config, yaml
+- `src/main/resources/application-dev.properties` - config, properties
+- `src/main/resources/application-local.properties` - config, properties
+- `src/main/resources/application-prod.properties` - config, properties
+- `src/main/resources/application-staging.properties` - config, properties
+- `src/main/resources/application-testing.properties` - config, properties
+- `src/main/resources/application.properties` - config, properties
+- `src/main/resources/ehcache.xml` - config, xml
+- `src/main/resources/liquibase.properties` - config, properties
+- `src/main/resources/templates/dataProtectionContactTemplate.en.json` - config, json
+- `src/main/resources/templates/dataProtectionContactTemplate.json` - config, json
+- `src/main/resources/version.properties` - config, properties
+- `src/test/resources/settings/default-consulting-type-settings.json` - config, json
+- `src/test/resources/settings/default-tenant-settings.json` - config, json

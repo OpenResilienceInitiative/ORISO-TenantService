@@ -85,6 +85,7 @@ logs/
 .env.local
 .env.*.local
 *.local.properties
+application-local.properties
 
 # =============================================================================
 # OS files

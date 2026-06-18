@@ -1,14 +1,8 @@
 flowchart TD
-  Contract[api/tenantservice.yaml] --> Controller[TenantController]
-  Controller --> Facade[TenantServiceFacade]
-  Facade --> Authz[TenantFacadeAuthorisationService]
-  Facade --> TenantService[TenantService]
-  TenantService --> Repo[TenantRepository]
-  Repo --> DB[(MariaDB tenant table)]
-  Facade --> Converter[TenantConverter]
-  Converter --> Templates[TemplateService and TemplateRenderer]
-  Facade --> Consulting[ConsultingTypeService]
-  Facade --> AppSettings[ApplicationSettingsService]
-  Facade --> UserAdmin[UserAdminService]
-  Security[WebSecurityConfig and JwtAuthConverter] --> Controller
-  Resolver[TenantResolverService] --> Facade
+  API[API and Routing] --> Domain[Tenant Domain Services]
+  Auth[Auth and Tenant Context] --> API
+  Domain --> Data[Data and Persistence]
+  Config[Configuration] --> API
+  Config --> Domain
+  Deploy[Deployment and Operations] --> Config
+  Docs[Documentation] --> API

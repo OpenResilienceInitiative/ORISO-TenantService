@@ -20,10 +20,12 @@ import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
+import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantEntity.TenantBase;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
+import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -54,6 +56,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort.Direction;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -83,6 +86,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantFacadeDependentSettingsOverrideService
       tenantFacadeDependentSettingsOverrideService;
 
+  private final @NonNull TenantAdminControlsService tenantAdminControlsService;
+
   private final @NonNull TenantResolverService tenantResolverService;
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
@@ -96,6 +101,7 @@ public class TenantServiceFacade {
     validateCreateTenantInput(tenantDTO);
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnCreate(
         sanitizedTenantDTO);
+    tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
     TenantEntity createdTenant = tenantService.create(entity);
@@ -108,7 +114,9 @@ public class TenantServiceFacade {
       throw new BadRequestException(
           "Error while creating consulting types for tenant with id " + createdTenant.getId());
     }
-    return tenantConverter.toMultilingualDTO(createdTenant);
+    var createdTenantDto = tenantConverter.toMultilingualDTO(createdTenant);
+    tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(createdTenantDto);
+    return createdTenantDto;
   }
 
   private void performRollback(TenantEntity createdTenant) {
@@ -292,6 +300,7 @@ public class TenantServiceFacade {
         sanitizedTenantDTO, existingTenantEntity);
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
         sanitizedTenantDTO, existingTenantEntity);
+    tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     updatedEntity = tenantService.update(updatedEntity);
@@ -319,18 +328,37 @@ public class TenantServiceFacade {
   public Optional<TenantDTO> findTenantById(Long id) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
     var tenantById = tenantService.findTenantById(id);
-    return tenantById.isEmpty()
-        ? Optional.empty()
-        : Optional.of(
-            tenantConverter.toDTO(
-                tenantById.get(), translationService.getCurrentLanguageContext()));
+    if (tenantById.isEmpty()) {
+      return Optional.empty();
+    }
+    var tenantDTO =
+        tenantConverter.toDTO(tenantById.get(), translationService.getCurrentLanguageContext());
+    tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(tenantDTO);
+    return Optional.of(tenantDTO);
   }
 
   private MultilingualTenantDTO getConvertedAndEnrichedTenant(TenantEntity tenantEntity) {
     var multilingualTenantDTO = tenantConverter.toMultilingualDTO(tenantEntity);
+    tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(multilingualTenantDTO);
     enrichWithAdminDataIfSuperadmin(multilingualTenantDTO);
     enrichWithConsultingTypeSettings(multilingualTenantDTO, tenantEntity.getId());
     return multilingualTenantDTO;
+  }
+
+  public TenantAdminControls getTenantAdminControls() {
+    assertSuperAdmin();
+    return tenantAdminControlsService.getControls();
+  }
+
+  public TenantAdminControls updateTenantAdminControls(TenantAdminControls tenantAdminControls) {
+    assertSuperAdmin();
+    return tenantAdminControlsService.updateControls(tenantAdminControls);
+  }
+
+  private void assertSuperAdmin() {
+    if (!tenantFacadeAuthorisationService.isSuperAdmin()) {
+      throw new AccessDeniedException("Only super admin can manage platform tenant admin controls");
+    }
   }
 
   private void enrichWithConsultingTypeSettings(

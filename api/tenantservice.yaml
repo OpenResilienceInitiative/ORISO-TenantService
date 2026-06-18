@@ -112,6 +112,48 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
         - Bearer: [ ]
+  /tenantadmin/controls:
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Gets platform-level tenant admin controls [Authorization: Super admin]'
+      operationId: getTenantAdminControls
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantAdminControls'
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - only super admin can access platform controls
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+    put:
+      tags:
+        - tenant-controller
+      summary: 'Updates platform-level tenant admin controls [Authorization: Super admin]'
+      operationId: updateTenantAdminControls
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/TenantAdminControls'
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantAdminControls'
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - only super admin can update platform controls
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}:
     put:
       tags:
@@ -697,10 +739,16 @@ components:
     TenantAdminAllowedPermissionToggles:
       type: object
       properties:
+        appearance:
+          type: boolean
+          example: "true"
         anonymousChat:
           type: boolean
           example: "true"
         calls:
+          type: boolean
+          example: "true"
+        groupChat:
           type: boolean
           example: "true"
         supervision:
@@ -790,13 +838,13 @@ components:
           example: "false"
         username:
           type: string
-          example: "notifications@oriso-dev.site"
+          example: "notifications@oriso.org"
         password:
           type: string
           example: "********"
         from:
           type: string
-          example: "notifications@oriso-dev.site"
+          example: "notifications@oriso.org"
         emailThemeColor:
           type: string
           example: "#0f3b8f"

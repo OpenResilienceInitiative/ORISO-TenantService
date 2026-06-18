@@ -1,16 +1,7 @@
-flowchart LR
-  Request[Generated Tenant DTO] --> Controller[TenantController]
-  Controller --> Facade[TenantServiceFacade]
-  Facade --> Sanitize[TenantInputSanitizer]
-  Facade --> Validate[Validation and authorization rules]
-  Facade --> Convert[TenantConverter]
-  Convert --> Entity[TenantEntity]
-  Entity --> Service[TenantService]
-  Service --> Repo[TenantRepository]
-  Repo --> DB[(tenant table)]
-  Facade --> CT[ConsultingTypeService]
-  Facade --> AS[ApplicationSettingsService]
-  Facade --> UA[UserAdminService]
-  CT --> External1[ConsultingType API]
-  AS --> External2[ApplicationSettings API]
-  UA --> External3[UserAdmin API]
+flowchart TD
+  Controller[TenantController] --> Facade[TenantServiceFacade]
+  Facade --> Service[TenantService]
+  Facade --> Controls[TenantAdminControlsService]
+  Service --> TenantEntity[(TenantEntity)]
+  Controls --> ControlsEntity[(TenantAdminControlsEntity)]
+  Migration[0013 Tenant Admin Controls] --> ControlsEntity

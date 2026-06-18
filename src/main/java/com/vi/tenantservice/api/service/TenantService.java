@@ -13,7 +13,9 @@ import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -89,6 +91,21 @@ public class TenantService {
     overrideSubdomainIfNeededForSingleDomainMultitenancy(tenantEntity);
     tenantEntity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));
     return tenantRepository.save(tenantEntity);
+  }
+
+  public void updateTenantSettingsBatch(Map<Long, String> settingsByTenantId) {
+    if (settingsByTenantId == null || settingsByTenantId.isEmpty()) {
+      return;
+    }
+    LocalDateTime updateDate = LocalDateTime.now(ZoneOffset.UTC);
+    List<TenantEntity> tenants =
+        tenantRepository.findAllByIdIn(new ArrayList<>(settingsByTenantId.keySet()));
+    tenants.forEach(
+        tenant -> {
+          tenant.setSettings(settingsByTenantId.get(tenant.getId()));
+          tenant.setUpdateDate(updateDate);
+        });
+    tenantRepository.saveAll(tenants);
   }
 
   private void validateTenant(TenantEntity tenantEntity) {
