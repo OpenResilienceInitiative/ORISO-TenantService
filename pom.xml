@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <description>VI SaaS: TenantService</description>
@@ -15,10 +16,12 @@
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>3.0.0</version>
-        <relativePath/>
+        <relativePath />
     </parent>
 
-    <properties> <!-- upper version is used to add the new features with the new versions of Java and spring boot, basic code changes are already made and as new features arrive they will use the upper version -->
+    <properties> <!-- upper version is used to add the new features with the new versions of Java and
+        spring boot, basic code changes are already made and as new features arrive they will use
+        the upper version -->
         <java.upper.version>21</java.upper.version>
         <springboot.upper.version>4.0.1</springboot.upper.version>
         <spring.upper.version>6.2.0</spring.upper.version>
@@ -345,6 +348,12 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>3.3.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
             <version>1.14.5</version>
@@ -386,6 +395,9 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <jvmArguments>--enable-preview</jvmArguments>
+                </configuration>
             </plugin>
             <!-- OpenApi codegen maven plugin: generates api stubs -->
             <plugin>
@@ -406,7 +418,8 @@
 
                             <inputSpec>${project.basedir}/api/tenantservice.yaml</inputSpec>
                             <generatorName>spring</generatorName>
-                            <apiPackage>${project.groupId}.${project.artifactId}.generated.api.controller</apiPackage>
+                            <apiPackage>
+                                ${project.groupId}.${project.artifactId}.generated.api.controller</apiPackage>
                             <modelPackage>${project.groupId}.${project.artifactId}.api.model</modelPackage>
                             <generateSupportingFiles>true</generateSupportingFiles>
                             <apisToGenerate></apisToGenerate>
@@ -510,7 +523,7 @@
                     <argLine>--enable-preview</argLine>
                     <excludedGroups>SkipOnCI</excludedGroups>
                     <!--
-                        TEMPORARY: 
+                        TEMPORARY:
                         Do not fail the build when tests fail. JUnit XML reports
                         are still written to target/surefire-reports/, and a
                         human-readable summary is printed at the end of the build.

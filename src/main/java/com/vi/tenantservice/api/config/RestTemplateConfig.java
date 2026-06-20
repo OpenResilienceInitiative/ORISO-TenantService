@@ -1,5 +1,6 @@
 package com.vi.tenantservice.api.config;
 
+import java.time.Duration;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,6 +18,10 @@ public class RestTemplateConfig {
    */
   @Bean
   public RestTemplate restTemplate(RestTemplateBuilder builder) {
-    return builder.errorHandler(new CustomResponseErrorHandler()).build();
+    return builder
+        .setConnectTimeout(Duration.ofSeconds(2))
+        .setReadTimeout(Duration.ofSeconds(8))
+        .errorHandler(new CustomResponseErrorHandler())
+        .build();
   }
 }
