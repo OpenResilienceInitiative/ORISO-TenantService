@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import org.apache.commons.codec.binary.Base32;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -53,7 +54,16 @@ public class AuthorisationService {
   }
 
   public Object getUsername() {
-    return getPrincipal().getClaims().get("username");
+    Object raw = getPrincipal().getClaims().get("username");
+    if (raw == null) {
+      return null;
+    }
+    String username = raw.toString();
+    if (!username.startsWith("enc.")) {
+      return username;
+    }
+    return new String(new Base32().decode(
+        username.substring(4).toUpperCase().replace(".", "=")));
   }
 
   private Authentication getAuthentication() {
