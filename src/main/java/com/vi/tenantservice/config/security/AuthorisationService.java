@@ -62,8 +62,7 @@ public class AuthorisationService {
     if (!username.startsWith("enc.")) {
       return username;
     }
-    return new String(new Base32().decode(
-        username.substring(4).toUpperCase().replace(".", "=")));
+    return new String(new Base32().decode(username.substring(4).toUpperCase().replace(".", "=")));
   }
 
   private Authentication getAuthentication() {
