@@ -64,8 +64,8 @@ public class AuthorisationService {
       return username;
     }
     try {
-      return new String(new Base32().decode(
-          username.substring(4).toUpperCase().replace(".", "=")),
+      return new String(
+          new Base32().decode(username.substring(4).toUpperCase().replace(".", "=")),
           StandardCharsets.UTF_8);
     } catch (IllegalArgumentException e) {
       throw new AccessDeniedException("Invalid encoded username: " + username, e);
