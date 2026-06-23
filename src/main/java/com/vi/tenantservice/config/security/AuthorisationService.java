@@ -2,6 +2,7 @@ package com.vi.tenantservice.config.security;
 
 import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.RoleAuthorizationAuthorityMapper;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -53,7 +54,7 @@ public class AuthorisationService {
     return Optional.of(tenantId);
   }
 
-  public Object getUsername() {
+  public String getUsername() {
     Object raw = getPrincipal().getClaims().get("username");
     if (raw == null) {
       return null;
@@ -62,7 +63,13 @@ public class AuthorisationService {
     if (!username.startsWith("enc.")) {
       return username;
     }
-    return new String(new Base32().decode(username.substring(4).toUpperCase().replace(".", "=")));
+    try {
+      return new String(new Base32().decode(
+          username.substring(4).toUpperCase().replace(".", "=")),
+          StandardCharsets.UTF_8);
+    } catch (IllegalArgumentException e) {
+      throw new AccessDeniedException("Invalid encoded username: " + username, e);
+    }
   }
 
   private Authentication getAuthentication() {
