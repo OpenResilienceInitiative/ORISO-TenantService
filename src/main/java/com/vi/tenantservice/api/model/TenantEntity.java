@@ -35,6 +35,12 @@ public class TenantEntity {
   @Column(name = "subdomain", nullable = false)
   private String subdomain;
 
+  @Column(name = "address")
+  private String address;
+
+  @Column(name = "description", columnDefinition = "TEXT")
+  private String description;
+
   @Column(name = "licensing_allowed_users")
   private Integer licensingAllowedNumberOfUsers;
 

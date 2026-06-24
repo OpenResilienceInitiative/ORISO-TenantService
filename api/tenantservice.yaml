@@ -412,6 +412,13 @@ components:
           type: string
           example: "companyname"
           maxLength: 100
+        address:
+          type: string
+          maxLength: 255
+          example: "Musterstraße 1, 12345 Musterstadt"
+        description:
+          type: string
+          example: "Short description of the tenant."
         createDate:
           type: string
         updateDate:
@@ -443,6 +450,13 @@ components:
               type: string
               example: "companyname"
               maxLength: 100
+            address:
+              type: string
+              maxLength: 255
+              example: "Musterstraße 1, 12345 Musterstadt"
+            description:
+              type: string
+              example: "Short description of the tenant."
             adminEmails:
               type: array
               items:
@@ -932,6 +946,13 @@ components:
           type: string
           example: "companyname"
           maxLength: 100
+        address:
+          type: string
+          maxLength: 255
+          example: "Musterstraße 1, 12345 Musterstadt"
+        description:
+          type: string
+          example: "Short description of the tenant."
         beraterCount:
           type: integer
           example: 10

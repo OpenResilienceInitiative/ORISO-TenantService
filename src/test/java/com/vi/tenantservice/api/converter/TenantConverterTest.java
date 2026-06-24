@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.converter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.DataProtectionContactTemplateDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
@@ -63,6 +64,35 @@ class TenantConverterTest {
     assertThat(converted.getSettings().getIsVideoCallAllowed()).isTrue();
     assertThat(converted.getSettings().getShowAskerProfile()).isTrue();
     // content comparision is skipped, due to i18n feature, so the structure is different
+  }
+
+  @Test
+  void toEntity_should_roundTripAddressAndDescription() {
+    // given
+    MultilingualTenantDTO tenantDTO = new MultilingualTenantTestDataBuilder().tenantDTO().build();
+    tenantDTO.setAddress("Musterstraße 1, 12345 Musterstadt");
+    tenantDTO.setDescription("Short description of the tenant.");
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then
+    assertThat(entity.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(entity.getDescription()).isEqualTo("Short description of the tenant.");
+
+    // and entity -> DTO conversions preserve the values
+    TenantDTO converted = tenantConverter.toDTO(entity, "de");
+    assertThat(converted.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(converted.getDescription()).isEqualTo("Short description of the tenant.");
+
+    MultilingualTenantDTO multilingualConverted = tenantConverter.toMultilingualDTO(entity);
+    assertThat(multilingualConverted.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(multilingualConverted.getDescription())
+        .isEqualTo("Short description of the tenant.");
+
+    AdminTenantDTO adminConverted = tenantConverter.toAdminTenantDTO(entity);
+    assertThat(adminConverted.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(adminConverted.getDescription()).isEqualTo("Short description of the tenant.");
   }
 
   @Test
