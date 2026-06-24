@@ -363,6 +363,54 @@ class TenantConverterTest {
   }
 
   @Test
+  void toDTO_should_applyPerFieldDefaults_When_storedSettingsJsonIsEmpty() {
+    // given — all keys absent from stored JSON
+    TenantEntity entity = TenantEntity.builder().settings("{}").build();
+
+    // when
+    Settings settings = tenantConverter.toDTO(entity, "de").getSettings();
+
+    // then — false-default fields (sample of 3)
+    assertThat(settings.getFeatureDemographicsEnabled()).isFalse();
+    assertThat(settings.getFeatureStatisticsEnabled()).isFalse();
+    assertThat(settings.getFeatureToolsEnabled()).isFalse();
+    // then — true-default fields (sample of 3)
+    assertThat(settings.getFeatureAudioCallsEnabled()).isTrue();
+    assertThat(settings.getFeatureAnonymousChatEnabled()).isTrue();
+    assertThat(settings.getFeatureCallsEnabled()).isTrue();
+  }
+
+  @Test
+  void toDTO_should_respectExplicitFalse_When_trueDefaultFieldIsSetToFalseInJson() {
+    // given — one true-default field explicitly false; all other keys absent
+    TenantEntity entity =
+        TenantEntity.builder().settings("{\"featureAudioCallsEnabled\":false}").build();
+
+    // when
+    Settings settings = tenantConverter.toDTO(entity, "de").getSettings();
+
+    // then
+    assertThat(settings.getFeatureAudioCallsEnabled()).isFalse();
+    assertThat(settings.getFeatureDemographicsEnabled()).isFalse();
+    assertThat(settings.getFeatureAnonymousChatEnabled()).isTrue();
+    assertThat(settings.getFeatureStatisticsEnabled()).isFalse();
+  }
+
+  @Test
+  void toDTO_should_notCrossContaminate_When_jsonContainsMisspelledFieldName() {
+    // given — typo must not satisfy .contains() for the correctly-spelled key
+    TenantEntity entity =
+        TenantEntity.builder().settings("{\"featureAudioCalls_Enabled\":false}").build();
+
+    // when
+    Settings settings = tenantConverter.toDTO(entity, "de").getSettings();
+
+    // then — correctly-spelled field keeps its true default; typo is ignored
+    assertThat(settings.getFeatureAudioCallsEnabled()).isTrue();
+    assertThat(settings.getFeatureDemographicsEnabled()).isFalse();
+  }
+
+  @Test
   void toBasicLicensingTenantDTO_should_convertAttributesProperly() {
     // given
     MultilingualTenantDTO tenantDTO =

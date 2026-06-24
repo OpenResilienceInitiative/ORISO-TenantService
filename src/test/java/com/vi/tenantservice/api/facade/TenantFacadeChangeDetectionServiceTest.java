@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.facade;
 
 import static com.vi.tenantservice.api.model.TenantSetting.*;
 import static com.vi.tenantservice.api.util.JsonConverter.convertToJson;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 import com.google.common.collect.Maps;
@@ -226,6 +227,40 @@ class TenantFacadeChangeDetectionServiceTest {
             tenantFacadeChangeDetectionService.determineChangedSettings(
                 sanitizedTenantDTO, existingTenant))
         .containsOnly(FEATURE_ATTACHMENT_UPLOAD_DISABLED);
+  }
+
+  @Test
+  void
+      determineChangedSettings_Should_ReportExactlyOneChange_When_StoredAndInputDifferInOneFieldOnly() {
+    // given — stored JSON uses defaults (audioCalls true); input sets only that field to false
+    TenantEntity existingTenant = TenantEntity.builder().settings("{}").build();
+    MultilingualTenantDTO sanitizedTenantDTO =
+        new MultilingualTenantDTO().settings(new Settings().featureAudioCallsEnabled(false));
+
+    // when, then
+    assertThat(
+            tenantFacadeChangeDetectionService.determineChangedSettings(
+                sanitizedTenantDTO, existingTenant))
+        .containsOnly(FEATURE_AUDIO_CALLS_ENABLED);
+  }
+
+  @Test
+  void determineChangedSettings_Should_NotNpe_When_storedJsonLeavesFalseDefaultFieldsAbsent() {
+    // Regresses Boolean-null unboxing in isChanged(Boolean, boolean): after boolean→Boolean,
+    // absent keys deserialize as null and isFeature*() must not be unboxed before defaults apply.
+    TenantEntity existingTenant = TenantEntity.builder().settings("{}").build();
+    MultilingualTenantDTO sanitizedTenantDTO = new MultilingualTenantDTO().settings(new Settings());
+
+    assertThatCode(
+            () ->
+                tenantFacadeChangeDetectionService.determineChangedSettings(
+                    sanitizedTenantDTO, existingTenant))
+        .doesNotThrowAnyException();
+
+    assertThat(
+            tenantFacadeChangeDetectionService.determineChangedSettings(
+                sanitizedTenantDTO, existingTenant))
+        .isEmpty();
   }
 
   @Test

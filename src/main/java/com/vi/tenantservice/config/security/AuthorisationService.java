@@ -2,11 +2,13 @@ package com.vi.tenantservice.config.security;
 
 import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.RoleAuthorizationAuthorityMapper;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import org.apache.commons.codec.binary.Base32;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -52,8 +54,22 @@ public class AuthorisationService {
     return Optional.of(tenantId);
   }
 
-  public Object getUsername() {
-    return getPrincipal().getClaims().get("username");
+  public String getUsername() {
+    Object raw = getPrincipal().getClaims().get("username");
+    if (raw == null) {
+      return null;
+    }
+    String username = raw.toString();
+    if (!username.startsWith("enc.")) {
+      return username;
+    }
+    try {
+      return new String(
+          new Base32().decode(username.substring(4).toUpperCase().replace(".", "=")),
+          StandardCharsets.UTF_8);
+    } catch (IllegalArgumentException e) {
+      throw new AccessDeniedException("Invalid encoded username: " + username, e);
+    }
   }
 
   private Authentication getAuthentication() {
