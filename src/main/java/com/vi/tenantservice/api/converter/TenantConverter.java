@@ -59,7 +59,9 @@ public class TenantConverter {
         TenantEntity.builder()
             .id(tenantDTO.getId())
             .name(tenantDTO.getName())
-            .subdomain(tenantDTO.getSubdomain());
+            .subdomain(tenantDTO.getSubdomain())
+            .address(tenantDTO.getAddress())
+            .description(tenantDTO.getDescription());
     contentToEntity(tenantDTO, builder);
     licensingToEntity(tenantDTO, builder);
     themingToEntity(tenantDTO, builder);
@@ -186,6 +188,8 @@ public class TenantConverter {
         new MultilingualTenantDTO(tenant.getName())
             .id(tenant.getId())
             .subdomain(tenant.getSubdomain())
+            .address(tenant.getAddress())
+            .description(tenant.getDescription())
             .content(toMultilingualContentDTO(tenant))
             .theming(toThemingDTO(tenant))
             .licensing(toLicensingDTO(tenant))
@@ -202,6 +206,8 @@ public class TenantConverter {
   public TenantDTO toDTO(TenantEntity tenant, String lang) {
     var tenantDTO =
         new TenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
+            .address(tenant.getAddress())
+            .description(tenant.getDescription())
             .content(toContentDTO(tenant, lang))
             .theming(toThemingDTO(tenant))
             .licensing(toLicensingDTO(tenant))
@@ -678,6 +684,8 @@ public class TenantConverter {
   public AdminTenantDTO toAdminTenantDTO(TenantEntity tenant) {
     var adminTenantDTO =
         new AdminTenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
+            .address(tenant.getAddress())
+            .description(tenant.getDescription())
             .beraterCount(tenant.getLicensingAllowedNumberOfUsers());
     if (tenant.getCreateDate() != null) {
       adminTenantDTO.setCreateDate(tenant.getCreateDate().toString());
