@@ -383,7 +383,15 @@ public class TenantServiceFacade {
 
   private void enrichWithAdminData(
       final Integer tenantId, final Consumer<List<String>> setAdminEmailsConsumer) {
-    List<AdminResponseDTO> tenantAdmins = userAdminService.getTenantAdmins(tenantId);
+    List<AdminResponseDTO> tenantAdmins = new ArrayList<>();
+    try {
+      tenantAdmins = userAdminService.getTenantAdmins(tenantId);
+    } catch (Exception ex) {
+      log.warn(
+          "Could not resolve tenant-admin emails for tenant {}. Returning tenant without adminEmails.",
+          tenantId,
+          ex);
+    }
     if (tenantAdmins != null && !tenantAdmins.isEmpty()) {
       log.debug("Enriching tenant with admin email data");
       setAdminEmailsConsumer.accept(getAdminEmails(tenantAdmins));
