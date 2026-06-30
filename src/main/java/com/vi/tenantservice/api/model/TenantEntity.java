@@ -77,6 +77,12 @@ public class TenantEntity {
   @Column(name = "termsandconditions_activation_date")
   private LocalDateTime contentTermsAndConditionsActivationDate;
 
+  @Column(name = "content_dpa")
+  private String contentDataProcessingAgreement;
+
+  @Column(name = "dpa_activation_date")
+  private LocalDateTime contentDataProcessingAgreementActivationDate;
+
   @Column(name = "settings")
   private String settings;
 
