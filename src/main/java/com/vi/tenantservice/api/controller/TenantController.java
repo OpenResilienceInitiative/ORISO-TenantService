@@ -24,6 +24,7 @@ import jakarta.validation.Valid;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -96,6 +97,13 @@ public class TenantController implements TenantApi, TenantadminApi {
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<DpaSignInviteDTO> createDataProcessingAgreementSignInvite(Long id) {
     return new ResponseEntity<>(tenantDpaFacade.createSignInvite(id), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<DpaGateStatusDTO> publishDataProcessingAgreement(
+      Long id, Map<String, String> requestBody) {
+    return new ResponseEntity<>(tenantDpaFacade.publishDpa(id, requestBody), HttpStatus.OK);
   }
 
   @ExceptionHandler(DpaNotPublishedException.class)

@@ -16,8 +16,10 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantService;
+import com.vi.tenantservice.api.validation.InputSanitizer;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +34,7 @@ class TenantDpaFacadeTest {
   @Mock private TenantDpaService tenantDpaService;
   @Mock private TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   @Mock private TenantService tenantService;
+  @Mock private InputSanitizer inputSanitizer;
   @InjectMocks private TenantDpaFacade tenantDpaFacade;
 
   @Test
@@ -129,5 +132,24 @@ class TenantDpaFacadeTest {
     assertThatThrownBy(() -> tenantDpaFacade.createSignInvite(5L))
         .isInstanceOf(DpaNotPublishedException.class);
     verify(tenantDpaService, never()).createSignInvite(any(), any(), any());
+  }
+
+  @Test
+  void publishDpa_Should_sanitize_storeAsJson_stampVersion_andReturnGate() {
+    // given
+    var tenant = new TenantEntity();
+    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(tenant));
+    when(inputSanitizer.sanitizeAllowingFormattingAndLinks("<p>x</p>")).thenReturn("<p>clean</p>");
+
+    // when
+    var status = tenantDpaFacade.publishDpa(5L, Map.of("de", "<p>x</p>"));
+
+    // then
+    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
+    assertThat(tenant.getContentDataProcessingAgreement()).contains("clean");
+    assertThat(tenant.getContentDataProcessingAgreementActivationDate()).isNotNull();
+    verify(tenantService).update(tenant);
+    assertThat(status.getDpaPublished()).isTrue();
+    assertThat(status.getDpaSigned()).isFalse();
   }
 }

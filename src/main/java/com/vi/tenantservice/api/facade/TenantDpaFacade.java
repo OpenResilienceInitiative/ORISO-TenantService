@@ -8,13 +8,19 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantService;
+import com.vi.tenantservice.api.util.JsonConverter;
+import com.vi.tenantservice.api.validation.InputSanitizer;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Tenant-scoped, authorisation-guarded entry point for the admin-facing DPA queries. Every method
@@ -32,6 +38,7 @@ public class TenantDpaFacade {
   private final @NonNull TenantDpaService tenantDpaService;
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   private final @NonNull TenantService tenantService;
+  private final @NonNull InputSanitizer inputSanitizer;
 
   @Value("${app.base.url:}")
   private String appBaseUrl;
@@ -81,6 +88,33 @@ public class TenantDpaFacade {
     boolean published = version != null;
     boolean signed = published && tenantDpaService.isSignedForVersion(tenantId, version);
     return new DpaGateStatusDTO().dpaPublished(published).dpaSigned(signed);
+  }
+
+  /**
+   * Publishes the tenant's DPA: sanitises each per-language HTML translation (OWASP allowlist),
+   * stores it as the multilingual JSON content, and stamps a fresh activation date (= new contract
+   * version). Returns the resulting gate status (published; signed is false until the new version
+   * is confirmed).
+   */
+  public DpaGateStatusDTO publishDpa(Long tenantId, Map<String, String> contentByLanguage) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    var tenant =
+        tenantService
+            .findTenantById(tenantId)
+            .orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
+    var sanitized = new LinkedHashMap<String, String>();
+    if (contentByLanguage != null) {
+      contentByLanguage.forEach(
+          (lang, html) ->
+              sanitized.put(lang, inputSanitizer.sanitizeAllowingFormattingAndLinks(html)));
+    }
+    var version = LocalDateTime.now();
+    tenant.setContentDataProcessingAgreement(JsonConverter.convertToJson(sanitized));
+    tenant.setContentDataProcessingAgreementActivationDate(version);
+    tenantService.update(tenant);
+    boolean signed = tenantDpaService.isSignedForVersion(tenantId, version);
+    return new DpaGateStatusDTO().dpaPublished(true).dpaSigned(signed);
   }
 
   private static DpaSignatureDTO toDto(TenantDpaSignatureEntity entity) {

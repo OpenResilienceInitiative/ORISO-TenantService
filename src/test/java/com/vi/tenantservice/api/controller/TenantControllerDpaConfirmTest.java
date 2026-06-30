@@ -1,6 +1,8 @@
 package com.vi.tenantservice.api.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
@@ -17,6 +19,7 @@ import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -131,5 +134,19 @@ class TenantControllerDpaConfirmTest {
 
     // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+  }
+
+  @Test
+  void publishDataProcessingAgreement_Should_returnOkWithGate() {
+    // given
+    when(tenantDpaFacade.publishDpa(eq(7L), any()))
+        .thenReturn(new DpaGateStatusDTO().dpaPublished(true).dpaSigned(false));
+
+    // when
+    var response = controller.publishDataProcessingAgreement(7L, Map.of("de", "<p>x</p>"));
+
+    // then
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().getDpaPublished()).isTrue();
   }
 }
