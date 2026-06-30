@@ -6,10 +6,12 @@ import static org.mockito.Mockito.when;
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.model.DpaGateStatusDTO;
+import com.vi.tenantservice.api.model.DpaSignInviteDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaSignatureRequestDTO;
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
+import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.config.security.AuthorisationService;
@@ -101,5 +103,33 @@ class TenantControllerDpaConfirmTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody().getDpaPublished()).isTrue();
     assertThat(response.getBody().getDpaSigned()).isFalse();
+  }
+
+  @Test
+  void createDataProcessingAgreementSignInvite_Should_returnOkWithInvite() {
+    // given
+    when(tenantDpaFacade.createSignInvite(7L))
+        .thenReturn(
+            new DpaSignInviteDTO()
+                .token("T")
+                .signLink("/dpa-sign/T")
+                .expiresAt("2026-07-15T00:00"));
+
+    // when
+    var response = controller.createDataProcessingAgreementSignInvite(7L);
+
+    // then
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().getToken()).isEqualTo("T");
+    assertThat(response.getBody().getSignLink()).isEqualTo("/dpa-sign/T");
+  }
+
+  @Test
+  void handleDpaNotPublished_Should_return409Conflict() {
+    // when
+    var response = controller.handleDpaNotPublished(new DpaNotPublishedException("not published"));
+
+    // then
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
   }
 }

@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.facade;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.when;
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantService;
 import java.time.LocalDateTime;
@@ -98,5 +100,34 @@ class TenantDpaFacadeTest {
     assertThat(status.getDpaPublished()).isFalse();
     assertThat(status.getDpaSigned()).isFalse();
     verify(tenantDpaService, never()).isSignedForVersion(any(), any());
+  }
+
+  @Test
+  void createSignInvite_Should_returnTokenAndLink_When_dpaPublished() {
+    // given a tenant with a published DPA
+    var tenant = new TenantEntity();
+    tenant.setContentDataProcessingAgreementActivationDate(LocalDateTime.now());
+    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(tenant));
+    when(tenantDpaService.createSignInvite(eq(5L), any(), any())).thenReturn("RAWTOKEN");
+
+    // when
+    var result = tenantDpaFacade.createSignInvite(5L);
+
+    // then
+    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
+    assertThat(result.getToken()).isEqualTo("RAWTOKEN");
+    assertThat(result.getSignLink()).endsWith("/dpa-sign/RAWTOKEN");
+    assertThat(result.getExpiresAt()).isNotBlank();
+  }
+
+  @Test
+  void createSignInvite_Should_throw_When_dpaNotPublished() {
+    // given a tenant with no DPA activation date
+    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
+
+    // when / then
+    assertThatThrownBy(() -> tenantDpaFacade.createSignInvite(5L))
+        .isInstanceOf(DpaNotPublishedException.class);
+    verify(tenantDpaService, never()).createSignInvite(any(), any(), any());
   }
 }
