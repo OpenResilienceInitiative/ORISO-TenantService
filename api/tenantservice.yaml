@@ -425,8 +425,67 @@ paths:
           description: GONE - token unknown, already used, or expired
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/signatures:
+    summary: 'Confirmed DPA signatures of a tenant (audit list)'
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Lists the DPA confirmations of a tenant [Authorization: Authority.GET_TENANT]'
+      operationId: getDataProcessingAgreementSignatures
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: long
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DpaSignatureDTO'
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/gate:
+    summary: 'DPA legal-gate status of a tenant'
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Whether the tenant DPA is published and signed [Authorization: Authority.GET_TENANT]'
+      operationId: getDataProcessingAgreementGate
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: long
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaGateStatusDTO'
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
 components:
   schemas:
+    DpaGateStatusDTO:
+      type: object
+      properties:
+        dpaPublished:
+          type: boolean
+        dpaSigned:
+          type: boolean
     DpaSignatureRequestDTO:
       type: object
       required:

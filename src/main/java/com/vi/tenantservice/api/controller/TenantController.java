@@ -1,8 +1,10 @@
 package com.vi.tenantservice.api.controller;
 
+import com.vi.tenantservice.api.facade.TenantDpaFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.DpaGateStatusDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaSignatureRequestDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
@@ -45,6 +47,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TenantDtoMapper tenantDtoMapper;
   private final @NonNull TenantDpaService tenantDpaService;
+  private final @NonNull TenantDpaFacade tenantDpaFacade;
 
   /**
    * Public DPA confirmation via a single-use sign token. No authentication: the token is the
@@ -73,6 +76,18 @@ public class TenantController implements TenantApi, TenantadminApi {
   ResponseEntity<Void> handleInvalidDpaSignToken(InvalidDpaSignTokenException e) {
     log.info("Rejected DPA sign attempt: {}", e.getMessage());
     return new ResponseEntity<>(HttpStatus.GONE);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  public ResponseEntity<List<DpaSignatureDTO>> getDataProcessingAgreementSignatures(Long id) {
+    return new ResponseEntity<>(tenantDpaFacade.getSignatures(id), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  public ResponseEntity<DpaGateStatusDTO> getDataProcessingAgreementGate(Long id) {
+    return new ResponseEntity<>(tenantDpaFacade.getGateStatus(id), HttpStatus.OK);
   }
 
   @Override
