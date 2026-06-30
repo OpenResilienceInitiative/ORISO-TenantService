@@ -121,4 +121,35 @@ class TenantDpaSignatureRepositoryTest {
     assertThat(signed).hasSize(1);
     assertThat(signed.get(0).getSignerName()).isEqualTo("Signed Person");
   }
+
+  @Test
+  void consumeSignToken_Should_signExactlyOnce_andRejectReuse() {
+    // given a PENDING row carrying a token
+    var now = LocalDateTime.now();
+    var pending =
+        signatureRepository.saveAndFlush(
+            TenantDpaSignatureEntity.builder()
+                .tenantId(3L)
+                .status(DpaSignatureStatus.PENDING)
+                .tokenHash("HASH")
+                .tokenExpiresAt(now.plusDays(1))
+                .createDate(now)
+                .build());
+
+    // when the first consume wins
+    int first = signatureRepository.consumeSignToken("HASH", "Erika", "GF", false, "de", now);
+    // and a second consume of the same token affects nothing (single-use)
+    int second = signatureRepository.consumeSignToken("HASH", "Mallory", "X", true, "en", now);
+    signatureRepository.flush();
+
+    // then
+    assertThat(first).isEqualTo(1);
+    assertThat(second).isZero();
+    var reloaded = signatureRepository.findById(pending.getId()).orElseThrow();
+    assertThat(reloaded.getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
+    assertThat(reloaded.getSignerName()).isEqualTo("Erika"); // not overwritten by the 2nd attempt
+    assertThat(reloaded.getTokenHash()).isNull();
+    assertThat(signatureRepository.findByTokenHashAndStatus("HASH", DpaSignatureStatus.PENDING))
+        .isEmpty();
+  }
 }

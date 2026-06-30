@@ -3,7 +3,9 @@ package com.vi.tenantservice.api.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
@@ -122,18 +124,55 @@ class TenantDpaServiceTest {
     when(signatureRepository.findByTokenHashAndStatus(
             DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
         .thenReturn(Optional.of(pending));
-    when(signatureRepository.save(any(TenantDpaSignatureEntity.class)))
-        .thenAnswer(invocation -> invocation.getArgument(0));
+    when(signatureRepository.consumeSignToken(
+            eq(DpaSignToken.hash(rawToken)),
+            eq("Erika M"),
+            eq("Geschäftsführerin"),
+            eq(false),
+            eq("de"),
+            any(LocalDateTime.class)))
+        .thenReturn(1);
 
     // when
     var result =
         tenantDpaService.confirmSignature(rawToken, "Erika M", "Geschäftsführerin", false, "de");
 
     // then
+    verify(signatureRepository)
+        .consumeSignToken(any(), any(), any(), any(), any(), any(LocalDateTime.class));
     assertThat(result.getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
     assertThat(result.getSignerName()).isEqualTo("Erika M");
     assertThat(result.getSignedAt()).isNotNull();
     assertThat(result.getTokenHash()).isNull(); // consumed -> single use
+  }
+
+  @Test
+  void confirmSignature_Should_throw_When_tokenNullOrBlank() {
+    // when / then
+    assertThatThrownBy(() -> tenantDpaService.confirmSignature(" ", "n", "p", false, "de"))
+        .isInstanceOf(InvalidDpaSignTokenException.class);
+    verifyNoInteractions(signatureRepository);
+  }
+
+  @Test
+  void confirmSignature_Should_throw_When_lostConcurrentRace() {
+    // given a valid, non-expired PENDING row, but the atomic consume affects 0 rows (someone won)
+    var rawToken = "race-token";
+    var pending =
+        TenantDpaSignatureEntity.builder()
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash(DpaSignToken.hash(rawToken))
+            .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+            .build();
+    when(signatureRepository.findByTokenHashAndStatus(
+            DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
+        .thenReturn(Optional.of(pending));
+    when(signatureRepository.consumeSignToken(any(), any(), any(), any(), any(), any()))
+        .thenReturn(0);
+
+    // when / then
+    assertThatThrownBy(() -> tenantDpaService.confirmSignature(rawToken, "n", "p", false, "de"))
+        .isInstanceOf(InvalidDpaSignTokenException.class);
   }
 
   @Test

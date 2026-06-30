@@ -434,21 +434,25 @@ components:
       properties:
         signerName:
           type: string
+          maxLength: 255
           example: "Erika Mustermann"
         signerPosition:
           type: string
+          maxLength: 255
           example: "Geschäftsführerin"
         signerIsMember:
           type: boolean
           example: false
         language:
           type: string
+          maxLength: 10
           example: "de"
     DpaSignatureDTO:
       type: object
       properties:
         tenantId:
-          type: long
+          type: integer
+          format: int64
         status:
           type: string
           example: "SIGNED"
