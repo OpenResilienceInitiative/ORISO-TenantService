@@ -12,5 +12,7 @@ CREATE TABLE IF NOT EXISTS `tenantservice`.`tenant_dpa_signature` (
     signed_at datetime NULL,
     create_date datetime NOT NULL,
     PRIMARY KEY (id),
-    KEY idx_tenant_dpa_signature_tenant (tenant_id)
+    KEY idx_tenant_dpa_signature_tenant (tenant_id),
+    CONSTRAINT fk_tenant_dpa_signature_tenant FOREIGN KEY (tenant_id)
+        REFERENCES `tenantservice`.`tenant` (id) ON DELETE CASCADE
 );
