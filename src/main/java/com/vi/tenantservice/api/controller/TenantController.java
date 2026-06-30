@@ -3,11 +3,15 @@ package com.vi.tenantservice.api.controller;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.DpaSignatureDTO;
+import com.vi.tenantservice.api.model.DpaSignatureRequestDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
+import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
+import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.generated.api.controller.TenantApi;
 import com.vi.tenantservice.generated.api.controller.TenantadminApi;
@@ -25,6 +29,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.NativeWebRequest;
@@ -39,6 +44,36 @@ public class TenantController implements TenantApi, TenantadminApi {
   private final @NonNull TenantServiceFacade tenantServiceFacade;
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TenantDtoMapper tenantDtoMapper;
+  private final @NonNull TenantDpaService tenantDpaService;
+
+  /**
+   * Public DPA confirmation via a single-use sign token. No authentication: the token is the
+   * authorisation (an external signer who may not hold a platform account confirms via the link).
+   */
+  @Override
+  public ResponseEntity<DpaSignatureDTO> confirmDataProcessingAgreement(
+      String token, DpaSignatureRequestDTO request) {
+    var signature =
+        tenantDpaService.confirmSignature(
+            token,
+            request.getSignerName(),
+            request.getSignerPosition(),
+            Boolean.TRUE.equals(request.getSignerIsMember()),
+            request.getLanguage());
+    var dto =
+        new DpaSignatureDTO()
+            .tenantId(signature.getTenantId())
+            .status(signature.getStatus() == null ? null : signature.getStatus().name())
+            .signerName(signature.getSignerName())
+            .signedAt(signature.getSignedAt() == null ? null : signature.getSignedAt().toString());
+    return ResponseEntity.ok(dto);
+  }
+
+  @ExceptionHandler(InvalidDpaSignTokenException.class)
+  ResponseEntity<Void> handleInvalidDpaSignToken(InvalidDpaSignTokenException e) {
+    log.info("Rejected DPA sign attempt: {}", e.getMessage());
+    return new ResponseEntity<>(HttpStatus.GONE);
+  }
 
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")

@@ -392,8 +392,70 @@ paths:
           description: BAD REQUEST - invalid/incomplete request or body object
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenant/public/dpa/confirm/{token}:
+    summary: 'Public confirmation (signature) of a tenant Data Processing Agreement'
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Confirms a tenant DPA via a single-use sign token [Authorization: no-auth]'
+      operationId: confirmDataProcessingAgreement
+      parameters:
+        - name: token
+          in: path
+          description: Single-use sign token from the invite link
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DpaSignatureRequestDTO'
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaSignatureDTO'
+        400:
+          description: BAD REQUEST - invalid/incomplete request or body object
+        410:
+          description: GONE - token unknown, already used, or expired
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
 components:
   schemas:
+    DpaSignatureRequestDTO:
+      type: object
+      required:
+        - signerName
+      properties:
+        signerName:
+          type: string
+          example: "Erika Mustermann"
+        signerPosition:
+          type: string
+          example: "Geschäftsführerin"
+        signerIsMember:
+          type: boolean
+          example: false
+        language:
+          type: string
+          example: "de"
+    DpaSignatureDTO:
+      type: object
+      properties:
+        tenantId:
+          type: long
+        status:
+          type: string
+          example: "SIGNED"
+        signerName:
+          type: string
+        signedAt:
+          type: string
     TenantDTO:
       type: object
       required:
