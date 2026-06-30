@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.service;
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -60,5 +61,55 @@ public class TenantDpaService {
   /** All confirmations for a tenant (for the platform-admin list of confirmed AVVs). */
   public List<TenantDpaSignatureEntity> getSignatures(Long tenantId) {
     return signatureRepository.findByTenantId(tenantId);
+  }
+
+  /**
+   * Creates a PENDING confirmation carrying a single-use, expiring sign token and returns the RAW
+   * token (caller builds the public sign link from it). Only the token's hash is persisted.
+   */
+  public String createSignInvite(Long tenantId, LocalDateTime dpaVersion, Duration ttl) {
+    var rawToken = DpaSignToken.generate();
+    var now = LocalDateTime.now();
+    signatureRepository.save(
+        TenantDpaSignatureEntity.builder()
+            .tenantId(tenantId)
+            .dpaVersion(dpaVersion)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash(DpaSignToken.hash(rawToken))
+            .tokenExpiresAt(now.plus(ttl))
+            .createDate(now)
+            .build());
+    return rawToken;
+  }
+
+  /**
+   * Confirms a DPA via its single-use sign token: looks up the PENDING row by token hash, validates
+   * it is not expired, records the signer, marks it SIGNED, and consumes the token.
+   *
+   * @throws InvalidDpaSignTokenException if the token is unknown, already used, or expired.
+   */
+  public TenantDpaSignatureEntity confirmSignature(
+      String rawToken,
+      String signerName,
+      String signerPosition,
+      boolean signerIsMember,
+      String language) {
+    var pending =
+        signatureRepository
+            .findByTokenHashAndStatus(DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING)
+            .orElseThrow(
+                () -> new InvalidDpaSignTokenException("Unknown or already-used sign token"));
+    if (pending.getTokenExpiresAt() == null
+        || pending.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
+      throw new InvalidDpaSignTokenException("Sign token has expired");
+    }
+    pending.setSignerName(signerName);
+    pending.setSignerPosition(signerPosition);
+    pending.setSignerIsMember(signerIsMember);
+    pending.setLanguage(language);
+    pending.setStatus(DpaSignatureStatus.SIGNED);
+    pending.setSignedAt(LocalDateTime.now());
+    pending.setTokenHash(null); // consume — single use
+    return signatureRepository.save(pending);
   }
 }

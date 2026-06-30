@@ -79,6 +79,13 @@ public class TenantDpaSignatureEntity {
   @Column(name = "signed_at")
   private LocalDateTime signedAt;
 
+  /** SHA-256 hash of the single-use sign-link token while PENDING; nulled once consumed. */
+  @Column(name = "token_hash")
+  private String tokenHash;
+
+  @Column(name = "token_expires_at")
+  private LocalDateTime tokenExpiresAt;
+
   @Column(name = "create_date", nullable = false)
   private LocalDateTime createDate;
 
