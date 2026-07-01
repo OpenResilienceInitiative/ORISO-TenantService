@@ -540,8 +540,42 @@ paths:
           description: NOT FOUND - tenant does not exist
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/versions:
+    summary: 'Published DPA versions of a tenant (newest first)'
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Lists the published DPA versions of a tenant [Authorization: Authority.GET_TENANT]'
+      operationId: getDataProcessingAgreementVersions
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: long
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DpaVersionDTO'
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
 components:
   schemas:
+    DpaVersionDTO:
+      type: object
+      properties:
+        activationDate:
+          type: string
+        content:
+          type: string
     DpaSignInviteDTO:
       type: object
       properties:

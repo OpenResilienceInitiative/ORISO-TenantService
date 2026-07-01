@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
+import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.TenantDpaService;
@@ -149,7 +150,29 @@ class TenantDpaFacadeTest {
     assertThat(tenant.getContentDataProcessingAgreement()).contains("clean");
     assertThat(tenant.getContentDataProcessingAgreementActivationDate()).isNotNull();
     verify(tenantService).update(tenant);
+    verify(tenantDpaService).recordPublishedVersion(eq(5L), any(), any());
     assertThat(status.getDpaPublished()).isTrue();
     assertThat(status.getDpaSigned()).isFalse();
+  }
+
+  @Test
+  void getVersions_Should_assertTenantAccess_andMapVersions() {
+    // given
+    when(tenantDpaService.getVersions(5L))
+        .thenReturn(
+            List.of(
+                TenantDpaVersionEntity.builder()
+                    .activationDate(LocalDateTime.now())
+                    .content("{\"de\":\"x\"}")
+                    .build()));
+
+    // when
+    var result = tenantDpaFacade.getVersions(5L);
+
+    // then
+    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
+    assertThat(result).hasSize(1);
+    assertThat(result.get(0).getContent()).isEqualTo("{\"de\":\"x\"}");
+    assertThat(result.get(0).getActivationDate()).isNotBlank();
   }
 }

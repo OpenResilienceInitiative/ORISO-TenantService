@@ -3,7 +3,9 @@ package com.vi.tenantservice.api.facade;
 import com.vi.tenantservice.api.model.DpaGateStatusDTO;
 import com.vi.tenantservice.api.model.DpaSignInviteDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
+import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
+import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.TenantDpaService;
@@ -110,11 +112,28 @@ public class TenantDpaFacade {
               sanitized.put(lang, inputSanitizer.sanitizeAllowingFormattingAndLinks(html)));
     }
     var version = LocalDateTime.now();
-    tenant.setContentDataProcessingAgreement(JsonConverter.convertToJson(sanitized));
+    var json = JsonConverter.convertToJson(sanitized);
+    tenant.setContentDataProcessingAgreement(json);
     tenant.setContentDataProcessingAgreementActivationDate(version);
     tenantService.update(tenant);
+    tenantDpaService.recordPublishedVersion(tenantId, json, version);
     boolean signed = tenantDpaService.isSignedForVersion(tenantId, version);
     return new DpaGateStatusDTO().dpaPublished(true).dpaSigned(signed);
+  }
+
+  /** The tenant's published DPA versions (newest first) for the read-only "look back" viewer. */
+  public List<DpaVersionDTO> getVersions(Long tenantId) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    return tenantDpaService.getVersions(tenantId).stream()
+        .map(TenantDpaFacade::toVersionDto)
+        .toList();
+  }
+
+  private static DpaVersionDTO toVersionDto(TenantDpaVersionEntity entity) {
+    return new DpaVersionDTO()
+        .activationDate(
+            entity.getActivationDate() == null ? null : entity.getActivationDate().toString())
+        .content(entity.getContent());
   }
 
   private static DpaSignatureDTO toDto(TenantDpaSignatureEntity entity) {

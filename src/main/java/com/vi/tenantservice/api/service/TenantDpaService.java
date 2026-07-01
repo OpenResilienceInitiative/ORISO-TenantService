@@ -2,7 +2,9 @@ package com.vi.tenantservice.api.service;
 
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
+import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
+import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TenantDpaService {
 
   private final TenantDpaSignatureRepository signatureRepository;
+  private final TenantDpaVersionRepository versionRepository;
 
   /** Persists a SIGNED confirmation of the given DPA version for a tenant. */
   public TenantDpaSignatureEntity recordSignature(
@@ -62,6 +65,22 @@ public class TenantDpaService {
   /** All confirmations for a tenant (for the platform-admin list of confirmed AVVs). */
   public List<TenantDpaSignatureEntity> getSignatures(Long tenantId) {
     return signatureRepository.findByTenantId(tenantId);
+  }
+
+  /** Appends a published-version snapshot (called on every publish) for the "look back" history. */
+  public void recordPublishedVersion(Long tenantId, String content, LocalDateTime activationDate) {
+    versionRepository.save(
+        TenantDpaVersionEntity.builder()
+            .tenantId(tenantId)
+            .content(content)
+            .activationDate(activationDate)
+            .createDate(LocalDateTime.now())
+            .build());
+  }
+
+  /** Published DPA versions for a tenant, newest first. */
+  public List<TenantDpaVersionEntity> getVersions(Long tenantId) {
+    return versionRepository.findByTenantIdOrderByActivationDateDesc(tenantId);
   }
 
   /**

@@ -12,6 +12,7 @@ import com.vi.tenantservice.api.model.DpaSignInviteDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaSignatureRequestDTO;
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
+import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
@@ -148,5 +149,21 @@ class TenantControllerDpaConfirmTest {
     // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody().getDpaPublished()).isTrue();
+  }
+
+  @Test
+  void getDataProcessingAgreementVersions_Should_returnOkWithFacadeList() {
+    // given
+    when(tenantDpaFacade.getVersions(7L))
+        .thenReturn(
+            List.of(
+                new DpaVersionDTO().activationDate("2026-07-13T10:22").content("{\"de\":\"x\"}")));
+
+    // when
+    var response = controller.getDataProcessingAgreementVersions(7L);
+
+    // then
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).hasSize(1);
   }
 }

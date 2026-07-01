@@ -8,6 +8,7 @@ import com.vi.tenantservice.api.model.DpaGateStatusDTO;
 import com.vi.tenantservice.api.model.DpaSignInviteDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaSignatureRequestDTO;
+import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminControls;
@@ -91,6 +92,12 @@ public class TenantController implements TenantApi, TenantadminApi {
   @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
   public ResponseEntity<DpaGateStatusDTO> getDataProcessingAgreementGate(Long id) {
     return new ResponseEntity<>(tenantDpaFacade.getGateStatus(id), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  public ResponseEntity<List<DpaVersionDTO>> getDataProcessingAgreementVersions(Long id) {
+    return new ResponseEntity<>(tenantDpaFacade.getVersions(id), HttpStatus.OK);
   }
 
   @Override
