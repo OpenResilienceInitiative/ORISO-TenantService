@@ -14,6 +14,7 @@ import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.api.validation.InputSanitizer;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +23,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
@@ -98,6 +100,7 @@ public class TenantDpaFacade {
    * version). Returns the resulting gate status (published; signed is false until the new version
    * is confirmed).
    */
+  @Transactional
   public DpaGateStatusDTO publishDpa(Long tenantId, Map<String, String> contentByLanguage) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
     var tenant =
@@ -111,7 +114,9 @@ public class TenantDpaFacade {
           (lang, html) ->
               sanitized.put(lang, inputSanitizer.sanitizeAllowingFormattingAndLinks(html)));
     }
-    var version = LocalDateTime.now();
+    // Truncate to seconds so the in-memory version key matches the MariaDB DATETIME(0) column
+    // after a round-trip — otherwise the signature gate (equals on dpa_version) could never match.
+    var version = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
     var json = JsonConverter.convertToJson(sanitized);
     tenant.setContentDataProcessingAgreement(json);
     tenant.setContentDataProcessingAgreementActivationDate(version);
