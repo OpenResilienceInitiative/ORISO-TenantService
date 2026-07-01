@@ -6,6 +6,7 @@ import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.model.TenantEntity;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -172,6 +173,23 @@ class TenantDpaSignatureRepositoryTest {
 
     assertThat(removed).isEqualTo(1);
     assertThat(signatureRepository.findByTenantId(9L)).hasSize(2);
+  }
+
+  @Test
+  void deleteByStatusAndCreateDateBefore_Should_keepRowExactlyAtCutoff() {
+    // strict "before" window: a DENIED row created exactly at the cutoff must be kept, not purged
+    var cutoff = LocalDateTime.now().minusDays(365).truncatedTo(ChronoUnit.SECONDS);
+    signatureRepository.save(denied(11L, cutoff.minusSeconds(1))); // just before -> purge
+    signatureRepository.save(denied(11L, cutoff)); // exactly at cutoff -> keep
+    signatureRepository.flush();
+
+    long removed =
+        signatureRepository.deleteByStatusAndCreateDateBefore(DpaSignatureStatus.DENIED, cutoff);
+
+    assertThat(removed).isEqualTo(1);
+    var survivors = signatureRepository.findByTenantId(11L);
+    assertThat(survivors).hasSize(1);
+    assertThat(survivors.get(0).getCreateDate()).isEqualTo(cutoff);
   }
 
   private TenantDpaSignatureEntity denied(Long tenantId, java.time.LocalDateTime createDate) {

@@ -28,7 +28,10 @@ public class TenantDpaRetentionService {
   /** Deletes DENIED signatures older than the retention window. Returns the number removed. */
   @Transactional
   public long purgeExpiredDeniedSignatures() {
-    var cutoff = LocalDateTime.now().minusDays(deniedRetentionDays);
+    // floor at 1 day: a misconfigured 0/negative window must never purge all (or future) DENIED
+    // rows
+    var effectiveDays = Math.max(1L, deniedRetentionDays);
+    var cutoff = LocalDateTime.now().minusDays(effectiveDays);
     long removed =
         signatureRepository.deleteByStatusAndCreateDateBefore(DpaSignatureStatus.DENIED, cutoff);
     if (removed > 0) {
@@ -37,7 +40,13 @@ public class TenantDpaRetentionService {
     return removed;
   }
 
+  /**
+   * Scheduled entry point. {@code @Transactional} lives here (not only on {@link
+   * #purgeExpiredDeniedSignatures()}) because the scheduler self-invokes and self-invocation does
+   * not pass through the Spring proxy — so the transaction would otherwise be inert on this path.
+   */
   @Scheduled(cron = "${dpa.retention-purge-cron:0 0 3 * * *}")
+  @Transactional
   void scheduledPurge() {
     purgeExpiredDeniedSignatures();
   }
