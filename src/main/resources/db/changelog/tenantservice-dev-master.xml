@@ -21,4 +21,7 @@
   <include file="db/changelog/changeset/0010_add_association_logo/0010-addAssociationLogo.xml"/>
   <include file="db/changelog/changeset/0013_tenant_admin_controls/0013-changeSet.xml"/>
   <include file="db/changelog/changeset/0014_add_tenant_address_description/0014-changeSet.xml"/>
+  <include file="db/changelog/changeset/0015_add_tenant_dpa/0015-changeSet.xml"/>
+  <include file="db/changelog/changeset/0016_tenant_dpa_signature/0016-changeSet.xml"/>
+  <include file="db/changelog/changeset/0017_tenant_dpa_signature_token/0017-changeSet.xml"/>
 </databaseChangeLog>
