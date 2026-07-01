@@ -20,6 +20,9 @@ public interface TenantDpaSignatureRepository
   Optional<TenantDpaSignatureEntity> findByTokenHashAndStatus(
       String tokenHash, DpaSignatureStatus status);
 
+  /** Retention purge: removes signatures of a given status created before the cutoff. */
+  long deleteByStatusAndCreateDateBefore(DpaSignatureStatus status, LocalDateTime cutoff);
+
   /**
    * Atomically consumes a PENDING sign token: flips it to SIGNED, records the signer, and clears
    * the token — all in one conditional UPDATE. Only the row that is still PENDING is affected, so

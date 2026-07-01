@@ -1,15 +1,20 @@
 package com.vi.tenantservice.api.controller;
 
+import com.vi.tenantservice.api.facade.TenantDpaFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.DpaGateStatusDTO;
+import com.vi.tenantservice.api.model.DpaSignInviteDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaSignatureRequestDTO;
+import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
+import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.config.security.AuthorisationService;
@@ -20,6 +25,7 @@ import jakarta.validation.Valid;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +51,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TenantDtoMapper tenantDtoMapper;
   private final @NonNull TenantDpaService tenantDpaService;
+  private final @NonNull TenantDpaFacade tenantDpaFacade;
 
   /**
    * Public DPA confirmation via a single-use sign token. No authentication: the token is the
@@ -73,6 +80,43 @@ public class TenantController implements TenantApi, TenantadminApi {
   ResponseEntity<Void> handleInvalidDpaSignToken(InvalidDpaSignTokenException e) {
     log.info("Rejected DPA sign attempt: {}", e.getMessage());
     return new ResponseEntity<>(HttpStatus.GONE);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  public ResponseEntity<List<DpaSignatureDTO>> getDataProcessingAgreementSignatures(Long id) {
+    return new ResponseEntity<>(tenantDpaFacade.getSignatures(id), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  public ResponseEntity<DpaGateStatusDTO> getDataProcessingAgreementGate(Long id) {
+    return new ResponseEntity<>(tenantDpaFacade.getGateStatus(id), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  public ResponseEntity<List<DpaVersionDTO>> getDataProcessingAgreementVersions(Long id) {
+    return new ResponseEntity<>(tenantDpaFacade.getVersions(id), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<DpaSignInviteDTO> createDataProcessingAgreementSignInvite(Long id) {
+    return new ResponseEntity<>(tenantDpaFacade.createSignInvite(id), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<DpaGateStatusDTO> publishDataProcessingAgreement(
+      Long id, Map<String, String> requestBody) {
+    return new ResponseEntity<>(tenantDpaFacade.publishDpa(id, requestBody), HttpStatus.OK);
+  }
+
+  @ExceptionHandler(DpaNotPublishedException.class)
+  ResponseEntity<Void> handleDpaNotPublished(DpaNotPublishedException e) {
+    log.info("DPA sign invite rejected: {}", e.getMessage());
+    return new ResponseEntity<>(HttpStatus.CONFLICT);
   }
 
   @Override

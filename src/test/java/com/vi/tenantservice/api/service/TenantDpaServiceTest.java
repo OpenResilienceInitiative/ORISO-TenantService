@@ -10,7 +10,9 @@ import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
+import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
+import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -26,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class TenantDpaServiceTest {
 
   @Mock private TenantDpaSignatureRepository signatureRepository;
+  @Mock private TenantDpaVersionRepository versionRepository;
   @InjectMocks private TenantDpaService tenantDpaService;
 
   @Test
@@ -85,6 +88,34 @@ class TenantDpaServiceTest {
 
     // when / then
     assertThat(tenantDpaService.getSignatures(5L)).hasSize(1);
+  }
+
+  @Test
+  void recordPublishedVersion_Should_saveSnapshot() {
+    // given
+    var activationDate = LocalDateTime.now();
+
+    // when
+    tenantDpaService.recordPublishedVersion(5L, "{\"de\":\"x\"}", activationDate);
+
+    // then
+    var captor = ArgumentCaptor.forClass(TenantDpaVersionEntity.class);
+    verify(versionRepository).save(captor.capture());
+    var saved = captor.getValue();
+    assertThat(saved.getTenantId()).isEqualTo(5L);
+    assertThat(saved.getContent()).isEqualTo("{\"de\":\"x\"}");
+    assertThat(saved.getActivationDate()).isEqualTo(activationDate);
+    assertThat(saved.getCreateDate()).isNotNull();
+  }
+
+  @Test
+  void getVersions_Should_returnFromRepoNewestFirst() {
+    // given
+    when(versionRepository.findByTenantIdOrderByActivationDateDesc(5L))
+        .thenReturn(List.of(TenantDpaVersionEntity.builder().tenantId(5L).build()));
+
+    // when / then
+    assertThat(tenantDpaService.getVersions(5L)).hasSize(1);
   }
 
   @Test
