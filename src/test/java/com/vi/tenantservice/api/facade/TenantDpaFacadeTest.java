@@ -175,4 +175,35 @@ class TenantDpaFacadeTest {
     assertThat(result.get(0).getContent()).isEqualTo("{\"de\":\"x\"}");
     assertThat(result.get(0).getActivationDate()).isNotBlank();
   }
+
+  @Test
+  void publishDpa_Should_publishWithoutSanitizing_When_contentMapIsNull() {
+    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
+
+    var status = tenantDpaFacade.publishDpa(5L, null);
+
+    verify(inputSanitizer, never()).sanitizeAllowingFormattingAndLinks(any());
+    verify(tenantDpaService).recordPublishedVersion(eq(5L), any(), any());
+    assertThat(status.getDpaPublished()).isTrue();
+  }
+
+  @Test
+  void publishDpa_Should_useLinkAllowingSanitiser_forEveryLanguage() {
+    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
+    when(inputSanitizer.sanitizeAllowingFormattingAndLinks(any())).thenReturn("clean");
+
+    tenantDpaFacade.publishDpa(5L, Map.of("de", "<p>d</p>", "en", "<p>e</p>"));
+
+    verify(inputSanitizer).sanitizeAllowingFormattingAndLinks("<p>d</p>");
+    verify(inputSanitizer).sanitizeAllowingFormattingAndLinks("<p>e</p>");
+  }
+
+  @Test
+  void publishDpa_Should_throwNotFound_When_tenantMissing() {
+    when(tenantService.findTenantById(5L)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> tenantDpaFacade.publishDpa(5L, Map.of("de", "x")))
+        .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+    verify(tenantDpaService, never()).recordPublishedVersion(any(), any(), any());
+  }
 }
