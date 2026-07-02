@@ -23,6 +23,8 @@ public class TenantInputSanitizer {
     MultilingualTenantDTO output = copyNotSanitizedAttributes(input);
     output.setName(inputSanitizer.sanitize(input.getName()));
     output.setSubdomain(inputSanitizer.sanitize(input.getSubdomain()));
+    output.setAddress(inputSanitizer.sanitize(input.getAddress()));
+    output.setDescription(inputSanitizer.sanitize(input.getDescription()));
     sanitizeTheming(input, output);
     sanitizeContent(input, output);
     return output;

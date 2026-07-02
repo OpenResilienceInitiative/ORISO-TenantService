@@ -392,8 +392,239 @@ paths:
           description: BAD REQUEST - invalid/incomplete request or body object
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenant/public/dpa/confirm/{token}:
+    summary: 'Public confirmation (signature) of a tenant Data Processing Agreement'
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Confirms a tenant DPA via a single-use sign token [Authorization: no-auth]'
+      operationId: confirmDataProcessingAgreement
+      parameters:
+        - name: token
+          in: path
+          description: Single-use sign token from the invite link
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DpaSignatureRequestDTO'
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaSignatureDTO'
+        400:
+          description: BAD REQUEST - invalid/incomplete request or body object
+        410:
+          description: GONE - token unknown, already used, or expired
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/signatures:
+    summary: 'Confirmed DPA signatures of a tenant (audit list)'
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Lists the DPA confirmations of a tenant [Authorization: Authority.GET_TENANT]'
+      operationId: getDataProcessingAgreementSignatures
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: long
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DpaSignatureDTO'
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/gate:
+    summary: 'DPA legal-gate status of a tenant'
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Whether the tenant DPA is published and signed [Authorization: Authority.GET_TENANT]'
+      operationId: getDataProcessingAgreementGate
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: long
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaGateStatusDTO'
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/invite:
+    summary: 'Create a single-use DPA sign invite (link) for a tenant'
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Creates a single-use sign link for a tenant DPA [Authorization: Authority.UPDATE_TENANT]'
+      operationId: createDataProcessingAgreementSignInvite
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: long
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaSignInviteDTO'
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        409:
+          description: CONFLICT - the tenant has no published DPA to sign yet
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa:
+    summary: 'Publish a tenant Data Processing Agreement (multilingual)'
+    put:
+      tags:
+        - tenant-controller
+      summary: 'Publishes the tenant DPA text and stamps a new version [Authorization: Authority.UPDATE_TENANT]'
+      operationId: publishDataProcessingAgreement
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: long
+      requestBody:
+        required: true
+        description: 'Per-language DPA HTML content (language code -> HTML)'
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: string
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaGateStatusDTO'
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        404:
+          description: NOT FOUND - tenant does not exist
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/versions:
+    summary: 'Published DPA versions of a tenant (newest first)'
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Lists the published DPA versions of a tenant [Authorization: Authority.GET_TENANT]'
+      operationId: getDataProcessingAgreementVersions
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: long
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DpaVersionDTO'
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
 components:
   schemas:
+    DpaVersionDTO:
+      type: object
+      properties:
+        activationDate:
+          type: string
+        content:
+          type: string
+    DpaSignInviteDTO:
+      type: object
+      properties:
+        token:
+          type: string
+        signLink:
+          type: string
+        expiresAt:
+          type: string
+    DpaGateStatusDTO:
+      type: object
+      properties:
+        dpaPublished:
+          type: boolean
+        dpaSigned:
+          type: boolean
+    DpaSignatureRequestDTO:
+      type: object
+      required:
+        - signerName
+      properties:
+        signerName:
+          type: string
+          maxLength: 255
+          example: "Erika Mustermann"
+        signerPosition:
+          type: string
+          maxLength: 255
+          example: "Geschäftsführerin"
+        signerIsMember:
+          type: boolean
+          example: false
+        language:
+          type: string
+          maxLength: 10
+          example: "de"
+    DpaSignatureDTO:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        status:
+          type: string
+          example: "SIGNED"
+        signerName:
+          type: string
+        signedAt:
+          type: string
     TenantDTO:
       type: object
       required:
@@ -412,6 +643,13 @@ components:
           type: string
           example: "companyname"
           maxLength: 100
+        address:
+          type: string
+          maxLength: 255
+          example: "Musterstraße 1, 12345 Musterstadt"
+        description:
+          type: string
+          example: "Short description of the tenant."
         createDate:
           type: string
         updateDate:
@@ -443,6 +681,13 @@ components:
               type: string
               example: "companyname"
               maxLength: 100
+            address:
+              type: string
+              maxLength: 255
+              example: "Musterstraße 1, 12345 Musterstadt"
+            description:
+              type: string
+              example: "Short description of the tenant."
             adminEmails:
               type: array
               items:
@@ -932,6 +1177,13 @@ components:
           type: string
           example: "companyname"
           maxLength: 100
+        address:
+          type: string
+          maxLength: 255
+          example: "Musterstraße 1, 12345 Musterstadt"
+        description:
+          type: string
+          example: "Short description of the tenant."
         beraterCount:
           type: integer
           example: 10

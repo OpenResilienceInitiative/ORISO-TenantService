@@ -6,7 +6,6 @@ import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason
 import javax.ws.rs.BadRequestException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -36,13 +35,13 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(value = {IllegalStateException.class})
   @ResponseStatus(value = HttpStatus.BAD_REQUEST)
-  protected void handleIllegalStateException() {
-    // status code is set with ResponseStatus
+  protected void handleIllegalStateException(IllegalStateException e) {
+    logger.warn("Returning HTTP 400 Bad Request for IllegalStateException", e);
   }
 
   @ExceptionHandler(value = {BadRequestException.class})
   @ResponseStatus(HttpStatus.BAD_REQUEST)
-  public void handle(HttpMessageNotReadableException e) {
+  public void handle(BadRequestException e) {
     logger.warn("Returning HTTP 400 Bad Request", e);
   }
 }

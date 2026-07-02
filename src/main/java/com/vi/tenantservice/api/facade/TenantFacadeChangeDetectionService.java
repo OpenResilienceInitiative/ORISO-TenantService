@@ -65,142 +65,142 @@ public class TenantFacadeChangeDetectionService {
     List<TenantSetting> resultList = Lists.newArrayList();
     if (isChanged(
         inputSettings.getFeatureDemographicsEnabled(),
-        existingSettingsToCompare.isFeatureDemographicsEnabled())) {
+        existingSettingsToCompare.getFeatureDemographicsEnabled())) {
       resultList.add(TenantSetting.FEATURE_DEMOGRAPHICS_ENABLED);
     }
     if (isChanged(
         inputSettings.getFeatureTopicsEnabled(),
-        existingSettingsToCompare.isFeatureTopicsEnabled())) {
+        existingSettingsToCompare.getFeatureTopicsEnabled())) {
       resultList.add(TenantSetting.FEATURE_TOPICS_ENABLED);
     }
     if (isChanged(
         inputSettings.getTopicsInRegistrationEnabled(),
-        existingSettingsToCompare.isTopicsInRegistrationEnabled())) {
+        existingSettingsToCompare.getTopicsInRegistrationEnabled())) {
       resultList.add(TenantSetting.ENABLE_TOPICS_IN_REGISTRATION);
     }
     if (isChanged(
         inputSettings.getFeatureStatisticsEnabled(),
-        existingSettingsToCompare.isFeatureStatisticsEnabled())) {
+        existingSettingsToCompare.getFeatureStatisticsEnabled())) {
       resultList.add(TenantSetting.FEATURE_STATISTICS_ENABLED);
     }
     if (isChanged(
         inputSettings.getFeatureAppointmentsEnabled(),
-        existingSettingsToCompare.isFeatureAppointmentsEnabled())) {
+        existingSettingsToCompare.getFeatureAppointmentsEnabled())) {
       resultList.add(TenantSetting.FEATURE_APPOINTMENTS_ENABLED);
     }
     if (isChanged(
         inputSettings.getFeatureGroupChatV2Enabled(),
-        existingSettingsToCompare.isFeatureGroupChatV2Enabled())) {
+        existingSettingsToCompare.getFeatureGroupChatV2Enabled())) {
       resultList.add(TenantSetting.FEATURE_GROUP_CHAT_V2_ENABLED);
     }
     if (isChanged(
         inputSettings.getFeatureToolsEnabled(),
-        existingSettingsToCompare.isFeatureToolsEnabled())) {
+        existingSettingsToCompare.getFeatureToolsEnabled())) {
       resultList.add(TenantSetting.FEATURE_TOOLS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureAnonymousChatEnabled())
-        != existingSettingsToCompare.isFeatureAnonymousChatEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureAnonymousChatEnabled())) {
       resultList.add(TenantSetting.FEATURE_ANONYMOUS_CHAT_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureCallsEnabled())
-        != existingSettingsToCompare.isFeatureCallsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureCallsEnabled())) {
       resultList.add(TenantSetting.FEATURE_CALLS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureSupervisionEnabled())
-        != existingSettingsToCompare.isFeatureSupervisionEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureSupervisionEnabled())) {
       resultList.add(TenantSetting.FEATURE_SUPERVISION_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureSupervisionAnonymousChatsEnabled())
-        != existingSettingsToCompare.isFeatureSupervisionAnonymousChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureSupervisionAnonymousChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_SUPERVISION_ANONYMOUS_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureSupervisionOneOnOneChatsEnabled())
-        != existingSettingsToCompare.isFeatureSupervisionOneOnOneChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureSupervisionOneOnOneChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_SUPERVISION_ONE_ON_ONE_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureAudioCallsEnabled())
-        != existingSettingsToCompare.isFeatureAudioCallsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureAudioCallsEnabled())) {
       resultList.add(TenantSetting.FEATURE_AUDIO_CALLS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureAudioCallsAnonymousChatsEnabled())
-        != existingSettingsToCompare.isFeatureAudioCallsAnonymousChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureAudioCallsAnonymousChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_AUDIO_CALLS_ANONYMOUS_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureAudioCallsOneOnOneChatsEnabled())
-        != existingSettingsToCompare.isFeatureAudioCallsOneOnOneChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureAudioCallsOneOnOneChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_AUDIO_CALLS_ONE_ON_ONE_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureAudioCallsGroupChatsEnabled())
-        != existingSettingsToCompare.isFeatureAudioCallsGroupChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureAudioCallsGroupChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_AUDIO_CALLS_GROUP_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureAudioCallsSupervisionChatsEnabled())
-        != existingSettingsToCompare.isFeatureAudioCallsSupervisionChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureAudioCallsSupervisionChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_AUDIO_CALLS_SUPERVISION_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureVideoCallsEnabled())
-        != existingSettingsToCompare.isFeatureVideoCallsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureVideoCallsEnabled())) {
       resultList.add(TenantSetting.FEATURE_VIDEO_CALLS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureVideoCallsAnonymousChatsEnabled())
-        != existingSettingsToCompare.isFeatureVideoCallsAnonymousChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureVideoCallsAnonymousChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_VIDEO_CALLS_ANONYMOUS_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureVideoCallsOneOnOneChatsEnabled())
-        != existingSettingsToCompare.isFeatureVideoCallsOneOnOneChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureVideoCallsOneOnOneChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_VIDEO_CALLS_ONE_ON_ONE_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureVideoCallsGroupChatsEnabled())
-        != existingSettingsToCompare.isFeatureVideoCallsGroupChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureVideoCallsGroupChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_VIDEO_CALLS_GROUP_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureVideoCallsSupervisionChatsEnabled())
-        != existingSettingsToCompare.isFeatureVideoCallsSupervisionChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureVideoCallsSupervisionChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_VIDEO_CALLS_SUPERVISION_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureThreadsEnabled())
-        != existingSettingsToCompare.isFeatureThreadsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureThreadsEnabled())) {
       resultList.add(TenantSetting.FEATURE_THREADS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureThreadsAnonymousChatsEnabled())
-        != existingSettingsToCompare.isFeatureThreadsAnonymousChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureThreadsAnonymousChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_THREADS_ANONYMOUS_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureThreadsGroupChatsEnabled())
-        != existingSettingsToCompare.isFeatureThreadsGroupChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureThreadsGroupChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_THREADS_GROUP_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureThreadsOneOnOneEnabled())
-        != existingSettingsToCompare.isFeatureThreadsOneOnOneEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureThreadsOneOnOneEnabled())) {
       resultList.add(TenantSetting.FEATURE_THREADS_ONE_ON_ONE_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureThreadsSupervisionChatsEnabled())
-        != existingSettingsToCompare.isFeatureThreadsSupervisionChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureThreadsSupervisionChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_THREADS_SUPERVISION_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureVoiceMessagesEnabled())
-        != existingSettingsToCompare.isFeatureVoiceMessagesEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureVoiceMessagesEnabled())) {
       resultList.add(TenantSetting.FEATURE_VOICE_MESSAGES_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureVoiceMessagesAnonymousChatsEnabled())
-        != existingSettingsToCompare.isFeatureVoiceMessagesAnonymousChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureVoiceMessagesAnonymousChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_VOICE_MESSAGES_ANONYMOUS_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureVoiceMessagesOneOnOneChatsEnabled())
-        != existingSettingsToCompare.isFeatureVoiceMessagesOneOnOneChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureVoiceMessagesOneOnOneChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_VOICE_MESSAGES_ONE_ON_ONE_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureVoiceMessagesGroupChatsEnabled())
-        != existingSettingsToCompare.isFeatureVoiceMessagesGroupChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureVoiceMessagesGroupChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_VOICE_MESSAGES_GROUP_CHATS_ENABLED);
     }
     if (nullAsTrue(inputSettings.getFeatureVoiceMessagesSupervisionChatsEnabled())
-        != existingSettingsToCompare.isFeatureVoiceMessagesSupervisionChatsEnabled()) {
+        != nullAsTrue(existingSettingsToCompare.getFeatureVoiceMessagesSupervisionChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_VOICE_MESSAGES_SUPERVISION_CHATS_ENABLED);
     }
     if (isChanged(
         inputSettings.getFeatureAttachmentUploadDisabled(),
-        existingSettingsToCompare.isFeatureAttachmentUploadDisabled())) {
+        existingSettingsToCompare.getFeatureAttachmentUploadDisabled())) {
       resultList.add(TenantSetting.FEATURE_ATTACHMENT_UPLOAD_DISABLED);
     }
     if (isChangedIgnoringOrder(
@@ -214,8 +214,8 @@ public class TenantFacadeChangeDetectionService {
     return !StringUtils.equals(newContent, existingContent);
   }
 
-  private boolean isChanged(Boolean inputSettings, boolean existingSettingsToCompare) {
-    return nullAsFalse(inputSettings) != existingSettingsToCompare;
+  private boolean isChanged(Boolean inputSettings, Boolean existingSettingsToCompare) {
+    return nullAsFalse(inputSettings) != nullAsFalse(existingSettingsToCompare);
   }
 
   private boolean isChangedIgnoringOrder(
@@ -232,116 +232,10 @@ public class TenantFacadeChangeDetectionService {
   }
 
   private TenantSettings getExistingTenantSettings(TenantEntity existingTenant) {
-    TenantSettings existingSettingsToCompare;
     if (existingTenant.getSettings() == null) {
-      existingSettingsToCompare = new TenantSettings();
-      // Default should be enabled if missing completely.
-      existingSettingsToCompare.setFeatureAnonymousChatEnabled(true);
-      existingSettingsToCompare.setFeatureCallsEnabled(true);
-      existingSettingsToCompare.setFeatureSupervisionEnabled(true);
-      existingSettingsToCompare.setFeatureSupervisionAnonymousChatsEnabled(true);
-      existingSettingsToCompare.setFeatureSupervisionOneOnOneChatsEnabled(true);
-      existingSettingsToCompare.setFeatureAudioCallsEnabled(true);
-      existingSettingsToCompare.setFeatureAudioCallsAnonymousChatsEnabled(true);
-      existingSettingsToCompare.setFeatureAudioCallsOneOnOneChatsEnabled(true);
-      existingSettingsToCompare.setFeatureAudioCallsGroupChatsEnabled(true);
-      existingSettingsToCompare.setFeatureAudioCallsSupervisionChatsEnabled(true);
-      existingSettingsToCompare.setFeatureVideoCallsEnabled(true);
-      existingSettingsToCompare.setFeatureVideoCallsAnonymousChatsEnabled(true);
-      existingSettingsToCompare.setFeatureVideoCallsOneOnOneChatsEnabled(true);
-      existingSettingsToCompare.setFeatureVideoCallsGroupChatsEnabled(true);
-      existingSettingsToCompare.setFeatureVideoCallsSupervisionChatsEnabled(true);
-      existingSettingsToCompare.setFeatureThreadsEnabled(true);
-      existingSettingsToCompare.setFeatureThreadsAnonymousChatsEnabled(true);
-      existingSettingsToCompare.setFeatureThreadsGroupChatsEnabled(true);
-      existingSettingsToCompare.setFeatureThreadsOneOnOneEnabled(true);
-      existingSettingsToCompare.setFeatureThreadsSupervisionChatsEnabled(true);
-      existingSettingsToCompare.setFeatureVoiceMessagesEnabled(true);
-      existingSettingsToCompare.setFeatureVoiceMessagesAnonymousChatsEnabled(true);
-      existingSettingsToCompare.setFeatureVoiceMessagesOneOnOneChatsEnabled(true);
-      existingSettingsToCompare.setFeatureVoiceMessagesGroupChatsEnabled(true);
-      existingSettingsToCompare.setFeatureVoiceMessagesSupervisionChatsEnabled(true);
-    } else {
-      final String settingsJson = existingTenant.getSettings();
-      existingSettingsToCompare = JsonConverter.convertFromJson(settingsJson);
-      // Default should be enabled if the setting is not present in stored JSON (backward compat).
-      if (!settingsJson.contains("\"featureAnonymousChatEnabled\"")) {
-        existingSettingsToCompare.setFeatureAnonymousChatEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureCallsEnabled\"")) {
-        existingSettingsToCompare.setFeatureCallsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureSupervisionEnabled\"")) {
-        existingSettingsToCompare.setFeatureSupervisionEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureSupervisionAnonymousChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureSupervisionAnonymousChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureSupervisionOneOnOneChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureSupervisionOneOnOneChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureAudioCallsEnabled\"")) {
-        existingSettingsToCompare.setFeatureAudioCallsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureAudioCallsAnonymousChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureAudioCallsAnonymousChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureAudioCallsOneOnOneChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureAudioCallsOneOnOneChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureAudioCallsGroupChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureAudioCallsGroupChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureAudioCallsSupervisionChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureAudioCallsSupervisionChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureVideoCallsEnabled\"")) {
-        existingSettingsToCompare.setFeatureVideoCallsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureVideoCallsAnonymousChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureVideoCallsAnonymousChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureVideoCallsOneOnOneChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureVideoCallsOneOnOneChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureVideoCallsGroupChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureVideoCallsGroupChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureVideoCallsSupervisionChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureVideoCallsSupervisionChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureThreadsEnabled\"")) {
-        existingSettingsToCompare.setFeatureThreadsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureThreadsAnonymousChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureThreadsAnonymousChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureThreadsGroupChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureThreadsGroupChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureThreadsOneOnOneEnabled\"")) {
-        existingSettingsToCompare.setFeatureThreadsOneOnOneEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureThreadsSupervisionChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureThreadsSupervisionChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureVoiceMessagesEnabled\"")) {
-        existingSettingsToCompare.setFeatureVoiceMessagesEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureVoiceMessagesAnonymousChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureVoiceMessagesAnonymousChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureVoiceMessagesOneOnOneChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureVoiceMessagesOneOnOneChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureVoiceMessagesGroupChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureVoiceMessagesGroupChatsEnabled(true);
-      }
-      if (!settingsJson.contains("\"featureVoiceMessagesSupervisionChatsEnabled\"")) {
-        existingSettingsToCompare.setFeatureVoiceMessagesSupervisionChatsEnabled(true);
-      }
+      return new TenantSettings().applyDefaults();
     }
-    return existingSettingsToCompare;
+    return JsonConverter.convertFromJson(existingTenant.getSettings()).applyDefaults();
   }
 
   boolean nullAsFalse(Boolean value) {

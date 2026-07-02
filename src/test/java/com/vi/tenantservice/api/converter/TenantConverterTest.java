@@ -3,12 +3,14 @@ package com.vi.tenantservice.api.converter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.DataProtectionContactTemplateDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NoAgencyContextDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
+import com.vi.tenantservice.api.model.SmtpConfig;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
@@ -65,6 +67,35 @@ class TenantConverterTest {
   }
 
   @Test
+  void toEntity_should_roundTripAddressAndDescription() {
+    // given
+    MultilingualTenantDTO tenantDTO = new MultilingualTenantTestDataBuilder().tenantDTO().build();
+    tenantDTO.setAddress("Musterstraße 1, 12345 Musterstadt");
+    tenantDTO.setDescription("Short description of the tenant.");
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then
+    assertThat(entity.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(entity.getDescription()).isEqualTo("Short description of the tenant.");
+
+    // and entity -> DTO conversions preserve the values
+    TenantDTO converted = tenantConverter.toDTO(entity, "de");
+    assertThat(converted.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(converted.getDescription()).isEqualTo("Short description of the tenant.");
+
+    MultilingualTenantDTO multilingualConverted = tenantConverter.toMultilingualDTO(entity);
+    assertThat(multilingualConverted.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(multilingualConverted.getDescription())
+        .isEqualTo("Short description of the tenant.");
+
+    AdminTenantDTO adminConverted = tenantConverter.toAdminTenantDTO(entity);
+    assertThat(adminConverted.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(adminConverted.getDescription()).isEqualTo("Short description of the tenant.");
+  }
+
+  @Test
   void toRestrictedTenantDTO_should_convertAttributesProperly()
       throws TemplateException, IOException, TemplateDescriptionServiceException {
     // given
@@ -98,9 +129,52 @@ class TenantConverterTest {
     assertThat(restrictedTenantDTO.getSubdomain()).isEqualTo(tenantDTO.getSubdomain());
     assertThat(restrictedTenantDTO.getTheming()).isEqualTo(tenantDTO.getTheming());
     assertContentIsProperlyConverted(tenantDTO, restrictedTenantDTO);
-    assertCoreSettingsAreConverted(tenantDTO.getSettings(), restrictedTenantDTO.getSettings());
+    assertRestrictedPublicSettingsAreConverted(
+        tenantDTO.getSettings(), restrictedTenantDTO.getSettings());
     Mockito.verify(templateRenderer).renderTemplate(Mockito.anyString(), Mockito.anyMap());
     assertThat(restrictedTenantDTO.getContent().getRenderedPrivacy()).isEqualTo("renderedPrivacy");
+  }
+
+  @Test
+  void toRestrictedTenantDTO_should_redactSensitivePublicSettings() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder()
+            .tenantDTO()
+            .withContent()
+            .withTheming()
+            .withLicensing()
+            .withSettings()
+            .build();
+    tenantDTO
+        .getSettings()
+        .featureToolsOICDToken("secret-oidc-token")
+        .smtp(
+            new SmtpConfig()
+                .enabled(true)
+                .host("smtp.example.org")
+                .port(587)
+                .secure(false)
+                .username("smtp-user")
+                .password("smtp-pass")
+                .from("notifications@example.org")
+                .emailThemeColor("#123456"));
+
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // when
+    RestrictedTenantDTO restrictedTenantDTO =
+        tenantConverter.toRestrictedTenantDTO(entity, TenantConverter.DE);
+
+    // then
+    assertThat(restrictedTenantDTO.getSettings().getFeatureToolsOICDToken()).isNull();
+    assertThat(restrictedTenantDTO.getSettings().getSmtp()).isNotNull();
+    assertThat(restrictedTenantDTO.getSettings().getSmtp().getHost()).isEqualTo("smtp.example.org");
+    assertThat(restrictedTenantDTO.getSettings().getSmtp().getPort()).isEqualTo(587);
+    assertThat(restrictedTenantDTO.getSettings().getSmtp().getFrom())
+        .isEqualTo("notifications@example.org");
+    assertThat(restrictedTenantDTO.getSettings().getSmtp().getUsername()).isNull();
+    assertThat(restrictedTenantDTO.getSettings().getSmtp().getPassword()).isNull();
   }
 
   @Test
@@ -179,6 +253,35 @@ class TenantConverterTest {
         .isTrue();
   }
 
+  @Test
+  void toDTO_should_preserveSensitiveSettingsForNonPublicDtos() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .featureToolsOICDToken("secret-oidc-token")
+        .smtp(
+            new SmtpConfig()
+                .enabled(true)
+                .host("smtp.example.org")
+                .port(587)
+                .secure(false)
+                .username("smtp-user")
+                .password("smtp-pass")
+                .from("notifications@example.org")
+                .emailThemeColor("#123456"));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(converted.getSettings().getFeatureToolsOICDToken()).isEqualTo("secret-oidc-token");
+    assertThat(converted.getSettings().getSmtp()).isNotNull();
+    assertThat(converted.getSettings().getSmtp().getUsername()).isEqualTo("smtp-user");
+    assertThat(converted.getSettings().getSmtp().getPassword()).isEqualTo("smtp-pass");
+  }
+
   private static void assertContentIsProperlyConverted(
       MultilingualTenantDTO tenantDTO, RestrictedTenantDTO restrictedTenantDTO) {
     assertThat(restrictedTenantDTO.getContent().getClaim())
@@ -215,8 +318,96 @@ class TenantConverterTest {
     assertThat(actual.getTenantAdminControls()).isEqualTo(expected.getTenantAdminControls());
   }
 
+  private static void assertRestrictedPublicSettingsAreConverted(
+      Settings expected, Settings actual) {
+    assertThat(actual.getFeatureStatisticsEnabled())
+        .isEqualTo(expected.getFeatureStatisticsEnabled());
+    assertThat(actual.getFeatureTopicsEnabled()).isEqualTo(expected.getFeatureTopicsEnabled());
+    assertThat(actual.getTopicsInRegistrationEnabled())
+        .isEqualTo(expected.getTopicsInRegistrationEnabled());
+    assertThat(actual.getFeatureDemographicsEnabled())
+        .isEqualTo(expected.getFeatureDemographicsEnabled());
+    assertThat(actual.getFeatureAppointmentsEnabled())
+        .isEqualTo(expected.getFeatureAppointmentsEnabled());
+    assertThat(actual.getFeatureGroupChatV2Enabled())
+        .isEqualTo(expected.getFeatureGroupChatV2Enabled());
+    assertThat(actual.getFeatureToolsEnabled()).isEqualTo(expected.getFeatureToolsEnabled());
+    assertThat(actual.getFeatureAttachmentUploadDisabled())
+        .isEqualTo(expected.getFeatureAttachmentUploadDisabled());
+    assertThat(actual.getActiveLanguages()).isEqualTo(expected.getActiveLanguages());
+    assertThat(actual.getShowAskerProfile()).isEqualTo(expected.getShowAskerProfile());
+    assertThat(actual.getIsVideoCallAllowed()).isEqualTo(expected.getIsVideoCallAllowed());
+    assertThat(actual.getFeatureCentralDataProtectionTemplateEnabled())
+        .isEqualTo(expected.getFeatureCentralDataProtectionTemplateEnabled());
+    assertThat(actual.getTenantAdminControls()).isEqualTo(expected.getTenantAdminControls());
+    assertThat(actual.getFeatureToolsOICDToken()).isNull();
+    if (expected.getSmtp() == null) {
+      assertThat(actual.getSmtp()).isNull();
+      return;
+    }
+
+    assertThat(actual.getSmtp()).isNotNull();
+    assertThat(actual.getSmtp().getEnabled()).isEqualTo(expected.getSmtp().getEnabled());
+    assertThat(actual.getSmtp().getHost()).isEqualTo(expected.getSmtp().getHost());
+    assertThat(actual.getSmtp().getPort()).isEqualTo(expected.getSmtp().getPort());
+    assertThat(actual.getSmtp().getSecure()).isEqualTo(expected.getSmtp().getSecure());
+    assertThat(actual.getSmtp().getFrom()).isEqualTo(expected.getSmtp().getFrom());
+    assertThat(actual.getSmtp().getEmailThemeColor())
+        .isEqualTo(expected.getSmtp().getEmailThemeColor());
+    assertThat(actual.getSmtp().getUsername()).isNull();
+    assertThat(actual.getSmtp().getPassword()).isNull();
+  }
+
   private static String getGermanTranslation(Map<String, String> translations) {
     return translations.get("de");
+  }
+
+  @Test
+  void toDTO_should_applyPerFieldDefaults_When_storedSettingsJsonIsEmpty() {
+    // given — all keys absent from stored JSON
+    TenantEntity entity = TenantEntity.builder().settings("{}").build();
+
+    // when
+    Settings settings = tenantConverter.toDTO(entity, "de").getSettings();
+
+    // then — false-default fields (sample of 3)
+    assertThat(settings.getFeatureDemographicsEnabled()).isFalse();
+    assertThat(settings.getFeatureStatisticsEnabled()).isFalse();
+    assertThat(settings.getFeatureToolsEnabled()).isFalse();
+    // then — true-default fields (sample of 3)
+    assertThat(settings.getFeatureAudioCallsEnabled()).isTrue();
+    assertThat(settings.getFeatureAnonymousChatEnabled()).isTrue();
+    assertThat(settings.getFeatureCallsEnabled()).isTrue();
+  }
+
+  @Test
+  void toDTO_should_respectExplicitFalse_When_trueDefaultFieldIsSetToFalseInJson() {
+    // given — one true-default field explicitly false; all other keys absent
+    TenantEntity entity =
+        TenantEntity.builder().settings("{\"featureAudioCallsEnabled\":false}").build();
+
+    // when
+    Settings settings = tenantConverter.toDTO(entity, "de").getSettings();
+
+    // then
+    assertThat(settings.getFeatureAudioCallsEnabled()).isFalse();
+    assertThat(settings.getFeatureDemographicsEnabled()).isFalse();
+    assertThat(settings.getFeatureAnonymousChatEnabled()).isTrue();
+    assertThat(settings.getFeatureStatisticsEnabled()).isFalse();
+  }
+
+  @Test
+  void toDTO_should_notCrossContaminate_When_jsonContainsMisspelledFieldName() {
+    // given — typo must not satisfy .contains() for the correctly-spelled key
+    TenantEntity entity =
+        TenantEntity.builder().settings("{\"featureAudioCalls_Enabled\":false}").build();
+
+    // when
+    Settings settings = tenantConverter.toDTO(entity, "de").getSettings();
+
+    // then — correctly-spelled field keeps its true default; typo is ignored
+    assertThat(settings.getFeatureAudioCallsEnabled()).isTrue();
+    assertThat(settings.getFeatureDemographicsEnabled()).isFalse();
   }
 
   @Test
