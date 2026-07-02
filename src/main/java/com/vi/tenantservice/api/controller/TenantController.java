@@ -21,7 +21,7 @@ import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.generated.api.controller.TenantApi;
 import com.vi.tenantservice.generated.api.controller.TenantadminApi;
 import io.swagger.annotations.Api;
-import jakarta.validation.Valid;
+import org.springframework.validation.annotation.Validated;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -45,6 +45,7 @@ import org.springframework.web.context.request.NativeWebRequest;
 @RequiredArgsConstructor
 @Api(tags = "tenant-controller")
 @Slf4j
+@Validated
 public class TenantController implements TenantApi, TenantadminApi {
 
   private final @NonNull TenantServiceFacade tenantServiceFacade;
@@ -147,7 +148,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
   public ResponseEntity<TenantAdminControls> updateTenantAdminControls(
-      @Valid TenantAdminControls tenantAdminControls) {
+      TenantAdminControls tenantAdminControls) {
     return new ResponseEntity<>(
         tenantServiceFacade.updateTenantAdminControls(tenantAdminControls), HttpStatus.OK);
   }
@@ -164,7 +165,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
   public ResponseEntity<MultilingualTenantDTO> createTenant(
-      @Valid MultilingualTenantDTO tenantMultilingualDTO) {
+      MultilingualTenantDTO tenantMultilingualDTO) {
     log.info("Creating tenant with by user {} ", authorisationService.getUsername());
     var tenant = tenantServiceFacade.createTenant(tenantMultilingualDTO);
     return new ResponseEntity<>(tenant, HttpStatus.OK);
@@ -173,7 +174,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<MultilingualTenantDTO> updateTenant(
-      Long id, @Valid MultilingualTenantDTO tenantDTO) {
+      Long id, MultilingualTenantDTO tenantDTO) {
     log.info("Updating tenant with id {} by user {} ", id, authorisationService.getUsername());
     var updatedTenantDTO = tenantServiceFacade.updateTenant(id, tenantDTO);
     return new ResponseEntity<>(updatedTenantDTO, HttpStatus.OK);

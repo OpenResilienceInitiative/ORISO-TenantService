@@ -13,7 +13,6 @@ public class RestTemplateConfig {
   /**
    * RestTemplate Bean.
    *
-   * @param builder {@link RestTemplateBuilder}
    * @return {@link RestTemplate}
    */
   @Bean
