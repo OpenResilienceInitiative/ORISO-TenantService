@@ -12,7 +12,7 @@ import com.vi.tenantservice.api.model.TenantContent;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantSetting;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
-import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled;
+import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import java.util.List;
 import java.util.Objects;
@@ -112,8 +112,7 @@ public class TenantFacadeAuthorisationService {
   private boolean singleTenantAdminCanEditLegalTexts() {
     var applicationSettings = applicationSettingsService.getApplicationSettings();
 
-    ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled
-        legalContentChangesBySingleTenantAdminsAllowed =
+    FeatureToggleDTO legalContentChangesBySingleTenantAdminsAllowed =
             applicationSettings.getLegalContentChangesBySingleTenantAdminsAllowed();
 
     if (legalContentChangesBySingleTenantAdminsAllowed != null) {

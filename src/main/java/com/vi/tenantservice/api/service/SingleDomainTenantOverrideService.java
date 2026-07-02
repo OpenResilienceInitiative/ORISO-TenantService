@@ -6,7 +6,7 @@ import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
-import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled;
+import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.springframework.stereotype.Component;
@@ -35,8 +35,7 @@ public class SingleDomainTenantOverrideService {
   }
 
   private boolean isContentOverrideAllowed() {
-    ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled
-        legalContentChangesBySingleTenantAdminsAllowed =
+    FeatureToggleDTO legalContentChangesBySingleTenantAdminsAllowed =
             applicationSettingsService
                 .getApplicationSettings()
                 .getLegalContentChangesBySingleTenantAdminsAllowed();

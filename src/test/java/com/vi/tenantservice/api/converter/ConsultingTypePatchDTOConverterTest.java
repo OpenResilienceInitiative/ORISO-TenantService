@@ -3,7 +3,7 @@ package com.vi.tenantservice.api.converter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
-import com.vi.tenantservice.consultingtypeservice.generated.web.model.ExtendedConsultingTypeResponseDTOAllOfWelcomeMessage;
+import com.vi.tenantservice.consultingtypeservice.generated.web.model.WelcomeMessageDTO;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import org.jeasy.random.EasyRandom;
 import org.junit.jupiter.api.Test;
@@ -25,7 +25,7 @@ class ConsultingTypePatchDTOConverterTest {
     fullConsultingTypeResponseDTO.languageFormal(true);
     fullConsultingTypeResponseDTO.setIsVideoCallAllowed(true);
     fullConsultingTypeResponseDTO.setWelcomeMessage(
-        new ExtendedConsultingTypeResponseDTOAllOfWelcomeMessage()
+        new WelcomeMessageDTO()
             .sendWelcomeMessage(true)
             .welcomeMessageText("welcome"));
     fullConsultingTypeResponseDTO.setSendFurtherStepsMessage(true);
@@ -53,7 +53,7 @@ class ConsultingTypePatchDTOConverterTest {
     fullConsultingTypeResponseDTO.languageFormal(true);
     fullConsultingTypeResponseDTO.setIsVideoCallAllowed(true);
     fullConsultingTypeResponseDTO.setWelcomeMessage(
-        new ExtendedConsultingTypeResponseDTOAllOfWelcomeMessage()
+        new WelcomeMessageDTO()
             .sendWelcomeMessage(true)
             .welcomeMessageText("welcome"));
     fullConsultingTypeResponseDTO.setSendFurtherStepsMessage(true);

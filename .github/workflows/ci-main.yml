@@ -25,7 +25,7 @@ jobs:
     - name: Compile and Package Java application
       uses: ./.github/actions/maven-build
       with:
-        java_version: '17'
+        java_version: '21'
 
     - name: Create and Publish Docker image
       uses: ./.github/actions/docker-build-push

@@ -40,9 +40,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.test.context.TestPropertySource;
@@ -56,6 +56,7 @@ import org.springframework.web.context.WebApplicationContext;
 @SpringBootTest(classes = TenantServiceApplication.class)
 @TestPropertySource(properties = "spring.profiles.active=testing")
 @AutoConfigureMockMvc(addFilters = false)
+@Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class TenantControllerIT {
 
   private static final String TENANT_RESOURCE = "/tenant";
@@ -85,26 +86,26 @@ class TenantControllerIT {
 
   @Autowired private WebApplicationContext context;
 
-  @MockBean AuthorisationService authorisationService;
+  @MockitoBean AuthorisationService authorisationService;
 
-  @MockBean ApplicationSettingsService applicationSettingsService;
+  @MockitoBean ApplicationSettingsService applicationSettingsService;
 
-  @MockBean ApplicationSettingsApiControllerFactory applicationSettingsApiControllerFactory;
+  @MockitoBean ApplicationSettingsApiControllerFactory applicationSettingsApiControllerFactory;
 
-  @MockBean ConsultingTypeServiceApiControllerFactory consultingTypeServiceApiControllerFactory;
+  @MockitoBean ConsultingTypeServiceApiControllerFactory consultingTypeServiceApiControllerFactory;
 
-  @MockBean
+  @MockitoBean
   com.vi.tenantservice.consultingtypeservice.generated.web.ConsultingTypeControllerApi
       consultingTypeControllerApi;
 
-  @MockBean SecurityHeaderSupplier securityHeaderSupplier;
-  @MockBean TenantResolverService tenantResolverService;
+  @MockitoBean SecurityHeaderSupplier securityHeaderSupplier;
+  @MockitoBean TenantResolverService tenantResolverService;
 
-  @MockBean ConsultingTypeService consultingTypeService;
+  @MockitoBean ConsultingTypeService consultingTypeService;
 
-  @MockBean UserAdminService userAdminService;
+  @MockitoBean UserAdminService userAdminService;
 
-  @MockBean SubdomainExtractor subdomainExtractor;
+  @MockitoBean SubdomainExtractor subdomainExtractor;
 
   private MockMvc mockMvc;
 
@@ -261,7 +262,7 @@ class TenantControllerIT {
                 .sendFurtherStepsMessage(true)
                 .welcomeMessage(
                     new com.vi.tenantservice.consultingtypeservice.generated.web.model
-                            .ExtendedConsultingTypeResponseDTOAllOfWelcomeMessage()
+                            .WelcomeMessageDTO()
                         .welcomeMessageText("welcome")
                         .sendWelcomeMessage(true))
                 .isVideoCallAllowed(true));
@@ -413,7 +414,7 @@ class TenantControllerIT {
                 .ApplicationSettingsDTO();
     settingsDTO.setLegalContentChangesBySingleTenantAdminsAllowed(
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
-                .ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled()
+                .FeatureToggleDTO()
             .value(value));
     when(applicationSettingsService.getApplicationSettings()).thenReturn(settingsDTO);
   }

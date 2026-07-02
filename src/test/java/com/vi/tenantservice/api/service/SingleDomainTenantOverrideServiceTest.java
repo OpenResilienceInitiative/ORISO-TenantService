@@ -9,7 +9,7 @@ import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
-import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled;
+import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,7 +46,7 @@ class SingleDomainTenantOverrideServiceTest {
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
             .ApplicationSettingsDTO();
     applicationSettings.setLegalContentChangesBySingleTenantAdminsAllowed(
-        new ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled().value(true));
+        new FeatureToggleDTO().value(true));
     when(applicationSettingsService.getApplicationSettings()).thenReturn(applicationSettings);
     // when
     RestrictedTenantDTO restrictedTenantDTO =
@@ -80,7 +80,7 @@ class SingleDomainTenantOverrideServiceTest {
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
             .ApplicationSettingsDTO();
     applicationSettings.setLegalContentChangesBySingleTenantAdminsAllowed(
-        new ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled().value(false));
+        new FeatureToggleDTO().value(false));
     when(applicationSettingsService.getApplicationSettings()).thenReturn(applicationSettings);
     // when
     RestrictedTenantDTO restrictedTenantDTO =
