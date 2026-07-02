@@ -12,8 +12,29 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 
+// The "testing" profile targets MariaDB and expects datasource/Keycloak/service settings
+// to be supplied via env (empty during the build), which the ConfigurationValidator rejects
+// on startup. Override them with an embedded H2 datasource and dummy config values so the
+// full application context can start for this template test.
 @SpringBootTest
-@TestPropertySource(properties = "spring.profiles.active=testing")
+@TestPropertySource(
+    properties = {
+      "spring.profiles.active=testing",
+      "spring.datasource.url=jdbc:h2:mem:templaterenderertest;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
+      "spring.datasource.driver-class-name=org.h2.Driver",
+      "spring.datasource.username=sa",
+      "spring.datasource.password=sa",
+      "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+      "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect",
+      "spring.jpa.hibernate.ddl-auto=create-drop",
+      "spring.liquibase.enabled=false",
+      "keycloak.auth-server-url=http://localhost:8080/auth",
+      "keycloak.realm=test",
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=http://localhost:8080/auth/realms/test",
+      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=http://localhost:8080/auth/realms/test/protocol/openid-connect/certs",
+      "consulting.type.service.api.url=http://localhost:8080",
+      "user.service.api.url=http://localhost:8080"
+    })
 @AutoConfigureMockMvc(addFilters = false)
 class TemplateRendererTest {
 
