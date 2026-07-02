@@ -522,15 +522,6 @@
                     <skipTests>false</skipTests>
                     <argLine>--enable-preview</argLine>
                     <excludedGroups>SkipOnCI</excludedGroups>
-                    <!--
-                        TEMPORARY:
-                        Do not fail the build when tests fail. JUnit XML reports
-                        are still written to target/surefire-reports/, and a
-                        human-readable summary is printed at the end of the build.
-                        Set to false (or pass -Dmaven.test.failure.ignore=false)
-                        when failures should block the build (e.g. in CI).
-                    -->
-                    <testFailureIgnore>true</testFailureIgnore>
                 </configuration>
                 <executions>
                     <execution>
