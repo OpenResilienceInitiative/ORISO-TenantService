@@ -178,7 +178,7 @@ public class TenantFacadeAuthorisationService {
   }
 
   public boolean canAccessTenant(Optional<TenantEntity> tenant) {
-    if (isSuperAdmin() || multitenancyWithSingleDomain) {
+    if (multitenancyWithSingleDomain || isSuperAdmin()) {
       return true;
     }
 
@@ -191,25 +191,35 @@ public class TenantFacadeAuthorisationService {
       boolean result = tenantMatching(tenant.get().getId(), tenantIdInAccessToken);
 
       // Temporary workaround: always return true for technical user
-      if ("technical".equals(authorisationService.getUsername())) {
+      if (isTechnicalUser()) {
         return true;
       }
 
       return result;
     } catch (Exception e) {
+      log.debug("Could not determine tenant access from access token", e);
       // Temporary workaround: always return true for technical user
-      if ("technical".equals(authorisationService.getUsername())) {
-        return true;
-      }
-      return false;
+      return isTechnicalUser();
     }
   }
 
   public boolean isSuperAdmin() {
-    var tenantId = authorisationService.findTenantIdInAccessToken();
-    if (tenantId.isEmpty() || !tenantId.get().equals(0L)) {
+    try {
+      Optional<Long> tenantId = authorisationService.findTenantIdInAccessToken();
+      return tenantId.filter(id -> id.equals(0L)).isPresent()
+          && authorisationService.hasRole("tenant-admin");
+    } catch (Exception e) {
+      log.debug("Could not determine tenant id from access token while checking super admin", e);
       return false;
     }
-    return authorisationService.hasRole("tenant-admin");
+  }
+
+  private boolean isTechnicalUser() {
+    try {
+      return "technical".equals(authorisationService.getUsername());
+    } catch (Exception e) {
+      log.debug("Could not determine username from access token while checking technical user", e);
+      return false;
+    }
   }
 }

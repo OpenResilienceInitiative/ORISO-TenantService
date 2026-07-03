@@ -4,7 +4,6 @@ import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.RoleAuthorizationAuthorityMapper;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -87,11 +86,14 @@ public class AuthorisationService {
   }
 
   public Collection<String> extractRealmRoles(Jwt jwt) {
-    Map<String, Object> realmAccess = (Map<String, Object>) jwt.getClaims().get("realm_access");
-    if (realmAccess != null) {
-      var roles = (List<String>) realmAccess.get("roles");
-      if (roles != null) {
-        return roles;
+    Object realmAccess = jwt.getClaims().get("realm_access");
+    if (realmAccess instanceof Map<?, ?> realmAccessMap) {
+      Object roles = realmAccessMap.get("roles");
+      if (roles instanceof Collection<?> roleCollection) {
+        return roleCollection.stream()
+            .filter(String.class::isInstance)
+            .map(String.class::cast)
+            .toList();
       }
     }
     return Lists.newArrayList();
