@@ -101,6 +101,8 @@ class TenantInputSanitizerTest {
   private void verifyNeededSanitizationsAreCalled(MultilingualTenantDTO tenantDTO) {
     verify(inputSanitizer).sanitize(tenantDTO.getName());
     verify(inputSanitizer).sanitize(tenantDTO.getSubdomain());
+    verify(inputSanitizer).sanitize(tenantDTO.getAddress());
+    verify(inputSanitizer).sanitize(tenantDTO.getDescription());
     verify(inputSanitizer).sanitize(tenantDTO.getTheming().getLogo());
     verify(inputSanitizer).sanitize(tenantDTO.getTheming().getFavicon());
     verify(inputSanitizer).sanitize(tenantDTO.getTheming().getAssociationLogo());
