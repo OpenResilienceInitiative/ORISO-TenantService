@@ -596,6 +596,11 @@ components:
       type: object
       required:
         - signerName
+        - signerPosition
+        - signerEmail
+        - signerOrganisation
+        - language
+        - accepted
       properties:
         signerName:
           type: string
@@ -605,9 +610,29 @@ components:
           type: string
           maxLength: 255
           example: "Geschäftsführerin"
+        signerEmail:
+          type: string
+          maxLength: 255
+          format: email
+          example: "erika.mustermann@example.org"
+        signerOrganisation:
+          type: string
+          maxLength: 255
+          example: "Caritas Beispiel e.V."
+        forwardedByUserId:
+          type: string
+          maxLength: 64
+          example: "tenant-admin-1"
+        source:
+          type: string
+          maxLength: 64
+          example: "PUBLIC_SIGN_LINK"
         signerIsMember:
           type: boolean
           example: false
+        accepted:
+          type: boolean
+          example: true
         language:
           type: string
           maxLength: 10
@@ -622,6 +647,16 @@ components:
           type: string
           example: "SIGNED"
         signerName:
+          type: string
+        signerPosition:
+          type: string
+        signerEmail:
+          type: string
+        signerOrganisation:
+          type: string
+        forwardedByUserId:
+          type: string
+        source:
           type: string
         signedAt:
           type: string

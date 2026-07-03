@@ -61,11 +61,18 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   public ResponseEntity<DpaSignatureDTO> confirmDataProcessingAgreement(
       String token, DpaSignatureRequestDTO request) {
+    if (!Boolean.TRUE.equals(request.getAccepted())) {
+      return ResponseEntity.badRequest().build();
+    }
     var signature =
         tenantDpaService.confirmSignature(
             token,
             request.getSignerName(),
             request.getSignerPosition(),
+            request.getSignerEmail(),
+            request.getSignerOrganisation(),
+            request.getForwardedByUserId(),
+            request.getSource(),
             Boolean.TRUE.equals(request.getSignerIsMember()),
             request.getLanguage());
     var dto =
@@ -73,6 +80,11 @@ public class TenantController implements TenantApi, TenantadminApi {
             .tenantId(signature.getTenantId())
             .status(signature.getStatus() == null ? null : signature.getStatus().name())
             .signerName(signature.getSignerName())
+            .signerPosition(signature.getSignerPosition())
+            .signerEmail(signature.getSignerEmail())
+            .signerOrganisation(signature.getSignerOrganisation())
+            .forwardedByUserId(signature.getForwardedByUserId())
+            .source(signature.getSource())
             .signedAt(signature.getSignedAt() == null ? null : signature.getSignedAt().toString());
     return ResponseEntity.ok(dto);
   }
