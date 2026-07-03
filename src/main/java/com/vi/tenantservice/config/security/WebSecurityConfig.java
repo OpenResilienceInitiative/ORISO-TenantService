@@ -35,18 +35,12 @@ public class WebSecurityConfig {
         .authorizeHttpRequests(
             authorize ->
                 authorize
-                    .requestMatchers("/tenant")
-                    .authenticated()
-                    .requestMatchers("/tenant/*")
-                    .authenticated()
-                    .requestMatchers("/tenantadmin")
-                    .authenticated()
-                    .requestMatchers("/tenantadmin/*")
-                    .authenticated()
                     .requestMatchers("/tenant/public/**")
                     .permitAll()
                     .requestMatchers(SpringFoxConfig.WHITE_LIST)
                     .permitAll()
+                    .requestMatchers("/tenant/**", "/tenantadmin/**")
+                    .authenticated()
                     .anyRequest()
                     .permitAll())
         .headers(
