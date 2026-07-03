@@ -27,6 +27,7 @@ import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantEntity.TenantEntityBuilder;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.model.Theming;
@@ -214,7 +215,7 @@ public class TenantConverter {
     return tenantDTO;
   }
 
-  private Settings getSettings(TenantEntity tenant) {
+  private Settings getSettings(TenantRestrictedData tenant) {
     if (tenant.getSettings() == null) {
       return new Settings();
     } else {
@@ -437,7 +438,7 @@ public class TenantConverter {
         .emailThemeColor(smtpSettings.getEmailThemeColor());
   }
 
-  public RestrictedTenantDTO toRestrictedTenantDTO(TenantEntity tenant, String lang) {
+  public RestrictedTenantDTO toRestrictedTenantDTO(TenantRestrictedData tenant, String lang) {
     return new RestrictedTenantDTO(tenant.getId(), tenant.getName())
         .content(toContentDTO(tenant, lang))
         .theming(toThemingDTO(tenant))
@@ -445,7 +446,7 @@ public class TenantConverter {
         .settings(getRestrictedPublicSettings(tenant));
   }
 
-  private Settings getRestrictedPublicSettings(TenantEntity tenant) {
+  private Settings getRestrictedPublicSettings(TenantRestrictedData tenant) {
     Settings settings = getSettings(tenant);
     settings.setFeatureToolsOICDToken(null);
     settings.setSmtp(toPublicSmtpConfig(settings.getSmtp()));
@@ -483,7 +484,7 @@ public class TenantConverter {
     return new Licensing(tenant.getLicensingAllowedNumberOfUsers());
   }
 
-  private Theming toThemingDTO(TenantEntity tenant) {
+  private Theming toThemingDTO(TenantRestrictedData tenant) {
     return new Theming()
         .favicon(tenant.getThemingFavicon())
         .logo(tenant.getThemingLogo())
@@ -492,7 +493,7 @@ public class TenantConverter {
         .secondaryColor(tenant.getThemingSecondaryColor());
   }
 
-  private Content toContentDTO(TenantEntity tenant, String lang) {
+  private Content toContentDTO(TenantRestrictedData tenant, String lang) {
     String privacyPotentiallyWithPlaceholders =
         getTranslatedStringFromMap(tenant.getContentPrivacy(), lang);
     DataProtectionContactTemplateDTO dataProtectionContactTemplate =

@@ -24,6 +24,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantEntity.TenantBase;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantService;
@@ -415,7 +416,7 @@ public class TenantServiceFacade {
   }
 
   public Optional<RestrictedTenantDTO> findRestrictedTenantById(Long id) {
-    var tenantById = tenantService.findTenantById(id);
+    var tenantById = tenantService.findRestrictedTenantDataById(id);
 
     String lang = translationService.getCurrentLanguageContext();
     return tenantById.isEmpty()
@@ -430,7 +431,7 @@ public class TenantServiceFacade {
 
   public Optional<RestrictedTenantDTO> findTenantBySubdomain(
       String subdomain, Long optionalTenantIdOverride) {
-    var tenantBySubdomain = tenantService.findTenantBySubdomain(subdomain);
+    var tenantBySubdomain = tenantService.findRestrictedTenantDataBySubdomain(subdomain);
     Optional<Long> tenantIdFromRequestOrCookie =
         resolveFromRequestOrCookie(optionalTenantIdOverride);
 
@@ -465,17 +466,20 @@ public class TenantServiceFacade {
             .getApplicationSettings()
             .getMainTenantSubdomainForSingleDomainMultitenancy()
             .getValue();
-    var mainTenant = tenantService.findTenantBySubdomain(mainTenantSubdomain).orElseThrow();
+    var mainTenant =
+        tenantService.findRestrictedTenantDataBySubdomain(mainTenantSubdomain).orElseThrow();
     Long actualTenantId = tenantResolverService.tryResolve().orElseThrow();
-    TenantEntity actualTenant = tenantService.findTenantById(actualTenantId).orElseThrow();
+    TenantRestrictedData actualTenant =
+        tenantService.findRestrictedTenantDataById(actualTenantId).orElseThrow();
     return singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
         mainTenant, actualTenant);
   }
 
   public Optional<RestrictedTenantDTO> getTenantDataWithOverride(
-      Optional<TenantEntity> mainTenantForSingleDomainMultitenancy, Long resolvedTenantId) {
+      Optional<TenantRestrictedData> mainTenantForSingleDomainMultitenancy, Long resolvedTenantId) {
 
-    Optional<TenantEntity> tenantToOverridePrivacy = tenantService.findTenantById(resolvedTenantId);
+    Optional<TenantRestrictedData> tenantToOverridePrivacy =
+        tenantService.findRestrictedTenantDataById(resolvedTenantId);
     if (tenantToOverridePrivacy.isEmpty()) {
       throw new BadRequestException("Tenant not found for id " + resolvedTenantId);
     }

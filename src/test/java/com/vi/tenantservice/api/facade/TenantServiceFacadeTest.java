@@ -25,6 +25,7 @@ import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -491,13 +492,14 @@ class TenantServiceFacadeTest {
         "tenantConverter",
         new TenantConverter(new TemplateService(), templateRenderer));
 
-    Optional<TenantEntity> defaultTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
-    Optional<TenantEntity> accessTokenTenantData = getTenantWithPrivacy("{\"de\":\"content2\"}");
+    Optional<TenantRestrictedData> defaultTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
+    Optional<TenantRestrictedData> accessTokenTenantData =
+        getTenantWithPrivacy("{\"de\":\"content2\"}");
 
-    when(tenantService.findTenantBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
         .thenReturn(defaultTenant);
     when(tenantResolverService.tryResolveForNonAuthUsers()).thenReturn(Optional.of(2L));
-    when(tenantService.findTenantById(2L)).thenReturn(accessTokenTenantData);
+    when(tenantService.findRestrictedTenantDataById(2L)).thenReturn(accessTokenTenantData);
 
     RestrictedTenantDTO overriddenDTO =
         new RestrictedTenantDTO().content(new Content().privacy("content2"));
@@ -528,10 +530,10 @@ class TenantServiceFacadeTest {
     verify(tenantService, never()).findTenantBySubdomain("localhost");
   }
 
-  private static Optional<TenantEntity> getTenantWithPrivacy(String contentPrivacy) {
+  private static Optional<TenantRestrictedData> getTenantWithPrivacy(String contentPrivacy) {
     TenantEntity defaultTenantEntity = new TenantEntity();
     defaultTenantEntity.setContentPrivacy(contentPrivacy);
-    Optional<TenantEntity> defaultTenant = Optional.of(defaultTenantEntity);
+    Optional<TenantRestrictedData> defaultTenant = Optional.of(defaultTenantEntity);
     return defaultTenant;
   }
 }

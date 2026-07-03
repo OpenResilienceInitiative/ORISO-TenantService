@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantEntity.TenantBase;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -126,6 +127,14 @@ public class TenantService {
 
   public Optional<Long> findTenantIdBySubdomain(String subdomain) {
     return Optional.ofNullable(tenantRepository.findIdBySubdomain(subdomain));
+  }
+
+  public Optional<TenantRestrictedData> findRestrictedTenantDataBySubdomain(String subdomain) {
+    return Optional.ofNullable(tenantRepository.findRestrictedDataBySubdomain(subdomain));
+  }
+
+  public Optional<TenantRestrictedData> findRestrictedTenantDataById(Long id) {
+    return Optional.ofNullable(tenantRepository.findRestrictedDataById(id));
   }
 
   public List<TenantEntity> getAllTenants() {
