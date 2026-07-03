@@ -25,6 +25,7 @@ import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionTogglesSetting
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantEntity.TenantEntityBuilder;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
@@ -177,7 +178,7 @@ public class TenantConverter {
     }
   }
 
-  public MultilingualTenantDTO toMultilingualDTO(TenantEntity tenant) {
+  public MultilingualTenantDTO toMultilingualDTO(TenantData tenant) {
     var tenantDTO =
         new MultilingualTenantDTO(tenant.getName())
             .id(tenant.getId())
@@ -197,7 +198,7 @@ public class TenantConverter {
     return tenantDTO;
   }
 
-  public TenantDTO toDTO(TenantEntity tenant, String lang) {
+  public TenantDTO toDTO(TenantData tenant, String lang) {
     var tenantDTO =
         new TenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
             .address(tenant.getAddress())
@@ -466,7 +467,7 @@ public class TenantConverter {
         .emailThemeColor(smtpConfig.getEmailThemeColor());
   }
 
-  public BasicTenantLicensingDTO toBasicLicensingTenantDTO(TenantEntity tenant) {
+  public BasicTenantLicensingDTO toBasicLicensingTenantDTO(TenantData tenant) {
     var basicTenantLicensingDTO =
         new BasicTenantLicensingDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
             .licensing(toLicensingDTO(tenant));
@@ -480,7 +481,7 @@ public class TenantConverter {
     return basicTenantLicensingDTO;
   }
 
-  public Licensing toLicensingDTO(TenantEntity tenant) {
+  public Licensing toLicensingDTO(TenantData tenant) {
     return new Licensing(tenant.getLicensingAllowedNumberOfUsers());
   }
 
@@ -576,7 +577,7 @@ public class TenantConverter {
     }
   }
 
-  private MultilingualContent toMultilingualContentDTO(TenantEntity tenant) {
+  private MultilingualContent toMultilingualContentDTO(TenantData tenant) {
     return new MultilingualContent(convertMapFromJson(tenant.getContentImpressum()))
         .claim(convertMapFromJson(tenant.getContentClaim()))
         .privacy(convertMapFromJson(tenant.getContentPrivacy()))
@@ -584,7 +585,7 @@ public class TenantConverter {
         .dataProtectionContactTemplate(getMultilingualDataProtectionTemplate());
   }
 
-  public AdminTenantDTO toAdminTenantDTO(TenantEntity tenant) {
+  public AdminTenantDTO toAdminTenantDTO(TenantData tenant) {
     var adminTenantDTO =
         new AdminTenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
             .address(tenant.getAddress())

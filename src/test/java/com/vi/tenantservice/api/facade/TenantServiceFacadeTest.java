@@ -149,7 +149,7 @@ class TenantServiceFacadeTest {
     when(converter.toEntity(tenantMultilingualDTO)).thenReturn(entity);
     when(tenantService.create(entity)).thenReturn(entity);
     ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
-    when(tenantService.getAllTenants()).thenReturn(List.of(technicalTenant));
+    when(tenantService.getAllTenantData()).thenReturn(List.of(technicalTenant));
     when(subdomainExtractor.getCurrentSubdomain()).thenReturn(Optional.of("app1"));
 
     // when
@@ -177,7 +177,7 @@ class TenantServiceFacadeTest {
     when(converter.toEntity(tenantMultilingualDTO)).thenReturn(entity);
     when(tenantService.create(entity)).thenReturn(entity);
     ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
-    when(tenantService.getAllTenants()).thenReturn(List.of(technicalTenant));
+    when(tenantService.getAllTenantData()).thenReturn(List.of(technicalTenant));
     when(subdomainExtractor.getCurrentSubdomain()).thenReturn(Optional.of("app2"));
 
     // when
@@ -411,7 +411,7 @@ class TenantServiceFacadeTest {
   @Test
   void findTenantById_Should_findTenant_When_ExistingIdIsPassedForSingleTenantAdmin() {
     // given
-    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(tenantService.findTenantDataById(ID)).thenReturn(Optional.of(tenantEntity));
     when(translationService.getCurrentLanguageContext()).thenReturn("de");
     when(converter.toDTO(tenantEntity, "de")).thenReturn(tenantDTO);
     // when
@@ -422,7 +422,7 @@ class TenantServiceFacadeTest {
   @Test
   void findMultilingualTenantById_Should_findTenant_When_ExistingIdIsPassedForSingleTenantAdmin() {
     // given
-    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(tenantService.findTenantDataById(ID)).thenReturn(Optional.of(tenantEntity));
     tenantEntity.setId(1L);
     tenantMultilingualDTO.setId(1L);
     when(consultingTypeService.getConsultingTypesByTenantId(Mockito.anyInt()))
@@ -444,13 +444,13 @@ class TenantServiceFacadeTest {
     // when
     tenantServiceFacade.getAllTenants();
     // then
-    verify(tenantService).getAllTenants();
+    verify(tenantService).getAllTenantData();
   }
 
   @Test
   void getSingleTenant_Should_findTenant_When_onlyOneTenantIsPresent() {
     // given
-    when(tenantService.getAllTenants()).thenReturn(List.of(tenantEntity));
+    when(tenantService.getAllTenantData()).thenReturn(List.of(tenantEntity));
     when(translationService.getCurrentLanguageContext()).thenReturn(DE);
     when(converter.toRestrictedTenantDTO(tenantEntity, DE)).thenReturn(restrictedTenantDTO);
 
@@ -458,7 +458,7 @@ class TenantServiceFacadeTest {
     tenantServiceFacade.getSingleTenant();
 
     // then
-    verify(tenantService).getAllTenants();
+    verify(tenantService).getAllTenantData();
     verify(converter).toRestrictedTenantDTO(tenantEntity, DE);
   }
 
@@ -467,7 +467,7 @@ class TenantServiceFacadeTest {
     // given
     TenantEntity secondTenantEntity = new TenantEntity();
     secondTenantEntity.setId(2L);
-    when(tenantService.getAllTenants()).thenReturn(List.of(tenantEntity, secondTenantEntity));
+    when(tenantService.getAllTenantData()).thenReturn(List.of(tenantEntity, secondTenantEntity));
 
     // then
     assertThrows(
@@ -477,7 +477,7 @@ class TenantServiceFacadeTest {
           tenantServiceFacade.getSingleTenant();
         });
 
-    verify(tenantService).getAllTenants();
+    verify(tenantService).getAllTenantData();
     verifyNoInteractions(converter);
   }
 
