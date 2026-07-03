@@ -186,7 +186,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<MultilingualTenantDTO> updateTenant(
-      Long id, MultilingualTenantDTO tenantDTO) {
+      Long id, @jakarta.validation.Valid MultilingualTenantDTO tenantDTO) {
     log.info("Updating tenant with id {} by user {} ", id, authorisationService.getUsername());
     var updatedTenantDTO = tenantServiceFacade.updateTenant(id, tenantDTO);
     return new ResponseEntity<>(updatedTenantDTO, HttpStatus.OK);
