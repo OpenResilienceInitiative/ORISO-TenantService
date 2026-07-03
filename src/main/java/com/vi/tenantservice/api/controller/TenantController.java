@@ -177,7 +177,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
   public ResponseEntity<MultilingualTenantDTO> createTenant(
-      MultilingualTenantDTO tenantMultilingualDTO) {
+      @jakarta.validation.Valid MultilingualTenantDTO tenantMultilingualDTO) {
     log.info("Creating tenant by user {} ", authorisationService.getUsername());
     var tenant = tenantServiceFacade.createTenant(tenantMultilingualDTO);
     return new ResponseEntity<>(tenant, HttpStatus.OK);
