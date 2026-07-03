@@ -104,4 +104,26 @@ class TenantRepositoryTest {
     // then
     assertNotNull(tenant);
   }
+
+  @Test
+  void findTenantDataById_Should_NotRequireDpaColumnsInProjection() {
+    // when
+    var tenant = tenantRepository.findTenantDataById(EXISTING_ID);
+
+    // then
+    assertNotNull(tenant);
+    assertThat(tenant.getId()).isEqualTo(EXISTING_ID);
+    assertThat(tenant.getName()).isEqualTo("Happylife Gmbh");
+    assertThat(tenant.getSubdomain()).isEqualTo("happylife");
+  }
+
+  @Test
+  void findAllTenantData_Should_NotRequireDpaColumnsInProjection() {
+    // when
+    var tenants = tenantRepository.findAllTenantData();
+
+    // then
+    assertThat(tenants.size()).isEqualTo(1);
+    assertThat(tenants.get(0).getId()).isEqualTo(EXISTING_ID);
+  }
 }

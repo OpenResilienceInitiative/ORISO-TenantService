@@ -25,6 +25,7 @@ import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -148,7 +149,7 @@ class TenantServiceFacadeTest {
     when(converter.toEntity(tenantMultilingualDTO)).thenReturn(entity);
     when(tenantService.create(entity)).thenReturn(entity);
     ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
-    when(tenantService.getAllTenants()).thenReturn(List.of(technicalTenant));
+    when(tenantService.getAllTenantData()).thenReturn(List.of(technicalTenant));
     when(subdomainExtractor.getCurrentSubdomain()).thenReturn(Optional.of("app1"));
 
     // when
@@ -176,7 +177,7 @@ class TenantServiceFacadeTest {
     when(converter.toEntity(tenantMultilingualDTO)).thenReturn(entity);
     when(tenantService.create(entity)).thenReturn(entity);
     ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
-    when(tenantService.getAllTenants()).thenReturn(List.of(technicalTenant));
+    when(tenantService.getAllTenantData()).thenReturn(List.of(technicalTenant));
     when(subdomainExtractor.getCurrentSubdomain()).thenReturn(Optional.of("app2"));
 
     // when
@@ -410,7 +411,7 @@ class TenantServiceFacadeTest {
   @Test
   void findTenantById_Should_findTenant_When_ExistingIdIsPassedForSingleTenantAdmin() {
     // given
-    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(tenantService.findTenantDataById(ID)).thenReturn(Optional.of(tenantEntity));
     when(translationService.getCurrentLanguageContext()).thenReturn("de");
     when(converter.toDTO(tenantEntity, "de")).thenReturn(tenantDTO);
     // when
@@ -421,7 +422,7 @@ class TenantServiceFacadeTest {
   @Test
   void findMultilingualTenantById_Should_findTenant_When_ExistingIdIsPassedForSingleTenantAdmin() {
     // given
-    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(tenantService.findTenantDataById(ID)).thenReturn(Optional.of(tenantEntity));
     tenantEntity.setId(1L);
     tenantMultilingualDTO.setId(1L);
     when(consultingTypeService.getConsultingTypesByTenantId(Mockito.anyInt()))
@@ -443,13 +444,13 @@ class TenantServiceFacadeTest {
     // when
     tenantServiceFacade.getAllTenants();
     // then
-    verify(tenantService).getAllTenants();
+    verify(tenantService).getAllTenantData();
   }
 
   @Test
   void getSingleTenant_Should_findTenant_When_onlyOneTenantIsPresent() {
     // given
-    when(tenantService.getAllTenants()).thenReturn(List.of(tenantEntity));
+    when(tenantService.getAllTenantData()).thenReturn(List.of(tenantEntity));
     when(translationService.getCurrentLanguageContext()).thenReturn(DE);
     when(converter.toRestrictedTenantDTO(tenantEntity, DE)).thenReturn(restrictedTenantDTO);
 
@@ -457,7 +458,7 @@ class TenantServiceFacadeTest {
     tenantServiceFacade.getSingleTenant();
 
     // then
-    verify(tenantService).getAllTenants();
+    verify(tenantService).getAllTenantData();
     verify(converter).toRestrictedTenantDTO(tenantEntity, DE);
   }
 
@@ -466,7 +467,7 @@ class TenantServiceFacadeTest {
     // given
     TenantEntity secondTenantEntity = new TenantEntity();
     secondTenantEntity.setId(2L);
-    when(tenantService.getAllTenants()).thenReturn(List.of(tenantEntity, secondTenantEntity));
+    when(tenantService.getAllTenantData()).thenReturn(List.of(tenantEntity, secondTenantEntity));
 
     // then
     assertThrows(
@@ -476,7 +477,7 @@ class TenantServiceFacadeTest {
           tenantServiceFacade.getSingleTenant();
         });
 
-    verify(tenantService).getAllTenants();
+    verify(tenantService).getAllTenantData();
     verifyNoInteractions(converter);
   }
 
@@ -491,13 +492,14 @@ class TenantServiceFacadeTest {
         "tenantConverter",
         new TenantConverter(new TemplateService(), templateRenderer));
 
-    Optional<TenantEntity> defaultTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
-    Optional<TenantEntity> accessTokenTenantData = getTenantWithPrivacy("{\"de\":\"content2\"}");
+    Optional<TenantRestrictedData> defaultTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
+    Optional<TenantRestrictedData> accessTokenTenantData =
+        getTenantWithPrivacy("{\"de\":\"content2\"}");
 
-    when(tenantService.findTenantBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
         .thenReturn(defaultTenant);
     when(tenantResolverService.tryResolveForNonAuthUsers()).thenReturn(Optional.of(2L));
-    when(tenantService.findTenantById(2L)).thenReturn(accessTokenTenantData);
+    when(tenantService.findRestrictedTenantDataById(2L)).thenReturn(accessTokenTenantData);
 
     RestrictedTenantDTO overriddenDTO =
         new RestrictedTenantDTO().content(new Content().privacy("content2"));
@@ -510,6 +512,25 @@ class TenantServiceFacadeTest {
 
     // then
     assertThat(tenantDTO.get().getContent().getPrivacy()).contains("content2");
+  }
+
+  @Test
+  void findTenantBySubdomain_Should_ReturnEmpty_When_MainTenantIsNotFoundInSingleDomainMode() {
+    // given
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(Optional.empty());
+    when(tenantResolverService.tryResolveForNonAuthUsers()).thenReturn(Optional.of(2L));
+
+    // when
+    Optional<RestrictedTenantDTO> tenantDTO =
+        tenantServiceFacade.findTenantBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME, null);
+
+    // then
+    assertThat(tenantDTO).isEmpty();
+    verify(tenantService, never()).findRestrictedTenantDataById(2L);
+    verifyNoInteractions(singleDomainTenantOverrideService);
   }
 
   @Test
@@ -528,10 +549,10 @@ class TenantServiceFacadeTest {
     verify(tenantService, never()).findTenantBySubdomain("localhost");
   }
 
-  private static Optional<TenantEntity> getTenantWithPrivacy(String contentPrivacy) {
+  private static Optional<TenantRestrictedData> getTenantWithPrivacy(String contentPrivacy) {
     TenantEntity defaultTenantEntity = new TenantEntity();
     defaultTenantEntity.setContentPrivacy(contentPrivacy);
-    Optional<TenantEntity> defaultTenant = Optional.of(defaultTenantEntity);
+    Optional<TenantRestrictedData> defaultTenant = Optional.of(defaultTenantEntity);
     return defaultTenant;
   }
 }

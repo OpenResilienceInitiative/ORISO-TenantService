@@ -22,8 +22,9 @@ import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
-import com.vi.tenantservice.api.model.TenantEntity.TenantBase;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantService;
@@ -47,8 +48,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -191,7 +190,7 @@ public class TenantServiceFacade {
   }
 
   private boolean onlyTechnicalTenantExists() {
-    List<TenantEntity> tenants = tenantService.getAllTenants();
+    List<TenantData> tenants = tenantService.getAllTenantData();
     return tenants.size() == 1 && tenants.get(0).getId().equals(0L);
   }
 
@@ -327,7 +326,7 @@ public class TenantServiceFacade {
 
   public Optional<TenantDTO> findTenantById(Long id) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
-    var tenantById = tenantService.findTenantById(id);
+    var tenantById = tenantService.findTenantDataById(id);
     if (tenantById.isEmpty()) {
       return Optional.empty();
     }
@@ -337,7 +336,7 @@ public class TenantServiceFacade {
     return Optional.of(tenantDTO);
   }
 
-  private MultilingualTenantDTO getConvertedAndEnrichedTenant(TenantEntity tenantEntity) {
+  private MultilingualTenantDTO getConvertedAndEnrichedTenant(TenantData tenantEntity) {
     var multilingualTenantDTO = tenantConverter.toMultilingualDTO(tenantEntity);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(multilingualTenantDTO);
     enrichWithAdminDataIfSuperadmin(multilingualTenantDTO);
@@ -408,14 +407,14 @@ public class TenantServiceFacade {
 
   public Optional<MultilingualTenantDTO> findMultilingualTenantById(Long id) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
-    var tenantById = tenantService.findTenantById(id);
+    var tenantById = tenantService.findTenantDataById(id);
     return tenantById.isEmpty()
         ? Optional.empty()
         : Optional.of(getConvertedAndEnrichedTenant(tenantById.get()));
   }
 
   public Optional<RestrictedTenantDTO> findRestrictedTenantById(Long id) {
-    var tenantById = tenantService.findTenantById(id);
+    var tenantById = tenantService.findRestrictedTenantDataById(id);
 
     String lang = translationService.getCurrentLanguageContext();
     return tenantById.isEmpty()
@@ -424,13 +423,13 @@ public class TenantServiceFacade {
   }
 
   public List<BasicTenantLicensingDTO> getAllTenants() {
-    var tenantEntities = tenantService.getAllTenants();
+    var tenantEntities = tenantService.getAllTenantData();
     return tenantEntities.stream().map(tenantConverter::toBasicLicensingTenantDTO).toList();
   }
 
   public Optional<RestrictedTenantDTO> findTenantBySubdomain(
       String subdomain, Long optionalTenantIdOverride) {
-    var tenantBySubdomain = tenantService.findTenantBySubdomain(subdomain);
+    var tenantBySubdomain = tenantService.findRestrictedTenantDataBySubdomain(subdomain);
     Optional<Long> tenantIdFromRequestOrCookie =
         resolveFromRequestOrCookie(optionalTenantIdOverride);
 
@@ -465,28 +464,34 @@ public class TenantServiceFacade {
             .getApplicationSettings()
             .getMainTenantSubdomainForSingleDomainMultitenancy()
             .getValue();
-    var mainTenant = tenantService.findTenantBySubdomain(mainTenantSubdomain).orElseThrow();
+    var mainTenant =
+        tenantService.findRestrictedTenantDataBySubdomain(mainTenantSubdomain).orElseThrow();
     Long actualTenantId = tenantResolverService.tryResolve().orElseThrow();
-    TenantEntity actualTenant = tenantService.findTenantById(actualTenantId).orElseThrow();
+    TenantRestrictedData actualTenant =
+        tenantService.findRestrictedTenantDataById(actualTenantId).orElseThrow();
     return singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
         mainTenant, actualTenant);
   }
 
   public Optional<RestrictedTenantDTO> getTenantDataWithOverride(
-      Optional<TenantEntity> mainTenantForSingleDomainMultitenancy, Long resolvedTenantId) {
+      Optional<TenantRestrictedData> mainTenantForSingleDomainMultitenancy, Long resolvedTenantId) {
 
-    Optional<TenantEntity> tenantToOverridePrivacy = tenantService.findTenantById(resolvedTenantId);
+    if (mainTenantForSingleDomainMultitenancy.isEmpty()) {
+      return Optional.empty();
+    }
+
+    Optional<TenantRestrictedData> tenantToOverridePrivacy =
+        tenantService.findRestrictedTenantDataById(resolvedTenantId);
     if (tenantToOverridePrivacy.isEmpty()) {
       throw new BadRequestException("Tenant not found for id " + resolvedTenantId);
     }
     return Optional.of(
         singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-            mainTenantForSingleDomainMultitenancy.orElseThrow(),
-            tenantToOverridePrivacy.orElseThrow()));
+            mainTenantForSingleDomainMultitenancy.get(), tenantToOverridePrivacy.get()));
   }
 
   public Optional<RestrictedTenantDTO> getSingleTenant() {
-    var tenantEntities = tenantService.getAllTenants();
+    var tenantEntities = tenantService.getAllTenantData();
     if (tenantEntities != null && tenantEntities.size() == 1) {
       var tenantEntity = tenantEntities.get(0);
       String lang = translationService.getCurrentLanguageContext();
@@ -524,14 +529,13 @@ public class TenantServiceFacade {
       String infix, int pageNumber, Integer pageSize, String fieldName, boolean isAscending) {
     var direction = isAscending ? Direction.ASC : Direction.DESC;
     var pageRequest = PageRequest.of(pageNumber, pageSize, direction, fieldName);
-    Page<TenantBase> tenantPage = tenantService.findAllExceptTechnicalByInfix(infix, pageRequest);
-    var tenantIds = tenantPage.stream().map(TenantBase::getId).toList();
-    var fullTenants = tenantService.findAllByIds(tenantIds);
-    return mapOf(tenantPage, fullTenants);
+    Page<TenantData> tenantPage =
+        tenantService.findAllTenantDataExceptTechnicalByInfix(infix, pageRequest);
+    return mapOf(tenantPage);
   }
 
   public List<AdminTenantDTO> getAllAdminTenantsExceptTechnical() {
-    var tenantEntities = tenantService.getAllTenants();
+    var tenantEntities = new ArrayList<>(tenantService.getAllTenantData());
     excludeTechnicalTenantFrom(tenantEntities);
     List<AdminTenantDTO> adminTenantDTOS =
         tenantEntities.stream().map(tenantConverter::toAdminTenantDTO).toList();
@@ -541,19 +545,15 @@ public class TenantServiceFacade {
     return adminTenantDTOS;
   }
 
-  private void excludeTechnicalTenantFrom(List<TenantEntity> tenants) {
+  private void excludeTechnicalTenantFrom(List<? extends TenantData> tenants) {
     emptyIfNull(tenants).removeIf(tenant -> tenant.getId() == TECHNICAL_TENANT_ID);
   }
 
-  private Map<String, Object> mapOf(Page<TenantBase> tenantPage, List<TenantEntity> fullTenants) {
-    var fullTenantsLookupMap =
-        fullTenants.stream().collect(Collectors.toMap(TenantEntity::getId, Function.identity()));
-
+  private Map<String, Object> mapOf(Page<TenantData> tenantPage) {
     var tenants = new ArrayList<Map<String, Object>>();
     tenantPage.forEach(
-        tenantBase -> {
-          var fullTenant = fullTenantsLookupMap.get(tenantBase.getId());
-          var tenantMap = mapOf(tenantBase, fullTenant);
+        tenantData -> {
+          var tenantMap = mapOf(tenantData);
           tenants.add(tenantMap);
         });
 
@@ -568,28 +568,28 @@ public class TenantServiceFacade {
         tenants);
   }
 
-  private Map<String, Object> mapOf(TenantBase tenantBase, TenantEntity fullTenant) {
+  private Map<String, Object> mapOf(TenantData tenantData) {
     Map<String, Object> map = new HashMap<>();
-    map.put("id", tenantBase.getId());
-    map.put("name", tenantBase.getName());
-    map.put("subdomain", fullTenant.getSubdomain());
-    map.put("beraterCount", fullTenant.getLicensingAllowedNumberOfUsers());
+    map.put("id", tenantData.getId());
+    map.put("name", tenantData.getName());
+    map.put("subdomain", tenantData.getSubdomain());
+    map.put("beraterCount", tenantData.getLicensingAllowedNumberOfUsers());
     List<AdminResponseDTO> tenantAdmins = new ArrayList<>();
     try {
-      tenantAdmins = userAdminService.getTenantAdmins(tenantBase.getId().intValue());
+      tenantAdmins = userAdminService.getTenantAdmins(tenantData.getId().intValue());
     } catch (Exception ex) {
       log.warn(
           "Could not resolve tenant-admin emails for tenant {}. Returning tenant without adminEmails.",
-          tenantBase.getId(),
+          tenantData.getId(),
           ex);
     }
     map.put("adminEmails", getAdminEmails(tenantAdmins));
     map.put(
         "createDate",
-        nonNull(fullTenant.getCreateDate()) ? fullTenant.getCreateDate().toString() : null);
+        nonNull(tenantData.getCreateDate()) ? tenantData.getCreateDate().toString() : null);
     map.put(
         "updateDate",
-        nonNull(fullTenant.getUpdateDate()) ? fullTenant.getUpdateDate().toString() : null);
+        nonNull(tenantData.getUpdateDate()) ? tenantData.getUpdateDate().toString() : null);
     return map;
   }
 }

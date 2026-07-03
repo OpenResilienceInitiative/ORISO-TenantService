@@ -43,11 +43,12 @@ class TenantServiceTest {
   void create_Should_CreateTenantAndSetCreationDate() {
     // given
     TenantEntity tenantEntity = new TenantEntity();
+    when(tenantRepository.findIdBySubdomain(tenantEntity.getSubdomain())).thenReturn(null);
     // when
     tenantService.create(tenantEntity);
     // then
     verify(tenantRepository).save(tenantEntity);
-    verify(tenantRepository).findBySubdomain(tenantEntity.getSubdomain());
+    verify(tenantRepository).findIdBySubdomain(tenantEntity.getSubdomain());
     assertThat(tenantEntity.getCreateDate()).isNotNull();
     assertThat(tenantEntity.getUpdateDate()).isNotNull();
   }
@@ -76,7 +77,7 @@ class TenantServiceTest {
     TenantEntity tenantEntity = new TenantEntity();
     givenApplicationSettingsWithMainTenantSubdomain(MAIN_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY);
     tenantEntity.setSubdomain(MAIN_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY);
-    when(tenantRepository.findBySubdomain(MAIN_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY))
+    when(tenantRepository.findIdBySubdomain(MAIN_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY))
         .thenReturn(null);
     // when
     tenantService.create(tenantEntity);
@@ -99,8 +100,8 @@ class TenantServiceTest {
     tenantEntity.setSubdomain(MAIN_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY);
     TenantEntity existingTenant = new TenantEntity();
     existingTenant.setId(1L);
-    when(tenantRepository.findBySubdomain(MAIN_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY))
-        .thenReturn(existingTenant);
+    when(tenantRepository.findIdBySubdomain(MAIN_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY))
+        .thenReturn(existingTenant.getId());
 
     // then
     assertThrows(
@@ -117,13 +118,14 @@ class TenantServiceTest {
     EasyRandom random = new EasyRandom();
     TenantEntity tenantEntity = random.nextObject(TenantEntity.class);
     LocalDateTime previousUpdateDate = tenantEntity.getUpdateDate();
+    when(tenantRepository.findIdBySubdomain(tenantEntity.getSubdomain())).thenReturn(null);
 
     // when
     tenantService.update(tenantEntity);
 
     // then
     verify(tenantRepository).save(tenantEntity);
-    verify(tenantRepository).findBySubdomain(tenantEntity.getSubdomain());
+    verify(tenantRepository).findIdBySubdomain(tenantEntity.getSubdomain());
     assertThat(tenantEntity.getUpdateDate()).isNotNull();
     assertThat(tenantEntity.getUpdateDate()).isNotEqualTo(previousUpdateDate);
   }
@@ -161,8 +163,8 @@ class TenantServiceTest {
 
     TenantEntity existingTenant = new TenantEntity();
     existingTenant.setId(1L);
-    when(tenantRepository.findBySubdomain(MAIN_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY))
-        .thenReturn(existingTenant);
+    when(tenantRepository.findIdBySubdomain(MAIN_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY))
+        .thenReturn(existingTenant.getId());
 
     // then
     assertThrows(
@@ -192,7 +194,7 @@ class TenantServiceTest {
 
     verify(tenantRepository).findAllByIdIn(java.util.List.of(2L));
     verify(tenantRepository).saveAll(java.util.List.of(tenantEntity));
-    verify(tenantRepository, never()).findBySubdomain(org.mockito.ArgumentMatchers.any());
+    verify(tenantRepository, never()).findIdBySubdomain(org.mockito.ArgumentMatchers.any());
     assertThat(tenantEntity.getSettings()).isEqualTo("{\"tenantAdminControls\":{}}");
     assertThat(tenantEntity.getUpdateDate()).isNotNull();
   }
@@ -220,5 +222,13 @@ class TenantServiceTest {
     tenantService.getAllTenants();
     // then
     verify(tenantRepository).findAll();
+  }
+
+  @Test
+  void getAllTenantData_Should_CallProjectionQuery() {
+    // when
+    tenantService.getAllTenantData();
+    // then
+    verify(tenantRepository).findAllTenantData();
   }
 }
