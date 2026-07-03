@@ -476,6 +476,10 @@ public class TenantServiceFacade {
   public Optional<RestrictedTenantDTO> getTenantDataWithOverride(
       Optional<TenantRestrictedData> mainTenantForSingleDomainMultitenancy, Long resolvedTenantId) {
 
+    if (mainTenantForSingleDomainMultitenancy.isEmpty()) {
+      return Optional.empty();
+    }
+
     Optional<TenantRestrictedData> tenantToOverridePrivacy =
         tenantService.findRestrictedTenantDataById(resolvedTenantId);
     if (tenantToOverridePrivacy.isEmpty()) {
@@ -483,8 +487,7 @@ public class TenantServiceFacade {
     }
     return Optional.of(
         singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-            mainTenantForSingleDomainMultitenancy.orElseThrow(),
-            tenantToOverridePrivacy.orElseThrow()));
+            mainTenantForSingleDomainMultitenancy.get(), tenantToOverridePrivacy.get()));
   }
 
   public Optional<RestrictedTenantDTO> getSingleTenant() {

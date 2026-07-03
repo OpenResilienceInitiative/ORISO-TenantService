@@ -515,6 +515,25 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void findTenantBySubdomain_Should_ReturnEmpty_When_MainTenantIsNotFoundInSingleDomainMode() {
+    // given
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(Optional.empty());
+    when(tenantResolverService.tryResolveForNonAuthUsers()).thenReturn(Optional.of(2L));
+
+    // when
+    Optional<RestrictedTenantDTO> tenantDTO =
+        tenantServiceFacade.findTenantBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME, null);
+
+    // then
+    assertThat(tenantDTO).isEmpty();
+    verify(tenantService, never()).findRestrictedTenantDataById(2L);
+    verifyNoInteractions(singleDomainTenantOverrideService);
+  }
+
+  @Test
   void canAccessTenant_Should_useTenantIdLookupInsteadOfLoadingTenantEntity() {
     // given
     when(subdomainExtractor.getCurrentSubdomain()).thenReturn(Optional.of("localhost"));
