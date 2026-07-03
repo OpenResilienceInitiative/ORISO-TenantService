@@ -516,8 +516,8 @@ public class TenantServiceFacade {
       }
     }
 
-    var tenantBySubdomain = tenantService.findTenantBySubdomain(subdomain.get());
-    return tenantFacadeAuthorisationService.canAccessTenant(tenantBySubdomain);
+    var tenantIdBySubdomain = tenantService.findTenantIdBySubdomain(subdomain.get());
+    return tenantFacadeAuthorisationService.canAccessTenantById(tenantIdBySubdomain);
   }
 
   public Map<String, Object> findTenantsExceptTechnicalByInfix(

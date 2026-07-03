@@ -512,6 +512,22 @@ class TenantServiceFacadeTest {
     assertThat(tenantDTO.get().getContent().getPrivacy()).contains("content2");
   }
 
+  @Test
+  void canAccessTenant_Should_useTenantIdLookupInsteadOfLoadingTenantEntity() {
+    // given
+    when(subdomainExtractor.getCurrentSubdomain()).thenReturn(Optional.of("localhost"));
+    when(tenantService.findTenantIdBySubdomain("localhost")).thenReturn(Optional.of(3L));
+    when(tenantFacadeAuthorisationService.canAccessTenantById(Optional.of(3L))).thenReturn(true);
+
+    // when
+    boolean canAccessTenant = tenantServiceFacade.canAccessTenant();
+
+    // then
+    assertThat(canAccessTenant).isTrue();
+    verify(tenantService).findTenantIdBySubdomain("localhost");
+    verify(tenantService, never()).findTenantBySubdomain("localhost");
+  }
+
   private static Optional<TenantEntity> getTenantWithPrivacy(String contentPrivacy) {
     TenantEntity defaultTenantEntity = new TenantEntity();
     defaultTenantEntity.setContentPrivacy(contentPrivacy);
