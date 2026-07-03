@@ -7,10 +7,14 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
 
   TenantEntity findBySubdomain(String subdomain);
+
+  @Query("SELECT t.id FROM TenantEntity t WHERE t.subdomain = :subdomain")
+  Long findIdBySubdomain(@Param("subdomain") String subdomain);
 
   @Query(
       value =

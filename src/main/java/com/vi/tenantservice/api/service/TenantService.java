@@ -124,6 +124,10 @@ public class TenantService {
     return bySubdomain != null ? Optional.of(bySubdomain) : Optional.empty();
   }
 
+  public Optional<Long> findTenantIdBySubdomain(String subdomain) {
+    return Optional.ofNullable(tenantRepository.findIdBySubdomain(subdomain));
+  }
+
   public List<TenantEntity> getAllTenants() {
     return tenantRepository.findAll();
   }

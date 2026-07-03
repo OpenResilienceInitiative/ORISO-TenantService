@@ -178,17 +178,21 @@ public class TenantFacadeAuthorisationService {
   }
 
   public boolean canAccessTenant(Optional<TenantEntity> tenant) {
+    return canAccessTenantById(tenant.map(TenantEntity::getId));
+  }
+
+  public boolean canAccessTenantById(Optional<Long> tenantId) {
     if (multitenancyWithSingleDomain || isSuperAdmin()) {
       return true;
     }
 
-    if (tenant.isEmpty()) {
+    if (tenantId.isEmpty()) {
       return false;
     }
 
     try {
       var tenantIdInAccessToken = authorisationService.findTenantIdInAccessToken();
-      boolean result = tenantMatching(tenant.get().getId(), tenantIdInAccessToken);
+      boolean result = tenantMatching(tenantId.get(), tenantIdInAccessToken);
 
       // Temporary workaround: always return true for technical user
       if (isTechnicalUser()) {
