@@ -191,14 +191,14 @@ public class TenantFacadeAuthorisationService {
       boolean result = tenantMatching(tenant.get().getId(), tenantIdInAccessToken);
 
       // Temporary workaround: always return true for technical user
-      if (authorisationService.getUsername().equals("technical")) {
+      if ("technical".equals(authorisationService.getUsername())) {
         return true;
       }
 
       return result;
     } catch (Exception e) {
       // Temporary workaround: always return true for technical user
-      if (authorisationService.getUsername().equals("technical")) {
+      if ("technical".equals(authorisationService.getUsername())) {
         return true;
       }
       return false;

@@ -1,6 +1,7 @@
 package com.vi.tenantservice.config.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Lists;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
@@ -46,6 +48,38 @@ class AuthorisationServiceTest {
 
     // when, then
     assertThat(authorisationService.getUsername()).isEqualTo("testUsername");
+  }
+
+  @Test
+  void getUsername_Should_DecodeBase32EncodedUsername() {
+    // "testuser" Base32-encoded = ORSXG5A=, stored in JWT as enc.ORSXG5A. (= replaced by .)
+    when(securityContext.getAuthentication()).thenReturn(authentication);
+    SecurityContextHolder.setContext(securityContext);
+    when(jwt.getClaims()).thenReturn(new HashMap<>(Map.of("username", "enc.ORSXG5A.")));
+    when(authentication.getPrincipal()).thenReturn(jwt);
+
+    assertThat(authorisationService.getUsername()).isEqualTo("testuser");
+  }
+
+  @Test
+  void getUsername_Should_ReturnNull_WhenUsernameClaim_IsMissing() {
+    when(securityContext.getAuthentication()).thenReturn(authentication);
+    SecurityContextHolder.setContext(securityContext);
+    when(jwt.getClaims()).thenReturn(new HashMap<>());
+    when(authentication.getPrincipal()).thenReturn(jwt);
+
+    assertThat(authorisationService.getUsername()).isNull();
+  }
+
+  @Test
+  void getUsername_Should_ThrowAccessDeniedException_WhenBase32IsInvalid() {
+    when(securityContext.getAuthentication()).thenReturn(authentication);
+    SecurityContextHolder.setContext(securityContext);
+    when(jwt.getClaims()).thenReturn(new HashMap<>(Map.of("username", "enc.!!!NOT_BASE32!!!")));
+    when(authentication.getPrincipal()).thenReturn(jwt);
+
+    assertThatThrownBy(() -> authorisationService.getUsername())
+        .isInstanceOf(AccessDeniedException.class);
   }
 
   @Test
