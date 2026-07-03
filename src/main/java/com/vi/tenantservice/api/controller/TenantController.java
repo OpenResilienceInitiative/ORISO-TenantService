@@ -160,7 +160,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
   public ResponseEntity<TenantAdminControls> updateTenantAdminControls(
-      TenantAdminControls tenantAdminControls) {
+      @jakarta.validation.Valid TenantAdminControls tenantAdminControls) {
     return new ResponseEntity<>(
         tenantServiceFacade.updateTenantAdminControls(tenantAdminControls), HttpStatus.OK);
   }
