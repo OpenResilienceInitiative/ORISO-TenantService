@@ -154,6 +154,116 @@ paths:
           description: FORBIDDEN - only super admin can update platform controls
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/translation/keys:
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Gets the configured machine-translation provider API keys, masked [Authorization: Super admin]'
+      description: 'Returns the platform-global translation provider API keys. Keys are always
+        returned MASKED (first characters plus the last 4, e.g. "sk-…abcd") and can never be read
+        back in full. A provider without a configured key is returned as null.'
+      operationId: getTranslationApiKeys
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationApiKeysDTO'
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - only super admin can access translation provider keys
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/translation/keys/{provider}:
+    put:
+      tags:
+        - tenant-controller
+      summary: 'Sets the machine-translation API key for a provider [Authorization: Super admin]'
+      description: 'Stores the API key for the given provider ("openrouter" or "mistral") in the
+        platform-global admin controls. Returns all keys masked.'
+      operationId: setTranslationApiKey
+      parameters:
+        - name: provider
+          in: path
+          description: Translation provider id, one of "openrouter" or "mistral"
+            (validated server-side, unknown providers are rejected with 400)
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranslationApiKeyUpdateDTO'
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationApiKeysDTO'
+        400:
+          description: BAD REQUEST - unknown provider or invalid/empty key
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - only super admin can update translation provider keys
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/translate:
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Machine-translates HTML texts into one or more target languages [Authorization: Authority.UPDATE_TENANT]'
+      description: 'Translates the given HTML texts (fieldKey -> HTML) from sourceLang into every
+        requested target language using an LLM provider (OpenRouter or Mistral) with the
+        platform-global API keys. HTML tags, attributes and structure are preserved; only
+        human-readable text is translated. If no provider is requested explicitly, openrouter is
+        used when its key is configured, otherwise mistral. Typed error codes:
+        TRANSLATION_NOT_CONFIGURED (409, no API key configured), TRANSLATION_KEY_INVALID (502,
+        provider rejected the key), TRANSLATION_NO_CREDIT (502, provider credit exhausted),
+        TRANSLATION_RATE_LIMITED (502, provider rate limit hit),
+        TRANSLATION_PROVIDER_UNAVAILABLE (502, provider timeout or 5xx). The response is meant to
+        be published together with the machine-translation metadata convention: for every machine
+        translated language the client stores a parallel "<lang>__meta" key with the strict JSON
+        value {"mt":true,"src":"<sourceLang>","at":"<ISO-timestamp>"} next to the translated HTML
+        in the same language->HTML map.'
+      operationId: translate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranslationRequestDTO'
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationResponseDTO'
+        400:
+          description: BAD REQUEST - invalid/incomplete request or unknown provider
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        409:
+          description: CONFLICT - no translation provider API key configured (TRANSLATION_NOT_CONFIGURED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationErrorDTO'
+        502:
+          description: BAD GATEWAY - translation provider error (TRANSLATION_KEY_INVALID,
+            TRANSLATION_NO_CREDIT, TRANSLATION_RATE_LIMITED, TRANSLATION_PROVIDER_UNAVAILABLE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationErrorDTO'
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}:
     put:
       tags:
@@ -520,7 +630,15 @@ paths:
             type: long
       requestBody:
         required: true
-        description: 'Per-language DPA HTML content (language code -> HTML)'
+        description: 'Per-language DPA HTML content (language code -> HTML). Supports the
+          machine-translation metadata convention: next to a translated language (e.g. "en") the
+          map may carry a parallel "en__meta" key whose value is the strict JSON string
+          {"mt":true,"src":"de","at":"<ISO-timestamp>"} marking the language as machine
+          translated. Meta values are validated as strict JSON with only these fields and stored
+          unsanitized; all other values are HTML-sanitized. When the HTML of a language is changed
+          manually (i.e. the content changed but the resent meta is the previously stored one),
+          the meta key for that language is removed - a manual edit clears the
+          machine-translated tag.'
         content:
           application/json:
             schema:
@@ -569,6 +687,88 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
 components:
   schemas:
+    TranslationApiKeysDTO:
+      type: object
+      description: 'Masked machine-translation provider API keys. A key is shown as its first
+        characters plus the last 4 (e.g. "sk-…abcd"); null means no key is configured for that
+        provider.'
+      properties:
+        openrouter:
+          type: string
+          example: "sk-…abcd"
+        mistral:
+          type: string
+          example: "Fgh…9xyz"
+    TranslationApiKeyUpdateDTO:
+      type: object
+      required:
+        - apiKey
+      properties:
+        apiKey:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: "sk-or-v1-0123456789abcdef"
+    TranslationRequestDTO:
+      type: object
+      required:
+        - sourceLang
+        - targetLangs
+        - texts
+      properties:
+        sourceLang:
+          type: string
+          maxLength: 10
+          example: "de"
+        targetLangs:
+          type: array
+          items:
+            type: string
+            maxLength: 10
+          minItems: 1
+          example: [ "en", "fr" ]
+        provider:
+          type: string
+          description: 'Optional explicit provider (openrouter or mistral). If omitted, openrouter
+            is used when its key is configured, otherwise mistral.'
+          example: "openrouter"
+        texts:
+          type: object
+          description: 'HTML texts to translate, keyed by a caller-defined field key
+            (e.g. "privacy", "impressum").'
+          additionalProperties:
+            type: string
+    TranslationResponseDTO:
+      type: object
+      description: 'Translations keyed by target language, each holding the translated HTML per
+        field key. HTML tags, attributes and structure are preserved by the provider prompt.'
+      properties:
+        translations:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: string
+        provider:
+          type: string
+          example: "openrouter"
+        model:
+          type: string
+          example: "openai/gpt-4o-mini"
+    TranslationErrorDTO:
+      type: object
+      description: 'Typed machine-translation error. errorCode is one of
+        TRANSLATION_NOT_CONFIGURED, TRANSLATION_KEY_INVALID, TRANSLATION_NO_CREDIT,
+        TRANSLATION_RATE_LIMITED, TRANSLATION_PROVIDER_UNAVAILABLE.'
+      properties:
+        errorCode:
+          type: string
+          example: "TRANSLATION_KEY_INVALID"
+        provider:
+          type: string
+          example: "openrouter"
+        message:
+          type: string
     DpaVersionDTO:
       type: object
       properties:
