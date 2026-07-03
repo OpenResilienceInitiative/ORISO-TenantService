@@ -113,7 +113,7 @@ public class TenantFacadeAuthorisationService {
     var applicationSettings = applicationSettingsService.getApplicationSettings();
 
     FeatureToggleDTO legalContentChangesBySingleTenantAdminsAllowed =
-            applicationSettings.getLegalContentChangesBySingleTenantAdminsAllowed();
+        applicationSettings.getLegalContentChangesBySingleTenantAdminsAllowed();
 
     if (legalContentChangesBySingleTenantAdminsAllowed != null) {
       return legalContentChangesBySingleTenantAdminsAllowed.getValue();

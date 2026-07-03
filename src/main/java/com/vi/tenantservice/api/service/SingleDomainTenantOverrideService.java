@@ -36,9 +36,9 @@ public class SingleDomainTenantOverrideService {
 
   private boolean isContentOverrideAllowed() {
     FeatureToggleDTO legalContentChangesBySingleTenantAdminsAllowed =
-            applicationSettingsService
-                .getApplicationSettings()
-                .getLegalContentChangesBySingleTenantAdminsAllowed();
+        applicationSettingsService
+            .getApplicationSettings()
+            .getLegalContentChangesBySingleTenantAdminsAllowed();
     return legalContentChangesBySingleTenantAdminsAllowed != null
         && nullAsFalse(legalContentChangesBySingleTenantAdminsAllowed.getValue());
   }

@@ -177,9 +177,7 @@ class TenantServiceTest {
     when(applicationSettingsService.getApplicationSettings())
         .thenReturn(
             new ApplicationSettingsDTO()
-                .mainTenantSubdomainForSingleDomainMultitenancy(
-                    new SettingDTO()
-                        .value(subdomain)));
+                .mainTenantSubdomainForSingleDomainMultitenancy(new SettingDTO().value(subdomain)));
   }
 
   @Test

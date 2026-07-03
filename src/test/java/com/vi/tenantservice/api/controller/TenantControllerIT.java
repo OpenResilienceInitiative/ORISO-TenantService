@@ -40,12 +40,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.Sql.ExecutionPhase;
 import org.springframework.test.web.servlet.MockMvc;
@@ -413,8 +413,7 @@ class TenantControllerIT {
             new com.vi.tenantservice.applicationsettingsservice.generated.web.model
                 .ApplicationSettingsDTO();
     settingsDTO.setLegalContentChangesBySingleTenantAdminsAllowed(
-        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
-                .FeatureToggleDTO()
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO()
             .value(value));
     when(applicationSettingsService.getApplicationSettings()).thenReturn(settingsDTO);
   }
