@@ -563,7 +563,7 @@
                         </goals>
                         <configuration>
                             <target>
-                                <replace dir="${project.build.directory}/generated-sources/openapi"
+                                <replace dir="${project.build.directory}/generated-sources"
                                     token="headers.entrySet()" value="headers.headerSet()">
                                     <include name="**/ApiClient.java"/>
                                 </replace>
