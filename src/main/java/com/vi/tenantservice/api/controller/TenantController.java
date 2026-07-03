@@ -21,7 +21,6 @@ import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.generated.api.controller.TenantApi;
 import com.vi.tenantservice.generated.api.controller.TenantadminApi;
 import io.swagger.annotations.Api;
-import jakarta.validation.Valid;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -34,6 +33,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.CollectionUtils;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -45,6 +45,7 @@ import org.springframework.web.context.request.NativeWebRequest;
 @RequiredArgsConstructor
 @Api(tags = "tenant-controller")
 @Slf4j
+@Validated
 public class TenantController implements TenantApi, TenantadminApi {
 
   private final @NonNull TenantServiceFacade tenantServiceFacade;
@@ -159,7 +160,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
   public ResponseEntity<TenantAdminControls> updateTenantAdminControls(
-      @Valid TenantAdminControls tenantAdminControls) {
+      @jakarta.validation.Valid TenantAdminControls tenantAdminControls) {
     return new ResponseEntity<>(
         tenantServiceFacade.updateTenantAdminControls(tenantAdminControls), HttpStatus.OK);
   }
@@ -176,8 +177,8 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
   public ResponseEntity<MultilingualTenantDTO> createTenant(
-      @Valid MultilingualTenantDTO tenantMultilingualDTO) {
-    log.info("Creating tenant with by user {} ", authorisationService.getUsername());
+      @jakarta.validation.Valid MultilingualTenantDTO tenantMultilingualDTO) {
+    log.info("Creating tenant by user {} ", authorisationService.getUsername());
     var tenant = tenantServiceFacade.createTenant(tenantMultilingualDTO);
     return new ResponseEntity<>(tenant, HttpStatus.OK);
   }
@@ -185,7 +186,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<MultilingualTenantDTO> updateTenant(
-      Long id, @Valid MultilingualTenantDTO tenantDTO) {
+      Long id, @jakarta.validation.Valid MultilingualTenantDTO tenantDTO) {
     log.info("Updating tenant with id {} by user {} ", id, authorisationService.getUsername());
     var updatedTenantDTO = tenantServiceFacade.updateTenant(id, tenantDTO);
     return new ResponseEntity<>(updatedTenantDTO, HttpStatus.OK);

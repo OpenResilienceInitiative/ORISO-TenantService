@@ -12,7 +12,7 @@ import com.vi.tenantservice.api.model.TenantContent;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantSetting;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
-import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled;
+import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import java.util.List;
 import java.util.Objects;
@@ -112,9 +112,8 @@ public class TenantFacadeAuthorisationService {
   private boolean singleTenantAdminCanEditLegalTexts() {
     var applicationSettings = applicationSettingsService.getApplicationSettings();
 
-    ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled
-        legalContentChangesBySingleTenantAdminsAllowed =
-            applicationSettings.getLegalContentChangesBySingleTenantAdminsAllowed();
+    FeatureToggleDTO legalContentChangesBySingleTenantAdminsAllowed =
+        applicationSettings.getLegalContentChangesBySingleTenantAdminsAllowed();
 
     if (legalContentChangesBySingleTenantAdminsAllowed != null) {
       return legalContentChangesBySingleTenantAdminsAllowed.getValue();
@@ -192,14 +191,14 @@ public class TenantFacadeAuthorisationService {
       boolean result = tenantMatching(tenant.get().getId(), tenantIdInAccessToken);
 
       // Temporary workaround: always return true for technical user
-      if (authorisationService.getUsername().equals("technical")) {
+      if ("technical".equals(authorisationService.getUsername())) {
         return true;
       }
 
       return result;
     } catch (Exception e) {
       // Temporary workaround: always return true for technical user
-      if (authorisationService.getUsername().equals("technical")) {
+      if ("technical".equals(authorisationService.getUsername())) {
         return true;
       }
       return false;

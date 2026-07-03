@@ -12,7 +12,7 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTO;
-import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTOMainTenantSubdomainForSingleDomainMultitenancy;
+import com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO;
 import java.time.LocalDateTime;
 import java.util.Map;
 import org.jeasy.random.EasyRandom;
@@ -177,9 +177,7 @@ class TenantServiceTest {
     when(applicationSettingsService.getApplicationSettings())
         .thenReturn(
             new ApplicationSettingsDTO()
-                .mainTenantSubdomainForSingleDomainMultitenancy(
-                    new ApplicationSettingsDTOMainTenantSubdomainForSingleDomainMultitenancy()
-                        .value(subdomain)));
+                .mainTenantSubdomainForSingleDomainMultitenancy(new SettingDTO().value(subdomain)));
   }
 
   @Test

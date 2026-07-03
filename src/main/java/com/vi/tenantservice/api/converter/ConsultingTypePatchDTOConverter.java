@@ -1,7 +1,7 @@
 package com.vi.tenantservice.api.converter;
 
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
-import com.vi.tenantservice.api.model.ConsultingTypePatchDTOWelcomeMessage;
+import com.vi.tenantservice.api.model.WelcomeMessageDTO;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -36,7 +36,7 @@ public class ConsultingTypePatchDTOConverter {
 
   private ConsultingTypePatchDTO initializeExtendedTenantSettings() {
     ConsultingTypePatchDTO consultingTypePatchDTO = new ConsultingTypePatchDTO();
-    consultingTypePatchDTO.setWelcomeMessage(new ConsultingTypePatchDTOWelcomeMessage());
+    consultingTypePatchDTO.setWelcomeMessage(new WelcomeMessageDTO());
     return consultingTypePatchDTO;
   }
 
@@ -58,8 +58,7 @@ public class ConsultingTypePatchDTOConverter {
           targetDTO) {
     if (extendedSettings.getWelcomeMessage() != null) {
       targetDTO.setWelcomeMessage(
-          new com.vi.tenantservice.consultingtypeservice.generated.web.model
-              .ExtendedConsultingTypeResponseDTOAllOfWelcomeMessage());
+          new com.vi.tenantservice.consultingtypeservice.generated.web.model.WelcomeMessageDTO());
       BeanUtils.copyProperties(extendedSettings.getWelcomeMessage(), targetDTO.getWelcomeMessage());
     }
   }

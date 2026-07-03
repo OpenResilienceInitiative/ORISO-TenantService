@@ -1,9 +1,9 @@
 package com.vi.tenantservice.api.config;
 
 import java.time.Duration;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 /** Contains the rest template configuration. */
@@ -13,15 +13,15 @@ public class RestTemplateConfig {
   /**
    * RestTemplate Bean.
    *
-   * @param builder {@link RestTemplateBuilder}
    * @return {@link RestTemplate}
    */
   @Bean
-  public RestTemplate restTemplate(RestTemplateBuilder builder) {
-    return builder
-        .setConnectTimeout(Duration.ofSeconds(2))
-        .setReadTimeout(Duration.ofSeconds(8))
-        .errorHandler(new CustomResponseErrorHandler())
-        .build();
+  public RestTemplate restTemplate() {
+    SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+    factory.setConnectTimeout(Duration.ofSeconds(2));
+    factory.setReadTimeout(Duration.ofSeconds(8));
+    RestTemplate restTemplate = new RestTemplate(factory);
+    restTemplate.setErrorHandler(new CustomResponseErrorHandler());
+    return restTemplate;
   }
 }

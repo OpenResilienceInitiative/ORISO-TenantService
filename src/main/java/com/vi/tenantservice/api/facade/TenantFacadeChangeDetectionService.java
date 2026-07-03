@@ -225,8 +225,13 @@ public class TenantFacadeChangeDetectionService {
 
   private boolean areEqualIgnoringOrder(
       List<String> updatedSettings, List<String> existingSettings) {
-    if (updatedSettings == null || existingSettings == null) {
-      return updatedSettings == existingSettings;
+    boolean inputIsEmpty = updatedSettings == null || updatedSettings.isEmpty();
+    boolean existingIsEmpty = existingSettings == null || existingSettings.isEmpty();
+    if (inputIsEmpty && existingIsEmpty) {
+      return true;
+    }
+    if (inputIsEmpty != existingIsEmpty) {
+      return false;
     }
     return Sets.newHashSet(updatedSettings).equals(Sets.newHashSet(existingSettings));
   }

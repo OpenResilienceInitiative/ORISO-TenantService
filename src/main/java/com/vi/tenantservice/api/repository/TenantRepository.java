@@ -19,7 +19,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "WHERE"
               + "  id != 0L "
               + "  AND ( ?1 = '*' "
-              + "  OR t.id LIKE CONCAT('%', UPPER(?1), '%') "
+              + "  OR cast(t.id as string) LIKE CONCAT('%', UPPER(?1), '%') "
               + "  OR UPPER(t.name) LIKE CONCAT('%', UPPER(?1), '%')"
               + "  )")
   Page<TenantBase> findAllExceptTechnicalByInfix(String infix, Pageable pageable);

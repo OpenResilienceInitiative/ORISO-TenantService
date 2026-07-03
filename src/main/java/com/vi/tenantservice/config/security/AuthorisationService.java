@@ -68,7 +68,7 @@ public class AuthorisationService {
           new Base32().decode(username.substring(4).toUpperCase().replace(".", "=")),
           StandardCharsets.UTF_8);
     } catch (IllegalArgumentException e) {
-      throw new AccessDeniedException("Invalid encoded username: " + username, e);
+      throw new AccessDeniedException("Invalid encoded username claim in JWT token", e);
     }
   }
 
