@@ -14,8 +14,6 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
-import org.springframework.boot.autoconfigure.web.client.RestTemplateAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
@@ -23,7 +21,6 @@ import org.springframework.web.client.RestTemplate;
 @SpringBootTest(
     classes = RestTemplateConfig.class,
     webEnvironment = SpringBootTest.WebEnvironment.NONE)
-@ImportAutoConfiguration(RestTemplateAutoConfiguration.class)
 class RestTemplateConfigIT {
 
   private static WireMockServer wireMockServer;
