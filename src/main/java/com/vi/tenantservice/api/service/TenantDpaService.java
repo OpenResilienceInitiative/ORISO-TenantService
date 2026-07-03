@@ -38,6 +38,31 @@ public class TenantDpaService {
       String signerPosition,
       boolean signerIsMember,
       String language) {
+    return recordSignature(
+        tenantId,
+        dpaVersion,
+        signerName,
+        signerPosition,
+        null,
+        null,
+        null,
+        null,
+        signerIsMember,
+        language);
+  }
+
+  /** Persists a SIGNED confirmation of the given DPA version for a tenant. */
+  public TenantDpaSignatureEntity recordSignature(
+      Long tenantId,
+      LocalDateTime dpaVersion,
+      String signerName,
+      String signerPosition,
+      String signerEmail,
+      String signerOrganisation,
+      String forwardedByUserId,
+      String source,
+      boolean signerIsMember,
+      String language) {
     var now = LocalDateTime.now();
     return signatureRepository.save(
         TenantDpaSignatureEntity.builder()
@@ -45,6 +70,10 @@ public class TenantDpaService {
             .dpaVersion(dpaVersion)
             .signerName(signerName)
             .signerPosition(signerPosition)
+            .signerEmail(signerEmail)
+            .signerOrganisation(signerOrganisation)
+            .forwardedByUserId(forwardedByUserId)
+            .source(normalizeSource(source))
             .signerIsMember(signerIsMember)
             .language(language)
             .status(DpaSignatureStatus.SIGNED)
@@ -113,6 +142,10 @@ public class TenantDpaService {
       String rawToken,
       String signerName,
       String signerPosition,
+      String signerEmail,
+      String signerOrganisation,
+      String forwardedByUserId,
+      String source,
       boolean signerIsMember,
       String language) {
     if (rawToken == null || rawToken.isBlank()) {
@@ -133,7 +166,16 @@ public class TenantDpaService {
     // produces exactly one winner (1 row) and the rest see 0.
     int consumed =
         signatureRepository.consumeSignToken(
-            tokenHash, signerName, signerPosition, signerIsMember, language, now);
+            tokenHash,
+            signerName,
+            signerPosition,
+            signerEmail,
+            signerOrganisation,
+            forwardedByUserId,
+            normalizeSource(source),
+            signerIsMember,
+            language,
+            now);
     if (consumed == 0) {
       throw new InvalidDpaSignTokenException("Sign token has already been used");
     }
@@ -141,11 +183,19 @@ public class TenantDpaService {
     // return.
     pending.setSignerName(signerName);
     pending.setSignerPosition(signerPosition);
+    pending.setSignerEmail(signerEmail);
+    pending.setSignerOrganisation(signerOrganisation);
+    pending.setForwardedByUserId(forwardedByUserId);
+    pending.setSource(normalizeSource(source));
     pending.setSignerIsMember(signerIsMember);
     pending.setLanguage(language);
     pending.setStatus(DpaSignatureStatus.SIGNED);
     pending.setSignedAt(now);
     pending.setTokenHash(null);
     return pending;
+  }
+
+  private static String normalizeSource(String source) {
+    return source == null || source.isBlank() ? "PUBLIC_SIGN_LINK" : source;
   }
 }

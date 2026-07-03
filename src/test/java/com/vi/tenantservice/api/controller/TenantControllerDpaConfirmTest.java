@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
@@ -45,7 +46,12 @@ class TenantControllerDpaConfirmTest {
         new DpaSignatureRequestDTO()
             .signerName("Erika M")
             .signerPosition("Geschäftsführerin")
+            .signerEmail("erika@example.org")
+            .signerOrganisation("Caritas Beispiel")
+            .forwardedByUserId("tenant-admin-1")
+            .source("PUBLIC_SIGN_LINK")
             .signerIsMember(false)
+            .accepted(true)
             .language("de");
     var signedAt = LocalDateTime.now();
     var entity =
@@ -53,9 +59,20 @@ class TenantControllerDpaConfirmTest {
             .tenantId(7L)
             .status(DpaSignatureStatus.SIGNED)
             .signerName("Erika M")
+            .signerEmail("erika@example.org")
+            .signerOrganisation("Caritas Beispiel")
             .signedAt(signedAt)
             .build();
-    when(tenantDpaService.confirmSignature("tok", "Erika M", "Geschäftsführerin", false, "de"))
+    when(tenantDpaService.confirmSignature(
+            "tok",
+            "Erika M",
+            "Geschäftsführerin",
+            "erika@example.org",
+            "Caritas Beispiel",
+            "tenant-admin-1",
+            "PUBLIC_SIGN_LINK",
+            false,
+            "de"))
         .thenReturn(entity);
 
     // when
@@ -67,6 +84,27 @@ class TenantControllerDpaConfirmTest {
     assertThat(response.getBody().getTenantId()).isEqualTo(7L);
     assertThat(response.getBody().getStatus()).isEqualTo("SIGNED");
     assertThat(response.getBody().getSignerName()).isEqualTo("Erika M");
+    assertThat(response.getBody().getSignerEmail()).isEqualTo("erika@example.org");
+    assertThat(response.getBody().getSignerOrganisation()).isEqualTo("Caritas Beispiel");
+  }
+
+  @Test
+  void confirmDataProcessingAgreement_Should_rejectMissingAcceptConfirmation() {
+    // given
+    var request =
+        new DpaSignatureRequestDTO()
+            .signerName("Erika M")
+            .signerPosition("Geschäftsführerin")
+            .signerEmail("erika@example.org")
+            .signerOrganisation("Caritas Beispiel")
+            .language("de");
+
+    // when
+    var response = controller.confirmDataProcessingAgreement("tok", request);
+
+    // then
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    verifyNoInteractions(tenantDpaService);
   }
 
   @Test

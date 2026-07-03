@@ -146,6 +146,11 @@ public class TenantDpaFacade {
         .tenantId(entity.getTenantId())
         .status(entity.getStatus() == null ? null : entity.getStatus().name())
         .signerName(entity.getSignerName())
+        .signerPosition(entity.getSignerPosition())
+        .signerEmail(entity.getSignerEmail())
+        .signerOrganisation(entity.getSignerOrganisation())
+        .forwardedByUserId(entity.getForwardedByUserId())
+        .source(entity.getSource())
         .signedAt(entity.getSignedAt() == null ? null : entity.getSignedAt().toString());
   }
 }
