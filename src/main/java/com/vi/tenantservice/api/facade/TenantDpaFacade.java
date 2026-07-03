@@ -11,6 +11,7 @@ import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.util.JsonConverter;
+import com.vi.tenantservice.api.util.TranslationMetaUtil;
 import com.vi.tenantservice.api.validation.InputSanitizer;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -18,6 +19,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -99,6 +101,13 @@ public class TenantDpaFacade {
    * stores it as the multilingual JSON content, and stamps a fresh activation date (= new contract
    * version). Returns the resulting gate status (published; signed is false until the new version
    * is confirmed).
+   *
+   * <p>Machine-translation metadata convention (see documentation/translation-meta.md): the map may
+   * carry parallel {@code <lang>__meta} keys marking a language as machine translated. Meta values
+   * are NOT html-sanitized but validated as strict JSON with only the known fields ({@code mt},
+   * {@code src}, {@code at}) and stored alongside the content. When the HTML of a language is
+   * changed while its previously stored {@code mt:true} meta is merely resent unchanged, that meta
+   * is removed - a manual edit clears the machine-translated tag.
    */
   @Transactional
   public DpaGateStatusDTO publishDpa(Long tenantId, Map<String, String> contentByLanguage) {
@@ -108,12 +117,29 @@ public class TenantDpaFacade {
             .findTenantById(tenantId)
             .orElseThrow(
                 () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
+    var previous = JsonConverter.convertMapFromJson(tenant.getContentDataProcessingAgreement());
     var sanitized = new LinkedHashMap<String, String>();
+    var metaByLanguage = new LinkedHashMap<String, String>();
     if (contentByLanguage != null) {
       contentByLanguage.forEach(
-          (lang, html) ->
-              sanitized.put(lang, inputSanitizer.sanitizeAllowingFormattingAndLinks(html)));
+          (key, value) -> {
+            if (TranslationMetaUtil.isMetaKey(key)) {
+              if (!TranslationMetaUtil.isValidMeta(value)) {
+                throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Invalid translation metadata for key: " + key);
+              }
+              metaByLanguage.put(TranslationMetaUtil.languageOf(key), value);
+            } else {
+              sanitized.put(key, inputSanitizer.sanitizeAllowingFormattingAndLinks(value));
+            }
+          });
     }
+    metaByLanguage.forEach(
+        (lang, meta) -> {
+          if (shouldKeepMeta(lang, meta, sanitized, previous)) {
+            sanitized.put(TranslationMetaUtil.metaKeyFor(lang), meta);
+          }
+        });
     // Truncate to seconds so the in-memory version key matches the MariaDB DATETIME(0) column
     // after a round-trip — otherwise the signature gate (equals on dpa_version) could never match.
     var version = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
@@ -124,6 +150,28 @@ public class TenantDpaFacade {
     tenantDpaService.recordPublishedVersion(tenantId, json, version);
     boolean signed = tenantDpaService.isSignedForVersion(tenantId, version);
     return new DpaGateStatusDTO().dpaPublished(true).dpaSigned(signed);
+  }
+
+  /**
+   * Decides whether a submitted {@code <lang>__meta} entry is stored. A meta without content for
+   * its language is dropped (orphan). If the language's HTML is unchanged, the meta is kept
+   * (republish). If the HTML changed but the submitted meta equals the previously stored one, the
+   * meta is a stale round-trip of an {@code mt:true} tag over a manual edit - it is removed
+   * (Frank's rule: a manual edit clears the machine-translated tag). A changed/new meta together
+   * with changed content is a fresh machine translation and is stored.
+   */
+  private boolean shouldKeepMeta(
+      String lang, String meta, Map<String, String> sanitized, Map<String, String> previous) {
+    if (!sanitized.containsKey(lang)) {
+      return false;
+    }
+    var newHtml = sanitized.get(lang);
+    var previousHtml = previous.get(lang);
+    if (Objects.equals(newHtml, previousHtml)) {
+      return true;
+    }
+    var previousMeta = previous.get(TranslationMetaUtil.metaKeyFor(lang));
+    return !Objects.equals(meta, previousMeta);
   }
 
   /** The tenant's published DPA versions (newest first) for the read-only "look back" viewer. */

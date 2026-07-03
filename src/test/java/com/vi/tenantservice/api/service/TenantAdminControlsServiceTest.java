@@ -106,4 +106,75 @@ class TenantAdminControlsServiceTest {
     verify(tenantAdminControlsRepository).save(captor.capture());
     assertThat(captor.getValue().getControls()).contains("groupChat");
   }
+
+  // --- machine-translation provider API keys (stored in the same controls JSON blob) ---
+
+  private void givenStoredControlsJson(String controlsJson) {
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc())
+        .thenReturn(
+            Optional.of(TenantAdminControlsEntity.builder().id(1L).controls(controlsJson).build()));
+  }
+
+  private String capturedSavedControls() {
+    ArgumentCaptor<TenantAdminControlsEntity> captor =
+        ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
+    verify(tenantAdminControlsRepository).save(captor.capture());
+    return captor.getValue().getControls();
+  }
+
+  @Test
+  void getTranslationApiKeys_Should_returnEmptyMap_When_noKeysStored() {
+    givenStoredControlsJson("{\"permissionsPageEnabled\":true}");
+
+    assertThat(tenantAdminControlsService.getTranslationApiKeys()).isEmpty();
+  }
+
+  @Test
+  void getTranslationApiKeys_Should_returnStoredKeys() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"translationApiKeys\":{\"openrouter\":\"sk-or-key\",\"mistral\":\"mi-key\"}}");
+
+    assertThat(tenantAdminControlsService.getTranslationApiKeys())
+        .containsEntry("openrouter", "sk-or-key")
+        .containsEntry("mistral", "mi-key");
+  }
+
+  @Test
+  void setTranslationApiKey_Should_persistKeyInControlsJson() {
+    givenStoredControlsJson("{\"permissionsPageEnabled\":true}");
+
+    tenantAdminControlsService.setTranslationApiKey("openrouter", "sk-or-new-key");
+
+    assertThat(capturedSavedControls())
+        .contains("\"openrouter\":\"sk-or-new-key\"")
+        .contains("\"permissionsPageEnabled\":true");
+  }
+
+  @Test
+  void setTranslationApiKey_Should_keepOtherProviderKey() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,\"translationApiKeys\":{\"mistral\":\"mi-key\"}}");
+
+    tenantAdminControlsService.setTranslationApiKey("openrouter", "sk-or-new-key");
+
+    assertThat(capturedSavedControls())
+        .contains("\"mistral\":\"mi-key\"")
+        .contains("\"openrouter\":\"sk-or-new-key\"");
+  }
+
+  @Test
+  void updateControls_Should_preserveStoredTranslationApiKeys() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,\"translationApiKeys\":{\"openrouter\":\"sk-or-key\"}}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    assertThat(capturedSavedControls()).contains("\"openrouter\":\"sk-or-key\"");
+  }
 }

@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.controller;
 
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
+import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.DpaGateStatusDTO;
@@ -14,9 +15,16 @@ import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
+import com.vi.tenantservice.api.model.TranslationApiKeyUpdateDTO;
+import com.vi.tenantservice.api.model.TranslationApiKeysDTO;
+import com.vi.tenantservice.api.model.TranslationErrorDTO;
+import com.vi.tenantservice.api.model.TranslationRequestDTO;
+import com.vi.tenantservice.api.model.TranslationResponseDTO;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
 import com.vi.tenantservice.api.service.TenantDpaService;
+import com.vi.tenantservice.api.service.translation.TranslationErrorCode;
+import com.vi.tenantservice.api.service.translation.TranslationException;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.generated.api.controller.TenantApi;
 import com.vi.tenantservice.generated.api.controller.TenantadminApi;
@@ -57,6 +65,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   private final @NonNull TenantDtoMapper tenantDtoMapper;
   private final @NonNull TenantDpaService tenantDpaService;
   private final @NonNull TenantDpaFacade tenantDpaFacade;
+  private final @NonNull TranslationFacade translationFacade;
 
   /**
    * Public DPA confirmation via a single-use sign token. No authentication: the token is the
@@ -169,6 +178,46 @@ public class TenantController implements TenantApi, TenantadminApi {
       @Valid TenantAdminControls tenantAdminControls) {
     return new ResponseEntity<>(
         tenantServiceFacade.updateTenantAdminControls(tenantAdminControls), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<TranslationApiKeysDTO> getTranslationApiKeys() {
+    return new ResponseEntity<>(translationFacade.getMaskedApiKeys(), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<TranslationApiKeysDTO> setTranslationApiKey(
+      String provider, TranslationApiKeyUpdateDTO translationApiKeyUpdateDTO) {
+    log.info(
+        "Updating translation API key for provider {} by user {}",
+        provider,
+        authorisationService.getUsername());
+    return new ResponseEntity<>(
+        translationFacade.setApiKey(provider, translationApiKeyUpdateDTO), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<TranslationResponseDTO> translate(
+      TranslationRequestDTO translationRequestDTO) {
+    return new ResponseEntity<>(translationFacade.translate(translationRequestDTO), HttpStatus.OK);
+  }
+
+  @ExceptionHandler(TranslationException.class)
+  ResponseEntity<TranslationErrorDTO> handleTranslationException(TranslationException e) {
+    log.warn("Machine translation failed: {} ({})", e.getErrorCode(), e.getMessage());
+    var status =
+        e.getErrorCode() == TranslationErrorCode.TRANSLATION_NOT_CONFIGURED
+            ? HttpStatus.CONFLICT
+            : HttpStatus.BAD_GATEWAY;
+    var body =
+        new TranslationErrorDTO()
+            .errorCode(e.getErrorCode().name())
+            .provider(e.getProvider())
+            .message(e.getMessage());
+    return new ResponseEntity<>(body, status);
   }
 
   @Override
