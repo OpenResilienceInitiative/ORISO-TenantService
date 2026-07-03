@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.facade;
 
 import static com.vi.tenantservice.api.authorisation.UserRole.SINGLE_TENANT_ADMIN;
 import static com.vi.tenantservice.api.authorisation.UserRole.TENANT_ADMIN;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -67,6 +68,23 @@ class TenantFacadeAuthorisationServiceTest {
           // when
           tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(ID);
         });
+  }
+
+  @Test
+  void canAccessTenant_Should_ReturnFalse_When_TenantIdCannotBeReadFromAccessToken() {
+    // given
+    when(authorisationService.findTenantIdInAccessToken())
+        .thenThrow(new AccessDeniedException("tenantId attribute not found in the access token"));
+    when(authorisationService.getUsername())
+        .thenThrow(new AccessDeniedException("Invalid encoded username claim in JWT token"));
+
+    // when
+    boolean canAccessTenant =
+        tenantFacadeAuthorisationService.canAccessTenant(
+            Optional.of(TenantEntity.builder().id(ID).build()));
+
+    // then
+    assertThat(canAccessTenant).isFalse();
   }
 
   @Test
