@@ -48,6 +48,9 @@ class TenantDpaFacadeTest {
                     .tenantId(5L)
                     .status(DpaSignatureStatus.SIGNED)
                     .signerName("Erika")
+                    .signerEmail("erika@example.org")
+                    .signerOrganisation("Caritas Beispiel")
+                    .source("PUBLIC_SIGN_LINK")
                     .signedAt(LocalDateTime.now())
                     .build()));
 
@@ -59,6 +62,9 @@ class TenantDpaFacadeTest {
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getStatus()).isEqualTo("SIGNED");
     assertThat(result.get(0).getSignerName()).isEqualTo("Erika");
+    assertThat(result.get(0).getSignerEmail()).isEqualTo("erika@example.org");
+    assertThat(result.get(0).getSignerOrganisation()).isEqualTo("Caritas Beispiel");
+    assertThat(result.get(0).getSource()).isEqualTo("PUBLIC_SIGN_LINK");
   }
 
   @Test

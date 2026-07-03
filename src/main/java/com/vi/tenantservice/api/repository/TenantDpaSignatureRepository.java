@@ -34,6 +34,8 @@ public interface TenantDpaSignatureRepository
       "update TenantDpaSignatureEntity s set "
           + "s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.SIGNED, "
           + "s.signerName = :signerName, s.signerPosition = :signerPosition, "
+          + "s.signerEmail = :signerEmail, s.signerOrganisation = :signerOrganisation, "
+          + "s.forwardedByUserId = :forwardedByUserId, s.source = :source, "
           + "s.signerIsMember = :signerIsMember, s.language = :language, "
           + "s.signedAt = :now, s.tokenHash = null "
           + "where s.tokenHash = :tokenHash "
@@ -42,6 +44,10 @@ public interface TenantDpaSignatureRepository
       @Param("tokenHash") String tokenHash,
       @Param("signerName") String signerName,
       @Param("signerPosition") String signerPosition,
+      @Param("signerEmail") String signerEmail,
+      @Param("signerOrganisation") String signerOrganisation,
+      @Param("forwardedByUserId") String forwardedByUserId,
+      @Param("source") String source,
       @Param("signerIsMember") Boolean signerIsMember,
       @Param("language") String language,
       @Param("now") LocalDateTime now);

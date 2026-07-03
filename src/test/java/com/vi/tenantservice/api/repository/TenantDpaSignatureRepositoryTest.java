@@ -138,9 +138,31 @@ class TenantDpaSignatureRepositoryTest {
                 .build());
 
     // when the first consume wins
-    int first = signatureRepository.consumeSignToken("HASH", "Erika", "GF", false, "de", now);
+    int first =
+        signatureRepository.consumeSignToken(
+            "HASH",
+            "Erika",
+            "GF",
+            "e@example.org",
+            "Caritas",
+            "admin-1",
+            "PUBLIC_SIGN_LINK",
+            false,
+            "de",
+            now);
     // and a second consume of the same token affects nothing (single-use)
-    int second = signatureRepository.consumeSignToken("HASH", "Mallory", "X", true, "en", now);
+    int second =
+        signatureRepository.consumeSignToken(
+            "HASH",
+            "Mallory",
+            "X",
+            "m@example.org",
+            "Bad Org",
+            "admin-2",
+            "PUBLIC_SIGN_LINK",
+            true,
+            "en",
+            now);
     signatureRepository.flush();
 
     // then
@@ -149,6 +171,10 @@ class TenantDpaSignatureRepositoryTest {
     var reloaded = signatureRepository.findById(pending.getId()).orElseThrow();
     assertThat(reloaded.getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
     assertThat(reloaded.getSignerName()).isEqualTo("Erika"); // not overwritten by the 2nd attempt
+    assertThat(reloaded.getSignerEmail()).isEqualTo("e@example.org");
+    assertThat(reloaded.getSignerOrganisation()).isEqualTo("Caritas");
+    assertThat(reloaded.getForwardedByUserId()).isEqualTo("admin-1");
+    assertThat(reloaded.getSource()).isEqualTo("PUBLIC_SIGN_LINK");
     assertThat(reloaded.getTokenHash()).isNull();
     assertThat(signatureRepository.findByTokenHashAndStatus("HASH", DpaSignatureStatus.PENDING))
         .isEmpty();

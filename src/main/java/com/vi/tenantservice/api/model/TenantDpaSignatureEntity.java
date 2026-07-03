@@ -60,6 +60,18 @@ public class TenantDpaSignatureEntity {
   @Column(name = "signer_position")
   private String signerPosition;
 
+  @Column(name = "signer_email")
+  private String signerEmail;
+
+  @Column(name = "signer_organisation")
+  private String signerOrganisation;
+
+  @Column(name = "forwarded_by_user_id")
+  private String forwardedByUserId;
+
+  @Column(name = "source")
+  private String source;
+
   /**
    * Whether the signer is a platform member. {@code false} = an external person (e.g. a CEO) who
    * confirmed via a forwarded link without holding a platform account.

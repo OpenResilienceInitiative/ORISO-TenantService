@@ -159,6 +159,10 @@ class TenantDpaServiceTest {
             eq(DpaSignToken.hash(rawToken)),
             eq("Erika M"),
             eq("Geschäftsführerin"),
+            eq("erika@example.org"),
+            eq("Caritas Beispiel"),
+            eq("tenant-admin-1"),
+            eq("PUBLIC_SIGN_LINK"),
             eq(false),
             eq("de"),
             any(LocalDateTime.class)))
@@ -166,13 +170,36 @@ class TenantDpaServiceTest {
 
     // when
     var result =
-        tenantDpaService.confirmSignature(rawToken, "Erika M", "Geschäftsführerin", false, "de");
+        tenantDpaService.confirmSignature(
+            rawToken,
+            "Erika M",
+            "Geschäftsführerin",
+            "erika@example.org",
+            "Caritas Beispiel",
+            "tenant-admin-1",
+            "PUBLIC_SIGN_LINK",
+            false,
+            "de");
 
     // then
     verify(signatureRepository)
-        .consumeSignToken(any(), any(), any(), any(), any(), any(LocalDateTime.class));
+        .consumeSignToken(
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(LocalDateTime.class));
     assertThat(result.getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
     assertThat(result.getSignerName()).isEqualTo("Erika M");
+    assertThat(result.getSignerEmail()).isEqualTo("erika@example.org");
+    assertThat(result.getSignerOrganisation()).isEqualTo("Caritas Beispiel");
+    assertThat(result.getForwardedByUserId()).isEqualTo("tenant-admin-1");
+    assertThat(result.getSource()).isEqualTo("PUBLIC_SIGN_LINK");
     assertThat(result.getSignedAt()).isNotNull();
     assertThat(result.getTokenHash()).isNull(); // consumed -> single use
   }
@@ -180,7 +207,10 @@ class TenantDpaServiceTest {
   @Test
   void confirmSignature_Should_throw_When_tokenNullOrBlank() {
     // when / then
-    assertThatThrownBy(() -> tenantDpaService.confirmSignature(" ", "n", "p", false, "de"))
+    assertThatThrownBy(
+            () ->
+                tenantDpaService.confirmSignature(
+                    " ", "n", "p", null, null, null, null, false, "de"))
         .isInstanceOf(InvalidDpaSignTokenException.class);
     verifyNoInteractions(signatureRepository);
   }
@@ -198,11 +228,15 @@ class TenantDpaServiceTest {
     when(signatureRepository.findByTokenHashAndStatus(
             DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
         .thenReturn(Optional.of(pending));
-    when(signatureRepository.consumeSignToken(any(), any(), any(), any(), any(), any()))
+    when(signatureRepository.consumeSignToken(
+            any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(0);
 
     // when / then
-    assertThatThrownBy(() -> tenantDpaService.confirmSignature(rawToken, "n", "p", false, "de"))
+    assertThatThrownBy(
+            () ->
+                tenantDpaService.confirmSignature(
+                    rawToken, "n", "p", null, null, null, null, false, "de"))
         .isInstanceOf(InvalidDpaSignTokenException.class);
   }
 
@@ -212,7 +246,10 @@ class TenantDpaServiceTest {
     when(signatureRepository.findByTokenHashAndStatus(any(), any())).thenReturn(Optional.empty());
 
     // when / then
-    assertThatThrownBy(() -> tenantDpaService.confirmSignature("bad", "n", "p", false, "de"))
+    assertThatThrownBy(
+            () ->
+                tenantDpaService.confirmSignature(
+                    "bad", "n", "p", null, null, null, null, false, "de"))
         .isInstanceOf(InvalidDpaSignTokenException.class);
   }
 
@@ -231,7 +268,10 @@ class TenantDpaServiceTest {
         .thenReturn(Optional.of(pending));
 
     // when / then
-    assertThatThrownBy(() -> tenantDpaService.confirmSignature(rawToken, "n", "p", false, "de"))
+    assertThatThrownBy(
+            () ->
+                tenantDpaService.confirmSignature(
+                    rawToken, "n", "p", null, null, null, null, false, "de"))
         .isInstanceOf(InvalidDpaSignTokenException.class);
   }
 
