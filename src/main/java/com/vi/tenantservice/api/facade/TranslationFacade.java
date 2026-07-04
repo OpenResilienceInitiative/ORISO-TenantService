@@ -14,10 +14,10 @@ import com.vi.tenantservice.api.service.translation.TranslationProviderClient;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
@@ -31,12 +31,26 @@ import org.springframework.web.server.ResponseStatusException;
  * Translation itself is available to tenant admins with the update authority.
  */
 @Service
-@RequiredArgsConstructor
 public class TranslationFacade {
 
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
-  private final @NonNull List<TranslationProviderClient> translationProviderClients;
+  private final Map<String, TranslationProviderClient> clientsById;
+
+  public TranslationFacade(
+      @NonNull TenantAdminControlsService tenantAdminControlsService,
+      @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService,
+      @NonNull List<TranslationProviderClient> translationProviderClients) {
+    this.tenantAdminControlsService = tenantAdminControlsService;
+    this.tenantFacadeAuthorisationService = tenantFacadeAuthorisationService;
+    this.clientsById =
+        translationProviderClients.stream()
+            .collect(
+                Collectors.toMap(TranslationProviderClient::getProviderId, Function.identity()));
+  }
+
+  /** A provider client together with the API key it was validated against (single read). */
+  private record ResolvedProvider(TranslationProviderClient client, String apiKey) {}
 
   /** Masked provider API keys (super admin only). */
   public TranslationApiKeysDTO getMaskedApiKeys() {
@@ -65,8 +79,9 @@ public class TranslationFacade {
    * @throws TranslationException typed provider errors, see {@link TranslationErrorCode}
    */
   public TranslationResponseDTO translate(TranslationRequestDTO request) {
-    var client = resolveProvider(request.getProvider());
-    var apiKey = tenantAdminControlsService.getTranslationApiKeys().get(client.getProviderId());
+    var resolved = resolveProvider(request.getProvider());
+    var client = resolved.client();
+    var apiKey = resolved.apiKey();
 
     var translations = new LinkedHashMap<String, Map<String, String>>();
     for (String targetLang : request.getTargetLangs()) {
@@ -86,7 +101,7 @@ public class TranslationFacade {
         .model(client.getModel());
   }
 
-  private TranslationProviderClient resolveProvider(String requestedProvider) {
+  private ResolvedProvider resolveProvider(String requestedProvider) {
     var apiKeys = tenantAdminControlsService.getTranslationApiKeys();
     if (StringUtils.isNotBlank(requestedProvider)) {
       var client =
@@ -96,18 +111,21 @@ public class TranslationFacade {
                       new ResponseStatusException(
                           HttpStatus.BAD_REQUEST,
                           "Unknown translation provider: " + requestedProvider));
-      if (StringUtils.isBlank(apiKeys.get(client.getProviderId()))) {
+      var apiKey = apiKeys.get(client.getProviderId());
+      if (StringUtils.isBlank(apiKey)) {
         throw new TranslationException(
             TranslationErrorCode.TRANSLATION_NOT_CONFIGURED,
             client.getProviderId(),
             "No API key configured for provider " + client.getProviderId());
       }
-      return client;
+      return new ResolvedProvider(client, apiKey);
     }
     // default order: openrouter if its key is set, else mistral
     for (String providerId : List.of(OpenRouterClient.PROVIDER_ID, MistralClient.PROVIDER_ID)) {
-      if (StringUtils.isNotBlank(apiKeys.get(providerId)) && clientFor(providerId).isPresent()) {
-        return clientFor(providerId).get();
+      var client = clientsById.get(providerId);
+      var apiKey = apiKeys.get(providerId);
+      if (client != null && StringUtils.isNotBlank(apiKey)) {
+        return new ResolvedProvider(client, apiKey);
       }
     }
     throw new TranslationException(
@@ -116,15 +134,8 @@ public class TranslationFacade {
         "No translation provider API key configured");
   }
 
-  private java.util.Optional<TranslationProviderClient> clientFor(String providerId) {
-    return clientsById().containsKey(providerId)
-        ? java.util.Optional.of(clientsById().get(providerId))
-        : java.util.Optional.empty();
-  }
-
-  private Map<String, TranslationProviderClient> clientsById() {
-    return translationProviderClients.stream()
-        .collect(Collectors.toMap(TranslationProviderClient::getProviderId, Function.identity()));
+  private Optional<TranslationProviderClient> clientFor(String providerId) {
+    return Optional.ofNullable(clientsById.get(providerId));
   }
 
   private TranslationApiKeysDTO maskedKeys() {
