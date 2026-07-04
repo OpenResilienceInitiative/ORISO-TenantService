@@ -500,6 +500,11 @@ public class TenantConverter {
     DataProtectionContactTemplateDTO dataProtectionContactTemplate =
         getDataProtectionContactTemplate(lang);
     return new Content(getTranslatedStringFromMap(tenant.getContentImpressum(), lang))
+        // Raw stored language maps (incl. the <lang>__meta machine-translation metadata keys)
+        // alongside the resolved strings, so public clients can show a "machine translated"
+        // notice. Kept lean on purpose: only for the legal contents impressum and privacy.
+        .impressumLanguages(convertMapFromJson(tenant.getContentImpressum()))
+        .privacyLanguages(convertMapFromJson(tenant.getContentPrivacy()))
         .claim(getTranslatedStringFromMap(tenant.getContentClaim(), lang))
         .privacy(privacyPotentiallyWithPlaceholders)
         .termsAndConditions(getTranslatedStringFromMap(tenant.getContentTermsAndConditions(), lang))
