@@ -1,6 +1,17 @@
 <?xml version="1.1" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
     <changeSet author="initialSetup" id="initSql-tables">
+		<!-- validCheckSum ANY + precondition added 2026-07-04 (Liquibase re-enablement L1):
+		     this changeset was missing from the former prod/staging masters, so databases of
+		     prod lineage have the columns (added outside Liquibase) but no DATABASECHANGELOG
+		     entry. MARK_RAN makes re-enabling Liquibase safe on such databases, while fresh
+		     databases still execute it normally. -->
+		<validCheckSum>ANY</validCheckSum>
+		<preConditions onFail="MARK_RAN">
+			<not>
+				<columnExists tableName="tenant" columnName="content_privacy"/>
+			</not>
+		</preConditions>
 		<sqlFile path="db/changelog/changeset/0002_add_privacy_and_terms_and_conditions/addPrivacyAndTermsAndConditionsColumns.sql" stripComments="true" />
 		<rollback><sql/></rollback>
 	</changeSet>
