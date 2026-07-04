@@ -18,3 +18,20 @@ jobs:
       uses: ./.github/actions/maven-build
       with:
         java_version: '21'
+
+  # Non-blocking burn-in (Test Quality Audit 2026-07-04, item 3 + CI Roadmap Part 1).
+  # Runs `mvnw -B verify` so the integration-test phase (46 *IT tests) runs on
+  # feature branches too. continue-on-error keeps it non-blocking during burn-in.
+  integration-tests:
+    name: integration-tests (non-blocking, burn-in)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Run integration tests (verify)
+      uses: ./.github/actions/maven-verify-burnin
+      with:
+        java_version: '21'

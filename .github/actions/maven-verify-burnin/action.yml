@@ -1,0 +1,92 @@
+name: Reusable Maven integration-test burn-in
+
+# Burn-in action (Test Quality Audit 2026-07-04, item 3 + CI Roadmap Part 1).
+# Runs the full `verify` lifecycle so the surefire `integration-tests` execution
+# (bound to the integration-test phase, includes **/*IT.*) actually runs. These
+# integration tests have never run in CI before, so this action is wired into a
+# NON-BLOCKING (continue-on-error) job. It must NOT be a required check until the
+# ITs are green. `mvnw` is run with `-fae` so IT failures are visible in the job
+# summary and reports without aborting the report-collection step below.
+
+inputs:
+  java_version:
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Set up JDK and Maven
+    uses: actions/setup-java@v5
+    with:
+      java-version: ${{ inputs.java_version }}
+      distribution: 'temurin'
+      cache: maven
+
+  - name: Run Maven verify (unit + integration tests, burn-in)
+    shell: bash
+    # -fae (fail-at-end) lets every module/execution run so the report set is
+    # complete; the actual pass/fail signal comes from the report gate below,
+    # which this burn-in job tolerates (continue-on-error at the job level).
+    run: ./mvnw -B -fae verify
+
+  - name: Assert test reports were produced (zero-report guard)
+    if: ${{ always() }}
+    shell: bash
+    # Guards against a future silent-skip: a green build that produced ZERO test
+    # reports must be treated as a failure, not a pass. Surefire writes both the
+    # unit (**/*Test) and integration (**/*IT) executions into surefire-reports;
+    # failsafe-reports is globbed too in case a module adopts failsafe later.
+    run: |
+      shopt -s nullglob globstar
+      reports=( **/target/surefire-reports/TEST-*.xml **/target/failsafe-reports/TEST-*.xml )
+      count=${#reports[@]}
+      echo "Found ${count} test report file(s)."
+      if [ "${count}" -eq 0 ]; then
+        echo "::error::Zero test reports were produced — tests were silently skipped or never ran."
+        exit 1
+      fi
+
+  - name: Summarise integration-test results (burn-in)
+    if: ${{ always() }}
+    shell: bash
+    run: |
+      python3 - <<'PY'
+      from pathlib import Path
+      import xml.etree.ElementTree as ET
+
+      total_tests = total_failures = total_errors = total_skipped = 0
+      failing = []
+      for report in Path(".").glob("**/target/surefire-reports/TEST-*.xml"):
+          try:
+              root = ET.parse(report).getroot()
+          except ET.ParseError:
+              continue
+          tests = int(root.attrib.get("tests", 0))
+          failures = int(root.attrib.get("failures", 0))
+          errors = int(root.attrib.get("errors", 0))
+          skipped = int(root.attrib.get("skipped", 0))
+          total_tests += tests
+          total_failures += failures
+          total_errors += errors
+          total_skipped += skipped
+          if failures or errors:
+              failing.append((report, failures, errors))
+
+      print(f"Integration-test burn-in: tests={total_tests} "
+            f"failures={total_failures} errors={total_errors} skipped={total_skipped}")
+      if failing:
+          print("Reports with failures/errors (expected during burn-in):")
+          for report, failures, errors in sorted(failing):
+              print(f"- {report}: failures={failures}, errors={errors}")
+      PY
+
+  - name: Upload test reports
+    if: ${{ always() }}
+    uses: actions/upload-artifact@v4
+    with:
+      name: integration-test-reports-${{ inputs.java_version }}
+      path: |
+        **/target/surefire-reports/*.xml
+        **/target/failsafe-reports/*.xml
+      if-no-files-found: warn
+      retention-days: 7

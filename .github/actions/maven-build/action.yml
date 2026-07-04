@@ -1,9 +1,8 @@
-name: Reusable Maven Build steps
+name: Reusable Maven validation and build steps
 
 inputs:
-  java_version: 
+  java_version:
     required: true
-    type: string
 
 runs:
   using: 'composite'
@@ -14,11 +13,35 @@ runs:
       java-version: ${{ inputs.java_version }}
       distribution: 'temurin'
       cache: maven
-      
-  - name: Build with Maven Wrapper
-    shell: bash
-    run: ./mvnw -B package
 
-  # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
-  #- name: Update dependency graph
-  #  uses: advanced-security/maven-dependency-submission-action@571e99aab1055c2e71a1e2309b9691de18d6b7d6
+  # Blocking unit-test gate (Test Quality Audit 2026-07-04, item 3).
+  # Runs the surefire `unit-tests` execution (test phase, **/*Test) and fails the
+  # build if any report shows failures/errors. Previously CI ran only
+  # `mvnw -B package`, which prints BUILD SUCCESS even when tests fail.
+  - name: Run Maven tests
+    shell: bash
+    run: |
+      ./mvnw -B test
+      python3 - <<'PY'
+      from pathlib import Path
+      import sys
+      import xml.etree.ElementTree as ET
+
+      failing_reports = []
+      for report in Path("target/surefire-reports").glob("TEST-*.xml"):
+          root = ET.parse(report).getroot()
+          failures = int(root.attrib.get("failures", 0))
+          errors = int(root.attrib.get("errors", 0))
+          if failures or errors:
+              failing_reports.append((report, failures, errors))
+
+      if failing_reports:
+          print("Maven reported test failures/errors:")
+          for report, failures, errors in failing_reports:
+              print(f"- {report}: failures={failures}, errors={errors}")
+          sys.exit(1)
+      PY
+
+  - name: Package Java application
+    shell: bash
+    run: ./mvnw -B package -DskipTests
