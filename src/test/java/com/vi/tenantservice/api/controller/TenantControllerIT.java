@@ -953,4 +953,60 @@ class TenantControllerIT {
         .andExpect(jsonPath("$[0].beraterCount").exists())
         .andExpect(jsonPath("$[0].adminEmails").doesNotExist());
   }
+
+  // --- machine-translation provider API keys (platform-global, super admin only) ---
+
+  private void givenSuperAdminAccessToken() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+  }
+
+  @Test
+  void translationApiKeys_Should_beStoredViaPut_andOnlyEverReadBackMasked() throws Exception {
+    givenSuperAdminAccessToken();
+    var builder = new AuthenticationMockBuilder();
+
+    mockMvc
+        .perform(
+            put("/tenantadmin/translation/keys/openrouter")
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON)
+                .content("{\"apiKey\":\"sk-or-v1-0123456789abcd\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("openrouter", is("sk-\u2026abcd")));
+
+    mockMvc
+        .perform(
+            get("/tenantadmin/translation/keys")
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("openrouter", is("sk-\u2026abcd")))
+        .andExpect(jsonPath("mistral", is((String) null)));
+  }
+
+  @Test
+  void getTranslationApiKeys_Should_returnForbidden_When_tokenIsNotSuperAdmin() throws Exception {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(1L));
+    var builder = new AuthenticationMockBuilder();
+
+    mockMvc
+        .perform(
+            get("/tenantadmin/translation/keys")
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void setTranslationApiKey_Should_returnForbidden_When_calledWithoutTenantAdminAuthority()
+      throws Exception {
+    mockMvc
+        .perform(
+            put("/tenantadmin/translation/keys/openrouter")
+                .with(
+                    user("not important")
+                        .authorities((GrantedAuthority) SINGLE_TENANT_ADMIN::getValue))
+                .contentType(APPLICATION_JSON)
+                .content("{\"apiKey\":\"sk-or-v1-0123456789abcd\"}"))
+        .andExpect(status().isForbidden());
+  }
 }

@@ -17,6 +17,7 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantService;
+import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.api.validation.InputSanitizer;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -211,5 +212,114 @@ class TenantDpaFacadeTest {
     assertThatThrownBy(() -> tenantDpaFacade.publishDpa(5L, Map.of("de", "x")))
         .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
     verify(tenantDpaService, never()).recordPublishedVersion(any(), any(), any());
+  }
+
+  // --- machine-translation metadata convention (documentation/translation-meta.md) ---
+
+  private static final String META_EN =
+      "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-07-03T10:15:30Z\"}";
+
+  private TenantEntity givenTenantWithStoredDpa(Map<String, String> storedMap) {
+    var tenant = new TenantEntity();
+    if (storedMap != null) {
+      tenant.setContentDataProcessingAgreement(JsonConverter.convertToJson(storedMap));
+    }
+    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(tenant));
+    return tenant;
+  }
+
+  private void givenIdentitySanitizer() {
+    when(inputSanitizer.sanitizeAllowingFormattingAndLinks(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+  }
+
+  private Map<String, String> storedMapOf(TenantEntity tenant) {
+    return JsonConverter.convertMapFromJson(tenant.getContentDataProcessingAgreement());
+  }
+
+  @Test
+  void publishDpa_Should_acceptAndStoreMetaKeys_withoutSanitizingThem() {
+    var tenant = givenTenantWithStoredDpa(null);
+    givenIdentitySanitizer();
+
+    tenantDpaFacade.publishDpa(5L, Map.of("en", "<p>Hello</p>", "en__meta", META_EN));
+
+    var stored = storedMapOf(tenant);
+    assertThat(stored).containsEntry("en", "<p>Hello</p>").containsEntry("en__meta", META_EN);
+    // the sanitizer must never see the meta value
+    verify(inputSanitizer, never()).sanitizeAllowingFormattingAndLinks(META_EN);
+  }
+
+  @Test
+  void publishDpa_Should_rejectInvalidMeta_withBadRequest() {
+    givenTenantWithStoredDpa(null);
+
+    assertThatThrownBy(
+            () ->
+                tenantDpaFacade.publishDpa(
+                    5L, Map.of("en", "<p>x</p>", "en__meta", "{\"mt\":true,\"evil\":\"field\"}")))
+        .isInstanceOfSatisfying(
+            org.springframework.web.server.ResponseStatusException.class,
+            e ->
+                assertThat(e.getStatusCode())
+                    .isEqualTo(org.springframework.http.HttpStatus.BAD_REQUEST));
+    verify(tenantDpaService, never()).recordPublishedVersion(any(), any(), any());
+  }
+
+  @Test
+  void publishDpa_Should_removeMeta_When_manualEditResendsPreviouslyStoredMeta() {
+    // given: "en" is machine translated (mt:true meta stored)
+    var tenant = givenTenantWithStoredDpa(Map.of("en", "<p>machine</p>", "en__meta", META_EN));
+    givenIdentitySanitizer();
+
+    // when: a manual edit changes the HTML but the UI round-trips the old meta unchanged
+    tenantDpaFacade.publishDpa(5L, Map.of("en", "<p>manually edited</p>", "en__meta", META_EN));
+
+    // then: the machine-translated tag is cleared
+    var stored = storedMapOf(tenant);
+    assertThat(stored).containsEntry("en", "<p>manually edited</p>").doesNotContainKey("en__meta");
+  }
+
+  @Test
+  void publishDpa_Should_keepMeta_When_contentUnchangedOnRepublish() {
+    var tenant = givenTenantWithStoredDpa(Map.of("en", "<p>machine</p>", "en__meta", META_EN));
+    givenIdentitySanitizer();
+
+    tenantDpaFacade.publishDpa(5L, Map.of("en", "<p>machine</p>", "en__meta", META_EN));
+
+    assertThat(storedMapOf(tenant)).containsEntry("en__meta", META_EN);
+  }
+
+  @Test
+  void publishDpa_Should_storeNewMeta_When_freshMachineTranslationReplacesContent() {
+    var tenant = givenTenantWithStoredDpa(Map.of("en", "<p>old machine</p>", "en__meta", META_EN));
+    givenIdentitySanitizer();
+    var freshMeta = "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-07-04T08:00:00Z\"}";
+
+    tenantDpaFacade.publishDpa(5L, Map.of("en", "<p>new machine</p>", "en__meta", freshMeta));
+
+    var stored = storedMapOf(tenant);
+    assertThat(stored)
+        .containsEntry("en", "<p>new machine</p>")
+        .containsEntry("en__meta", freshMeta);
+  }
+
+  @Test
+  void publishDpa_Should_dropOrphanMeta_When_languageHasNoContent() {
+    var tenant = givenTenantWithStoredDpa(null);
+
+    tenantDpaFacade.publishDpa(5L, Map.of("en__meta", META_EN));
+
+    assertThat(storedMapOf(tenant)).isEmpty();
+  }
+
+  @Test
+  void publishDpa_Should_clearMeta_When_manualPublishOmitsMeta() {
+    var tenant = givenTenantWithStoredDpa(Map.of("en", "<p>machine</p>", "en__meta", META_EN));
+    givenIdentitySanitizer();
+
+    tenantDpaFacade.publishDpa(5L, Map.of("en", "<p>manual rewrite</p>"));
+
+    assertThat(storedMapOf(tenant)).doesNotContainKey("en__meta");
   }
 }
