@@ -63,6 +63,8 @@ public class SingleDomainTenantOverrideService {
           .getContent()
           .dataPrivacyConfirmation(
               overridingRestrictedTenantDTO.getContent().getDataPrivacyConfirmation())
+          // keep the raw language map (incl. __meta keys) consistent with the overridden privacy
+          .privacyLanguages(overridingRestrictedTenantDTO.getContent().getPrivacyLanguages())
           .setPrivacy(overridingRestrictedTenantDTO.getContent().getPrivacy());
     }
   }

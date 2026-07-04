@@ -827,6 +827,17 @@ components:
         impressum:
           type: string
           example: "Llorem ipsum..."
+        impressumLanguages:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Raw stored language map for the impressum, including the `<lang>__meta`
+            machine-translation metadata keys (JSON strings like
+            `{"mt":true,"src":"de","at":"<ISO>"}`). Lets clients show a
+            "machine translated / legally binding is German" notice. The `<lang>`
+            values are the same sanitized HTML the resolved `impressum` field is
+            picked from; the map is exposed as stored, no additional processing.
         claim:
           type: string
           example: "Llorem ipsum..."
@@ -834,6 +845,16 @@ components:
         privacy:
           type: string
           example: "Llorem ipsum..."
+        privacyLanguages:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Raw stored language map for the privacy statement, including the
+            `<lang>__meta` machine-translation metadata keys. Same semantics as
+            `impressumLanguages`. Note: contains the stored (unrendered) privacy
+            text, i.e. without the data-protection placeholder rendering applied
+            to `renderedPrivacy`.
         renderedPrivacy:
           type: string
           example: "Llorem ipsum..."
