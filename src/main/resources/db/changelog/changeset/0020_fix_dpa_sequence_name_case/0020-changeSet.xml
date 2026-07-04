@@ -1,0 +1,47 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Changesets 0016/0018 created the DPA sequences with UPPERCASE names
+      (SEQUENCE_TENANT_DPA_SIGNATURE / SEQUENCE_TENANT_DPA_VERSION), but Hibernate's
+      physical naming strategy lowercases sequence names at runtime. On case-sensitive
+      Linux MariaDB (lower_case_table_names=0) every DPA publish/signature insert then
+      fails with "Unknown SEQUENCE: 'sequence_tenant_dpa_version'".
+
+      This changelog renames the uppercase sequences to lowercase (sequences are renamed
+      via RENAME TABLE in MariaDB) and, as a fallback for databases that have neither
+      casing, creates the lowercase sequences. Databases that already have BOTH casings
+      (e.g. manually repaired environments) are left untouched: the rename is skipped and
+      the stray uppercase sequence stays behind, which is harmless.
+
+      Rollbacks are intentionally empty: renaming back to uppercase would re-break the
+      runtime lookup, because the application has always requested the lowercase name.
+    -->
+
+    <changeSet author="oriso" id="renameDpaSignatureSequenceToLowercase">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <sqlCheck expectedResult="1">SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'tenantservice' AND TABLE_TYPE = 'SEQUENCE' AND CAST(TABLE_NAME AS BINARY) = CAST('SEQUENCE_TENANT_DPA_SIGNATURE' AS BINARY)</sqlCheck>
+                <sqlCheck expectedResult="0">SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'tenantservice' AND TABLE_TYPE = 'SEQUENCE' AND CAST(TABLE_NAME AS BINARY) = CAST('sequence_tenant_dpa_signature' AS BINARY)</sqlCheck>
+            </and>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0020_fix_dpa_sequence_name_case/renameDpaSignatureSequenceToLowercase.sql" stripComments="true" />
+        <rollback/>
+    </changeSet>
+
+    <changeSet author="oriso" id="renameDpaVersionSequenceToLowercase">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <sqlCheck expectedResult="1">SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'tenantservice' AND TABLE_TYPE = 'SEQUENCE' AND CAST(TABLE_NAME AS BINARY) = CAST('SEQUENCE_TENANT_DPA_VERSION' AS BINARY)</sqlCheck>
+                <sqlCheck expectedResult="0">SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'tenantservice' AND TABLE_TYPE = 'SEQUENCE' AND CAST(TABLE_NAME AS BINARY) = CAST('sequence_tenant_dpa_version' AS BINARY)</sqlCheck>
+            </and>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0020_fix_dpa_sequence_name_case/renameDpaVersionSequenceToLowercase.sql" stripComments="true" />
+        <rollback/>
+    </changeSet>
+
+    <changeSet author="oriso" id="createLowercaseDpaSequencesIfMissing">
+        <sqlFile path="db/changelog/changeset/0020_fix_dpa_sequence_name_case/createLowercaseDpaSequencesIfMissing.sql" stripComments="true" />
+        <rollback/>
+    </changeSet>
+</databaseChangeLog>
