@@ -34,6 +34,10 @@ we store a parallel metadata key **inside the same map** — no schema change ne
 - `PUT /tenantadmin/{id}/dpa` (DPA publish) accepts and stores meta keys per the rules above.
 - `POST /tenantadmin/translate` produces the translations; the Admin UI adds the
   `<lang>__meta` entries when publishing machine-translated languages.
+- The public tenant endpoints (`/tenant/public/...`) expose the raw stored maps for the legal
+  contents impressum and privacy as `Content.impressumLanguages` / `Content.privacyLanguages`,
+  including the `<lang>__meta` keys, so clients can render a "machine translated" notice
+  (PR #62). `TranslationMetaUtil` stays the single implementation of the convention.
 
 ## Related endpoints
 
