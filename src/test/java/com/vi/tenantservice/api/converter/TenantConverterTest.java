@@ -136,6 +136,45 @@ class TenantConverterTest {
   }
 
   @Test
+  void toRestrictedTenantDTO_should_exposeRawLanguageMapsIncludingTranslationMeta()
+      throws TemplateDescriptionServiceException {
+    // given
+    var impressumJson =
+        "{\"de\":\"<h2 id=\\\"intro\\\">Impressum</h2>\",\"en\":\"<h2>Imprint</h2>\","
+            + "\"en__meta\":\"{\\\"mt\\\":true,\\\"src\\\":\\\"de\\\",\\\"at\\\":\\\"2026-07-04T10:00:00Z\\\"}\"}";
+    var privacyJson =
+        "{\"de\":\"<p>Datenschutz</p>\",\"en\":\"<p>Privacy</p>\","
+            + "\"en__meta\":\"{\\\"mt\\\":true,\\\"src\\\":\\\"de\\\",\\\"at\\\":\\\"2026-07-04T10:00:00Z\\\"}\"}";
+    var entity = new TenantEntity();
+    entity.setId(5L);
+    entity.setName("tenant");
+    entity.setContentImpressum(impressumJson);
+    entity.setContentPrivacy(privacyJson);
+    when(templateService.getMultilingualDataProtectionTemplate()).thenReturn(Map.of());
+
+    // when
+    RestrictedTenantDTO restrictedTenantDTO =
+        tenantConverter.toRestrictedTenantDTO(entity, TenantConverter.DE);
+
+    // then: resolved fields are unchanged
+    assertThat(restrictedTenantDTO.getContent().getImpressum())
+        .isEqualTo("<h2 id=\"intro\">Impressum</h2>");
+    assertThat(restrictedTenantDTO.getContent().getPrivacy()).isEqualTo("<p>Datenschutz</p>");
+
+    // and: the raw language maps incl. __meta keys are exposed as stored (no processing)
+    assertThat(restrictedTenantDTO.getContent().getImpressumLanguages())
+        .containsOnly(
+            Map.entry("de", "<h2 id=\"intro\">Impressum</h2>"),
+            Map.entry("en", "<h2>Imprint</h2>"),
+            Map.entry("en__meta", "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-07-04T10:00:00Z\"}"));
+    assertThat(restrictedTenantDTO.getContent().getPrivacyLanguages())
+        .containsOnly(
+            Map.entry("de", "<p>Datenschutz</p>"),
+            Map.entry("en", "<p>Privacy</p>"),
+            Map.entry("en__meta", "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-07-04T10:00:00Z\"}"));
+  }
+
+  @Test
   void toRestrictedTenantDTO_should_redactSensitivePublicSettings() {
     // given
     MultilingualTenantDTO tenantDTO =

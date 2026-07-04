@@ -11,6 +11,7 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import java.time.LocalDateTime;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -55,6 +56,8 @@ class SingleDomainTenantOverrideServiceTest {
 
     // then
     assertThat(restrictedTenantDTO.getContent().getPrivacy()).isEqualTo("actual privacy");
+    assertThat(restrictedTenantDTO.getContent().getPrivacyLanguages())
+        .isEqualTo(Map.of("de", "actual privacy"));
     assertThat(restrictedTenantDTO.getContent().getDataPrivacyConfirmation())
         .isEqualTo(actualPrivacyChangedDate);
     assertThat(restrictedTenantDTO.getSettings().getFeatureAttachmentUploadDisabled()).isTrue();
@@ -97,7 +100,11 @@ class SingleDomainTenantOverrideServiceTest {
   private static RestrictedTenantDTO restrictedDTO(
       String privacy, LocalDateTime privacyChangedDate, boolean featureAttachmentUploadDisabled) {
     return new RestrictedTenantDTO()
-        .content(new Content().privacy(privacy).dataPrivacyConfirmation(privacyChangedDate))
+        .content(
+            new Content()
+                .privacy(privacy)
+                .privacyLanguages(Map.of("de", privacy))
+                .dataPrivacyConfirmation(privacyChangedDate))
         .settings(new Settings().featureAttachmentUploadDisabled(featureAttachmentUploadDisabled));
   }
 }
