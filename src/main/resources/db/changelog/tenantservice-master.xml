@@ -1,12 +1,29 @@
-<?xml version="1.0" encoding="UTF-8"?> 
+<?xml version="1.0" encoding="UTF-8"?>
 <databaseChangeLog
   xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
                       http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.2.xsd">
-                      
-    <!-- The base changeset contains the database state when liquibase was added to the project -->
-	<include file="db/changelog/changeset/0001_initsql/initSql.xml"/>
+
+  <!--
+    Single master changelog for ALL environments (Liquibase Re-Enablement Plan 2026-07-04, package L1).
+
+    Replaces the former per-environment masters (local/dev/staging/prod/testing).
+    Environment differences are expressed via Liquibase contexts, activated through
+    spring.liquibase.contexts per Spring profile:
+      - local/dev activate context "seed" (seed/demo data changesets, if any are added later)
+      - staging/prod activate context "prod" (schema-only; changesets tagged context="seed" are skipped)
+    Changesets without a context attribute run in every environment.
+
+    IMPORTANT: changeset identity is (id, author, filepath). Never move or rename
+    existing changeset files.
+  -->
+
+  <!-- The base changeset contains the database state when liquibase was added to the project -->
+  <include file="db/changelog/changeset/0001_initsql/initSql.xml"/>
+  <!-- 0002 was historically missing from the prod/staging masters although 0006 depends on the
+       columns it adds; it carries a columnExists precondition (MARK_RAN) so it is safe on
+       databases that already received the columns outside of Liquibase. -->
   <include file="db/changelog/changeset/0002_add_privacy_and_terms_and_conditions/0002-changeSet.xml"/>
   <include file="db/changelog/changeset/0003_change_tenant_attributes/0003-changeSet.xml"/>
   <include file="db/changelog/changeset/0004_add_tenant_settings/0004-changeSet.xml"/>
@@ -15,7 +32,7 @@
   <include file="db/changelog/changeset/0007_content_activation_dates/0007-changeSet.xml"/>
   <include file="db/changelog/changeset/0008_drop_unique_constraint_for_subdomain/0008-changeSet.xml"/>
   <include file="db/changelog/changeset/0009_fix_sequence_start_value/0009-fixSequenceStartValue.xml"/>
-<!--  <include file="db/changelog/changeset/0010_tenant_id_default_value/tenantIdDefaultValue.xml"/>-->
+  <!-- 0010_tenant_id_default_value was commented out in every per-env master; kept excluded. -->
   <include file="db/changelog/changeset/0011_tenant_add_is_video_call_allowed/tenantAddIsVideoCallAllowed.xml"/>
   <include file="db/changelog/changeset/0012_tenant_remove_is_video_call_allowed/tenantRemoveIsVideoCallAllowed.xml"/>
   <include file="db/changelog/changeset/0010_add_association_logo/0010-addAssociationLogo.xml"/>
@@ -27,4 +44,6 @@
   <include file="db/changelog/changeset/0018_tenant_dpa_version/0018-changeSet.xml"/>
   <include file="db/changelog/changeset/0019_tenant_dpa_signature_audit_fields/0019-changeSet.xml"/>
   <include file="db/changelog/changeset/0020_fix_dpa_sequence_name_case/0020-changeSet.xml"/>
+  <!-- Catch-up changesets from the 2026-07-04 Liquibase re-enablement (package L1). -->
+  <include file="db/changelog/changeset/0021_fix_dpa_signature_signer_is_member_type/0021-changeSet.xml"/>
 </databaseChangeLog>
