@@ -43,6 +43,9 @@ class TranslationFacadeTest {
 
   @BeforeEach
   void setUp() {
+    // provider ids must be stubbed BEFORE construction: the facade builds its
+    // provider map once in the constructor (review feedback: no per-call rebuilds)
+    givenProviderIds();
     translationFacade =
         new TranslationFacade(
             tenantAdminControlsService,
@@ -51,8 +54,8 @@ class TranslationFacadeTest {
   }
 
   private void givenProviderIds() {
-    when(openRouterClient.getProviderId()).thenReturn("openrouter");
-    when(mistralClient.getProviderId()).thenReturn("mistral");
+    org.mockito.Mockito.lenient().when(openRouterClient.getProviderId()).thenReturn("openrouter");
+    org.mockito.Mockito.lenient().when(mistralClient.getProviderId()).thenReturn("mistral");
   }
 
   private void givenSuperAdmin(boolean isSuperAdmin) {
@@ -167,6 +170,27 @@ class TranslationFacadeTest {
     assertThat(response.getModel()).isEqualTo("mistral-small-latest");
     assertThat(response.getTranslations().get("en")).containsEntry("privacy", "<p>Hello</p>");
     assertThat(response.getTranslations().get("fr")).containsEntry("privacy", "<p>Bonjour</p>");
+  }
+
+  @Test
+  void translate_Should_readApiKeysExactlyOnce_toAvoidToctouBetweenResolveAndUse() {
+    givenProviderIds();
+    when(tenantAdminControlsService.getTranslationApiKeys())
+        .thenReturn(Map.of("mistral", MISTRAL_KEY));
+    when(mistralClient.getModel()).thenReturn("mistral-small-latest");
+    when(mistralClient.translateHtml(MISTRAL_KEY, "de", "en", "<p>Hallo</p>"))
+        .thenReturn("<p>Hello</p>");
+
+    translationFacade.translate(
+        new TranslationRequestDTO()
+            .sourceLang("de")
+            .targetLangs(List.of("en"))
+            .provider("mistral")
+            .texts(Map.of("privacy", "<p>Hallo</p>")));
+
+    // the key used for the provider call must be the one validated during resolution —
+    // a second read would reintroduce the time-of-check/time-of-use window
+    verify(tenantAdminControlsService, org.mockito.Mockito.times(1)).getTranslationApiKeys();
   }
 
   @Test
