@@ -3,7 +3,9 @@ set -euo pipefail
 
 NAMESPACE=${NAMESPACE:-caritas}
 DEPLOYMENT=${DEPLOYMENT:-oriso-platform-tenantservice}
-export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk-amd64}
+# TenantService builds on Java 21 since the 2026-07 upgrade; the old
+# java-17 default no longer exists on the deploy host and broke this script.
+export JAVA_HOME=${JAVA_HOME:-/usr/lib/jvm/java-21-openjdk-amd64}
 export PATH="$JAVA_HOME/bin:$PATH"
 
 echo "Starting TenantService build & deployment..."
