@@ -25,8 +25,10 @@ import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionTogglesSetting
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantEntity.TenantEntityBuilder;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.model.Theming;
@@ -176,7 +178,7 @@ public class TenantConverter {
     }
   }
 
-  public MultilingualTenantDTO toMultilingualDTO(TenantEntity tenant) {
+  public MultilingualTenantDTO toMultilingualDTO(TenantData tenant) {
     var tenantDTO =
         new MultilingualTenantDTO(tenant.getName())
             .id(tenant.getId())
@@ -196,7 +198,7 @@ public class TenantConverter {
     return tenantDTO;
   }
 
-  public TenantDTO toDTO(TenantEntity tenant, String lang) {
+  public TenantDTO toDTO(TenantData tenant, String lang) {
     var tenantDTO =
         new TenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
             .address(tenant.getAddress())
@@ -214,7 +216,7 @@ public class TenantConverter {
     return tenantDTO;
   }
 
-  private Settings getSettings(TenantEntity tenant) {
+  private Settings getSettings(TenantRestrictedData tenant) {
     if (tenant.getSettings() == null) {
       return new Settings();
     } else {
@@ -437,7 +439,7 @@ public class TenantConverter {
         .emailThemeColor(smtpSettings.getEmailThemeColor());
   }
 
-  public RestrictedTenantDTO toRestrictedTenantDTO(TenantEntity tenant, String lang) {
+  public RestrictedTenantDTO toRestrictedTenantDTO(TenantRestrictedData tenant, String lang) {
     return new RestrictedTenantDTO(tenant.getId(), tenant.getName())
         .content(toContentDTO(tenant, lang))
         .theming(toThemingDTO(tenant))
@@ -445,7 +447,7 @@ public class TenantConverter {
         .settings(getRestrictedPublicSettings(tenant));
   }
 
-  private Settings getRestrictedPublicSettings(TenantEntity tenant) {
+  private Settings getRestrictedPublicSettings(TenantRestrictedData tenant) {
     Settings settings = getSettings(tenant);
     settings.setFeatureToolsOICDToken(null);
     settings.setSmtp(toPublicSmtpConfig(settings.getSmtp()));
@@ -465,7 +467,7 @@ public class TenantConverter {
         .emailThemeColor(smtpConfig.getEmailThemeColor());
   }
 
-  public BasicTenantLicensingDTO toBasicLicensingTenantDTO(TenantEntity tenant) {
+  public BasicTenantLicensingDTO toBasicLicensingTenantDTO(TenantData tenant) {
     var basicTenantLicensingDTO =
         new BasicTenantLicensingDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
             .licensing(toLicensingDTO(tenant));
@@ -479,11 +481,11 @@ public class TenantConverter {
     return basicTenantLicensingDTO;
   }
 
-  public Licensing toLicensingDTO(TenantEntity tenant) {
+  public Licensing toLicensingDTO(TenantData tenant) {
     return new Licensing(tenant.getLicensingAllowedNumberOfUsers());
   }
 
-  private Theming toThemingDTO(TenantEntity tenant) {
+  private Theming toThemingDTO(TenantRestrictedData tenant) {
     return new Theming()
         .favicon(tenant.getThemingFavicon())
         .logo(tenant.getThemingLogo())
@@ -492,12 +494,17 @@ public class TenantConverter {
         .secondaryColor(tenant.getThemingSecondaryColor());
   }
 
-  private Content toContentDTO(TenantEntity tenant, String lang) {
+  private Content toContentDTO(TenantRestrictedData tenant, String lang) {
     String privacyPotentiallyWithPlaceholders =
         getTranslatedStringFromMap(tenant.getContentPrivacy(), lang);
     DataProtectionContactTemplateDTO dataProtectionContactTemplate =
         getDataProtectionContactTemplate(lang);
     return new Content(getTranslatedStringFromMap(tenant.getContentImpressum(), lang))
+        // Raw stored language maps (incl. the <lang>__meta machine-translation metadata keys)
+        // alongside the resolved strings, so public clients can show a "machine translated"
+        // notice. Kept lean on purpose: only for the legal contents impressum and privacy.
+        .impressumLanguages(convertMapFromJson(tenant.getContentImpressum()))
+        .privacyLanguages(convertMapFromJson(tenant.getContentPrivacy()))
         .claim(getTranslatedStringFromMap(tenant.getContentClaim(), lang))
         .privacy(privacyPotentiallyWithPlaceholders)
         .termsAndConditions(getTranslatedStringFromMap(tenant.getContentTermsAndConditions(), lang))
@@ -575,7 +582,7 @@ public class TenantConverter {
     }
   }
 
-  private MultilingualContent toMultilingualContentDTO(TenantEntity tenant) {
+  private MultilingualContent toMultilingualContentDTO(TenantData tenant) {
     return new MultilingualContent(convertMapFromJson(tenant.getContentImpressum()))
         .claim(convertMapFromJson(tenant.getContentClaim()))
         .privacy(convertMapFromJson(tenant.getContentPrivacy()))
@@ -583,7 +590,7 @@ public class TenantConverter {
         .dataProtectionContactTemplate(getMultilingualDataProtectionTemplate());
   }
 
-  public AdminTenantDTO toAdminTenantDTO(TenantEntity tenant) {
+  public AdminTenantDTO toAdminTenantDTO(TenantData tenant) {
     var adminTenantDTO =
         new AdminTenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
             .address(tenant.getAddress())

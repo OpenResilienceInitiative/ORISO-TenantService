@@ -26,4 +26,5 @@
 	<include file="db/changelog/changeset/0017_tenant_dpa_signature_token/0017-changeSet.xml"/>
 	<include file="db/changelog/changeset/0018_tenant_dpa_version/0018-changeSet.xml"/>
 	<include file="db/changelog/changeset/0019_tenant_dpa_signature_audit_fields/0019-changeSet.xml"/>
+	<include file="db/changelog/changeset/0020_fix_dpa_sequence_name_case/0020-changeSet.xml"/>
 </databaseChangeLog>

@@ -4,7 +4,7 @@ import static com.vi.tenantservice.api.converter.ConverterUtils.nullAsFalse;
 
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
-import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import lombok.AllArgsConstructor;
@@ -21,7 +21,7 @@ public class SingleDomainTenantOverrideService {
   private final @NonNull ApplicationSettingsService applicationSettingsService;
 
   public RestrictedTenantDTO overridePrivacyAndCertainSettings(
-      TenantEntity mainTenant, TenantEntity actualTenant) {
+      TenantRestrictedData mainTenant, TenantRestrictedData actualTenant) {
     String lang = translationService.getCurrentLanguageContext();
 
     RestrictedTenantDTO mainTenantRestrictedDTO = getRestrictedTenantDTO(mainTenant, lang);
@@ -52,7 +52,7 @@ public class SingleDomainTenantOverrideService {
             overridingRestrictedTenantDTO.getSettings().getFeatureAttachmentUploadDisabled());
   }
 
-  private RestrictedTenantDTO getRestrictedTenantDTO(TenantEntity mainTenant, String lang) {
+  private RestrictedTenantDTO getRestrictedTenantDTO(TenantRestrictedData mainTenant, String lang) {
     return tenantConverter.toRestrictedTenantDTO(mainTenant, lang);
   }
 
@@ -63,6 +63,8 @@ public class SingleDomainTenantOverrideService {
           .getContent()
           .dataPrivacyConfirmation(
               overridingRestrictedTenantDTO.getContent().getDataPrivacyConfirmation())
+          // keep the raw language map (incl. __meta keys) consistent with the overridden privacy
+          .privacyLanguages(overridingRestrictedTenantDTO.getContent().getPrivacyLanguages())
           .setPrivacy(overridingRestrictedTenantDTO.getContent().getPrivacy());
     }
   }

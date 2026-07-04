@@ -101,6 +101,33 @@ class AuthorisationServiceTest {
   }
 
   @Test
+  void extractRealmRoles_Should_ReturnNoRoles_WhenRealmAccessClaimHasUnexpectedType() {
+    // given
+    when(jwt.getClaims()).thenReturn(new HashMap<>(Map.of("realm_access", "invalid")));
+
+    // when
+    Collection<String> roles = authorisationService.extractRealmRoles(jwt);
+
+    // then
+    assertThat(roles).isEmpty();
+  }
+
+  @Test
+  void extractRealmRoles_Should_IgnoreNonStringRoleValues() {
+    // given
+    when(jwt.getClaims())
+        .thenReturn(
+            new HashMap<>(
+                Map.of("realm_access", Map.of("roles", Lists.newArrayList(1, "tenant-admin")))));
+
+    // when
+    Collection<String> roles = authorisationService.extractRealmRoles(jwt);
+
+    // then
+    assertThat(roles).containsExactly("tenant-admin");
+  }
+
+  @Test
   void extractRealmRoles_Should_ExtractAuthoritiesFromJwt() {
     // given
     when(jwt.getClaims())

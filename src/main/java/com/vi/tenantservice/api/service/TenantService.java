@@ -4,8 +4,9 @@ import static com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptio
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.exception.TenantValidationException;
+import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
-import com.vi.tenantservice.api.model.TenantEntity.TenantBase;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -75,15 +76,15 @@ public class TenantService {
   }
 
   private void validateTenantSubdomainDoesNotExist(TenantEntity tenantEntity) {
-    var dbTenant = tenantRepository.findBySubdomain(tenantEntity.getSubdomain());
-    if (tenantWithSuchSubdomainAlreadyExists(tenantEntity, dbTenant)) {
+    var existingTenantId = tenantRepository.findIdBySubdomain(tenantEntity.getSubdomain());
+    if (tenantWithSuchSubdomainAlreadyExists(tenantEntity, existingTenantId)) {
       throw new TenantValidationException(SUBDOMAIN_NOT_UNIQUE);
     }
   }
 
   private boolean tenantWithSuchSubdomainAlreadyExists(
-      TenantEntity tenantEntity, TenantEntity dbTenant) {
-    return dbTenant != null && !dbTenant.getId().equals(tenantEntity.getId());
+      TenantEntity tenantEntity, Long existingTenantId) {
+    return existingTenantId != null && !existingTenantId.equals(tenantEntity.getId());
   }
 
   public TenantEntity update(TenantEntity tenantEntity) {
@@ -119,17 +120,40 @@ public class TenantService {
     return tenantRepository.findById(id);
   }
 
+  public Optional<TenantData> findTenantDataById(Long id) {
+    return Optional.ofNullable(tenantRepository.findTenantDataById(id));
+  }
+
   public Optional<TenantEntity> findTenantBySubdomain(String subdomain) {
     var bySubdomain = tenantRepository.findBySubdomain(subdomain);
     return bySubdomain != null ? Optional.of(bySubdomain) : Optional.empty();
+  }
+
+  public Optional<Long> findTenantIdBySubdomain(String subdomain) {
+    return Optional.ofNullable(tenantRepository.findIdBySubdomain(subdomain));
+  }
+
+  public Optional<TenantRestrictedData> findRestrictedTenantDataBySubdomain(String subdomain) {
+    return Optional.ofNullable(tenantRepository.findRestrictedDataBySubdomain(subdomain));
+  }
+
+  public Optional<TenantRestrictedData> findRestrictedTenantDataById(Long id) {
+    return Optional.ofNullable(tenantRepository.findRestrictedDataById(id));
   }
 
   public List<TenantEntity> getAllTenants() {
     return tenantRepository.findAll();
   }
 
-  public Page<TenantBase> findAllExceptTechnicalByInfix(String infix, PageRequest pageRequest) {
-    return tenantRepository.findAllExceptTechnicalByInfix(infix, pageRequest);
+  public List<TenantData> getAllTenantData() {
+    return List.copyOf(tenantRepository.findAllTenantData());
+  }
+
+  public Page<TenantData> findAllTenantDataExceptTechnicalByInfix(
+      String infix, PageRequest pageRequest) {
+    return tenantRepository
+        .findAllTenantDataExceptTechnicalByInfix(infix, pageRequest)
+        .map(tenantData -> tenantData);
   }
 
   public List<TenantEntity> findAllByIds(List<Long> tenantIds) {

@@ -21,7 +21,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 @EqualsAndHashCode
-public class TenantEntity {
+public class TenantEntity implements TenantData {
 
   @Id
   @SequenceGenerator(name = "id_seq", allocationSize = 1, sequenceName = "SEQUENCE_TENANT")
