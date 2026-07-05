@@ -951,7 +951,10 @@ class TenantControllerIT {
         .andExpect(jsonPath("$[0].name").exists())
         .andExpect(jsonPath("$[0].subdomain").exists())
         .andExpect(jsonPath("$[0].beraterCount").exists())
-        .andExpect(jsonPath("$[0].adminEmails").doesNotExist());
+        // No tenant admins are mocked here, so the enrichment step leaves adminEmails untouched.
+        // The generated AdminTenantDTO now default-initializes the field to an empty list, so it
+        // serializes as an empty array rather than being absent.
+        .andExpect(jsonPath("$[0].adminEmails", hasSize(0)));
   }
 
   // --- machine-translation provider API keys (platform-global, super admin only) ---
