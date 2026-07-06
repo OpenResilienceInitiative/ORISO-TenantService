@@ -83,7 +83,7 @@ public class TenantEntity implements TenantData {
   @Column(name = "dpa_activation_date")
   private LocalDateTime contentDataProcessingAgreementActivationDate;
 
-  @Column(name = "settings")
+  @Column(name = "settings", length = 4000)
   private String settings;
 
   @Column(name = "create_date", nullable = false)

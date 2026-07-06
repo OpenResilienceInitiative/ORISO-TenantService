@@ -7,3 +7,10 @@ INSERT INTO TENANT (`id`, `name`, `subdomain`, `licensing_allowed_users`, `conte
                   VALUES (2, 'Another tenant', 'examplesubdomain', 10, '{"de" : "Impressum"}', '{ "de" : "Privacy"}','2021-12-28', '2021-12-29', '{"topicsInRegistrationEnabled":"true"}');
 INSERT INTO TENANT (`id`, `name`, `subdomain`, `licensing_allowed_users`, `content_impressum`,`content_privacy`,  `create_date`, `update_date`,`settings`)
                   VALUES (3, 'localhost tenant', 'localhost', 12, '{"de" : "Impressum"}', '{ "de" : "Privacy"}','2021-12-28', '2021-12-29', '{"topicsInRegistrationEnabled":"true"}');
+
+-- Move the id sequence past the seeded rows (max id = 3) so createTenant tests do
+-- not collide with the fixed ids above. Under ddl-auto=create-drop Hibernate already
+-- created SEQUENCE_TENANT (from the entity's @SequenceGenerator, starting at 1), so the
+-- "CREATE SEQUENCE IF NOT EXISTS ... START WITH 100000" in TenantServiceDatabase.sql is a
+-- no-op. Mirrors the approach already used in TenantRepositoryTestData.sql.
+ALTER SEQUENCE SEQUENCE_TENANT RESTART WITH 100000;
