@@ -26,3 +26,23 @@ jobs:
         push_to_ghcr: false
         image_name: oriso-tenantservice
         github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Non-blocking burn-in (Test Quality Audit 2026-07-04, item 3 + CI Roadmap Part 1).
+  # Runs `mvnw -B verify`, which reaches the surefire `integration-tests` execution
+  # (integration-test phase, **/*IT.*) — the 46 authz/actuator ITs that have never
+  # run in CI. They use embedded H2 + in-process WireMock + Mockito, so no external
+  # services are needed. continue-on-error keeps this OFF the required-checks path
+  # until burn-in is consistently green; flip to required once it is.
+  integration-tests:
+    name: integration-tests (non-blocking, burn-in)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Run integration tests (verify)
+      uses: ./.github/actions/maven-verify-burnin
+      with:
+        java_version: '21'
