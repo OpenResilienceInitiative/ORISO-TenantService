@@ -59,7 +59,7 @@ jobs:
         for spec in api/*.yaml api/*.yml; do
           if [ -f ".base/$spec" ]; then
             echo "::group::oasdiff breaking $spec"
-            docker run --rm -v "$PWD:/work:ro" ghcr.io/oasdiff/oasdiff:latest \
+            docker run --rm -v "$PWD:/work:ro" tufin/oasdiff:latest \
               breaking "/work/.base/$spec" "/work/$spec" --fail-on WARN || status=1
             echo "::endgroup::"
           else
