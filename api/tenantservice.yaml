@@ -440,7 +440,8 @@ paths:
           description: Tenant Id
           required: false
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -468,7 +469,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -590,7 +592,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -617,7 +620,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -642,7 +646,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -669,7 +674,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       requestBody:
         required: true
         description: 'Per-language DPA HTML content (language code -> HTML). Supports the
@@ -713,7 +719,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -910,7 +917,8 @@ components:
         - subdomain
       properties:
         id:
-          type: long
+          type: integer
+          format: int64
           example: 12132
         name:
           type: string
@@ -948,7 +956,8 @@ components:
             - name
           properties:
             id:
-              type: long
+              type: integer
+              format: int64
               example: 12132
             name:
               type: string
@@ -993,7 +1002,8 @@ components:
         - subdomain
       properties:
         id:
-          type: long
+          type: integer
+          format: int64
           example: 12132
         name:
           type: string
@@ -1016,7 +1026,8 @@ components:
         - name
       properties:
         id:
-          type: long
+          type: integer
+          format: int64
           example: 12132
         name:
           type: string
@@ -1470,7 +1481,8 @@ components:
         - subdomain
       properties:
         id:
-          type: long
+          type: integer
+          format: int64
           example: 12132
         name:
           type: string
