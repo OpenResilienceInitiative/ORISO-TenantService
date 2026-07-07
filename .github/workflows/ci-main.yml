@@ -34,20 +34,7 @@ jobs:
         image_name: oriso-tenantservice
         github_token: ${{ secrets.GITHUB_TOKEN }}
 
-  # Non-blocking burn-in (Test Quality Audit 2026-07-04, item 3 + CI Roadmap Part 1).
-  # Runs `mvnw -B verify` on dev/main so integration-test results stay visible after
-  # merge. Independent of the publish job: a red burn-in must NOT block publishing
-  # while the ITs are being stabilised. Flip to required once burn-in is green.
-  integration-tests:
-    name: integration-tests (non-blocking, burn-in)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
-
-    - name: Run integration tests (verify)
-      uses: ./.github/actions/maven-verify-burnin
-      with:
-        java_version: '21'
+  # The former non-blocking `integration-tests` burn-in job was folded into the
+  # blocking `build` job above: `maven-build` now runs `mvnw -B verify`, so the
+  # surefire `integration-tests` execution (**/*IT.*) is part of the main gate
+  # (burn-in green since 2026-07-05; flipped 2026-07-07).
