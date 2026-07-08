@@ -66,4 +66,7 @@ jobs:
             echo "Skipping $spec (new on this branch, nothing to diff against)"
           fi
         done
-        exit $status
+        if [ "$status" -ne 0 ]; then
+          echo "::warning::oasdiff found (formally) breaking API spec changes - report-only; see the log groups above. Flip to a hard failure once the breaking-change process is agreed."
+          echo "### api-contract-diff: breaking changes detected (report-only)" >> "$GITHUB_STEP_SUMMARY"
+        fi
