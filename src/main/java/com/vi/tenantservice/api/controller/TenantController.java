@@ -222,6 +222,8 @@ public class TenantController implements TenantApi, TenantadminApi {
         || CollectionUtils.isEmpty(request.getTexts())
         || request.getTexts().size() > 10
         || request.getTargetLangs().size() > 10
+        || request.getTargetLangs().stream()
+            .anyMatch(language -> language == null || language.isBlank() || language.length() > 10)
         || request.getTexts().entrySet().stream()
             .anyMatch(
                 entry ->

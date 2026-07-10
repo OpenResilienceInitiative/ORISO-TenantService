@@ -12,6 +12,10 @@ import com.vi.tenantservice.api.model.TranslationRequestDTO;
 import com.vi.tenantservice.api.model.TranslationResponseDTO;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.config.security.AuthorisationService;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -22,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.server.ResponseStatusException;
+import org.yaml.snakeyaml.Yaml;
 
 @ExtendWith(MockitoExtension.class)
 class TenantControllerGroupChatTranslationTest {
@@ -66,6 +71,40 @@ class TenantControllerGroupChatTranslationTest {
                 assertThat(((ResponseStatusException) error).getStatusCode())
                     .isEqualTo(HttpStatus.BAD_REQUEST));
     verifyNoInteractions(translationFacade);
+  }
+
+  @Test
+  void authorContentRejectsBlankAndNullTargetLanguages() {
+    for (var targetLangs : List.of(List.of(" "), Arrays.asList("en", null))) {
+      var request =
+          new TranslationRequestDTO()
+              .sourceLang("de")
+              .targetLangs(targetLangs)
+              .texts(Map.of("welcome", "Willkommen"));
+
+      assertThatThrownBy(() -> controller.translateGroupChatAuthorContent(request))
+          .isInstanceOf(ResponseStatusException.class)
+          .satisfies(
+              error ->
+                  assertThat(((ResponseStatusException) error).getStatusCode())
+                      .isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+    verifyNoInteractions(translationFacade);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void openApiDocumentsEveryRoleAllowedToTranslateGroupChatContent() throws IOException {
+    Map<String, Object> specification =
+        new Yaml().load(Files.readString(Path.of("api/tenantservice.yaml")));
+    var paths = (Map<String, Object>) specification.get("paths");
+    var endpoint = (Map<String, Object>) paths.get("/tenant/translate/group-chat-author-content");
+    var post = (Map<String, Object>) endpoint.get("post");
+
+    assertThat(post.get("summary"))
+        .isEqualTo(
+            "Translates bounded self-help group welcome and rule content "
+                + "[Authorization: consultant, group-chat-consultant]");
   }
 
   @Test
