@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: en-US
+
+tone_instructions: "Be a strict, practical ORISO reviewer for this Spring Boot service. Keep comments concise, concrete, and focused on correctness, mergeability, privacy, security, tests, and maintainability."
+
+reviews:
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  review_status: true
+  review_details: true
+  poem: false
+
+  auto_review:
+    enabled: true
+    description_keyword: "coderabbit: review"
+    auto_incremental_review: false
+    drafts: false
+    labels:
+      - "coderabbit"
+    base_branches:
+      - "dev"
+
+  path_filters:
+    - "!target/**"
+    - "!**/generated/**"
+    - "src/**"
+    - "pom.xml"
+    - ".github/**"
+    - "*.md"
+
+  path_instructions:
+    - path: "src/main/**/*.java"
+      instructions: |
+        Check behavior against the surrounding ORISO flow, not only types. Flag
+        missing transaction boundaries, swallowed exceptions, N+1 queries, and
+        privacy regressions around Matrix identifiers, chat content and user data.
+        Configuration must stay environment-driven — never hardcode hosts, IPs or
+        credentials (see ADR-005 / finding DB-M04).
+    - path: "src/main/resources/db/**"
+      instructions: |
+        Liquibase changesets are append-only. Flag edits to already-applied
+        changesets, missing rollback, and changes that are not idempotent.
+    - path: "src/test/**/*.java"
+      instructions: |
+        Tests must be able to fail. Flag over-mocking that hides the defect,
+        assertions that cannot break, and missing edge cases.
+
+  pre_merge_checks:
+    title:
+      mode: warning
+      requirements: "Use a concise conventional title that names the affected ORISO area."
+    description:
+      mode: warning
+    custom_checks:
+      - name: "Validation evidence"
+        mode: error
+        instructions: |
+          Pass for docs/config-only PRs. For behavior-affecting product code,
+          pass only if the PR includes relevant automated tests or clearly lists
+          the exact validation command and result. Fail if product behavior
+          changed with no test/validation evidence and no explicit rationale.
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "README.md"
+      - ".understand-anything/README.md"
+      - ".understand-anything/ARCHITECTURE.md"
+      - ".understand-anything/ORISO-ECOSYSTEM.md"
+
+chat:
+  auto_reply: true
