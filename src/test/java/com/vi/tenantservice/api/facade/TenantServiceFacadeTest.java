@@ -284,6 +284,27 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void updateTenant_Should_passValidation_When_translationMetadataKeyIsValid() {
+    // given
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(converter.toEntity(tenantEntity, sanitizedTenantDTO)).thenReturn(tenantEntity);
+    HashMap<String, String> privacy = Maps.newHashMap();
+    privacy.put("en", "english privacy text");
+    privacy.put("en__meta", "{\"mt\":true,\"src\":\"de\"}");
+    tenantMultilingualDTO.setContent(new MultilingualContent().privacy(privacy));
+    givenConsultingTypeReturnsConsultingTypeByTenantId();
+    when(tenantService.update(tenantEntity)).thenReturn(tenantEntity);
+    when(converter.toMultilingualDTO(tenantEntity)).thenReturn(sanitizedTenantDTO);
+
+    // when
+    tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO);
+
+    // then
+    verify(tenantService).update(tenantEntity);
+  }
+
+  @Test
   void updateTenant_Should_ThrowTenantNotFoundException_When_IdNotFound() {
     // then
     assertThrows(

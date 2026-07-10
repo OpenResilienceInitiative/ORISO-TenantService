@@ -243,9 +243,21 @@ public class TenantServiceFacade {
   }
 
   private void validateTranslationKeys(List<String> isoCountries, List<String> keys) {
-    if (!keys.isEmpty() && !isoCountries.containsAll(keys)) {
+    boolean hasInvalidKey =
+        keys.stream().anyMatch(key -> !isValidTranslationKey(isoCountries, key));
+    if (hasInvalidKey) {
       throw new TenantValidationException(HttpStatusExceptionReason.LANGUAGE_KEY_NOT_VALID);
     }
+  }
+
+  private boolean isValidTranslationKey(List<String> isoCountries, String key) {
+    if (isoCountries.contains(key)) {
+      return true;
+    }
+
+    String metadataSuffix = "__meta";
+    return key.endsWith(metadataSuffix)
+        && isoCountries.contains(key.substring(0, key.length() - metadataSuffix.length()));
   }
 
   private static List<String> getLanguageLowercaseKeys(Map<String, String> translatedMap) {
