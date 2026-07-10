@@ -8,6 +8,8 @@ import lombok.Getter;
 @AllArgsConstructor
 @Getter
 public enum UserRole {
+  CONSULTANT("consultant"),
+  GROUP_CHAT_CONSULTANT("group-chat-consultant"),
   TENANT_ADMIN("tenant-admin"),
   SINGLE_TENANT_ADMIN("single-tenant-admin"),
 
