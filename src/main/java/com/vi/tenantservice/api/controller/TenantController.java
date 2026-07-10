@@ -51,6 +51,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.NativeWebRequest;
+import org.springframework.web.server.ResponseStatusException;
 
 /** Controller for tenant API operations. */
 @RestController
@@ -203,6 +204,36 @@ public class TenantController implements TenantApi, TenantadminApi {
   public ResponseEntity<TranslationResponseDTO> translate(
       TranslationRequestDTO translationRequestDTO) {
     return new ResponseEntity<>(translationFacade.translate(translationRequestDTO), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_TRANSLATE_GROUP_CHAT_CONTENT')")
+  public ResponseEntity<TranslationResponseDTO> translateGroupChatAuthorContent(
+      TranslationRequestDTO translationRequestDTO) {
+    validateGroupChatAuthorContent(translationRequestDTO);
+    return new ResponseEntity<>(translationFacade.translate(translationRequestDTO), HttpStatus.OK);
+  }
+
+  private static void validateGroupChatAuthorContent(TranslationRequestDTO request) {
+    if (request == null
+        || request.getSourceLang() == null
+        || request.getSourceLang().isBlank()
+        || CollectionUtils.isEmpty(request.getTargetLangs())
+        || CollectionUtils.isEmpty(request.getTexts())
+        || request.getTexts().size() > 10
+        || request.getTargetLangs().size() > 10
+        || request.getTexts().entrySet().stream()
+            .anyMatch(
+                entry ->
+                    entry.getKey() == null
+                        || entry.getKey().isBlank()
+                        || entry.getKey().length() > 64
+                        || entry.getValue() == null
+                        || entry.getValue().isBlank()
+                        || entry.getValue().length() > 120)) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Invalid group-chat author content");
+    }
   }
 
   @ExceptionHandler(TranslationException.class)
