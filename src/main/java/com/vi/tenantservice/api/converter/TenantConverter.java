@@ -296,6 +296,8 @@ public class TenantConverter {
         .allowedPermissionToggles(
             toTenantAdminAllowedPermissionTogglesSettings(
                 tenantAdminControls.getAllowedPermissionToggles()))
+        .enforcedPermissionToggles(
+            toEnforcedPermissionTogglesSettings(tenantAdminControls.getEnforcedPermissionToggles()))
         .build();
   }
 
@@ -353,7 +355,10 @@ public class TenantConverter {
         .permissionsPageEnabled(tenantAdminControlsSettings.isPermissionsPageEnabled())
         .allowedPermissionToggles(
             toTenantAdminAllowedPermissionToggles(
-                tenantAdminControlsSettings.getAllowedPermissionToggles()));
+                tenantAdminControlsSettings.getAllowedPermissionToggles()))
+        .enforcedPermissionToggles(
+            toEnforcedPermissionToggles(
+                tenantAdminControlsSettings.getEnforcedPermissionToggles()));
   }
 
   private TenantAdminAllowedPermissionToggles toTenantAdminAllowedPermissionToggles(
@@ -406,6 +411,103 @@ public class TenantConverter {
             nullAsTrue(allowedPermissionTogglesSettings.getVoiceMessagesGroupChats()))
         .voiceMessagesSupervisionChats(
             nullAsTrue(allowedPermissionTogglesSettings.getVoiceMessagesSupervisionChats()));
+  }
+
+  private TenantAdminAllowedPermissionTogglesSettings toEnforcedPermissionTogglesSettings(
+      TenantAdminAllowedPermissionToggles allowedPermissionToggles) {
+    if (allowedPermissionToggles == null) {
+      return null;
+    }
+    return TenantAdminAllowedPermissionTogglesSettings.builder()
+        .appearance(nullAsFalse(allowedPermissionToggles.getAppearance()))
+        .anonymousChat(nullAsFalse(allowedPermissionToggles.getAnonymousChat()))
+        .calls(nullAsFalse(allowedPermissionToggles.getCalls()))
+        .groupChat(nullAsFalse(allowedPermissionToggles.getGroupChat()))
+        .supervision(nullAsFalse(allowedPermissionToggles.getSupervision()))
+        .supervisionAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getSupervisionAnonymousChats()))
+        .supervisionOneOnOneChats(
+            nullAsFalse(allowedPermissionToggles.getSupervisionOneOnOneChats()))
+        .audioCalls(nullAsFalse(allowedPermissionToggles.getAudioCalls()))
+        .audioCallsAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getAudioCallsAnonymousChats()))
+        .audioCallsOneOnOneChats(nullAsFalse(allowedPermissionToggles.getAudioCallsOneOnOneChats()))
+        .audioCallsGroupChats(nullAsFalse(allowedPermissionToggles.getAudioCallsGroupChats()))
+        .audioCallsSupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getAudioCallsSupervisionChats()))
+        .videoCalls(nullAsFalse(allowedPermissionToggles.getVideoCalls()))
+        .videoCallsAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getVideoCallsAnonymousChats()))
+        .videoCallsOneOnOneChats(nullAsFalse(allowedPermissionToggles.getVideoCallsOneOnOneChats()))
+        .videoCallsGroupChats(nullAsFalse(allowedPermissionToggles.getVideoCallsGroupChats()))
+        .videoCallsSupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getVideoCallsSupervisionChats()))
+        .threads(nullAsFalse(allowedPermissionToggles.getThreads()))
+        .threadsAnonymousChats(nullAsFalse(allowedPermissionToggles.getThreadsAnonymousChats()))
+        .threadsOneOnOneChats(nullAsFalse(allowedPermissionToggles.getThreadsOneOnOneChats()))
+        .threadsGroupChats(nullAsFalse(allowedPermissionToggles.getThreadsGroupChats()))
+        .threadsSupervisionChats(nullAsFalse(allowedPermissionToggles.getThreadsSupervisionChats()))
+        .voiceMessages(nullAsFalse(allowedPermissionToggles.getVoiceMessages()))
+        .voiceMessagesAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getVoiceMessagesAnonymousChats()))
+        .voiceMessagesOneOnOneChats(
+            nullAsFalse(allowedPermissionToggles.getVoiceMessagesOneOnOneChats()))
+        .voiceMessagesGroupChats(nullAsFalse(allowedPermissionToggles.getVoiceMessagesGroupChats()))
+        .voiceMessagesSupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getVoiceMessagesSupervisionChats()))
+        .build();
+  }
+
+  private TenantAdminAllowedPermissionToggles toEnforcedPermissionToggles(
+      TenantAdminAllowedPermissionTogglesSettings allowedPermissionTogglesSettings) {
+    if (allowedPermissionTogglesSettings == null) {
+      return null;
+    }
+    return new TenantAdminAllowedPermissionToggles()
+        .appearance(nullAsFalse(allowedPermissionTogglesSettings.getAppearance()))
+        .anonymousChat(nullAsFalse(allowedPermissionTogglesSettings.getAnonymousChat()))
+        .calls(nullAsFalse(allowedPermissionTogglesSettings.getCalls()))
+        .groupChat(nullAsFalse(allowedPermissionTogglesSettings.getGroupChat()))
+        .supervision(nullAsFalse(allowedPermissionTogglesSettings.getSupervision()))
+        .supervisionAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getSupervisionAnonymousChats()))
+        .supervisionOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getSupervisionOneOnOneChats()))
+        .audioCalls(nullAsFalse(allowedPermissionTogglesSettings.getAudioCalls()))
+        .audioCallsAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getAudioCallsAnonymousChats()))
+        .audioCallsOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getAudioCallsOneOnOneChats()))
+        .audioCallsGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getAudioCallsGroupChats()))
+        .audioCallsSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getAudioCallsSupervisionChats()))
+        .videoCalls(nullAsFalse(allowedPermissionTogglesSettings.getVideoCalls()))
+        .videoCallsAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVideoCallsAnonymousChats()))
+        .videoCallsOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVideoCallsOneOnOneChats()))
+        .videoCallsGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVideoCallsGroupChats()))
+        .videoCallsSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVideoCallsSupervisionChats()))
+        .threads(nullAsFalse(allowedPermissionTogglesSettings.getThreads()))
+        .threadsAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getThreadsAnonymousChats()))
+        .threadsOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getThreadsOneOnOneChats()))
+        .threadsGroupChats(nullAsFalse(allowedPermissionTogglesSettings.getThreadsGroupChats()))
+        .threadsSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getThreadsSupervisionChats()))
+        .voiceMessages(nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessages()))
+        .voiceMessagesAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesAnonymousChats()))
+        .voiceMessagesOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesOneOnOneChats()))
+        .voiceMessagesGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesGroupChats()))
+        .voiceMessagesSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesSupervisionChats()));
   }
 
   private TenantSmtpSettings toTenantSmtpSettings(SmtpConfig smtpConfig) {

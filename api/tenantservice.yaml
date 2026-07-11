@@ -1278,6 +1278,11 @@ components:
           example: "true"
         allowedPermissionToggles:
           $ref: '#/components/schemas/TenantAdminAllowedPermissionToggles'
+        # enforcedPermissionToggles: per-feature flags an upper role locks ON for every lower role
+        # (Platform -> Traeger -> Beratungsstelle). true = enforced-on; absent/false = not enforced.
+        # Same shape as allowedPermissionToggles. See ADR-013.
+        enforcedPermissionToggles:
+          $ref: '#/components/schemas/TenantAdminAllowedPermissionToggles'
 
     TenantAdminAllowedPermissionToggles:
       type: object
