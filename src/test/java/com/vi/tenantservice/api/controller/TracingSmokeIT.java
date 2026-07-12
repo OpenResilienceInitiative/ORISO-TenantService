@@ -26,8 +26,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 /**
- * Regression test for OBS-P2 (SigNoz OTLP tracing): TenantService's pom.xml was missing the
- * Spring Boot 4 modular tracing autoconfiguration (spring-boot-micrometer-tracing /
+ * Regression test for OBS-P2 (SigNoz OTLP tracing): TenantService's pom.xml was missing the Spring
+ * Boot 4 modular tracing autoconfiguration (spring-boot-micrometer-tracing /
  * spring-boot-micrometer-tracing-opentelemetry), so no io.micrometer.tracing.Tracer bean was ever
  * created and every HTTP request produced zero spans - confirmed live on Pre-Dev via
  * /actuator/beans, which showed only the metrics-side ObservationHandlerGroup and no
@@ -42,10 +42,7 @@ import org.springframework.web.context.WebApplicationContext;
  */
 @SpringBootTest(classes = TenantServiceApplication.class)
 @TestPropertySource(
-    properties = {
-      "spring.profiles.active=testing",
-      "management.tracing.sampling.probability=1.0"
-    })
+    properties = {"spring.profiles.active=testing", "management.tracing.sampling.probability=1.0"})
 @AutoConfigureMockMvc
 @Import(TracingSmokeIT.InMemorySpanExporterConfig.class)
 class TracingSmokeIT {
