@@ -44,4 +44,10 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
   public void handle(BadRequestException e) {
     logger.warn("Returning HTTP 400 Bad Request", e);
   }
+
+  @ExceptionHandler(value = {Exception.class})
+  @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+  protected void handleException(Exception e) {
+    logger.error("Returning HTTP 500 Internal Server Error", e);
+  }
 }
