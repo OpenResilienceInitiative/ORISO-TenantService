@@ -14,6 +14,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.vi.tenantservice.api.authorisation.Authority.AuthorityValue;
 import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
+import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
@@ -23,6 +24,8 @@ import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
+import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
+import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
@@ -51,6 +54,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -107,6 +111,10 @@ class TenantServiceFacadeTest {
   private TenantFacadeDependentSettingsOverrideService tenantFacadeDependentSettingsOverrideService;
 
   @Mock private TenantAdminControlsService tenantAdminControlsService;
+
+  @Spy
+  private EffectivePermissionSettingsApplier effectivePermissionSettingsApplier =
+      new EffectivePermissionSettingsApplier();
 
   @Mock private SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
@@ -280,6 +288,27 @@ class TenantServiceFacadeTest {
     // then
     verify(tenantService).findTenantById(ID);
     verify(converter).toEntity(tenantEntity, sanitizedTenantDTO);
+    verify(tenantService).update(tenantEntity);
+  }
+
+  @Test
+  void updateTenant_Should_passValidation_When_translationMetadataKeyIsValid() {
+    // given
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(converter.toEntity(tenantEntity, sanitizedTenantDTO)).thenReturn(tenantEntity);
+    HashMap<String, String> privacy = Maps.newHashMap();
+    privacy.put("en", "english privacy text");
+    privacy.put("en__meta", "{\"mt\":true,\"src\":\"de\"}");
+    tenantMultilingualDTO.setContent(new MultilingualContent().privacy(privacy));
+    givenConsultingTypeReturnsConsultingTypeByTenantId();
+    when(tenantService.update(tenantEntity)).thenReturn(tenantEntity);
+    when(converter.toMultilingualDTO(tenantEntity)).thenReturn(sanitizedTenantDTO);
+
+    // when
+    tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO);
+
+    // then
     verify(tenantService).update(tenantEntity);
   }
 
@@ -460,6 +489,28 @@ class TenantServiceFacadeTest {
     // then
     verify(tenantService).getAllTenantData();
     verify(converter).toRestrictedTenantDTO(tenantEntity, DE);
+  }
+
+  @Test
+  void getSingleTenant_Should_applyEffectivePlatformControls_toPublicSettings() {
+    // given: platform disallows video calls; the tenant itself has them on
+    var publicDto =
+        new RestrictedTenantDTO().settings(new Settings().featureVideoCallsEnabled(true));
+    when(tenantService.getAllTenantData()).thenReturn(List.of(tenantEntity));
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(converter.toRestrictedTenantDTO(tenantEntity, DE)).thenReturn(publicDto);
+    when(tenantAdminControlsService.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .allowedPermissionToggles(
+                    new TenantAdminAllowedPermissionToggles().videoCalls(false)));
+
+    // when
+    var result = tenantServiceFacade.getSingleTenant();
+
+    // then: the public settings served to the counselling app reflect the platform constraint
+    assertThat(result).isPresent();
+    assertThat(result.get().getSettings().getFeatureVideoCallsEnabled()).isFalse();
   }
 
   @Test

@@ -107,13 +107,46 @@
             <artifactId>spring-boot-starter-hateoas</artifactId>
         </dependency>
 
+        <!-- Spring Boot 4 split tracing autoconfiguration out of the actuator
+          starter (unlike metrics, which spring-boot-starter-actuator still pulls
+          in via spring-boot-starter-micrometer-metrics). Without these two
+          modules, MicrometerTracingAutoConfiguration / OpenTelemetryTracingAutoConfiguration /
+          OtlpTracingAutoConfiguration never load: io.micrometer.tracing.Tracer
+          falls back to Tracer.NOOP (or, as was the case here, doesn't even get a
+          NoopTracerAutoConfiguration bean because the whole autoconfiguration
+          class is simply absent from the classpath), so no span is ever created
+          regardless of how the OTLP exporter properties are set. Verified by
+          diffing `unzip -l` of this service's running jar against AgencyService's:
+          Agency has spring-boot-micrometer-tracing-4.0.1.jar and
+          spring-boot-micrometer-tracing-opentelemetry-4.0.1.jar; this service did
+          not, despite having the io.micrometer bridge and OTLP exporter jars below. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-micrometer-tracing</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-micrometer-tracing-opentelemetry</artifactId>
+        </dependency>
+        <!-- Provides the base io.opentelemetry.api.OpenTelemetry SDK bean
+          (OpenTelemetrySdkAutoConfiguration) that OtlpTracingAutoConfiguration's
+          otelTracer bean requires - not pulled in by
+          spring-boot-micrometer-tracing-opentelemetry itself. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-opentelemetry</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-tracing-bridge-otel</artifactId>
         </dependency>
         <dependency>
             <groupId>io.opentelemetry</groupId>
-            <artifactId>opentelemetry-exporter-zipkin</artifactId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-otlp</artifactId>
         </dependency>
         <dependency>
             <groupId>io.sentry</groupId>
@@ -124,6 +157,11 @@
             <groupId>io.sentry</groupId>
             <artifactId>sentry-logback</artifactId>
             <version>${sentry.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.0.1</version>
         </dependency>
 
         <!-- Spring actuator  -->
@@ -350,6 +388,17 @@
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>${assertj-core.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- In-memory span exporter for asserting real spans get created/exported
+          end-to-end through the tracing autoconfiguration - see
+          TracingSmokeIT. Version pinned to the same OTel SDK line already used
+          by spring-boot-opentelemetry (${opentelemetry.version}), inherited
+          from spring-boot-dependencies. -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
+            <version>${opentelemetry.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>

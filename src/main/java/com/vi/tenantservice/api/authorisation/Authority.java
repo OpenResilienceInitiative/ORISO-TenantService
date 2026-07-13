@@ -14,6 +14,9 @@ import lombok.Getter;
 @AllArgsConstructor
 @Getter
 public enum Authority {
+  CONSULTANT(UserRole.CONSULTANT, singletonList(AuthorityValue.TRANSLATE_GROUP_CHAT_CONTENT)),
+  GROUP_CHAT_CONSULTANT(
+      UserRole.GROUP_CHAT_CONSULTANT, singletonList(AuthorityValue.TRANSLATE_GROUP_CHAT_CONTENT)),
   TENANT_ADMIN(
       UserRole.TENANT_ADMIN,
       Lists.newArrayList(
@@ -62,5 +65,7 @@ public enum Authority {
 
     public static final String UPDATE_EXTENDED_TENANT_SETTINGS =
         PREFIX + "UPDATE_EXTENDED_TENANT_SETTINGS";
+    public static final String TRANSLATE_GROUP_CHAT_CONTENT =
+        PREFIX + "TRANSLATE_GROUP_CHAT_CONTENT";
   }
 }

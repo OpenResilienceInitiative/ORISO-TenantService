@@ -8,6 +8,7 @@ import static org.springframework.util.ObjectUtils.nullSafeEquals;
 import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.Authority.AuthorityValue;
 import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
+import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
@@ -86,6 +87,8 @@ public class TenantServiceFacade {
       tenantFacadeDependentSettingsOverrideService;
 
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
+
+  private final @NonNull EffectivePermissionSettingsApplier effectivePermissionSettingsApplier;
 
   private final @NonNull TenantResolverService tenantResolverService;
 
@@ -243,9 +246,21 @@ public class TenantServiceFacade {
   }
 
   private void validateTranslationKeys(List<String> isoCountries, List<String> keys) {
-    if (!keys.isEmpty() && !isoCountries.containsAll(keys)) {
+    boolean hasInvalidKey =
+        keys.stream().anyMatch(key -> !isValidTranslationKey(isoCountries, key));
+    if (hasInvalidKey) {
       throw new TenantValidationException(HttpStatusExceptionReason.LANGUAGE_KEY_NOT_VALID);
     }
+  }
+
+  private boolean isValidTranslationKey(List<String> isoCountries, String key) {
+    if (isoCountries.contains(key)) {
+      return true;
+    }
+
+    String metadataSuffix = "__meta";
+    return key.endsWith(metadataSuffix)
+        && isoCountries.contains(key.substring(0, key.length() - metadataSuffix.length()));
   }
 
   private static List<String> getLanguageLowercaseKeys(Map<String, String> translatedMap) {
@@ -419,7 +434,22 @@ public class TenantServiceFacade {
     String lang = translationService.getCurrentLanguageContext();
     return tenantById.isEmpty()
         ? Optional.empty()
-        : Optional.of(tenantConverter.toRestrictedTenantDTO(tenantById.get(), lang));
+        : Optional.of(
+            withEffectivePermissions(
+                tenantConverter.toRestrictedTenantDTO(tenantById.get(), lang)));
+  }
+
+  /**
+   * Bakes the platform admin controls into the public settings so the counselling app receives
+   * effective feature flags (forced-off disabled, enforced-on locked on) without seeing the
+   * controls themselves. See ADR-013 P4.
+   */
+  private RestrictedTenantDTO withEffectivePermissions(RestrictedTenantDTO dto) {
+    if (dto != null) {
+      effectivePermissionSettingsApplier.applyTo(
+          dto.getSettings(), tenantAdminControlsService.getControls());
+    }
+    return dto;
   }
 
   public List<BasicTenantLicensingDTO> getAllTenants() {
@@ -440,7 +470,9 @@ public class TenantServiceFacade {
     String lang = translationService.getCurrentLanguageContext();
     return tenantBySubdomain.isEmpty()
         ? Optional.empty()
-        : Optional.of(tenantConverter.toRestrictedTenantDTO(tenantBySubdomain.get(), lang));
+        : Optional.of(
+            withEffectivePermissions(
+                tenantConverter.toRestrictedTenantDTO(tenantBySubdomain.get(), lang)));
   }
 
   private Optional<Long> resolveFromRequestOrCookie(Long optionalTenantIdOverride) {
@@ -469,8 +501,9 @@ public class TenantServiceFacade {
     Long actualTenantId = tenantResolverService.tryResolve().orElseThrow();
     TenantRestrictedData actualTenant =
         tenantService.findRestrictedTenantDataById(actualTenantId).orElseThrow();
-    return singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-        mainTenant, actualTenant);
+    return withEffectivePermissions(
+        singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
+            mainTenant, actualTenant));
   }
 
   public Optional<RestrictedTenantDTO> getTenantDataWithOverride(
@@ -486,8 +519,9 @@ public class TenantServiceFacade {
       throw new BadRequestException("Tenant not found for id " + resolvedTenantId);
     }
     return Optional.of(
-        singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-            mainTenantForSingleDomainMultitenancy.get(), tenantToOverridePrivacy.get()));
+        withEffectivePermissions(
+            singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
+                mainTenantForSingleDomainMultitenancy.get(), tenantToOverridePrivacy.get())));
   }
 
   public Optional<RestrictedTenantDTO> getSingleTenant() {
@@ -495,7 +529,8 @@ public class TenantServiceFacade {
     if (tenantEntities != null && tenantEntities.size() == 1) {
       var tenantEntity = tenantEntities.get(0);
       String lang = translationService.getCurrentLanguageContext();
-      return Optional.of(tenantConverter.toRestrictedTenantDTO(tenantEntity, lang));
+      return Optional.of(
+          withEffectivePermissions(tenantConverter.toRestrictedTenantDTO(tenantEntity, lang)));
     } else {
       throw new IllegalStateException("Not exactly one tenant was found.");
     }

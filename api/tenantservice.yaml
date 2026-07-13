@@ -264,6 +264,48 @@ paths:
                 $ref: '#/components/schemas/TranslationErrorDTO'
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenant/translate/group-chat-author-content:
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Translates bounded self-help group welcome and rule content [Authorization: consultant, group-chat-consultant]'
+      description: 'Uses the configured translation provider for short, plain-text welcome and
+        group-rule content. The endpoint is intentionally separate from tenant administration so
+        consultants never receive tenant-management privileges.'
+      operationId: translateGroupChatAuthorContent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranslationRequestDTO'
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationResponseDTO'
+        400:
+          description: BAD REQUEST - content is missing or exceeds the group-chat limits
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - dedicated group-chat translation authority is missing
+        409:
+          description: CONFLICT - no translation provider API key configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationErrorDTO'
+        502:
+          description: BAD GATEWAY - translation provider error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationErrorDTO'
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}:
     put:
       tags:
@@ -398,7 +440,8 @@ paths:
           description: Tenant Id
           required: false
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -426,7 +469,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -548,7 +592,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -575,7 +620,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -600,7 +646,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -627,7 +674,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       requestBody:
         required: true
         description: 'Per-language DPA HTML content (language code -> HTML). Supports the
@@ -671,7 +719,8 @@ paths:
           description: Tenant ID
           required: true
           schema:
-            type: long
+            type: integer
+            format: int64
       responses:
         200:
           description: Successful operation
@@ -868,7 +917,8 @@ components:
         - subdomain
       properties:
         id:
-          type: long
+          type: integer
+          format: int64
           example: 12132
         name:
           type: string
@@ -906,7 +956,8 @@ components:
             - name
           properties:
             id:
-              type: long
+              type: integer
+              format: int64
               example: 12132
             name:
               type: string
@@ -951,7 +1002,8 @@ components:
         - subdomain
       properties:
         id:
-          type: long
+          type: integer
+          format: int64
           example: 12132
         name:
           type: string
@@ -974,7 +1026,8 @@ components:
         - name
       properties:
         id:
-          type: long
+          type: integer
+          format: int64
           example: 12132
         name:
           type: string
@@ -1236,6 +1289,11 @@ components:
           example: "true"
         allowedPermissionToggles:
           $ref: '#/components/schemas/TenantAdminAllowedPermissionToggles'
+        # enforcedPermissionToggles: per-feature flags an upper role locks ON for every lower role
+        # (Platform -> Traeger -> Beratungsstelle). true = enforced-on; absent/false = not enforced.
+        # Same shape as allowedPermissionToggles. See ADR-013.
+        enforcedPermissionToggles:
+          $ref: '#/components/schemas/TenantAdminAllowedPermissionToggles'
 
     TenantAdminAllowedPermissionToggles:
       type: object
@@ -1423,7 +1481,8 @@ components:
         - subdomain
       properties:
         id:
-          type: long
+          type: integer
+          format: int64
           example: 12132
         name:
           type: string

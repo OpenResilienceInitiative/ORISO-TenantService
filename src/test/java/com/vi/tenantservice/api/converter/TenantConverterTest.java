@@ -293,6 +293,74 @@ class TenantConverterTest {
   }
 
   @Test
+  void toDTO_should_preserveEnforcedPermissionToggle() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .tenantAdminControls(
+            new TenantAdminControls()
+                .enforcedPermissionToggles(
+                    new TenantAdminAllowedPermissionToggles().videoCalls(true)));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(
+            converted
+                .getSettings()
+                .getTenantAdminControls()
+                .getEnforcedPermissionToggles()
+                .getVideoCalls())
+        .isTrue();
+  }
+
+  @Test
+  void toDTO_should_defaultMissingEnforcedPermissionToggleToFalse() {
+    // given - unlike allowed (defaults true), an unset enforced flag means "not enforced" = false
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .tenantAdminControls(
+            new TenantAdminControls()
+                .enforcedPermissionToggles(new TenantAdminAllowedPermissionToggles()));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(
+            converted
+                .getSettings()
+                .getTenantAdminControls()
+                .getEnforcedPermissionToggles()
+                .getVideoCalls())
+        .isFalse();
+  }
+
+  @Test
+  void toDTO_should_keepEnforcedTogglesNullWhenAbsent() {
+    // given - a legacy row / DTO without enforcedPermissionToggles stays null (nothing enforced)
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .tenantAdminControls(
+            new TenantAdminControls()
+                .allowedPermissionToggles(new TenantAdminAllowedPermissionToggles()));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(converted.getSettings().getTenantAdminControls().getEnforcedPermissionToggles())
+        .isNull();
+  }
+
+  @Test
   void toDTO_should_preserveSensitiveSettingsForNonPublicDtos() {
     // given
     MultilingualTenantDTO tenantDTO =
