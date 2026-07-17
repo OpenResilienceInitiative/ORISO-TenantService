@@ -840,6 +840,59 @@ class TenantControllerIT {
   }
 
   @Test
+  void searchTenants_Should_returnOk_When_sortedBySubdomain() throws Exception {
+    // given
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+
+    // when
+    var content =
+        this.mockMvc
+            .perform(
+                get(TENANTADMIN_SEARCH + "?query=*&page=1&perPage=10&field=SUBDOMAIN&order=ASC")
+                    .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("_embedded", hasSize(PAGE_SIZE)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    // then
+    var subdomains =
+        com.jayway.jsonpath.JsonPath.<java.util.List<String>>read(
+            content, "$._embedded[*].subdomain");
+    org.assertj.core.api.Assertions.assertThat(subdomains).isSorted();
+  }
+
+  @Test
+  void searchTenants_Should_returnOk_When_sortedByBeraterCountDescending() throws Exception {
+    // given
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+
+    // when
+    var content =
+        this.mockMvc
+            .perform(
+                get(TENANTADMIN_SEARCH + "?query=*&page=1&perPage=10&field=BERATERCOUNT&order=DESC")
+                    .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("_embedded", hasSize(PAGE_SIZE)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    // then
+    var beraterCounts =
+        com.jayway.jsonpath.JsonPath.<java.util.List<Integer>>read(
+            content, "$._embedded[*].beraterCount");
+    org.assertj.core.api.Assertions.assertThat(beraterCounts)
+        .isSortedAccordingTo(java.util.Comparator.reverseOrder());
+  }
+
+  @Test
   void searchTenants_Should_returnUnauthorized_When_attemptedToGetTenantWithoutTenantAuthority()
       throws Exception {
     // when, then
