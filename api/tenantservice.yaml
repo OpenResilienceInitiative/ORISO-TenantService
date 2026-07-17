@@ -86,9 +86,9 @@ paths:
           description: field to sort by
           schema:
             type: string
-            enum: [ NAME, ID ]
+            enum: [ NAME, ID, SUBDOMAIN, BERATERCOUNT ]
             default: NAME
-            pattern: '^(NAME|ID)$'
+            pattern: '^(NAME|ID|SUBDOMAIN|BERATERCOUNT)$'
         - name: order
           in: query
           description: sort order
