@@ -339,7 +339,7 @@ public class TenantController implements TenantApi, TenantadminApi {
       @NotNull @Valid String query,
       @Min(1) @Valid Integer page,
       @Min(1) @Valid Integer perPage,
-      @Pattern(regexp = "^(NAME|ID)$") @Valid String field,
+      @Pattern(regexp = "^(NAME|ID|SUBDOMAIN|BERATERCOUNT)$") @Valid String field,
       @Pattern(regexp = "^(ASC|DESC)$") @Valid String order) {
     var decodedInfix = URLDecoder.decode(query, StandardCharsets.UTF_8).trim();
     var isAscending = order.equalsIgnoreCase("asc");
