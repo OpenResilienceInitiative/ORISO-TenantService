@@ -14,11 +14,9 @@ reviews:
 
   auto_review:
     enabled: true
-    description_keyword: "coderabbit: review"
-    auto_incremental_review: false
+    auto_incremental_review: true
     drafts: false
-    labels:
-      - "coderabbit"
+    labels: []
     base_branches:
       - "dev"
 
@@ -28,7 +26,7 @@ reviews:
     - "src/**"
     - "pom.xml"
     - ".github/**"
-    - "*.md"
+    - "**/*.md"
 
   path_instructions:
     - path: "src/main/**/*.java"
