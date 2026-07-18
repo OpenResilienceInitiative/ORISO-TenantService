@@ -414,8 +414,14 @@ class TenantConverterTest {
     assertThat(actual.getFeatureGroupChatV2Enabled())
         .isEqualTo(expected.getFeatureGroupChatV2Enabled());
     assertThat(actual.getFeatureToolsEnabled()).isEqualTo(expected.getFeatureToolsEnabled());
-    assertThat(actual.getFeatureAttachmentUploadDisabled())
-        .isEqualTo(expected.getFeatureAttachmentUploadDisabled());
+    assertThat(actual.getFeatureMediaUploadEnabled())
+        .isEqualTo(expected.getFeatureMediaUploadEnabled());
+    assertThat(actual.getFeatureMediaUploadAnonymousChatsEnabled())
+        .isEqualTo(expected.getFeatureMediaUploadAnonymousChatsEnabled());
+    assertThat(actual.getFeatureMediaInlineDisplayEnabled())
+        .isEqualTo(expected.getFeatureMediaInlineDisplayEnabled());
+    assertThat(actual.getFeatureMediaAiScanEnabled())
+        .isEqualTo(expected.getFeatureMediaAiScanEnabled());
     assertThat(actual.getFeatureToolsOICDToken()).isEqualTo(expected.getFeatureToolsOICDToken());
     assertThat(actual.getActiveLanguages()).isEqualTo(expected.getActiveLanguages());
     assertThat(actual.getShowAskerProfile()).isEqualTo(expected.getShowAskerProfile());
@@ -439,8 +445,14 @@ class TenantConverterTest {
     assertThat(actual.getFeatureGroupChatV2Enabled())
         .isEqualTo(expected.getFeatureGroupChatV2Enabled());
     assertThat(actual.getFeatureToolsEnabled()).isEqualTo(expected.getFeatureToolsEnabled());
-    assertThat(actual.getFeatureAttachmentUploadDisabled())
-        .isEqualTo(expected.getFeatureAttachmentUploadDisabled());
+    assertThat(actual.getFeatureMediaUploadEnabled())
+        .isEqualTo(expected.getFeatureMediaUploadEnabled());
+    assertThat(actual.getFeatureMediaUploadAnonymousChatsEnabled())
+        .isEqualTo(expected.getFeatureMediaUploadAnonymousChatsEnabled());
+    assertThat(actual.getFeatureMediaInlineDisplayEnabled())
+        .isEqualTo(expected.getFeatureMediaInlineDisplayEnabled());
+    assertThat(actual.getFeatureMediaAiScanEnabled())
+        .isEqualTo(expected.getFeatureMediaAiScanEnabled());
     assertThat(actual.getActiveLanguages()).isEqualTo(expected.getActiveLanguages());
     assertThat(actual.getShowAskerProfile()).isEqualTo(expected.getShowAskerProfile());
     assertThat(actual.getIsVideoCallAllowed()).isEqualTo(expected.getIsVideoCallAllowed());

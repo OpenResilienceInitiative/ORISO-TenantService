@@ -31,7 +31,7 @@
   "featureVoiceMessagesOneOnOneChatsEnabled": true,
   "featureVoiceMessagesGroupChatsEnabled": true,
   "featureVoiceMessagesSupervisionChatsEnabled": true,
-  "featureAttachmentUploadDisabled": true,
+  "featureMediaUploadEnabled": false,
   "featureToolsOIDCToken": "token",
   "activeLanguages": [
     "de",

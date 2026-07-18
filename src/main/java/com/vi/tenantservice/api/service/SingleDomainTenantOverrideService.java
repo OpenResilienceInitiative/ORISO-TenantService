@@ -46,10 +46,36 @@ public class SingleDomainTenantOverrideService {
   private static void overrideSettings(
       RestrictedTenantDTO mainTenantRestrictedDTO,
       RestrictedTenantDTO overridingRestrictedTenantDTO) {
-    mainTenantRestrictedDTO
-        .getSettings()
-        .setFeatureAttachmentUploadDisabled(
-            overridingRestrictedTenantDTO.getSettings().getFeatureAttachmentUploadDisabled());
+    var mainSettings = mainTenantRestrictedDTO.getSettings();
+    var actualSettings = overridingRestrictedTenantDTO.getSettings();
+    mainSettings.setFeatureMediaUploadEnabled(actualSettings.getFeatureMediaUploadEnabled());
+    mainSettings.setFeatureMediaUploadAnonymousChatsEnabled(
+        actualSettings.getFeatureMediaUploadAnonymousChatsEnabled());
+    mainSettings.setFeatureMediaUploadOneOnOneChatsEnabled(
+        actualSettings.getFeatureMediaUploadOneOnOneChatsEnabled());
+    mainSettings.setFeatureMediaUploadGroupChatsEnabled(
+        actualSettings.getFeatureMediaUploadGroupChatsEnabled());
+    mainSettings.setFeatureMediaUploadSupervisionChatsEnabled(
+        actualSettings.getFeatureMediaUploadSupervisionChatsEnabled());
+    mainSettings.setFeatureMediaInlineDisplayEnabled(
+        actualSettings.getFeatureMediaInlineDisplayEnabled());
+    mainSettings.setFeatureMediaInlineDisplayAnonymousChatsEnabled(
+        actualSettings.getFeatureMediaInlineDisplayAnonymousChatsEnabled());
+    mainSettings.setFeatureMediaInlineDisplayOneOnOneChatsEnabled(
+        actualSettings.getFeatureMediaInlineDisplayOneOnOneChatsEnabled());
+    mainSettings.setFeatureMediaInlineDisplayGroupChatsEnabled(
+        actualSettings.getFeatureMediaInlineDisplayGroupChatsEnabled());
+    mainSettings.setFeatureMediaInlineDisplaySupervisionChatsEnabled(
+        actualSettings.getFeatureMediaInlineDisplaySupervisionChatsEnabled());
+    mainSettings.setFeatureMediaAiScanEnabled(actualSettings.getFeatureMediaAiScanEnabled());
+    mainSettings.setFeatureMediaAiScanAnonymousChatsEnabled(
+        actualSettings.getFeatureMediaAiScanAnonymousChatsEnabled());
+    mainSettings.setFeatureMediaAiScanOneOnOneChatsEnabled(
+        actualSettings.getFeatureMediaAiScanOneOnOneChatsEnabled());
+    mainSettings.setFeatureMediaAiScanGroupChatsEnabled(
+        actualSettings.getFeatureMediaAiScanGroupChatsEnabled());
+    mainSettings.setFeatureMediaAiScanSupervisionChatsEnabled(
+        actualSettings.getFeatureMediaAiScanSupervisionChatsEnabled());
   }
 
   private RestrictedTenantDTO getRestrictedTenantDTO(TenantRestrictedData mainTenant, String lang) {

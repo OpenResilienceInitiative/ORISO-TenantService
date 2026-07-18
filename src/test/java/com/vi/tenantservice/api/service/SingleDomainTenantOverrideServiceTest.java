@@ -38,10 +38,10 @@ class SingleDomainTenantOverrideServiceTest {
     var actualTenant = new TenantEntity();
     when(translationService.getCurrentLanguageContext()).thenReturn("de");
     when(tenantConverter.toRestrictedTenantDTO(mainTenant, "de"))
-        .thenReturn(restrictedDTO("main privacy", LocalDateTime.now().minusDays(1), false));
+        .thenReturn(restrictedDTO("main privacy", LocalDateTime.now().minusDays(1), true));
     LocalDateTime actualPrivacyChangedDate = LocalDateTime.now();
     when(tenantConverter.toRestrictedTenantDTO(actualTenant, "de"))
-        .thenReturn(restrictedDTO("actual privacy", actualPrivacyChangedDate, true));
+        .thenReturn(restrictedDTO("actual privacy", actualPrivacyChangedDate, false));
 
     var applicationSettings =
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
@@ -60,7 +60,7 @@ class SingleDomainTenantOverrideServiceTest {
         .isEqualTo(Map.of("de", "actual privacy"));
     assertThat(restrictedTenantDTO.getContent().getDataPrivacyConfirmation())
         .isEqualTo(actualPrivacyChangedDate);
-    assertThat(restrictedTenantDTO.getSettings().getFeatureAttachmentUploadDisabled()).isTrue();
+    assertThat(restrictedTenantDTO.getSettings().getFeatureMediaUploadEnabled()).isFalse();
   }
 
   @Test
@@ -74,10 +74,10 @@ class SingleDomainTenantOverrideServiceTest {
     when(translationService.getCurrentLanguageContext()).thenReturn("de");
     LocalDateTime mainPrivacyChangedDate = LocalDateTime.now().minusDays(1);
     when(tenantConverter.toRestrictedTenantDTO(mainTenant, "de"))
-        .thenReturn(restrictedDTO("main privacy", mainPrivacyChangedDate, false));
+        .thenReturn(restrictedDTO("main privacy", mainPrivacyChangedDate, true));
     LocalDateTime actualPrivacyChangedDate = LocalDateTime.now();
     when(tenantConverter.toRestrictedTenantDTO(actualTenant, "de"))
-        .thenReturn(restrictedDTO("actual privacy", actualPrivacyChangedDate, true));
+        .thenReturn(restrictedDTO("actual privacy", actualPrivacyChangedDate, false));
 
     var applicationSettings =
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
@@ -94,17 +94,17 @@ class SingleDomainTenantOverrideServiceTest {
     assertThat(restrictedTenantDTO.getContent().getPrivacy()).isEqualTo("main privacy");
     assertThat(restrictedTenantDTO.getContent().getDataPrivacyConfirmation())
         .isEqualTo(mainPrivacyChangedDate);
-    assertThat(restrictedTenantDTO.getSettings().getFeatureAttachmentUploadDisabled()).isTrue();
+    assertThat(restrictedTenantDTO.getSettings().getFeatureMediaUploadEnabled()).isFalse();
   }
 
   private static RestrictedTenantDTO restrictedDTO(
-      String privacy, LocalDateTime privacyChangedDate, boolean featureAttachmentUploadDisabled) {
+      String privacy, LocalDateTime privacyChangedDate, boolean mediaUploadEnabled) {
     return new RestrictedTenantDTO()
         .content(
             new Content()
                 .privacy(privacy)
                 .privacyLanguages(Map.of("de", privacy))
                 .dataPrivacyConfirmation(privacyChangedDate))
-        .settings(new Settings().featureAttachmentUploadDisabled(featureAttachmentUploadDisabled));
+        .settings(new Settings().featureMediaUploadEnabled(mediaUploadEnabled));
   }
 }

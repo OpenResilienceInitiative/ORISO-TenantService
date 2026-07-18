@@ -62,7 +62,7 @@ class JsonConverterTest {
             + "\"featureAppointmentsEnabled\":false,"
             + "\"featureGroupChatV2Enabled\":false,"
             + "\"featureToolsEnabled\":false,"
-            + "\"featureAttachmentUploadDisabled\":true,"
+            + "\"featureMediaUploadEnabled\":false,"
             + "\"featureToolsOIDCToken\":null"
             + "}";
 
@@ -78,7 +78,7 @@ class JsonConverterTest {
     assertThat(tenantSettings.getFeatureAppointmentsEnabled(), is(false));
     assertThat(tenantSettings.getFeatureGroupChatV2Enabled(), is(false));
     assertThat(tenantSettings.getFeatureToolsEnabled(), is(false));
-    assertThat(tenantSettings.getFeatureAttachmentUploadDisabled(), is(true));
+    assertThat(tenantSettings.getFeatureMediaUploadEnabled(), is(false));
     assertThat(tenantSettings.getFeatureToolsOIDCToken(), nullValue());
   }
 
