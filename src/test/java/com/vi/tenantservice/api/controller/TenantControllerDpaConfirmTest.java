@@ -39,6 +39,8 @@ class TenantControllerDpaConfirmTest {
   @Mock private TenantDpaService tenantDpaService;
   @Mock private TenantDpaFacade tenantDpaFacade;
   @Mock private TranslationFacade translationFacade;
+  @Mock com.vi.tenantservice.api.service.TenantMediaService tenantMediaService;
+
   @InjectMocks private TenantController controller;
 
   @Test

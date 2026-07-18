@@ -734,6 +734,65 @@ paths:
           description: FORBIDDEN - not authorized to access this tenant
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/media:
+    post:
+      tags:
+        - tenant-controller
+      summary:
+        'Uploads an editor image owned by the calling admin''s tenant. Content type is derived
+        from magic bytes (PNG/JPEG/WebP only, max 2 MB) [Authorization: tenant-admin,
+        single-tenant-admin]'
+      operationId: uploadTenantMedia
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        201:
+          description: CREATED - media stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMediaResponseDTO'
+        400:
+          description: BAD REQUEST - unsupported content or size limit exceeded
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /media/{mediaId}:
+    get:
+      tags:
+        - tenant-controller
+      summary:
+        'Serves a stored tenant media file. Public: legal-text images are read by anonymous
+        visitors. Immutable content (UUID ids), aggressively cacheable.'
+      operationId: getTenantMedia
+      parameters:
+        - name: mediaId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: OK - media content
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        404:
+          description: NOT FOUND - unknown media id
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
 components:
   schemas:
     TranslationApiKeysDTO:
@@ -1481,6 +1540,20 @@ components:
         mediaAiScanSupervisionChats:
           type: boolean
           example: "true"
+
+    TenantMediaResponseDTO:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "3f6f1c1e-8a7b-4c2d-9e0f-1a2b3c4d5e6f"
+        url:
+          type: string
+          description: "Server-relative path the stored media is served from."
+          example: "/media/3f6f1c1e-8a7b-4c2d-9e0f-1a2b3c4d5e6f"
+        contentType:
+          type: string
+          example: "image/png"
 
     SmtpConfig:
       type: object
