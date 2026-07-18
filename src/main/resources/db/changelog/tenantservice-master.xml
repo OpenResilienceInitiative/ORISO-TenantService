@@ -47,4 +47,5 @@
   <!-- Catch-up changesets from the 2026-07-04 Liquibase re-enablement (package L1). -->
   <include file="db/changelog/changeset/0021_fix_dpa_signature_signer_is_member_type/0021-changeSet.xml"/>
   <include file="db/changelog/changeset/0022_widen_tenant_settings_column/0022-changeSet.xml"/>
+  <include file="db/changelog/changeset/0023_tenant_media/0023-changeSet.xml"/>
 </databaseChangeLog>

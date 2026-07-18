@@ -14,6 +14,7 @@ import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.model.TenantMediaResponseDTO;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeyUpdateDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeysDTO;
@@ -22,7 +23,10 @@ import com.vi.tenantservice.api.model.TranslationRequestDTO;
 import com.vi.tenantservice.api.model.TranslationResponseDTO;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
+import com.vi.tenantservice.api.service.MediaSizeLimitExceededException;
 import com.vi.tenantservice.api.service.TenantDpaService;
+import com.vi.tenantservice.api.service.TenantMediaService;
+import com.vi.tenantservice.api.service.UnsupportedMediaContentException;
 import com.vi.tenantservice.api.service.translation.TranslationErrorCode;
 import com.vi.tenantservice.api.service.translation.TranslationException;
 import com.vi.tenantservice.config.security.AuthorisationService;
@@ -67,6 +71,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   private final @NonNull TenantDpaService tenantDpaService;
   private final @NonNull TenantDpaFacade tenantDpaFacade;
   private final @NonNull TranslationFacade translationFacade;
+  private final @NonNull TenantMediaService tenantMediaService;
 
   /**
    * Public DPA confirmation via a single-use sign token. No authentication: the token is the
@@ -362,5 +367,31 @@ public class TenantController implements TenantApi, TenantadminApi {
     return !CollectionUtils.isEmpty(tenants)
         ? new ResponseEntity<>(tenants, HttpStatus.OK)
         : new ResponseEntity<>(HttpStatus.NO_CONTENT);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<TenantMediaResponseDTO> uploadTenantMedia(
+      org.springframework.web.multipart.MultipartFile file) {
+    var tenantId =
+        authorisationService
+            .findTenantIdInAccessToken()
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(
+                        HttpStatus.FORBIDDEN, "no tenantId claim in access token"));
+    try {
+      var stored = tenantMediaService.upload(file.getBytes(), file.getOriginalFilename(), tenantId);
+      var response =
+          new TenantMediaResponseDTO()
+              .id(stored.getId())
+              .url("/media/" + stored.getId())
+              .contentType(stored.getContentType());
+      return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    } catch (java.io.IOException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "could not read upload");
+    } catch (MediaSizeLimitExceededException | UnsupportedMediaContentException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
   }
 }
