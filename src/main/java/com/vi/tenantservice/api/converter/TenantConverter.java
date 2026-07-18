@@ -125,7 +125,31 @@ public class TenantConverter {
             settings.getFeatureSystemNotificationEmailsEnabled())
         .smtp(toTenantSmtpSettings(settings.getSmtp()))
         .featureToolsOIDCToken(settings.getFeatureToolsOICDToken())
-        .featureAttachmentUploadDisabled(settings.getFeatureAttachmentUploadDisabled())
+        .featureMediaUploadEnabled(settings.getFeatureMediaUploadEnabled())
+        .featureMediaUploadAnonymousChatsEnabled(
+            settings.getFeatureMediaUploadAnonymousChatsEnabled())
+        .featureMediaUploadOneOnOneChatsEnabled(
+            settings.getFeatureMediaUploadOneOnOneChatsEnabled())
+        .featureMediaUploadGroupChatsEnabled(settings.getFeatureMediaUploadGroupChatsEnabled())
+        .featureMediaUploadSupervisionChatsEnabled(
+            settings.getFeatureMediaUploadSupervisionChatsEnabled())
+        .featureMediaInlineDisplayEnabled(settings.getFeatureMediaInlineDisplayEnabled())
+        .featureMediaInlineDisplayAnonymousChatsEnabled(
+            settings.getFeatureMediaInlineDisplayAnonymousChatsEnabled())
+        .featureMediaInlineDisplayOneOnOneChatsEnabled(
+            settings.getFeatureMediaInlineDisplayOneOnOneChatsEnabled())
+        .featureMediaInlineDisplayGroupChatsEnabled(
+            settings.getFeatureMediaInlineDisplayGroupChatsEnabled())
+        .featureMediaInlineDisplaySupervisionChatsEnabled(
+            settings.getFeatureMediaInlineDisplaySupervisionChatsEnabled())
+        .featureMediaAiScanEnabled(settings.getFeatureMediaAiScanEnabled())
+        .featureMediaAiScanAnonymousChatsEnabled(
+            settings.getFeatureMediaAiScanAnonymousChatsEnabled())
+        .featureMediaAiScanOneOnOneChatsEnabled(
+            settings.getFeatureMediaAiScanOneOnOneChatsEnabled())
+        .featureMediaAiScanGroupChatsEnabled(settings.getFeatureMediaAiScanGroupChatsEnabled())
+        .featureMediaAiScanSupervisionChatsEnabled(
+            settings.getFeatureMediaAiScanSupervisionChatsEnabled())
         .activeLanguages(nullAsGerman(settings.getActiveLanguages()))
         .isVideoCallAllowed(settings.getIsVideoCallAllowed())
         .showAskerProfile(settings.getShowAskerProfile())
@@ -277,7 +301,33 @@ public class TenantConverter {
         .featureSystemNotificationEmailsEnabled(
             tenantSettings.getFeatureSystemNotificationEmailsEnabled())
         .smtp(toSmtpConfig(tenantSettings.getSmtp()))
-        .featureAttachmentUploadDisabled(tenantSettings.getFeatureAttachmentUploadDisabled())
+        .featureMediaUploadEnabled(tenantSettings.getFeatureMediaUploadEnabled())
+        .featureMediaUploadAnonymousChatsEnabled(
+            tenantSettings.getFeatureMediaUploadAnonymousChatsEnabled())
+        .featureMediaUploadOneOnOneChatsEnabled(
+            tenantSettings.getFeatureMediaUploadOneOnOneChatsEnabled())
+        .featureMediaUploadGroupChatsEnabled(
+            tenantSettings.getFeatureMediaUploadGroupChatsEnabled())
+        .featureMediaUploadSupervisionChatsEnabled(
+            tenantSettings.getFeatureMediaUploadSupervisionChatsEnabled())
+        .featureMediaInlineDisplayEnabled(tenantSettings.getFeatureMediaInlineDisplayEnabled())
+        .featureMediaInlineDisplayAnonymousChatsEnabled(
+            tenantSettings.getFeatureMediaInlineDisplayAnonymousChatsEnabled())
+        .featureMediaInlineDisplayOneOnOneChatsEnabled(
+            tenantSettings.getFeatureMediaInlineDisplayOneOnOneChatsEnabled())
+        .featureMediaInlineDisplayGroupChatsEnabled(
+            tenantSettings.getFeatureMediaInlineDisplayGroupChatsEnabled())
+        .featureMediaInlineDisplaySupervisionChatsEnabled(
+            tenantSettings.getFeatureMediaInlineDisplaySupervisionChatsEnabled())
+        .featureMediaAiScanEnabled(tenantSettings.getFeatureMediaAiScanEnabled())
+        .featureMediaAiScanAnonymousChatsEnabled(
+            tenantSettings.getFeatureMediaAiScanAnonymousChatsEnabled())
+        .featureMediaAiScanOneOnOneChatsEnabled(
+            tenantSettings.getFeatureMediaAiScanOneOnOneChatsEnabled())
+        .featureMediaAiScanGroupChatsEnabled(
+            tenantSettings.getFeatureMediaAiScanGroupChatsEnabled())
+        .featureMediaAiScanSupervisionChatsEnabled(
+            tenantSettings.getFeatureMediaAiScanSupervisionChatsEnabled())
         .isVideoCallAllowed(tenantSettings.getIsVideoCallAllowed())
         .showAskerProfile(tenantSettings.getShowAskerProfile())
         .featureCentralDataProtectionTemplateEnabled(
@@ -343,6 +393,31 @@ public class TenantConverter {
         .voiceMessagesGroupChats(nullAsTrue(allowedPermissionToggles.getVoiceMessagesGroupChats()))
         .voiceMessagesSupervisionChats(
             nullAsTrue(allowedPermissionToggles.getVoiceMessagesSupervisionChats()))
+        .mediaUpload(nullAsTrue(allowedPermissionToggles.getMediaUpload()))
+        .mediaUploadAnonymousChats(
+            nullAsTrue(allowedPermissionToggles.getMediaUploadAnonymousChats()))
+        .mediaUploadOneOnOneChats(
+            nullAsTrue(allowedPermissionToggles.getMediaUploadOneOnOneChats()))
+        .mediaUploadGroupChats(nullAsTrue(allowedPermissionToggles.getMediaUploadGroupChats()))
+        .mediaUploadSupervisionChats(
+            nullAsTrue(allowedPermissionToggles.getMediaUploadSupervisionChats()))
+        .mediaInlineDisplay(nullAsTrue(allowedPermissionToggles.getMediaInlineDisplay()))
+        .mediaInlineDisplayAnonymousChats(
+            nullAsTrue(allowedPermissionToggles.getMediaInlineDisplayAnonymousChats()))
+        .mediaInlineDisplayOneOnOneChats(
+            nullAsTrue(allowedPermissionToggles.getMediaInlineDisplayOneOnOneChats()))
+        .mediaInlineDisplayGroupChats(
+            nullAsTrue(allowedPermissionToggles.getMediaInlineDisplayGroupChats()))
+        .mediaInlineDisplaySupervisionChats(
+            nullAsTrue(allowedPermissionToggles.getMediaInlineDisplaySupervisionChats()))
+        .mediaAiScan(nullAsTrue(allowedPermissionToggles.getMediaAiScan()))
+        .mediaAiScanAnonymousChats(
+            nullAsTrue(allowedPermissionToggles.getMediaAiScanAnonymousChats()))
+        .mediaAiScanOneOnOneChats(
+            nullAsTrue(allowedPermissionToggles.getMediaAiScanOneOnOneChats()))
+        .mediaAiScanGroupChats(nullAsTrue(allowedPermissionToggles.getMediaAiScanGroupChats()))
+        .mediaAiScanSupervisionChats(
+            nullAsTrue(allowedPermissionToggles.getMediaAiScanSupervisionChats()))
         .build();
   }
 
@@ -410,7 +485,34 @@ public class TenantConverter {
         .voiceMessagesGroupChats(
             nullAsTrue(allowedPermissionTogglesSettings.getVoiceMessagesGroupChats()))
         .voiceMessagesSupervisionChats(
-            nullAsTrue(allowedPermissionTogglesSettings.getVoiceMessagesSupervisionChats()));
+            nullAsTrue(allowedPermissionTogglesSettings.getVoiceMessagesSupervisionChats()))
+        .mediaUpload(nullAsTrue(allowedPermissionTogglesSettings.getMediaUpload()))
+        .mediaUploadAnonymousChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaUploadAnonymousChats()))
+        .mediaUploadOneOnOneChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaUploadOneOnOneChats()))
+        .mediaUploadGroupChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaUploadGroupChats()))
+        .mediaUploadSupervisionChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaUploadSupervisionChats()))
+        .mediaInlineDisplay(nullAsTrue(allowedPermissionTogglesSettings.getMediaInlineDisplay()))
+        .mediaInlineDisplayAnonymousChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaInlineDisplayAnonymousChats()))
+        .mediaInlineDisplayOneOnOneChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaInlineDisplayOneOnOneChats()))
+        .mediaInlineDisplayGroupChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaInlineDisplayGroupChats()))
+        .mediaInlineDisplaySupervisionChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaInlineDisplaySupervisionChats()))
+        .mediaAiScan(nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScan()))
+        .mediaAiScanAnonymousChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanAnonymousChats()))
+        .mediaAiScanOneOnOneChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanOneOnOneChats()))
+        .mediaAiScanGroupChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanGroupChats()))
+        .mediaAiScanSupervisionChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()));
   }
 
   private TenantAdminAllowedPermissionTogglesSettings toEnforcedPermissionTogglesSettings(
@@ -455,6 +557,31 @@ public class TenantConverter {
         .voiceMessagesGroupChats(nullAsFalse(allowedPermissionToggles.getVoiceMessagesGroupChats()))
         .voiceMessagesSupervisionChats(
             nullAsFalse(allowedPermissionToggles.getVoiceMessagesSupervisionChats()))
+        .mediaUpload(nullAsFalse(allowedPermissionToggles.getMediaUpload()))
+        .mediaUploadAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getMediaUploadAnonymousChats()))
+        .mediaUploadOneOnOneChats(
+            nullAsFalse(allowedPermissionToggles.getMediaUploadOneOnOneChats()))
+        .mediaUploadGroupChats(nullAsFalse(allowedPermissionToggles.getMediaUploadGroupChats()))
+        .mediaUploadSupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getMediaUploadSupervisionChats()))
+        .mediaInlineDisplay(nullAsFalse(allowedPermissionToggles.getMediaInlineDisplay()))
+        .mediaInlineDisplayAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getMediaInlineDisplayAnonymousChats()))
+        .mediaInlineDisplayOneOnOneChats(
+            nullAsFalse(allowedPermissionToggles.getMediaInlineDisplayOneOnOneChats()))
+        .mediaInlineDisplayGroupChats(
+            nullAsFalse(allowedPermissionToggles.getMediaInlineDisplayGroupChats()))
+        .mediaInlineDisplaySupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getMediaInlineDisplaySupervisionChats()))
+        .mediaAiScan(nullAsFalse(allowedPermissionToggles.getMediaAiScan()))
+        .mediaAiScanAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getMediaAiScanAnonymousChats()))
+        .mediaAiScanOneOnOneChats(
+            nullAsFalse(allowedPermissionToggles.getMediaAiScanOneOnOneChats()))
+        .mediaAiScanGroupChats(nullAsFalse(allowedPermissionToggles.getMediaAiScanGroupChats()))
+        .mediaAiScanSupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getMediaAiScanSupervisionChats()))
         .build();
   }
 
@@ -507,7 +634,34 @@ public class TenantConverter {
         .voiceMessagesGroupChats(
             nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesGroupChats()))
         .voiceMessagesSupervisionChats(
-            nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesSupervisionChats()));
+            nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesSupervisionChats()))
+        .mediaUpload(nullAsFalse(allowedPermissionTogglesSettings.getMediaUpload()))
+        .mediaUploadAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaUploadAnonymousChats()))
+        .mediaUploadOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaUploadOneOnOneChats()))
+        .mediaUploadGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaUploadGroupChats()))
+        .mediaUploadSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaUploadSupervisionChats()))
+        .mediaInlineDisplay(nullAsFalse(allowedPermissionTogglesSettings.getMediaInlineDisplay()))
+        .mediaInlineDisplayAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaInlineDisplayAnonymousChats()))
+        .mediaInlineDisplayOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaInlineDisplayOneOnOneChats()))
+        .mediaInlineDisplayGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaInlineDisplayGroupChats()))
+        .mediaInlineDisplaySupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaInlineDisplaySupervisionChats()))
+        .mediaAiScan(nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScan()))
+        .mediaAiScanAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanAnonymousChats()))
+        .mediaAiScanOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanOneOnOneChats()))
+        .mediaAiScanGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanGroupChats()))
+        .mediaAiScanSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()));
   }
 
   private TenantSmtpSettings toTenantSmtpSettings(SmtpConfig smtpConfig) {

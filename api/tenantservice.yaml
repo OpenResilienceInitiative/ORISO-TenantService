@@ -1249,9 +1249,66 @@ components:
           type: boolean
           example: "true"
           description: "Enable voice messages when a user is in supervision mode."
-        featureAttachmentUploadDisabled:
+        featureMediaUploadEnabled:
+          type: boolean
+          example: "true"
+          description: "Master toggle: may images/media be uploaded into chats at all. Replaces the retired featureAttachmentUploadDisabled (ADR-015)."
+        featureMediaUploadAnonymousChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable media upload in anonymous chats."
+        featureMediaUploadOneOnOneChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable media upload in 1-on-1 chats."
+        featureMediaUploadGroupChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable media upload in group chats."
+        featureMediaUploadSupervisionChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable media upload when a user is in supervision mode."
+        featureMediaInlineDisplayEnabled:
+          type: boolean
+          example: "true"
+          description: "Master toggle: render media as scaled thumbnails (on) or deliver as downloadable file only (off). The virus-scan requirement is attached to this switch."
+        featureMediaInlineDisplayAnonymousChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Inline media display in anonymous chats."
+        featureMediaInlineDisplayOneOnOneChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Inline media display in 1-on-1 chats."
+        featureMediaInlineDisplayGroupChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Inline media display in group chats."
+        featureMediaInlineDisplaySupervisionChatsEnabled:
+          type: boolean
+          example: "true"
+          description: "Inline media display when a user is in supervision mode."
+        featureMediaAiScanEnabled:
           type: boolean
           example: "false"
+          description: "Master toggle: AI content check (content scanner) sets the media check state automatically; off = phase-1 behaviour (blurred until counsellor click-to-reveal)."
+        featureMediaAiScanAnonymousChatsEnabled:
+          type: boolean
+          example: "false"
+          description: "AI media scan for anonymous chats."
+        featureMediaAiScanOneOnOneChatsEnabled:
+          type: boolean
+          example: "false"
+          description: "AI media scan for 1-on-1 chats."
+        featureMediaAiScanGroupChatsEnabled:
+          type: boolean
+          example: "false"
+          description: "AI media scan for group chats."
+        featureMediaAiScanSupervisionChatsEnabled:
+          type: boolean
+          example: "false"
+          description: "AI media scan when a user is in supervision mode."
         featureToolsOICDToken:
           type: string
           example: "1234-1234-1234-1234"
@@ -1377,6 +1434,51 @@ components:
           type: boolean
           example: "true"
         voiceMessagesSupervisionChats:
+          type: boolean
+          example: "true"
+        mediaUpload:
+          type: boolean
+          example: "true"
+        mediaUploadAnonymousChats:
+          type: boolean
+          example: "true"
+        mediaUploadOneOnOneChats:
+          type: boolean
+          example: "true"
+        mediaUploadGroupChats:
+          type: boolean
+          example: "true"
+        mediaUploadSupervisionChats:
+          type: boolean
+          example: "true"
+        mediaInlineDisplay:
+          type: boolean
+          example: "true"
+        mediaInlineDisplayAnonymousChats:
+          type: boolean
+          example: "true"
+        mediaInlineDisplayOneOnOneChats:
+          type: boolean
+          example: "true"
+        mediaInlineDisplayGroupChats:
+          type: boolean
+          example: "true"
+        mediaInlineDisplaySupervisionChats:
+          type: boolean
+          example: "true"
+        mediaAiScan:
+          type: boolean
+          example: "true"
+        mediaAiScanAnonymousChats:
+          type: boolean
+          example: "true"
+        mediaAiScanOneOnOneChats:
+          type: boolean
+          example: "true"
+        mediaAiScanGroupChats:
+          type: boolean
+          example: "true"
+        mediaAiScanSupervisionChats:
           type: boolean
           example: "true"
 

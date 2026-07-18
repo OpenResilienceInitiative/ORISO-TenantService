@@ -160,7 +160,7 @@ class TenantControllerIT {
         .andExpect(jsonPath("settings.featureDemographicsEnabled", is(false)))
         .andExpect(jsonPath("settings.featureAppointmentsEnabled", is(false)))
         .andExpect(jsonPath("settings.featureGroupChatV2Enabled", is(false)))
-        .andExpect(jsonPath("settings.featureAttachmentUploadDisabled", is(true)))
+        .andExpect(jsonPath("settings.featureMediaUploadEnabled", is(false)))
         .andExpect(jsonPath("settings.featureToolsOICDToken", is("token")))
         .andExpect(jsonPath("settings.activeLanguages", is(Lists.newArrayList("de", "en"))));
   }
@@ -475,7 +475,7 @@ class TenantControllerIT {
         .andExpect(jsonPath("settings.featureDemographicsEnabled", is(true)))
         .andExpect(jsonPath("settings.featureAppointmentsEnabled", is(true)))
         .andExpect(jsonPath("settings.featureGroupChatV2Enabled", is(true)))
-        .andExpect(jsonPath("settings.featureAttachmentUploadDisabled", is(false)))
+        .andExpect(jsonPath("settings.featureMediaUploadEnabled", is(true)))
         .andExpect(jsonPath("settings.activeLanguages", is(Lists.newArrayList("de"))));
   }
 

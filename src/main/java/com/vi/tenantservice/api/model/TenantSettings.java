@@ -1,5 +1,6 @@
 package com.vi.tenantservice.api.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -48,7 +49,30 @@ public class TenantSettings {
   Boolean featureVoiceMessagesSupervisionChatsEnabled;
   Boolean featureSystemNotificationEmailsEnabled;
   TenantSmtpSettings smtp;
-  Boolean featureAttachmentUploadDisabled;
+  Boolean featureMediaUploadEnabled;
+  Boolean featureMediaUploadAnonymousChatsEnabled;
+  Boolean featureMediaUploadOneOnOneChatsEnabled;
+  Boolean featureMediaUploadGroupChatsEnabled;
+  Boolean featureMediaUploadSupervisionChatsEnabled;
+  Boolean featureMediaInlineDisplayEnabled;
+  Boolean featureMediaInlineDisplayAnonymousChatsEnabled;
+  Boolean featureMediaInlineDisplayOneOnOneChatsEnabled;
+  Boolean featureMediaInlineDisplayGroupChatsEnabled;
+  Boolean featureMediaInlineDisplaySupervisionChatsEnabled;
+  Boolean featureMediaAiScanEnabled;
+  Boolean featureMediaAiScanAnonymousChatsEnabled;
+  Boolean featureMediaAiScanOneOnOneChatsEnabled;
+  Boolean featureMediaAiScanGroupChatsEnabled;
+  Boolean featureMediaAiScanSupervisionChatsEnabled;
+
+  /**
+   * Retired key, superseded by the featureMediaUpload* family (ADR-015). Still read from stored
+   * JSON so {@link #applyDefaults()} can translate it once, but never serialized back and no longer
+   * part of the API surface.
+   */
+  @JsonProperty(value = "featureAttachmentUploadDisabled", access = JsonProperty.Access.WRITE_ONLY)
+  Boolean legacyFeatureAttachmentUploadDisabled;
+
   Boolean isVideoCallAllowed;
   Boolean showAskerProfile;
 
@@ -102,7 +126,21 @@ public class TenantSettings {
               Map.entry("featureVoiceMessagesGroupChatsEnabled", true),
               Map.entry("featureVoiceMessagesSupervisionChatsEnabled", true),
               Map.entry("featureSystemNotificationEmailsEnabled", false),
-              Map.entry("featureAttachmentUploadDisabled", false),
+              Map.entry("featureMediaUploadEnabled", true),
+              Map.entry("featureMediaUploadAnonymousChatsEnabled", true),
+              Map.entry("featureMediaUploadOneOnOneChatsEnabled", true),
+              Map.entry("featureMediaUploadGroupChatsEnabled", true),
+              Map.entry("featureMediaUploadSupervisionChatsEnabled", true),
+              Map.entry("featureMediaInlineDisplayEnabled", true),
+              Map.entry("featureMediaInlineDisplayAnonymousChatsEnabled", true),
+              Map.entry("featureMediaInlineDisplayOneOnOneChatsEnabled", true),
+              Map.entry("featureMediaInlineDisplayGroupChatsEnabled", true),
+              Map.entry("featureMediaInlineDisplaySupervisionChatsEnabled", true),
+              Map.entry("featureMediaAiScanEnabled", false),
+              Map.entry("featureMediaAiScanAnonymousChatsEnabled", false),
+              Map.entry("featureMediaAiScanOneOnOneChatsEnabled", false),
+              Map.entry("featureMediaAiScanGroupChatsEnabled", false),
+              Map.entry("featureMediaAiScanSupervisionChatsEnabled", false),
               Map.entry("isVideoCallAllowed", false),
               Map.entry("showAskerProfile", false),
               Map.entry("featureCentralDataProtectionTemplateEnabled", false)));
@@ -234,10 +272,7 @@ public class TenantSettings {
       featureSystemNotificationEmailsEnabled =
           BOOLEAN_FIELD_DEFAULTS.get("featureSystemNotificationEmailsEnabled");
     }
-    if (featureAttachmentUploadDisabled == null) {
-      featureAttachmentUploadDisabled =
-          BOOLEAN_FIELD_DEFAULTS.get("featureAttachmentUploadDisabled");
-    }
+    applyMediaDefaults();
     if (isVideoCallAllowed == null) {
       isVideoCallAllowed = BOOLEAN_FIELD_DEFAULTS.get("isVideoCallAllowed");
     }
@@ -249,5 +284,78 @@ public class TenantSettings {
           BOOLEAN_FIELD_DEFAULTS.get("featureCentralDataProtectionTemplateEnabled");
     }
     return this;
+  }
+
+  /**
+   * Defaults for the media flag families. The upload family additionally translates the retired
+   * {@code featureAttachmentUploadDisabled} key once (ADR-015): a stored {@code true} means the
+   * tenant had switched uploads off, so absent upload keys default to {@code false} instead of the
+   * documented {@code true}. Explicitly stored media keys always win over the legacy translation.
+   */
+  private void applyMediaDefaults() {
+    boolean legacyUploadDisabled = Boolean.TRUE.equals(legacyFeatureAttachmentUploadDisabled);
+    if (featureMediaUploadEnabled == null) {
+      featureMediaUploadEnabled =
+          !legacyUploadDisabled && BOOLEAN_FIELD_DEFAULTS.get("featureMediaUploadEnabled");
+    }
+    if (featureMediaUploadAnonymousChatsEnabled == null) {
+      featureMediaUploadAnonymousChatsEnabled =
+          !legacyUploadDisabled
+              && BOOLEAN_FIELD_DEFAULTS.get("featureMediaUploadAnonymousChatsEnabled");
+    }
+    if (featureMediaUploadOneOnOneChatsEnabled == null) {
+      featureMediaUploadOneOnOneChatsEnabled =
+          !legacyUploadDisabled
+              && BOOLEAN_FIELD_DEFAULTS.get("featureMediaUploadOneOnOneChatsEnabled");
+    }
+    if (featureMediaUploadGroupChatsEnabled == null) {
+      featureMediaUploadGroupChatsEnabled =
+          !legacyUploadDisabled
+              && BOOLEAN_FIELD_DEFAULTS.get("featureMediaUploadGroupChatsEnabled");
+    }
+    if (featureMediaUploadSupervisionChatsEnabled == null) {
+      featureMediaUploadSupervisionChatsEnabled =
+          !legacyUploadDisabled
+              && BOOLEAN_FIELD_DEFAULTS.get("featureMediaUploadSupervisionChatsEnabled");
+    }
+    if (featureMediaInlineDisplayEnabled == null) {
+      featureMediaInlineDisplayEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureMediaInlineDisplayEnabled");
+    }
+    if (featureMediaInlineDisplayAnonymousChatsEnabled == null) {
+      featureMediaInlineDisplayAnonymousChatsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureMediaInlineDisplayAnonymousChatsEnabled");
+    }
+    if (featureMediaInlineDisplayOneOnOneChatsEnabled == null) {
+      featureMediaInlineDisplayOneOnOneChatsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureMediaInlineDisplayOneOnOneChatsEnabled");
+    }
+    if (featureMediaInlineDisplayGroupChatsEnabled == null) {
+      featureMediaInlineDisplayGroupChatsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureMediaInlineDisplayGroupChatsEnabled");
+    }
+    if (featureMediaInlineDisplaySupervisionChatsEnabled == null) {
+      featureMediaInlineDisplaySupervisionChatsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureMediaInlineDisplaySupervisionChatsEnabled");
+    }
+    if (featureMediaAiScanEnabled == null) {
+      featureMediaAiScanEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureMediaAiScanEnabled");
+    }
+    if (featureMediaAiScanAnonymousChatsEnabled == null) {
+      featureMediaAiScanAnonymousChatsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureMediaAiScanAnonymousChatsEnabled");
+    }
+    if (featureMediaAiScanOneOnOneChatsEnabled == null) {
+      featureMediaAiScanOneOnOneChatsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureMediaAiScanOneOnOneChatsEnabled");
+    }
+    if (featureMediaAiScanGroupChatsEnabled == null) {
+      featureMediaAiScanGroupChatsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureMediaAiScanGroupChatsEnabled");
+    }
+    if (featureMediaAiScanSupervisionChatsEnabled == null) {
+      featureMediaAiScanSupervisionChatsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureMediaAiScanSupervisionChatsEnabled");
+    }
   }
 }
