@@ -21,6 +21,7 @@ import com.vi.tenantservice.api.service.TemplateService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import freemarker.template.TemplateException;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -93,6 +94,28 @@ class TenantConverterTest {
     AdminTenantDTO adminConverted = tenantConverter.toAdminTenantDTO(entity);
     assertThat(adminConverted.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
     assertThat(adminConverted.getDescription()).isEqualTo("Short description of the tenant.");
+  }
+
+  @Test
+  void toEntity_should_preserveServerManagedDpaFieldsOnTenantUpdate() {
+    // given
+    var activationDate = LocalDateTime.of(2026, 7, 19, 18, 24, 47);
+    var targetEntity =
+        TenantEntity.builder()
+            .id(84L)
+            .contentDataProcessingAgreement("{\"de\":\"Published DPA\"}")
+            .contentDataProcessingAgreementActivationDate(activationDate)
+            .build();
+    var tenantDTO = new MultilingualTenantTestDataBuilder().tenantDTO().build();
+
+    // when
+    TenantEntity converted = tenantConverter.toEntity(targetEntity, tenantDTO);
+
+    // then
+    assertThat(converted.getContentDataProcessingAgreement())
+        .isEqualTo("{\"de\":\"Published DPA\"}");
+    assertThat(converted.getContentDataProcessingAgreementActivationDate())
+        .isEqualTo(activationDate);
   }
 
   @Test
