@@ -134,6 +134,18 @@ class TenantDpaFacadeTest {
   }
 
   @Test
+  void getGateStatus_Should_notRecoverHistory_When_tenantDoesNotExist() {
+    when(tenantService.findTenantById(5L)).thenReturn(Optional.empty());
+
+    var status = tenantDpaFacade.getGateStatus(5L);
+
+    assertThat(status.getDpaPublished()).isFalse();
+    assertThat(status.getDpaSigned()).isFalse();
+    verify(tenantDpaService, never()).getVersions(any());
+    verify(tenantDpaService, never()).isSignedForVersion(any(), any());
+  }
+
+  @Test
   void createSignInvite_Should_returnTokenAndLink_When_dpaPublished() {
     // given a tenant with a published DPA
     var tenant = new TenantEntity();
