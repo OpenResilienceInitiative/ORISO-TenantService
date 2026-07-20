@@ -168,7 +168,9 @@ public class TenantConverter {
         "createDate",
         "updateDate",
         "contentPrivacyActivationDate",
-        "contentTermsAndConditionsActivationDate");
+        "contentTermsAndConditionsActivationDate",
+        "contentDataProcessingAgreement",
+        "contentDataProcessingAgreementActivationDate");
     return targetEntity;
   }
 

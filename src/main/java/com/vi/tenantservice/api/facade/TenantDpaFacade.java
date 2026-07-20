@@ -6,7 +6,6 @@ import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
-import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantService;
@@ -57,11 +56,7 @@ public class TenantDpaFacade {
    */
   public DpaSignInviteDTO createSignInvite(Long tenantId) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
-    var version =
-        tenantService
-            .findTenantById(tenantId)
-            .map(TenantEntity::getContentDataProcessingAgreementActivationDate)
-            .orElse(null);
+    var version = resolveCurrentDpaVersion(tenantId);
     if (version == null) {
       throw new DpaNotPublishedException(
           "Tenant " + tenantId + " has no published DPA to sign yet");
@@ -86,14 +81,31 @@ public class TenantDpaFacade {
   /** Whether the tenant's DPA is published and signed (the consultation gate). */
   public DpaGateStatusDTO getGateStatus(Long tenantId) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
-    var version =
-        tenantService
-            .findTenantById(tenantId)
-            .map(TenantEntity::getContentDataProcessingAgreementActivationDate)
-            .orElse(null);
+    var version = resolveCurrentDpaVersion(tenantId);
     boolean published = version != null;
     boolean signed = published && tenantDpaService.isSignedForVersion(tenantId, version);
     return new DpaGateStatusDTO().dpaPublished(published).dpaSigned(signed);
+  }
+
+  /**
+   * Resolves the active DPA version from the tenant row and falls back to the append-only publish
+   * history when a legacy narrow tenant update cleared the embedded activation date. A missing
+   * tenant never falls back, so historical rows cannot resurrect a deleted tenant.
+   */
+  private LocalDateTime resolveCurrentDpaVersion(Long tenantId) {
+    var tenant = tenantService.findTenantById(tenantId);
+    if (tenant.isEmpty()) {
+      return null;
+    }
+    var embeddedVersion = tenant.get().getContentDataProcessingAgreementActivationDate();
+    if (embeddedVersion != null) {
+      return embeddedVersion;
+    }
+    return tenantDpaService.getVersions(tenantId).stream()
+        .map(TenantDpaVersionEntity::getActivationDate)
+        .filter(Objects::nonNull)
+        .findFirst()
+        .orElse(null);
   }
 
   /**
