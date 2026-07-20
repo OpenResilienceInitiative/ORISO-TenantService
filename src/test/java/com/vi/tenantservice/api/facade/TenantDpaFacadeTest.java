@@ -114,6 +114,26 @@ class TenantDpaFacadeTest {
   }
 
   @Test
+  void getGateStatus_Should_recoverLatestPublishedVersion_When_tenantActivationWasCleared() {
+    var version = LocalDateTime.of(2026, 7, 19, 20, 0);
+    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
+    when(tenantDpaService.getVersions(5L))
+        .thenReturn(
+            List.of(
+                TenantDpaVersionEntity.builder()
+                    .tenantId(5L)
+                    .activationDate(version)
+                    .content("{\"de\":\"published\"}")
+                    .build()));
+    when(tenantDpaService.isSignedForVersion(5L, version)).thenReturn(true);
+
+    var status = tenantDpaFacade.getGateStatus(5L);
+
+    assertThat(status.getDpaPublished()).isTrue();
+    assertThat(status.getDpaSigned()).isTrue();
+  }
+
+  @Test
   void createSignInvite_Should_returnTokenAndLink_When_dpaPublished() {
     // given a tenant with a published DPA
     var tenant = new TenantEntity();
@@ -140,6 +160,26 @@ class TenantDpaFacadeTest {
     assertThatThrownBy(() -> tenantDpaFacade.createSignInvite(5L))
         .isInstanceOf(DpaNotPublishedException.class);
     verify(tenantDpaService, never()).createSignInvite(any(), any(), any());
+  }
+
+  @Test
+  void createSignInvite_Should_recoverLatestPublishedVersion_When_tenantActivationWasCleared() {
+    var version = LocalDateTime.of(2026, 7, 19, 20, 0);
+    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
+    when(tenantDpaService.getVersions(5L))
+        .thenReturn(
+            List.of(
+                TenantDpaVersionEntity.builder()
+                    .tenantId(5L)
+                    .activationDate(version)
+                    .content("{\"de\":\"published\"}")
+                    .build()));
+    when(tenantDpaService.createSignInvite(eq(5L), eq(version), any())).thenReturn("RAWTOKEN");
+
+    var result = tenantDpaFacade.createSignInvite(5L);
+
+    assertThat(result.getToken()).isEqualTo("RAWTOKEN");
+    verify(tenantDpaService).createSignInvite(eq(5L), eq(version), any());
   }
 
   @Test
