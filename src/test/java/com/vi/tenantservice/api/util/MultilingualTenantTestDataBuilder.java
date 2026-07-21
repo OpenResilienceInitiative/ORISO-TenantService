@@ -103,6 +103,7 @@ public class MultilingualTenantTestDataBuilder {
         .featureStatisticsEnabled(true)
         .featureTopicsEnabled(true)
         .featureGroupChatV2Enabled(true)
+        .featureTeamDiscussionEnabled(true)
         .featureToolsEnabled(true)
         .featureToolsOICDToken("1234")
         .featureMediaUploadEnabled(true)

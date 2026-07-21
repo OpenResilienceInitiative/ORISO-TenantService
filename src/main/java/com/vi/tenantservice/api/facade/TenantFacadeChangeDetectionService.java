@@ -94,6 +94,11 @@ public class TenantFacadeChangeDetectionService {
       resultList.add(TenantSetting.FEATURE_GROUP_CHAT_V2_ENABLED);
     }
     if (isChanged(
+        inputSettings.getFeatureTeamDiscussionEnabled(),
+        existingSettingsToCompare.getFeatureTeamDiscussionEnabled())) {
+      resultList.add(TenantSetting.FEATURE_TEAM_DISCUSSION_ENABLED);
+    }
+    if (isChanged(
         inputSettings.getFeatureToolsEnabled(),
         existingSettingsToCompare.getFeatureToolsEnabled())) {
       resultList.add(TenantSetting.FEATURE_TOOLS_ENABLED);

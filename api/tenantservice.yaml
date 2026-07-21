@@ -1207,6 +1207,9 @@ components:
         featureGroupChatV2Enabled:
           type: boolean
           example: "false"
+        featureTeamDiscussionEnabled:
+          type: boolean
+          example: "false"
         featureToolsEnabled:
           type: boolean
           example: "false"

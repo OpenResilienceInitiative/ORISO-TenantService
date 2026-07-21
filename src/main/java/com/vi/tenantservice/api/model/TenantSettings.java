@@ -21,6 +21,7 @@ public class TenantSettings {
   Boolean featureDemographicsEnabled;
   Boolean featureAppointmentsEnabled;
   Boolean featureGroupChatV2Enabled;
+  Boolean featureTeamDiscussionEnabled;
   Boolean featureToolsEnabled;
   Boolean featureAnonymousChatEnabled;
   Boolean featureCallsEnabled;
@@ -99,6 +100,7 @@ public class TenantSettings {
               Map.entry("featureDemographicsEnabled", false),
               Map.entry("featureAppointmentsEnabled", false),
               Map.entry("featureGroupChatV2Enabled", false),
+              Map.entry("featureTeamDiscussionEnabled", false),
               Map.entry("featureToolsEnabled", false),
               Map.entry("featureAnonymousChatEnabled", true),
               Map.entry("featureCallsEnabled", true),
@@ -172,6 +174,9 @@ public class TenantSettings {
     }
     if (featureGroupChatV2Enabled == null) {
       featureGroupChatV2Enabled = BOOLEAN_FIELD_DEFAULTS.get("featureGroupChatV2Enabled");
+    }
+    if (featureTeamDiscussionEnabled == null) {
+      featureTeamDiscussionEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureTeamDiscussionEnabled");
     }
     if (featureToolsEnabled == null) {
       featureToolsEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureToolsEnabled");
