@@ -7,6 +7,7 @@ import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.DpaGateStatusDTO;
 import com.vi.tenantservice.api.model.DpaSignInviteDTO;
+import com.vi.tenantservice.api.model.DpaSignPreviewDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaSignatureRequestDTO;
 import com.vi.tenantservice.api.model.DpaVersionDTO;
@@ -72,6 +73,22 @@ public class TenantController implements TenantApi, TenantadminApi {
   private final @NonNull TenantDpaFacade tenantDpaFacade;
   private final @NonNull TranslationFacade translationFacade;
   private final @NonNull TenantMediaService tenantMediaService;
+
+  /**
+   * Public read-only preview of the exact DPA version referenced by a valid sign token. Merely
+   * viewing the agreement never consumes the token.
+   */
+  @Override
+  public ResponseEntity<DpaSignPreviewDTO> getDataProcessingAgreementPreview(
+      @NotNull String token) {
+    var preview = tenantDpaService.getSignPreview(token);
+    return ResponseEntity.ok(
+        new DpaSignPreviewDTO()
+            .tenantName(preview.tenantName())
+            .dpaVersion(preview.dpaVersion().toString())
+            .content(preview.content())
+            .expiresAt(preview.expiresAt().toString()));
+  }
 
   /**
    * Public DPA confirmation via a single-use sign token. No authentication: the token is the

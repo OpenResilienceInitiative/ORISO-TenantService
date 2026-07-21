@@ -548,6 +548,29 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenant/public/dpa/confirm/{token}:
     summary: 'Public confirmation (signature) of a tenant Data Processing Agreement'
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Shows the exact published DPA bound to a valid sign token [Authorization: no-auth]'
+      operationId: getDataProcessingAgreementPreview
+      parameters:
+        - name: token
+          in: path
+          description: Single-use sign token from the invite link
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaSignPreviewDTO'
+        410:
+          description: GONE - token unknown, already used, expired, or its contract version is missing
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
     post:
       tags:
         - tenant-controller
@@ -891,6 +914,23 @@ components:
           type: string
         signLink:
           type: string
+        expiresAt:
+          type: string
+    DpaSignPreviewDTO:
+      type: object
+      required:
+        - tenantName
+        - dpaVersion
+        - content
+        - expiresAt
+      properties:
+        tenantName:
+          type: string
+        dpaVersion:
+          type: string
+        content:
+          type: string
+          description: 'Sanitized multilingual DPA snapshot as JSON (language code -> HTML).'
         expiresAt:
           type: string
     DpaGateStatusDTO:

@@ -11,8 +11,10 @@ import static org.mockito.Mockito.when;
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
+import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
+import com.vi.tenantservice.api.repository.TenantRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -29,6 +31,7 @@ class TenantDpaServiceTest {
 
   @Mock private TenantDpaSignatureRepository signatureRepository;
   @Mock private TenantDpaVersionRepository versionRepository;
+  @Mock private TenantRepository tenantRepository;
   @InjectMocks private TenantDpaService tenantDpaService;
 
   @Test
@@ -139,6 +142,65 @@ class TenantDpaServiceTest {
     // the raw token is never stored — only its SHA-256 hash
     assertThat(saved.getTokenHash()).isEqualTo(DpaSignToken.hash(rawToken)).isNotEqualTo(rawToken);
     assertThat(saved.getTokenExpiresAt()).isAfter(LocalDateTime.now());
+  }
+
+  @Test
+  void getSignPreview_Should_returnExactPublishedVersion_withoutConsumingToken() {
+    // given
+    var rawToken = "preview-token";
+    var version = LocalDateTime.of(2026, 7, 20, 12, 30);
+    var pending =
+        TenantDpaSignatureEntity.builder()
+            .tenantId(7L)
+            .dpaVersion(version)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash(DpaSignToken.hash(rawToken))
+            .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+            .build();
+    var published =
+        TenantDpaVersionEntity.builder()
+            .tenantId(7L)
+            .activationDate(version)
+            .content("{\"de\":\"<h2>AVV</h2><p>Vertragstext</p>\"}")
+            .build();
+    when(signatureRepository.findByTokenHashAndStatus(
+            DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
+        .thenReturn(Optional.of(pending));
+    when(versionRepository.findFirstByTenantIdAndActivationDate(7L, version))
+        .thenReturn(Optional.of(published));
+    when(tenantRepository.findById(7L))
+        .thenReturn(Optional.of(TenantEntity.builder().id(7L).name("Träger Nord").build()));
+
+    // when
+    var preview = tenantDpaService.getSignPreview(rawToken);
+
+    // then
+    assertThat(preview.tenantId()).isEqualTo(7L);
+    assertThat(preview.tenantName()).isEqualTo("Träger Nord");
+    assertThat(preview.dpaVersion()).isEqualTo(version);
+    assertThat(preview.content()).contains("Vertragstext");
+    assertThat(preview.expiresAt()).isEqualTo(pending.getTokenExpiresAt());
+    verify(signatureRepository, org.mockito.Mockito.never())
+        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void getSignPreview_Should_rejectExpiredToken() {
+    // given
+    var rawToken = "expired-preview-token";
+    when(signatureRepository.findByTokenHashAndStatus(
+            DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
+        .thenReturn(
+            Optional.of(
+                TenantDpaSignatureEntity.builder()
+                    .status(DpaSignatureStatus.PENDING)
+                    .tokenExpiresAt(LocalDateTime.now().minusMinutes(1))
+                    .build()));
+
+    // when / then
+    assertThatThrownBy(() -> tenantDpaService.getSignPreview(rawToken))
+        .isInstanceOf(InvalidDpaSignTokenException.class);
+    verifyNoInteractions(versionRepository);
   }
 
   @Test
