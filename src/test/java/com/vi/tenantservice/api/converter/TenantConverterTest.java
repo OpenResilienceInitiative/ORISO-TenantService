@@ -436,6 +436,8 @@ class TenantConverterTest {
         .isEqualTo(expected.getFeatureAppointmentsEnabled());
     assertThat(actual.getFeatureGroupChatV2Enabled())
         .isEqualTo(expected.getFeatureGroupChatV2Enabled());
+    assertThat(actual.getFeatureTeamDiscussionEnabled())
+        .isEqualTo(expected.getFeatureTeamDiscussionEnabled());
     assertThat(actual.getFeatureToolsEnabled()).isEqualTo(expected.getFeatureToolsEnabled());
     assertThat(actual.getFeatureMediaUploadEnabled())
         .isEqualTo(expected.getFeatureMediaUploadEnabled());
@@ -467,6 +469,8 @@ class TenantConverterTest {
         .isEqualTo(expected.getFeatureAppointmentsEnabled());
     assertThat(actual.getFeatureGroupChatV2Enabled())
         .isEqualTo(expected.getFeatureGroupChatV2Enabled());
+    assertThat(actual.getFeatureTeamDiscussionEnabled())
+        .isEqualTo(expected.getFeatureTeamDiscussionEnabled());
     assertThat(actual.getFeatureToolsEnabled()).isEqualTo(expected.getFeatureToolsEnabled());
     assertThat(actual.getFeatureMediaUploadEnabled())
         .isEqualTo(expected.getFeatureMediaUploadEnabled());
