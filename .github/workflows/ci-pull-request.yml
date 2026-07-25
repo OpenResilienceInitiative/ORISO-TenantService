@@ -8,7 +8,8 @@ env:
   ORG: openresilienceinitiative
 
 jobs:
-  build:
+  validate:
+    name: test, build and Docker validation
     runs-on: ubuntu-latest
 
     steps:
@@ -28,9 +29,38 @@ jobs:
         github_token: ${{ secrets.GITHUB_TOKEN }}
 
   # The former non-blocking `integration-tests` burn-in job was folded into the
-  # blocking `build` job above: `maven-build` now runs `mvnw -B verify`, so the
+  # blocking `validate` job above: `maven-build` now runs `mvnw -B verify`, so the
   # surefire `integration-tests` execution (**/*IT.*) is a required part of the
   # main gate (burn-in green since 2026-07-05; flipped 2026-07-07).
+
+  required-ci:
+    name: required PreDev CI
+    if: always()
+    needs: [validate]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Report aggregate required conclusion to SigNoz
+      env:
+        REPO: ${{ github.event.repository.name }}
+        WORKFLOW: ${{ github.workflow }}
+        VALIDATE_RESULT: ${{ needs.validate.result }}
+      run: |
+        conclusion=success
+        if [[ "${VALIDATE_RESULT}" != success ]]; then
+          conclusion=failure
+        fi
+        now_ns="$(date +%s)000000000"
+        payload="{\"resourceMetrics\":[{\"resource\":{\"attributes\":[{\"key\":\"service.name\",\"value\":{\"stringValue\":\"ci-cd\"}}]},\"scopeMetrics\":[{\"scope\":{\"name\":\"ci-health\"},\"metrics\":[{\"name\":\"ci_run_result\",\"sum\":{\"dataPoints\":[{\"attributes\":[{\"key\":\"repo\",\"value\":{\"stringValue\":\"${REPO}\"}},{\"key\":\"workflow\",\"value\":{\"stringValue\":\"${WORKFLOW}\"}},{\"key\":\"conclusion\",\"value\":{\"stringValue\":\"${conclusion}\"}}],\"startTimeUnixNano\":\"${now_ns}\",\"timeUnixNano\":\"${now_ns}\",\"asInt\":\"1\"}],\"aggregationTemporality\":2,\"isMonotonic\":true}}]}]}]}"
+        curl --fail-with-body --silent --show-error \
+          -X POST "https://signoz.oriso-dev.site/v1/metrics" \
+          -H "Content-Type: application/json" \
+          -d "${payload}" \
+          || echo "::warning::Failed to POST aggregate CI health metric to SigNoz"
+        if [[ "${conclusion}" != success ]]; then
+          echo "::error::Required CI failed: validate=${VALIDATE_RESULT}"
+          exit 1
+        fi
 
   # Non-blocking OpenAPI contract diff: flags breaking changes to this service's
   # own vendored spec (api/tenantservice.yaml) between the PR base and head.
