@@ -11,22 +11,21 @@ paths:
       summary: 'Returns the hal root entry point. [Authorization: Role: agency-admin]'
       operationId: getRoot
       responses:
-        200:
+        '200':
           description: OK - successfull operation
           content:
             application/hal+json:
               schema:
                 $ref: '#/components/schemas/RootDTO'
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /agencyadmin/agencies:
     get:
       tags:
         - admin-agency-controller
-      summary: 'Returns the list of agencies by search query parameter. [Authorization: Role:
-      agency-admin]'
+      summary: 'Returns the list of agencies by search query parameter. [Authorization: Role: agency-admin]'
       operationId: searchAgencies
       parameters:
         - name: q
@@ -34,7 +33,7 @@ paths:
           description: The query parameter to search for
           schema:
             type: string
-            example: "Freiburg"
+            example: Freiburg
         - name: page
           in: query
           description: Number of page where to start in the query (1 = first page)
@@ -55,20 +54,20 @@ paths:
           schema:
             $ref: '#/components/schemas/Sort'
       responses:
-        200:
+        '200':
           description: OK - successfull operation
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AgencyAdminSearchResultDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     post:
       tags:
         - admin-agency-controller
@@ -76,30 +75,30 @@ paths:
       operationId: createAgency
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/AgencyDTO'
         required: true
       responses:
-        201:
+        '201':
           description: CREATED - agency was created successfully
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AgencyAdminFullResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /agencyadmin/agencies/{agencyId}:
     get:
       tags:
         - admin-agency-controller
-      summary: 'Get an agency [Authorization: Role: agency-admin]'
+      summary: 'Get an agency including platform agency admin controls in settings.agencyAdminControls [Authorization: Role: agency-admin]'
       operationId: getAgency
       parameters:
         - name: agencyId
@@ -110,22 +109,22 @@ paths:
             type: integer
             format: int64
       responses:
-        200:
+        '200':
           description: OK - agency found
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/AgencyAdminFullResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - agency with the provided ID does not exist
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     delete:
       tags:
         - admin-agency-controller
@@ -140,28 +139,28 @@ paths:
             type: integer
             format: int64
       responses:
-        200:
+        '200':
           description: OK - agency was deleted successfully
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        404:
-          description: NOT FOUND - agency not found
-        409:
-          description: CONFLICT - agency contains consultants and therefore can't be deleted
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '404':
+          description: NOT FOUND - agency not found
+        '409':
+          description: CONFLICT - agency contains consultants and therefore can't be deleted
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     put:
       tags:
         - admin-agency-controller
-      summary: 'Updates an agency [Authorization: Role: agency-admin]'
+      summary: 'Updates an agency including settings.agencyAdminControls [Authorization: Role: agency-admin]'
       operationId: updateAgency
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/UpdateAgencyDTO'
         required: true
@@ -174,22 +173,22 @@ paths:
             type: integer
             format: int64
       responses:
-        200:
+        '200':
           description: OK - agency was updated successfully
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AgencyAdminFullResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        404:
-          description: NOT FOUND - agency not found
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '404':
+          description: NOT FOUND - agency not found
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /agencyadmin/agencies/tenant/{tenantId}:
     get:
       tags:
@@ -205,25 +204,396 @@ paths:
             type: integer
             format: int64
       responses:
-        200:
+        '200':
           description: OK
           content:
-            'application/json':
+            application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/AgencyAdminFullResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - agency with the provided tenant id does not exist
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
-
+        - Bearer: []
+  /agencyadmin/agencies/{agencyId}/changetype:
+    post:
+      tags:
+        - admin-agency-controller
+      summary: 'Change an agency from team-agency to default and vice-versa and switch the associated consultant accounts to team consultant or default consultant. Ongoing team counselings change to 1:1 when converting agency to default status. 1:1 counselings remain single counselings when swapping the agency to team-agency. [Authorization: Role: user-admin]'
+      operationId: changeAgencyType
+      parameters:
+        - name: agencyId
+          in: path
+          description: Agency Id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgencyTypeRequestDTO'
+      responses:
+        '200':
+          description: OK - agency type successfully changed
+        '400':
+          description: BAD REQUEST - invalid/incomplete request or body object
+        '401':
+          description: UNAUTHORIZED - no/invalid role/authorization
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
+  /agencyadmin/agencies/{agencyId}/topics/{topicId}/dpp:
+    get:
+      tags:
+        - admin-agency-controller
+      summary: 'Read a department''s (Fachbereich = agency x topic) own data privacy policy (DSE) to prefill the editor. [Authorization: Role: agency-admin or restricted-agency-admin scoped to its own agencies]'
+      operationId: getDepartmentDataProtection
+      parameters:
+        - name: agencyId
+          in: path
+          description: Agency Id (Beratungszentrum)
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: topicId
+          in: path
+          description: Topic Id (Fachbereich)
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: OK - department data privacy policy content and status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentDataProtectionContentDTO'
+        '400':
+          description: BAD REQUEST - caller may not access this agency
+        '401':
+          description: UNAUTHORIZED - no/invalid role/authorization
+        '404':
+          description: NOT FOUND - department (agency x topic) not found
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
+    put:
+      tags:
+        - admin-agency-controller
+      summary: 'Publish or draft-save a department''s (Fachbereich = agency x topic) own data privacy policy (DSE). [Authorization: Role: agency-admin or restricted-agency-admin scoped to its own agencies]'
+      operationId: publishDepartmentDataProtection
+      parameters:
+        - name: agencyId
+          in: path
+          description: Agency Id (Beratungszentrum)
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: topicId
+          in: path
+          description: Topic Id (Fachbereich)
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentDataProtectionDTO'
+        required: true
+      responses:
+        '200':
+          description: OK - department data privacy policy stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentDataProtectionResponseDTO'
+        '400':
+          description: BAD REQUEST - invalid/incomplete request, or caller may not edit this agency
+        '401':
+          description: UNAUTHORIZED - no/invalid role/authorization
+        '404':
+          description: NOT FOUND - department (agency x topic) not found
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
+  /agencyadmin/legaltexts:
+    get:
+      tags:
+        - admin-agency-controller
+      summary: 'List the caller tenant''s shared legal texts of one kind, each with its department usage count ("used by N departments", ADR-014). Library CRUD is full-admin only: a shared text applies tenant-wide. [Authorization: Role: agency-admin]'
+      operationId: getLegalTexts
+      parameters:
+        - name: kind
+          in: query
+          description: Which library to list (data privacy policies or imprints)
+          required: true
+          schema:
+            type: string
+            enum:
+              - DPP
+              - IMPRINT
+      responses:
+        '200':
+          description: OK - the tenant's legal texts of that kind
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LegalTextAdminDTO'
+        '401':
+          description: UNAUTHORIZED - no/invalid role/authorization
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
+    post:
+      tags:
+        - admin-agency-controller
+      summary: 'Create a shared legal text owned by the caller''s tenant (ADR-014). [Authorization: Role: agency-admin — full admins only, see GET]'
+      operationId: createLegalText
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLegalTextDTO'
+        required: true
+      responses:
+        '200':
+          description: OK - legal text stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegalTextAdminDTO'
+        '400':
+          description: BAD REQUEST - invalid/incomplete request (e.g. blank label)
+        '401':
+          description: UNAUTHORIZED - no/invalid role/authorization
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
+  /agencyadmin/legaltexts/{legalTextId}:
+    put:
+      tags:
+        - admin-agency-controller
+      summary: 'Update a shared legal text (label, multilingual content, optionally publication status — omitted publish keeps the current status). Changes apply to every department referencing the text. [Authorization: Role: agency-admin — full admins only, scoped to the owning tenant]'
+      operationId: updateLegalText
+      parameters:
+        - name: legalTextId
+          in: path
+          description: Legal text id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLegalTextDTO'
+        required: true
+      responses:
+        '200':
+          description: OK - legal text updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LegalTextAdminDTO'
+        '400':
+          description: BAD REQUEST - invalid request, or caller may not edit this tenant's text
+        '401':
+          description: UNAUTHORIZED - no/invalid role/authorization
+        '404':
+          description: NOT FOUND - legal text not found
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
+  /agencyadmin/agencies/{agencyId}/topics/{topicId}/legaltext-assignment:
+    put:
+      tags:
+        - admin-agency-controller
+      summary: 'Assign a shared legal text to a department''s DPP or imprint slot, or clear the slot (null = department falls back to its own inline content, content_dpp/content_imprint; tenant-level fallback is future work, ADR-014 / #136). The text''s kind must match the slot and the text must belong to the agency''s tenant. [Authorization: Role: agency-admin or restricted-agency-admin scoped to its own agencies]'
+      operationId: assignDepartmentLegalText
+      parameters:
+        - name: agencyId
+          in: path
+          description: Agency Id (Beratungszentrum)
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: topicId
+          in: path
+          description: Topic Id (Fachbereich)
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LegalTextAssignmentDTO'
+        required: true
+      responses:
+        '204':
+          description: NO CONTENT - assignment stored
+        '400':
+          description: BAD REQUEST - kind mismatch, cross-tenant text, or caller may not edit this agency
+        '401':
+          description: UNAUTHORIZED - no/invalid role/authorization
+        '404':
+          description: NOT FOUND - department or legal text not found
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
+  /agencyadmin/agencies/{agencyId}/topics/{topicId}/imprint:
+    get:
+      tags:
+        - admin-agency-controller
+      summary: 'Read a department''s (Fachbereich = agency x topic) own imprint (Impressum) to prefill the editor. [Authorization: Role: agency-admin or restricted-agency-admin scoped to its own agencies]'
+      operationId: getDepartmentImprint
+      parameters:
+        - name: agencyId
+          in: path
+          description: Agency Id (Beratungszentrum)
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: topicId
+          in: path
+          description: Topic Id (Fachbereich)
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: OK - department imprint content and status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentImprintContentDTO'
+        '400':
+          description: BAD REQUEST - caller may not access this agency
+        '401':
+          description: UNAUTHORIZED - no/invalid role/authorization
+        '404':
+          description: NOT FOUND - department (agency x topic) not found
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
+    put:
+      tags:
+        - admin-agency-controller
+      summary: 'Publish or draft-save a department''s (Fachbereich = agency x topic) own imprint (Impressum). [Authorization: Role: agency-admin or restricted-agency-admin scoped to its own agencies]'
+      operationId: publishDepartmentImprint
+      parameters:
+        - name: agencyId
+          in: path
+          description: Agency Id (Beratungszentrum)
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: topicId
+          in: path
+          description: Topic Id (Fachbereich)
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentImprintDTO'
+        required: true
+      responses:
+        '200':
+          description: OK - department imprint stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentImprintResponseDTO'
+        '400':
+          description: BAD REQUEST - invalid/incomplete request, or caller may not edit this agency
+        '401':
+          description: UNAUTHORIZED - no/invalid role/authorization
+        '404':
+          description: NOT FOUND - department (agency x topic) not found
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
+  /agencyadmin/controls:
+    get:
+      tags:
+        - admin-agency-controller
+      summary: 'Gets platform-level agency admin controls [Authorization: Super admin]'
+      operationId: getAgencyAdminControls
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgencyAdminControls'
+        '401':
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        '403':
+          description: FORBIDDEN - only super admin can access platform controls
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
+    put:
+      tags:
+        - admin-agency-controller
+      summary: 'Updates platform-level agency admin controls [Authorization: Super admin]'
+      operationId: updateAgencyAdminControls
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgencyAdminControls'
+      responses:
+        '200':
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgencyAdminControls'
+        '401':
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        '403':
+          description: FORBIDDEN - only super admin can update platform controls
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
   /agencyadmin/postcoderanges/{agencyId}:
     get:
       tags:
@@ -239,22 +609,22 @@ paths:
             type: integer
             format: int64
       responses:
-        200:
+        '200':
           description: OK - agency postcode range found
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/AgencyPostcodeRangeResponseDTO'
-        204:
+        '204':
           description: NO CONTENT - agency postcode range with the provided agency ID does not exist
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     post:
       tags:
         - admin-agency-controller
@@ -262,7 +632,7 @@ paths:
       operationId: createAgencyPostcodeRange
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/PostcodeRangeDTO'
         required: true
@@ -275,22 +645,22 @@ paths:
             type: integer
             format: int64
       responses:
-        201:
+        '201':
           description: CREATED - agency postcode range was created successfully
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AgencyPostcodeRangeResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - provided agency ID does not exist
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     put:
       tags:
         - admin-agency-controller
@@ -298,7 +668,7 @@ paths:
       operationId: updateAgencyPostcodeRange
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/PostcodeRangeDTO'
         required: true
@@ -311,22 +681,22 @@ paths:
             type: integer
             format: int64
       responses:
-        200:
+        '200':
           description: OK - agency postcode range was successfully updated
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AgencyPostcodeRangeResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - agency postcode range with the provided ID does not exist
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     delete:
       tags:
         - admin-agency-controller
@@ -341,18 +711,18 @@ paths:
             type: integer
             format: int64
       responses:
-        200:
+        '200':
           description: OK - agency postcode range was deleted sucessfully
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - agency postcode range with the provided ID does not exist
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
 components:
   schemas:
     RootDTO:
@@ -362,7 +732,6 @@ components:
       properties:
         _links:
           $ref: '#/components/schemas/RootLinks'
-
     RootLinks:
       type: object
       required:
@@ -376,8 +745,6 @@ components:
           $ref: '#/components/schemas/HalLink'
         agencypostcodes:
           $ref: '#/components/schemas/HalLink'
-
-
     HalLink:
       type: object
       required:
@@ -387,10 +754,13 @@ components:
           type: string
         method:
           type: string
-          enum: [ GET, POST, DELETE, PUT ]
+          enum:
+            - GET
+            - POST
+            - DELETE
+            - PUT
         templated:
           type: boolean
-
     AgencyAdminSearchResultDTO:
       type: object
       properties:
@@ -411,16 +781,16 @@ components:
           example: 12132
         name:
           type: string
-          example: "Topic name"
+          example: Topic name
         description:
           type: string
-          example: "Description"
+          example: Description
         internalIdentifier:
           type: string
-          example: "identifier for data exports for example: alcohol"
+          example: 'identifier for data exports for example: alcohol'
         status:
           type: string
-          example: "Active"
+          example: Active
     AgencyAdminResponseDTO:
       type: object
       properties:
@@ -428,25 +798,56 @@ components:
           type: integer
           format: int64
           minimum: 0
-          maximum: 9223372036854775807
+          maximum: 9223372036854776000
           example: 684
         name:
           type: string
           maxLength: 100
-          example: "Suchtberatung Freiburg"
+          example: Suchtberatung Freiburg
         description:
           type: string
           maxLength: 65534
-          example: "Our agency provides help for the following topics: Lorem ipsum.."
+          example: 'Our agency provides help for the following topics: Lorem ipsum..'
         postcode:
           type: string
           minLength: 5
           maxLength: 5
-          example: "79106"
+          example: '79106'
         city:
           type: string
           maxLength: 100
-          example: "Bonn"
+          example: Bonn
+        street:
+          type: string
+          maxLength: 255
+          example: Musterstraße
+        houseNumber:
+          type: string
+          maxLength: 20
+          example: 12a
+        floorBuilding:
+          type: string
+          maxLength: 100
+          example: 2. OG, Haus B
+        country:
+          type: string
+          maxLength: 100
+          example: Deutschland
+        phone:
+          type: string
+          maxLength: 30
+          example: 0761 123456
+        phoneSecondary:
+          type: string
+          maxLength: 30
+          example: 0761 654321
+        email:
+          type: string
+          maxLength: 255
+          example: kontakt@beratungsstelle.de
+        teamAgency:
+          type: boolean
+          example: false
         offline:
           type: boolean
           example: false
@@ -469,100 +870,140 @@ components:
           $ref: '#/components/schemas/DemographicsDTO'
         createDate:
           type: string
-          example: "2019-08-23T08:52:05"
+          example: '2019-08-23T08:52:05'
         updateDate:
           type: string
-          example: "2019-12-02T13:12:08"
+          example: '2019-12-02T13:12:08'
         deleteDate:
           type: string
-          example: "2020-09-02T15:53:23"
+          example: '2020-09-02T15:53:23'
         counsellingRelations:
           type: array
           items:
             type: string
-            enum: [ RELATIVE_COUNSELLING, SELF_COUNSELLING, PARENTAL_COUNSELLING ]
+            enum:
+              - RELATIVE_COUNSELLING
+              - SELF_COUNSELLING
+              - PARENTAL_COUNSELLING
         tenantId:
           type: integer
           format: int64
           example: 12
         dataProtection:
+          type: object
           $ref: '#/components/schemas/DataProtectionDTO'
         agencyLogo:
           type: string
-          example: "base64 encoded image"
-
+          example: base64 encoded image
+        settings:
+          $ref: '#/components/schemas/Settings'
+          description: Agency settings including platform-level agencyAdminControls
     DataProtectionDTO:
       type: object
       properties:
         dataProtectionResponsibleEntity:
           type: string
-          enum: [ AGENCY_RESPONSIBLE, ALTERNATIVE_REPRESENTATIVE, DATA_PROTECTION_OFFICER ]
+          enum:
+            - AGENCY_RESPONSIBLE
+            - ALTERNATIVE_REPRESENTATIVE
+            - DATA_PROTECTION_OFFICER
         agencyDataProtectionResponsibleContact:
+          type: object
           $ref: '#/components/schemas/DataProtectionContactDTO'
         alternativeDataProtectionRepresentativeContact:
+          type: object
           $ref: '#/components/schemas/DataProtectionContactDTO'
         dataProtectionOfficerContact:
+          type: object
           $ref: '#/components/schemas/DataProtectionContactDTO'
-
     DataProtectionContactDTO:
       type: object
       properties:
         nameAndLegalForm:
           type: string
-          example: "Max Mustermann"
+          example: Max Mustermann
         street:
           type: string
           maxLength: 100
-          example: "Musterstraße 1"
+          example: Musterstraße 1
         postcode:
           type: string
           minLength: 5
           maxLength: 5
-          example: "79106"
+          example: '79106'
         city:
           type: string
           maxLength: 100
-          example: "Freiburg"
+          example: Freiburg
         phoneNumber:
           type: string
           maxLength: 100
-          example: "0761 123456"
+          example: 0761 123456
         email:
           type: string
           maxLength: 100
-
-
     PostcodeRangeDTO:
       type: object
       properties:
         postcodeRanges:
           type: string
-          example: "79106-79386;88682;97051-97111"
-
+          example: 79106-79386;88682;97051-97111
     AgencyDTO:
       type: object
       required:
         - name
+        - teamAgency
         - consultingType
         - external
       properties:
         name:
           type: string
           maxLength: 100
-          example: "Beratungsstelle"
+          example: Beratungsstelle
         description:
           type: string
           maxLength: 10000
-          example: "Beschreibung Beratungsstelle"
+          example: Beschreibung Beratungsstelle
         postcode:
           type: string
           minLength: 5
           maxLength: 5
-          example: "79106"
+          example: '79106'
         city:
           type: string
           maxLength: 100
-          example: "Muenchen"
+          example: Muenchen
+        street:
+          type: string
+          maxLength: 255
+          example: Musterstraße
+        houseNumber:
+          type: string
+          maxLength: 20
+          example: 12a
+        floorBuilding:
+          type: string
+          maxLength: 100
+          example: 2. OG, Haus B
+        country:
+          type: string
+          maxLength: 100
+          example: Deutschland
+        phone:
+          type: string
+          maxLength: 30
+          example: 0761 123456
+        phoneSecondary:
+          type: string
+          maxLength: 30
+          example: 0761 654321
+        email:
+          type: string
+          maxLength: 255
+          example: kontakt@beratungsstelle.de
+        teamAgency:
+          type: boolean
+          example: false
         consultingType:
           type: integer
           minimum: 0
@@ -589,14 +1030,16 @@ components:
           type: array
           items:
             type: string
-            enum: [ RELATIVE_COUNSELLING, SELF_COUNSELLING, PARENTAL_COUNSELLING]
+            enum:
+              - RELATIVE_COUNSELLING
+              - SELF_COUNSELLING
+              - PARENTAL_COUNSELLING
         dataProtection:
           type: object
           $ref: '#/components/schemas/DataProtectionDTO'
         agencyLogo:
           type: string
-          example: "base64 encoded image"
-
+          example: base64 encoded image
     AgencyAdminFullResponseDTO:
       type: object
       properties:
@@ -604,7 +1047,6 @@ components:
           $ref: '#/components/schemas/AgencyAdminResponseDTO'
         _links:
           $ref: '#/components/schemas/AgencyLinks'
-
     UpdateAgencyDTO:
       type: object
       required:
@@ -614,12 +1056,12 @@ components:
       properties:
         name:
           type: string
-          example: "Beratungsstelle"
+          example: Beratungsstelle
           minLength: 1
           maxLength: 100
         description:
           type: string
-          example: "Beschreibung Beratungsstelle..."
+          example: Beschreibung Beratungsstelle...
           maxLength: 10000
         consultingType:
           type: integer
@@ -630,11 +1072,39 @@ components:
           type: string
           minLength: 5
           maxLength: 5
-          example: "79106"
+          example: '79106'
         city:
           type: string
-          example: "Muenchen"
+          example: Muenchen
           maxLength: 100
+        street:
+          type: string
+          maxLength: 255
+          example: Musterstraße
+        houseNumber:
+          type: string
+          maxLength: 20
+          example: 12a
+        floorBuilding:
+          type: string
+          maxLength: 100
+          example: 2. OG, Haus B
+        country:
+          type: string
+          maxLength: 100
+          example: Deutschland
+        phone:
+          type: string
+          maxLength: 30
+          example: 0761 123456
+        phoneSecondary:
+          type: string
+          maxLength: 30
+          example: 0761 654321
+        email:
+          type: string
+          maxLength: 255
+          example: kontakt@beratungsstelle.de
         offline:
           type: boolean
           example: false
@@ -656,14 +1126,19 @@ components:
           type: array
           items:
             type: string
-            enum: [ RELATIVE_COUNSELLING, SELF_COUNSELLING, PARENTAL_COUNSELLING ]
+            enum:
+              - RELATIVE_COUNSELLING
+              - SELF_COUNSELLING
+              - PARENTAL_COUNSELLING
         dataProtection:
           type: object
           $ref: '#/components/schemas/DataProtectionDTO'
         agencyLogo:
           type: string
-          example: "base64 encoded image"
-
+          example: base64 encoded image
+        settings:
+          $ref: '#/components/schemas/Settings'
+          description: Agency settings including platform-level agencyAdminControls
     DemographicsDTO:
       type: object
       properties:
@@ -681,8 +1156,7 @@ components:
           type: array
           items:
             type: string
-          example: "[MALE,FEMALE,DIVERS]"
-
+          example: '[MALE,FEMALE,DIVERS]'
     UpdateAgencyResponseDTO:
       type: object
       properties:
@@ -690,7 +1164,6 @@ components:
           $ref: '#/components/schemas/AgencyAdminResponseDTO'
         _links:
           $ref: '#/components/schemas/DefaultLinks'
-
     AgencyPostcodeRangeResponseDTO:
       type: object
       properties:
@@ -698,7 +1171,6 @@ components:
           $ref: '#/components/schemas/PostcodeRangeResponseDTO'
         _links:
           $ref: '#/components/schemas/DefaultLinks'
-
     PostcodeRangeResponseDTO:
       type: object
       properties:
@@ -706,13 +1178,12 @@ components:
           type: integer
           format: int64
           minimum: 0
-          maximum: 9223372036854775807
+          maximum: 9223372036854776000
           example: 684
-          description: "The agency id of the related postcoderanges"
+          description: The agency id of the related postcoderanges
         postcodeRanges:
           type: string
-          example: "79106-79386;88682;97051-97111"
-
+          example: 79106-79386;88682;97051-97111
     AgencyTypeRequestDTO:
       type: object
       required:
@@ -721,8 +1192,8 @@ components:
         agencyType:
           type: string
           enum:
-            - 'DEFAULT_AGENCY'
-
+            - TEAM_AGENCY
+            - DEFAULT_AGENCY
     PaginationLinks:
       type: object
       required:
@@ -734,7 +1205,6 @@ components:
           $ref: '#/components/schemas/HalLink'
         previous:
           $ref: '#/components/schemas/HalLink'
-
     SearchResultLinks:
       allOf:
         - $ref: '#/components/schemas/PaginationLinks'
@@ -742,7 +1212,6 @@ components:
           properties:
             search:
               $ref: '#/components/schemas/HalLink'
-
     DefaultLinks:
       type: object
       required:
@@ -754,7 +1223,6 @@ components:
           $ref: '#/components/schemas/HalLink'
         delete:
           $ref: '#/components/schemas/HalLink'
-
     AgencyLinks:
       allOf:
         - $ref: '#/components/schemas/DefaultLinks'
@@ -762,26 +1230,547 @@ components:
           properties:
             postcodeRanges:
               $ref: '#/components/schemas/HalLink'
-
     Sort:
       type: object
       properties:
         field:
           type: string
-          example: 'name|description|postcode|city|offline'
+          example: id|name|description|postcode|city|teamAgency|offline|createDate
           enum:
-            - 'name'
-            - 'description'
-            - 'postCode'
-            - 'city'
-            - 'offline'
+            - id
+            - name
+            - description
+            - postCode
+            - city
+            - teamAgency
+            - offline
+            - createDate
         order:
           type: string
-          example: 'ASC|DESC'
+          example: ASC|DESC
           enum:
-            - 'ASC'
-            - 'DESC'
-
+            - ASC
+            - DESC
+    LegalTextAdminDTO:
+      type: object
+      required:
+        - id
+        - kind
+        - label
+        - publicationStatus
+        - usageCount
+      properties:
+        id:
+          type: integer
+          format: int64
+        kind:
+          type: string
+          enum:
+            - DPP
+            - IMPRINT
+        label:
+          type: string
+          description: Admin-facing name shown in the legal-text library
+        content:
+          type: string
+          nullable: true
+          description: Stored multilingual content as a JSON language->HTML map string
+        publicationStatus:
+          type: string
+          enum:
+            - DRAFT
+            - PUBLISHED
+        usageCount:
+          type: integer
+          format: int64
+          description: How many departments currently reference this text
+    CreateLegalTextDTO:
+      type: object
+      required:
+        - kind
+        - label
+        - content
+      properties:
+        kind:
+          type: string
+          enum:
+            - DPP
+            - IMPRINT
+        label:
+          type: string
+        content:
+          type: object
+          description: Language code (e.g. de, en) to HTML text (multilingual map). Keys with the __meta suffix carry JSON translation metadata instead of HTML.
+          additionalProperties:
+            type: string
+        publish:
+          type: boolean
+          description: true = mark PUBLISHED; false/absent = keep as DRAFT
+          default: false
+    UpdateLegalTextDTO:
+      type: object
+      required:
+        - label
+        - content
+      properties:
+        label:
+          type: string
+        content:
+          type: object
+          description: Language code (e.g. de, en) to HTML text (multilingual map). Keys with the __meta suffix carry JSON translation metadata instead of HTML.
+          additionalProperties:
+            type: string
+        publish:
+          type: boolean
+          nullable: true
+          description: true = PUBLISHED, false = DRAFT; omitted/null = keep the current publication status (a label/content-only update never unpublishes)
+    LegalTextAssignmentDTO:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - DPP
+            - IMPRINT
+          description: Which slot of the department to assign
+        legalTextId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 'Legal text to reference; null clears the slot — the department falls back to its own inline content (content_dpp/content_imprint). Tenant-level fallback is future work (ADR-014 / #136).'
+    DepartmentDataProtectionDTO:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: object
+          description: Language code (e.g. de, en) to HTML data privacy policy text (multilingual map)
+          additionalProperties:
+            type: string
+          example:
+            de: <p>Datenschutzerklärung des Fachbereichs ...</p>
+            en: <p>Data privacy policy of the department ...</p>
+        publish:
+          type: boolean
+          description: true = mark PUBLISHED (final legal document); false/absent = keep as DRAFT (draft-save)
+          default: false
+    DepartmentDataProtectionResponseDTO:
+      type: object
+      required:
+        - publicationStatus
+      properties:
+        publicationStatus:
+          type: string
+          description: Resulting publication status of the department's data privacy policy
+          enum:
+            - DRAFT
+            - PUBLISHED
+    DepartmentDataProtectionContentDTO:
+      type: object
+      required:
+        - publicationStatus
+      properties:
+        content:
+          type: string
+          nullable: true
+          description: Stored multilingual content as a JSON language->HTML map string; null if never authored
+        publicationStatus:
+          type: string
+          description: Current publication status of the department's data privacy policy
+          enum:
+            - DRAFT
+            - PUBLISHED
+    DepartmentImprintDTO:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: object
+          description: Language code (e.g. de, en) to HTML imprint text (multilingual map). Keys with the __meta suffix carry JSON translation metadata instead of HTML.
+          additionalProperties:
+            type: string
+          example:
+            de: <p>Impressum des Fachbereichs ...</p>
+            en: <p>Imprint of the department ...</p>
+        publish:
+          type: boolean
+          description: true = mark PUBLISHED (final legal document); false/absent = keep as DRAFT (draft-save)
+          default: false
+    DepartmentImprintResponseDTO:
+      type: object
+      required:
+        - publicationStatus
+      properties:
+        publicationStatus:
+          type: string
+          description: Resulting publication status of the department's imprint
+          enum:
+            - DRAFT
+            - PUBLISHED
+    DepartmentImprintContentDTO:
+      type: object
+      required:
+        - publicationStatus
+      properties:
+        content:
+          type: string
+          nullable: true
+          description: Stored multilingual content as a JSON language->HTML map string; null if never authored
+        publicationStatus:
+          type: string
+          description: Current publication status of the department's imprint
+          enum:
+            - DRAFT
+            - PUBLISHED
+    AgencyAdminAllowedPermissionToggles:
+      type: object
+      properties:
+        appearance:
+          type: boolean
+          example: true
+        anonymousChat:
+          type: boolean
+          example: true
+        calls:
+          type: boolean
+          example: true
+        groupChat:
+          type: boolean
+          example: true
+        supervision:
+          type: boolean
+          example: true
+        supervisionAnonymousChats:
+          type: boolean
+          example: true
+        supervisionOneOnOneChats:
+          type: boolean
+          example: true
+        audioCalls:
+          type: boolean
+          example: true
+        audioCallsAnonymousChats:
+          type: boolean
+          example: true
+        audioCallsOneOnOneChats:
+          type: boolean
+          example: true
+        audioCallsGroupChats:
+          type: boolean
+          example: true
+        audioCallsSupervisionChats:
+          type: boolean
+          example: true
+        videoCalls:
+          type: boolean
+          example: true
+        videoCallsAnonymousChats:
+          type: boolean
+          example: true
+        videoCallsOneOnOneChats:
+          type: boolean
+          example: true
+        videoCallsGroupChats:
+          type: boolean
+          example: true
+        videoCallsSupervisionChats:
+          type: boolean
+          example: true
+        threads:
+          type: boolean
+          example: true
+        threadsAnonymousChats:
+          type: boolean
+          example: true
+        threadsOneOnOneChats:
+          type: boolean
+          example: true
+        threadsGroupChats:
+          type: boolean
+          example: true
+        threadsSupervisionChats:
+          type: boolean
+          example: true
+        voiceMessages:
+          type: boolean
+          example: true
+        voiceMessagesAnonymousChats:
+          type: boolean
+          example: true
+        voiceMessagesOneOnOneChats:
+          type: boolean
+          example: true
+        voiceMessagesGroupChats:
+          type: boolean
+          example: true
+        voiceMessagesSupervisionChats:
+          type: boolean
+          example: true
+        mediaUpload:
+          type: boolean
+          example: true
+        mediaUploadAnonymousChats:
+          type: boolean
+          example: true
+        mediaUploadOneOnOneChats:
+          type: boolean
+          example: true
+        mediaUploadGroupChats:
+          type: boolean
+          example: true
+        mediaUploadSupervisionChats:
+          type: boolean
+          example: true
+        mediaInlineDisplay:
+          type: boolean
+          example: true
+        mediaInlineDisplayAnonymousChats:
+          type: boolean
+          example: true
+        mediaInlineDisplayOneOnOneChats:
+          type: boolean
+          example: true
+        mediaInlineDisplayGroupChats:
+          type: boolean
+          example: true
+        mediaInlineDisplaySupervisionChats:
+          type: boolean
+          example: true
+        mediaAiScan:
+          type: boolean
+          example: true
+        mediaAiScanAnonymousChats:
+          type: boolean
+          example: true
+        mediaAiScanOneOnOneChats:
+          type: boolean
+          example: true
+        mediaAiScanGroupChats:
+          type: boolean
+          example: true
+        mediaAiScanSupervisionChats:
+          type: boolean
+          example: true
+    AgencyAdminControls:
+      type: object
+      properties:
+        permissionsPageEnabled:
+          type: boolean
+          example: true
+        allowedPermissionToggles:
+          $ref: '#/components/schemas/AgencyAdminAllowedPermissionToggles'
+        enforcedPermissionToggles:
+          $ref: '#/components/schemas/AgencyAdminAllowedPermissionToggles'
+    Settings:
+      type: object
+      properties:
+        featureStatisticsEnabled:
+          type: boolean
+          example: false
+        featureTopicsEnabled:
+          type: boolean
+          example: false
+        topicsInRegistrationEnabled:
+          type: boolean
+          example: false
+        featureDemographicsEnabled:
+          type: boolean
+          example: false
+        featureAppointmentsEnabled:
+          type: boolean
+          example: false
+        featureGroupChatV2Enabled:
+          type: boolean
+          example: false
+        featureToolsEnabled:
+          type: boolean
+          example: false
+        featureAnonymousChatEnabled:
+          type: boolean
+          example: true
+        featureCallsEnabled:
+          type: boolean
+          example: true
+        featureSupervisionEnabled:
+          type: boolean
+          example: true
+          description: Master toggle for supervision functionality (adding/removing supervisors, supervision views).
+        featureSupervisionAnonymousChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable supervision functionality in anonymous chats.
+        featureSupervisionOneOnOneChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable supervision functionality in 1-on-1 chats.
+        featureAudioCallsEnabled:
+          type: boolean
+          example: true
+          description: Master toggle for audio call button availability (all chat types).
+        featureAudioCallsAnonymousChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable audio call button in anonymous chats.
+        featureAudioCallsOneOnOneChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable audio call button in 1-on-1 chats.
+        featureAudioCallsGroupChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable audio call button in group chats.
+        featureAudioCallsSupervisionChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable audio call button when a user is in supervision mode.
+        featureVideoCallsEnabled:
+          type: boolean
+          example: true
+          description: Master toggle for video call button availability (all chat types).
+        featureVideoCallsAnonymousChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable video call button in anonymous chats.
+        featureVideoCallsOneOnOneChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable video call button in 1-on-1 chats.
+        featureVideoCallsGroupChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable video call button in group chats.
+        featureVideoCallsSupervisionChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable video call button when a user is in supervision mode.
+        featureThreadsEnabled:
+          type: boolean
+          example: true
+          description: Master toggle for threads availability (all chat types).
+        featureThreadsAnonymousChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable threads in anonymous chats.
+        featureThreadsGroupChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable threads in group chats.
+        featureThreadsOneOnOneEnabled:
+          type: boolean
+          example: true
+          description: Enable threads in 1-on-1 chats.
+        featureThreadsSupervisionChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable threads when a user is in supervision mode.
+        featureVoiceMessagesEnabled:
+          type: boolean
+          example: true
+          description: Master toggle for voice messages availability (all chat types).
+        featureVoiceMessagesAnonymousChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable voice messages in anonymous chats.
+        featureVoiceMessagesOneOnOneChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable voice messages in 1-on-1 chats.
+        featureVoiceMessagesGroupChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable voice messages in group chats.
+        featureVoiceMessagesSupervisionChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable voice messages when a user is in supervision mode.
+        featureMediaUploadEnabled:
+          type: boolean
+          example: true
+          description: 'Master toggle: may images/media be uploaded into chats at all. Replaces the retired featureAttachmentUploadDisabled (ADR-015).'
+        featureMediaUploadAnonymousChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable media upload in anonymous chats.
+        featureMediaUploadOneOnOneChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable media upload in 1-on-1 chats.
+        featureMediaUploadGroupChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable media upload in group chats.
+        featureMediaUploadSupervisionChatsEnabled:
+          type: boolean
+          example: true
+          description: Enable media upload when a user is in supervision mode.
+        featureMediaInlineDisplayEnabled:
+          type: boolean
+          example: true
+          description: 'Master toggle: render media as scaled thumbnails (on) or deliver as downloadable file only (off). The virus-scan requirement is attached to this switch.'
+        featureMediaInlineDisplayAnonymousChatsEnabled:
+          type: boolean
+          example: true
+          description: Inline media display in anonymous chats.
+        featureMediaInlineDisplayOneOnOneChatsEnabled:
+          type: boolean
+          example: true
+          description: Inline media display in 1-on-1 chats.
+        featureMediaInlineDisplayGroupChatsEnabled:
+          type: boolean
+          example: true
+          description: Inline media display in group chats.
+        featureMediaInlineDisplaySupervisionChatsEnabled:
+          type: boolean
+          example: true
+          description: Inline media display when a user is in supervision mode.
+        featureMediaAiScanEnabled:
+          type: boolean
+          example: false
+          description: 'Master toggle: AI content check sets the media check state automatically; off = blurred until counsellor click-to-reveal.'
+        featureMediaAiScanAnonymousChatsEnabled:
+          type: boolean
+          example: false
+          description: AI media scan for anonymous chats.
+        featureMediaAiScanOneOnOneChatsEnabled:
+          type: boolean
+          example: false
+          description: AI media scan for 1-on-1 chats.
+        featureMediaAiScanGroupChatsEnabled:
+          type: boolean
+          example: false
+          description: AI media scan for group chats.
+        featureMediaAiScanSupervisionChatsEnabled:
+          type: boolean
+          example: false
+          description: AI media scan when a user is in supervision mode.
+        featureToolsOICDToken:
+          type: string
+          example: 1234-1234-1234-1234
+        activeLanguages:
+          type: array
+          items:
+            type: string
+          example: '[en, de, fr]'
+        showAskerProfile:
+          type: boolean
+          default: false
+          example: false
+        isVideoCallAllowed:
+          type: boolean
+          default: false
+          example: false
+        featureSystemNotificationEmailsEnabled:
+          type: boolean
+          example: false
+        featureCentralDataProtectionTemplateEnabled:
+          type: boolean
+          example: false
+        agencyAdminControls:
+          $ref: '#/components/schemas/AgencyAdminControls'
   securitySchemes:
     Bearer:
       type: apiKey

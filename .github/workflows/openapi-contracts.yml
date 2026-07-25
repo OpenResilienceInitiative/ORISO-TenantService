@@ -1,0 +1,117 @@
+name: OpenAPI Contracts
+
+on:
+  pull_request:
+  push:
+    branches:
+    - pre-dev
+
+env:
+  REDOCLY_VERSION: 2.40.0
+  OASDIFF_VERSION: v1.17.0
+
+jobs:
+  contracts:
+    name: openapi provider and consumer contracts
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Checkout pull-request base
+      if: github.event_name == 'pull_request'
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event.pull_request.base.sha }}
+        path: .contract-base
+
+    - name: Checkout AgencyService provider
+      uses: actions/checkout@v6
+      with:
+        repository: OpenResilienceInitiative/ORISO-AgencyService
+        ref: pre-dev
+        path: .providers/agency
+
+    - name: Checkout ConsultingTypeService provider
+      uses: actions/checkout@v6
+      with:
+        repository: OpenResilienceInitiative/ORISO-ConsultingTypeService
+        ref: pre-dev
+        path: .providers/consulting
+
+    - name: Checkout UserService provider
+      uses: actions/checkout@v6
+      with:
+        repository: OpenResilienceInitiative/ORISO-UserService
+        ref: pre-dev
+        path: .providers/user
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: '24'
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: '1.26.3'
+
+    - name: Install pinned oasdiff
+      run: |
+        mkdir -p "${RUNNER_TEMP}/contract-tools"
+        GOBIN="${RUNNER_TEMP}/contract-tools" go install "github.com/oasdiff/oasdiff@${OASDIFF_VERSION}"
+        echo "${RUNNER_TEMP}/contract-tools" >> "${GITHUB_PATH}"
+
+    - name: Bundle provider-owned contracts
+      run: scripts/contracts/publish-provider-contracts.sh . contract-artifacts/provider
+
+    - name: Reject provider breaking changes
+      if: github.event_name == 'pull_request'
+      run: scripts/contracts/verify-provider-source-compatibility.sh .contract-base contract-artifacts/provider
+
+    - name: Verify AgencyService consumer compatibility
+      run: >-
+        scripts/contracts/verify-consumer-contract.sh
+        services/agencyadminservice.yaml
+        .providers/agency
+        api/agencyadminservice.yaml
+
+    - name: Verify application settings consumer compatibility
+      run: >-
+        scripts/contracts/verify-consumer-contract.sh
+        services/applicationsettingsservice.yml
+        .providers/consulting
+        api/applicationsettingsservice.yml
+
+    - name: Verify consulting types consumer compatibility
+      run: >-
+        scripts/contracts/verify-consumer-contract.sh
+        services/consultingtypeservice.yaml
+        .providers/consulting
+        api/consultingtypeservice.yml
+
+    - name: Verify UserService consumer compatibility
+      run: >-
+        scripts/contracts/verify-consumer-contract.sh
+        services/useradminservice.yaml
+        .providers/user
+        api/useradminservice.yaml
+
+    - name: Record resolved provider commits
+      run: |
+        git -C .providers/agency rev-parse HEAD > contract-artifacts/AGENCY_PROVIDER_COMMIT
+        git -C .providers/consulting rev-parse HEAD > contract-artifacts/CONSULTING_PROVIDER_COMMIT
+        git -C .providers/user rev-parse HEAD > contract-artifacts/USER_PROVIDER_COMMIT
+        cat contract-artifacts/*_PROVIDER_COMMIT
+
+    - name: Upload immutable provider contracts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: provider-contracts-${{ github.sha }}
+        path: contract-artifacts/
+        if-no-files-found: error
+        retention-days: 30
