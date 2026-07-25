@@ -32,7 +32,7 @@ jobs:
       uses: actions/checkout@v6
       with:
         repository: OpenResilienceInitiative/ORISO-AgencyService
-        ref: pre-dev
+        ref: ${{ github.event_name == 'pull_request' && '299d4792820747ff8c5b387e421a6e971fb760d3' || 'pre-dev' }}
         path: .providers/agency
 
     - name: Checkout ConsultingTypeService provider
@@ -46,7 +46,7 @@ jobs:
       uses: actions/checkout@v6
       with:
         repository: OpenResilienceInitiative/ORISO-UserService
-        ref: pre-dev
+        ref: ${{ github.event_name == 'pull_request' && '688908ac876b61ce68594dc732acdd4dfcff5d75' || 'pre-dev' }}
         path: .providers/user
 
     - name: Set up Node.js
