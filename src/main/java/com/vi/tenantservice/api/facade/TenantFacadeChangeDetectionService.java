@@ -94,6 +94,11 @@ public class TenantFacadeChangeDetectionService {
       resultList.add(TenantSetting.FEATURE_GROUP_CHAT_V2_ENABLED);
     }
     if (isChanged(
+        inputSettings.getFeatureTeamDiscussionEnabled(),
+        existingSettingsToCompare.getFeatureTeamDiscussionEnabled())) {
+      resultList.add(TenantSetting.FEATURE_TEAM_DISCUSSION_ENABLED);
+    }
+    if (isChanged(
         inputSettings.getFeatureToolsEnabled(),
         existingSettingsToCompare.getFeatureToolsEnabled())) {
       resultList.add(TenantSetting.FEATURE_TOOLS_ENABLED);
@@ -198,10 +203,73 @@ public class TenantFacadeChangeDetectionService {
         != nullAsTrue(existingSettingsToCompare.getFeatureVoiceMessagesSupervisionChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_VOICE_MESSAGES_SUPERVISION_CHATS_ENABLED);
     }
+    if (nullAsTrue(inputSettings.getFeatureMediaUploadEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureMediaUploadEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_UPLOAD_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureMediaUploadAnonymousChatsEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureMediaUploadAnonymousChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_UPLOAD_ANONYMOUS_CHATS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureMediaUploadOneOnOneChatsEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureMediaUploadOneOnOneChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_UPLOAD_ONE_ON_ONE_CHATS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureMediaUploadGroupChatsEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureMediaUploadGroupChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_UPLOAD_GROUP_CHATS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureMediaUploadSupervisionChatsEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureMediaUploadSupervisionChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_UPLOAD_SUPERVISION_CHATS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureMediaInlineDisplayEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureMediaInlineDisplayEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_INLINE_DISPLAY_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureMediaInlineDisplayAnonymousChatsEnabled())
+        != nullAsTrue(
+            existingSettingsToCompare.getFeatureMediaInlineDisplayAnonymousChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_INLINE_DISPLAY_ANONYMOUS_CHATS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureMediaInlineDisplayOneOnOneChatsEnabled())
+        != nullAsTrue(
+            existingSettingsToCompare.getFeatureMediaInlineDisplayOneOnOneChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_INLINE_DISPLAY_ONE_ON_ONE_CHATS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureMediaInlineDisplayGroupChatsEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureMediaInlineDisplayGroupChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_INLINE_DISPLAY_GROUP_CHATS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureMediaInlineDisplaySupervisionChatsEnabled())
+        != nullAsTrue(
+            existingSettingsToCompare.getFeatureMediaInlineDisplaySupervisionChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_INLINE_DISPLAY_SUPERVISION_CHATS_ENABLED);
+    }
     if (isChanged(
-        inputSettings.getFeatureAttachmentUploadDisabled(),
-        existingSettingsToCompare.getFeatureAttachmentUploadDisabled())) {
-      resultList.add(TenantSetting.FEATURE_ATTACHMENT_UPLOAD_DISABLED);
+        inputSettings.getFeatureMediaAiScanEnabled(),
+        existingSettingsToCompare.getFeatureMediaAiScanEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_AI_SCAN_ENABLED);
+    }
+    if (isChanged(
+        inputSettings.getFeatureMediaAiScanAnonymousChatsEnabled(),
+        existingSettingsToCompare.getFeatureMediaAiScanAnonymousChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_AI_SCAN_ANONYMOUS_CHATS_ENABLED);
+    }
+    if (isChanged(
+        inputSettings.getFeatureMediaAiScanOneOnOneChatsEnabled(),
+        existingSettingsToCompare.getFeatureMediaAiScanOneOnOneChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_AI_SCAN_ONE_ON_ONE_CHATS_ENABLED);
+    }
+    if (isChanged(
+        inputSettings.getFeatureMediaAiScanGroupChatsEnabled(),
+        existingSettingsToCompare.getFeatureMediaAiScanGroupChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_AI_SCAN_GROUP_CHATS_ENABLED);
+    }
+    if (isChanged(
+        inputSettings.getFeatureMediaAiScanSupervisionChatsEnabled(),
+        existingSettingsToCompare.getFeatureMediaAiScanSupervisionChatsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_AI_SCAN_SUPERVISION_CHATS_ENABLED);
     }
     if (isChangedIgnoringOrder(
         inputSettings.getActiveLanguages(), existingSettingsToCompare.getActiveLanguages())) {

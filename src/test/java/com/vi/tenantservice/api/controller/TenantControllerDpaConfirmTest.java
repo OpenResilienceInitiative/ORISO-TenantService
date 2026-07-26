@@ -11,6 +11,7 @@ import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.model.DpaGateStatusDTO;
 import com.vi.tenantservice.api.model.DpaSignInviteDTO;
+import com.vi.tenantservice.api.model.DpaSignPreviewDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaSignatureRequestDTO;
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
@@ -39,7 +40,32 @@ class TenantControllerDpaConfirmTest {
   @Mock private TenantDpaService tenantDpaService;
   @Mock private TenantDpaFacade tenantDpaFacade;
   @Mock private TranslationFacade translationFacade;
+  @Mock com.vi.tenantservice.api.service.TenantMediaService tenantMediaService;
+
   @InjectMocks private TenantController controller;
+
+  @Test
+  void getDataProcessingAgreementPreview_Should_returnContractBoundToToken() {
+    // given
+    var version = LocalDateTime.of(2026, 7, 20, 12, 30);
+    var expiresAt = LocalDateTime.of(2026, 8, 3, 12, 30);
+    when(tenantDpaService.getSignPreview("tok"))
+        .thenReturn(
+            new TenantDpaService.DpaSignPreview(
+                7L, "Träger Nord", version, "{\"de\":\"<p>Vertragstext</p>\"}", expiresAt));
+
+    // when
+    var response = controller.getDataProcessingAgreementPreview("tok");
+
+    // then
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isInstanceOf(DpaSignPreviewDTO.class);
+    assertThat(response.getBody().getTenantName()).isEqualTo("Träger Nord");
+    assertThat(response.getBody().getDpaVersion()).isEqualTo("2026-07-20T12:30");
+    assertThat(response.getBody().getContent()).contains("Vertragstext");
+    assertThat(response.getBody().getExpiresAt()).isEqualTo("2026-08-03T12:30");
+    verifyNoInteractions(tenantServiceFacade);
+  }
 
   @Test
   void confirmDataProcessingAgreement_Should_returnOkWithMappedDto() {

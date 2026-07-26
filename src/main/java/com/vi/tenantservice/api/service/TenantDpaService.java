@@ -5,6 +5,7 @@ import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
+import com.vi.tenantservice.api.repository.TenantRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -27,8 +28,17 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class TenantDpaService {
 
+  /** Public, read-only view of the exact published contract referenced by a valid sign token. */
+  public record DpaSignPreview(
+      Long tenantId,
+      String tenantName,
+      LocalDateTime dpaVersion,
+      String content,
+      LocalDateTime expiresAt) {}
+
   private final TenantDpaSignatureRepository signatureRepository;
   private final TenantDpaVersionRepository versionRepository;
+  private final TenantRepository tenantRepository;
 
   /** Persists a SIGNED confirmation of the given DPA version for a tenant. */
   public TenantDpaSignatureEntity recordSignature(
@@ -132,6 +142,33 @@ public class TenantDpaService {
   }
 
   /**
+   * Resolves the exact immutable DPA snapshot bound to a still-valid invitation. The token is only
+   * read here; previewing the contract never consumes it.
+   */
+  @Transactional(readOnly = true)
+  public DpaSignPreview getSignPreview(String rawToken) {
+    var pending = requireValidPendingSignature(rawToken);
+    var publishedVersion =
+        versionRepository
+            .findFirstByTenantIdAndActivationDate(pending.getTenantId(), pending.getDpaVersion())
+            .orElseThrow(
+                () ->
+                    new InvalidDpaSignTokenException(
+                        "Published DPA version for sign token was not found"));
+    var tenant =
+        tenantRepository
+            .findById(pending.getTenantId())
+            .orElseThrow(
+                () -> new InvalidDpaSignTokenException("Tenant for sign token was not found"));
+    return new DpaSignPreview(
+        pending.getTenantId(),
+        tenant.getName(),
+        pending.getDpaVersion(),
+        publishedVersion.getContent(),
+        pending.getTokenExpiresAt());
+  }
+
+  /**
    * Confirms a DPA via its single-use sign token: looks up the PENDING row by token hash, validates
    * it is not expired, records the signer, marks it SIGNED, and consumes the token.
    *
@@ -148,19 +185,8 @@ public class TenantDpaService {
       String source,
       boolean signerIsMember,
       String language) {
-    if (rawToken == null || rawToken.isBlank()) {
-      throw new InvalidDpaSignTokenException("Missing sign token");
-    }
+    var pending = requireValidPendingSignature(rawToken);
     var tokenHash = DpaSignToken.hash(rawToken);
-    var pending =
-        signatureRepository
-            .findByTokenHashAndStatus(tokenHash, DpaSignatureStatus.PENDING)
-            .orElseThrow(
-                () -> new InvalidDpaSignTokenException("Unknown or already-used sign token"));
-    if (pending.getTokenExpiresAt() == null
-        || pending.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
-      throw new InvalidDpaSignTokenException("Sign token has expired");
-    }
     var now = LocalDateTime.now();
     // Atomic single-use: only the still-PENDING row is updated, so a concurrent double-submit
     // produces exactly one winner (1 row) and the rest see 0.
@@ -192,6 +218,22 @@ public class TenantDpaService {
     pending.setStatus(DpaSignatureStatus.SIGNED);
     pending.setSignedAt(now);
     pending.setTokenHash(null);
+    return pending;
+  }
+
+  private TenantDpaSignatureEntity requireValidPendingSignature(String rawToken) {
+    if (rawToken == null || rawToken.isBlank()) {
+      throw new InvalidDpaSignTokenException("Missing sign token");
+    }
+    var pending =
+        signatureRepository
+            .findByTokenHashAndStatus(DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING)
+            .orElseThrow(
+                () -> new InvalidDpaSignTokenException("Unknown or already-used sign token"));
+    if (pending.getTokenExpiresAt() == null
+        || pending.getTokenExpiresAt().isBefore(LocalDateTime.now())) {
+      throw new InvalidDpaSignTokenException("Sign token has expired");
+    }
     return pending;
   }
 

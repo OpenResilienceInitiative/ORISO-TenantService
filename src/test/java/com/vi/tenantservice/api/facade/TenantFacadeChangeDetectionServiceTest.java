@@ -213,20 +213,36 @@ class TenantFacadeChangeDetectionServiceTest {
 
   @Test
   void
-      determineChangedSettings_Should_DetectFeatureAttachmentUploadDisabledChanges_When_InputDTOContainsDifferentSettingsAsEntity() {
+      determineChangedSettings_Should_DetectFeatureMediaUploadChanges_When_InputDTOContainsDifferentSettingsAsEntity() {
     // given
-    Settings settings = new Settings().featureAttachmentUploadDisabled(true);
+    Settings settings = new Settings().featureMediaUploadEnabled(false);
     MultilingualTenantDTO sanitizedTenantDTO = new MultilingualTenantDTO().settings(settings);
 
     TenantSettings existingTenantSettings =
-        TenantSettings.builder().featureAttachmentUploadDisabled(false).build();
+        TenantSettings.builder().featureMediaUploadEnabled(true).build();
     TenantEntity existingTenant =
         TenantEntity.builder().settings(convertToJson(existingTenantSettings)).build();
     // when, then
     assertThat(
             tenantFacadeChangeDetectionService.determineChangedSettings(
                 sanitizedTenantDTO, existingTenant))
-        .containsOnly(FEATURE_ATTACHMENT_UPLOAD_DISABLED);
+        .containsOnly(FEATURE_MEDIA_UPLOAD_ENABLED);
+  }
+
+  @Test
+  void
+      determineChangedSettings_Should_DetectFeatureMediaAiScanChanges_When_InputDTOContainsDifferentSettingsAsEntity() {
+    // given — AI scan defaults to false, so null vs false must NOT count as a change
+    Settings settings = new Settings().featureMediaAiScanEnabled(true);
+    MultilingualTenantDTO sanitizedTenantDTO = new MultilingualTenantDTO().settings(settings);
+
+    TenantEntity existingTenant =
+        TenantEntity.builder().settings(convertToJson(TenantSettings.builder().build())).build();
+    // when, then
+    assertThat(
+            tenantFacadeChangeDetectionService.determineChangedSettings(
+                sanitizedTenantDTO, existingTenant))
+        .containsOnly(FEATURE_MEDIA_AI_SCAN_ENABLED);
   }
 
   @Test

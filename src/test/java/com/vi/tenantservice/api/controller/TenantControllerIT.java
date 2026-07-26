@@ -160,7 +160,7 @@ class TenantControllerIT {
         .andExpect(jsonPath("settings.featureDemographicsEnabled", is(false)))
         .andExpect(jsonPath("settings.featureAppointmentsEnabled", is(false)))
         .andExpect(jsonPath("settings.featureGroupChatV2Enabled", is(false)))
-        .andExpect(jsonPath("settings.featureAttachmentUploadDisabled", is(true)))
+        .andExpect(jsonPath("settings.featureMediaUploadEnabled", is(false)))
         .andExpect(jsonPath("settings.featureToolsOICDToken", is("token")))
         .andExpect(jsonPath("settings.activeLanguages", is(Lists.newArrayList("de", "en"))));
   }
@@ -475,7 +475,7 @@ class TenantControllerIT {
         .andExpect(jsonPath("settings.featureDemographicsEnabled", is(true)))
         .andExpect(jsonPath("settings.featureAppointmentsEnabled", is(true)))
         .andExpect(jsonPath("settings.featureGroupChatV2Enabled", is(true)))
-        .andExpect(jsonPath("settings.featureAttachmentUploadDisabled", is(false)))
+        .andExpect(jsonPath("settings.featureMediaUploadEnabled", is(true)))
         .andExpect(jsonPath("settings.activeLanguages", is(Lists.newArrayList("de"))));
   }
 
@@ -837,6 +837,59 @@ class TenantControllerIT {
                 .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
         .andExpect(status().isOk())
         .andExpect(jsonPath("_embedded", hasSize(PAGE_SIZE)));
+  }
+
+  @Test
+  void searchTenants_Should_returnOk_When_sortedBySubdomain() throws Exception {
+    // given
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+
+    // when
+    var content =
+        this.mockMvc
+            .perform(
+                get(TENANTADMIN_SEARCH + "?query=*&page=1&perPage=10&field=SUBDOMAIN&order=ASC")
+                    .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("_embedded", hasSize(PAGE_SIZE)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    // then
+    var subdomains =
+        com.jayway.jsonpath.JsonPath.<java.util.List<String>>read(
+            content, "$._embedded[*].subdomain");
+    org.assertj.core.api.Assertions.assertThat(subdomains).isSorted();
+  }
+
+  @Test
+  void searchTenants_Should_returnOk_When_sortedByBeraterCountDescending() throws Exception {
+    // given
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+
+    // when
+    var content =
+        this.mockMvc
+            .perform(
+                get(TENANTADMIN_SEARCH + "?query=*&page=1&perPage=10&field=BERATERCOUNT&order=DESC")
+                    .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("_embedded", hasSize(PAGE_SIZE)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    // then
+    var beraterCounts =
+        com.jayway.jsonpath.JsonPath.<java.util.List<Integer>>read(
+            content, "$._embedded[*].beraterCount");
+    org.assertj.core.api.Assertions.assertThat(beraterCounts)
+        .isSortedAccordingTo(java.util.Comparator.reverseOrder());
   }
 
   @Test

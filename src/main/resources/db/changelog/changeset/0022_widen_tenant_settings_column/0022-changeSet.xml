@@ -1,0 +1,23 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      The tenant settings JSON outgrew VARCHAR(4000): the three media flag families (ADR-015,
+      featureMediaUpload*/featureMediaInlineDisplay*/featureMediaAiScan*) plus the widened
+      allowed/enforced permission toggle sets push a fully populated settings blob past the
+      old limit (~4.8k chars). TEXT (64k) gives ample headroom; a guard test in
+      TenantSettingsTest fails the build long before the new limit is reached.
+
+      Lossless widening. The precondition marks the changeset ran where the column is
+      already TEXT, so it is safe on both fresh and already-patched databases. Validation
+      precedent: theming_logo is longtext against a plain String @Column, accepted by
+      ddl-auto=validate.
+    -->
+    <changeSet author="oriso" id="widenTenantSettingsColumn">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="1">SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenant' AND COLUMN_NAME = 'settings' AND DATA_TYPE = 'varchar'</sqlCheck>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0022_widen_tenant_settings_column/widenTenantSettingsColumn.sql" stripComments="true" />
+        <rollback><sql/></rollback>
+    </changeSet>
+</databaseChangeLog>

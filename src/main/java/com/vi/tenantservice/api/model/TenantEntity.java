@@ -83,7 +83,9 @@ public class TenantEntity implements TenantData {
   @Column(name = "dpa_activation_date")
   private LocalDateTime contentDataProcessingAgreementActivationDate;
 
-  @Column(name = "settings", length = 4000)
+  // TEXT on MariaDB since changeset 0022 (media flag families outgrew VARCHAR(4000));
+  // the length here only sizes the generated H2 test schema.
+  @Column(name = "settings", length = 65535)
   private String settings;
 
   @Column(name = "create_date", nullable = false)
