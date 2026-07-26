@@ -78,6 +78,15 @@ class OpenApiContractGateTest(unittest.TestCase):
         )
         self.assertIn("|| 'pre-dev'", workflow)
 
+    def test_contract_gate_tests_are_executed_by_ci(self):
+        # A gate assertion that never runs protects nothing. Without a job that
+        # invokes pytest, this file can drift away from the workflow and the
+        # scripts it describes while every check stays green.
+        workflow = (ROOT / ".github/workflows/openapi-contracts.yml").read_text()
+
+        self.assertIn("contract-gate-tests:", workflow)
+        self.assertIn("python -m pytest -q tests/contracts", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
