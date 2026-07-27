@@ -484,6 +484,38 @@ paths:
           description: BAD REQUEST - invalid/incomplete request or body object
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenant/public/ids:
+    summary: 'Represents publicly allowed tenant data for a bounded set of ids'
+    description: Existing tenants are returned; unknown ids are omitted and duplicate ids are normalized.
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Gets public tenant information in one bounded batch [Authorization: no-auth]'
+      operationId: getRestrictedTenantDataByTenantIds
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              minItems: 1
+              maxItems: 100
+              items:
+                type: integer
+                format: int64
+      responses:
+        200:
+          description: Existing requested tenants; unknown ids are omitted
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RestrictedTenantDTO'
+        400:
+          description: BAD REQUEST - request must contain 1 to 100 tenant ids
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenant/public/single:
     summary: 'Represents a publicly allowed tenant data'
     description: This resource represents the tenant in a single-tenant system.

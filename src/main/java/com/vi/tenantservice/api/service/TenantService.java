@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -139,6 +140,10 @@ public class TenantService {
 
   public Optional<TenantRestrictedData> findRestrictedTenantDataById(Long id) {
     return Optional.ofNullable(tenantRepository.findRestrictedDataById(id));
+  }
+
+  public List<TenantRestrictedData> findRestrictedTenantDataByIds(Set<Long> ids) {
+    return List.copyOf(tenantRepository.findRestrictedDataByIdIn(ids));
   }
 
   public List<TenantEntity> getAllTenants() {

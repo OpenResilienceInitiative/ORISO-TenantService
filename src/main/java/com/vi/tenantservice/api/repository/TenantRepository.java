@@ -4,6 +4,7 @@ import com.vi.tenantservice.api.model.TenantDataView;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedDataView;
 import java.util.List;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -143,6 +144,27 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.settings) "
               + "FROM TenantEntity t WHERE t.id = :id")
   TenantRestrictedDataView findRestrictedDataById(@Param("id") Long id);
+
+  @Query(
+      value =
+          "SELECT new com.vi.tenantservice.api.model.TenantRestrictedDataView("
+              + "t.id, "
+              + "t.name, "
+              + "t.subdomain, "
+              + "t.themingLogo, "
+              + "t.themingAssociationLogo, "
+              + "t.themingFavicon, "
+              + "t.themingPrimaryColor, "
+              + "t.themingSecondaryColor, "
+              + "t.contentImpressum, "
+              + "t.contentClaim, "
+              + "t.contentPrivacy, "
+              + "t.contentPrivacyActivationDate, "
+              + "t.contentTermsAndConditions, "
+              + "t.contentTermsAndConditionsActivationDate, "
+              + "t.settings) "
+              + "FROM TenantEntity t WHERE t.id IN :ids")
+  List<TenantRestrictedDataView> findRestrictedDataByIdIn(@Param("ids") Set<Long> ids);
 
   List<TenantEntity> findAllByIdIn(List<Long> tenantIds);
 }

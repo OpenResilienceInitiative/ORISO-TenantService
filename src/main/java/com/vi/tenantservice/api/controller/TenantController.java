@@ -43,6 +43,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -326,6 +327,15 @@ public class TenantController implements TenantApi, TenantadminApi {
     return tenantById.isEmpty()
         ? new ResponseEntity<>(HttpStatus.NOT_FOUND)
         : new ResponseEntity<>(tenantById.get(), HttpStatus.OK);
+  }
+
+  @Override
+  public ResponseEntity<List<RestrictedTenantDTO>> getRestrictedTenantDataByTenantIds(
+      List<Long> tenantIds) {
+    if (tenantIds.contains(null)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tenant ids must not contain null");
+    }
+    return ResponseEntity.ok(tenantServiceFacade.findRestrictedTenantsByIds(Set.copyOf(tenantIds)));
   }
 
   @Override
