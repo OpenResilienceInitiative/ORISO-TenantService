@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.controller;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
+import jakarta.validation.ConstraintViolationException;
 import jakarta.ws.rs.BadRequestException;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpStatus;
@@ -46,6 +47,13 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
   @ResponseStatus(HttpStatus.BAD_REQUEST)
   public void handle(BadRequestException e) {
     logger.warn("Returning HTTP 400 Bad Request", e);
+  }
+
+  @ExceptionHandler(value = {ConstraintViolationException.class})
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  public void handle(ConstraintViolationException e) {
+    logger.warn(
+        "Returning HTTP 400 Bad Request for invalid request constraints: " + e.getMessage());
   }
 
   /**
