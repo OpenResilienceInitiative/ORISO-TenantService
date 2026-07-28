@@ -34,6 +34,7 @@ import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantIdAllocationService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -119,6 +120,7 @@ class TenantServiceFacadeTest {
       new EffectivePermissionSettingsApplier();
 
   @Mock private SingleDomainTenantOverrideService singleDomainTenantOverrideService;
+  @Mock private TenantIdAllocationService tenantIdAllocationService;
 
   @InjectMocks private TenantServiceFacade tenantServiceFacade;
 
@@ -132,14 +134,14 @@ class TenantServiceFacadeTest {
     // given
     when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
     when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
-    when(tenantService.create(tenantEntity)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
 
     // when
     tenantServiceFacade.createTenant(tenantMultilingualDTO);
 
     // then
     verify(converter).toEntity(sanitizedTenantDTO);
-    verify(tenantService).create(tenantEntity);
+    verify(tenantService).create(tenantEntity, null);
     verify(consultingTypeService).createDefaultConsultingTypes(tenantEntity.getId());
     verify(applicationSettingsService, never()).saveMainTenantSubDomain(any());
   }
@@ -157,7 +159,7 @@ class TenantServiceFacadeTest {
 
     when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
     when(converter.toEntity(tenantMultilingualDTO)).thenReturn(entity);
-    when(tenantService.create(entity)).thenReturn(entity);
+    when(tenantService.create(entity, null)).thenReturn(entity);
     ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
     when(tenantService.getAllTenantData()).thenReturn(List.of(technicalTenant));
     when(subdomainExtractor.getCurrentSubdomain()).thenReturn(Optional.of("app1"));
@@ -167,7 +169,7 @@ class TenantServiceFacadeTest {
 
     // then
     verify(converter).toEntity(sanitizedTenantDTO);
-    verify(tenantService).create(entity);
+    verify(tenantService).create(entity, null);
     verify(consultingTypeService).createDefaultConsultingTypes(entity.getId());
     verify(applicationSettingsService).saveMainTenantSubDomain("app1");
   }
@@ -185,7 +187,7 @@ class TenantServiceFacadeTest {
 
     when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
     when(converter.toEntity(tenantMultilingualDTO)).thenReturn(entity);
-    when(tenantService.create(entity)).thenReturn(entity);
+    when(tenantService.create(entity, null)).thenReturn(entity);
     ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
     when(tenantService.getAllTenantData()).thenReturn(List.of(technicalTenant));
     when(subdomainExtractor.getCurrentSubdomain()).thenReturn(Optional.of("app2"));
@@ -216,18 +218,19 @@ class TenantServiceFacadeTest {
   }
 
   @Test
-  void createTenant_Should_throwBadRequest_When_tenantIdIsProvided() {
-    // given
-    MultilingualTenantDTO tenantDTOWithId = mock(MultilingualTenantDTO.class);
-    when(tenantDTOWithId.getId()).thenReturn(1L);
-    when(tenantInputSanitizer.sanitize(tenantDTOWithId)).thenReturn(sanitizedTenantDTO);
+  void createTenant_Should_passReservationTokenToAllocationAwareCreate_When_tokenIsProvided() {
+    // given (TEN-INV-U1: manual IDs are no longer rejected upfront; they are re-validated
+    // against the allocation ledger inside the creating transaction)
+    tenantMultilingualDTO.setTenantIdReservationToken("reservation-token");
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, "reservation-token")).thenReturn(tenantEntity);
+
+    // when
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
 
     // then
-    assertThrows(
-        TenantValidationException.class,
-        () -> {
-          tenantServiceFacade.createTenant(tenantDTOWithId);
-        });
+    verify(tenantService).create(tenantEntity, "reservation-token");
   }
 
   @Test
