@@ -1,0 +1,38 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Changeset 0025 created SEQUENCE_TENANT_DPA_ADMIN_SIGNATURE with an UPPERCASE name,
+      but Hibernate's physical naming strategy lowercases sequence names at runtime. On
+      case-sensitive Linux MariaDB (lower_case_table_names=0) every tenant-admin DPA
+      signature insert (POST /tenantadmin/{id}/dpa/sign) then fails with
+      "Unknown SEQUENCE: 'sequence_tenant_dpa_admin_signature'", so an admin behind the
+      DPA blocker can never unlock the admin area (bug #569). This is the same regression
+      class that changeset 0020 already fixed for the other DPA sequences; same remedy here.
+
+      This changelog renames the uppercase sequence to lowercase (sequences are renamed
+      via RENAME TABLE in MariaDB) and, as a fallback for databases that have neither
+      casing, creates the lowercase sequence. Databases that already have BOTH casings
+      (e.g. manually repaired environments) are left untouched: the rename is skipped and
+      the stray uppercase sequence stays behind, which is harmless.
+
+      Rollback is intentionally empty: renaming back to uppercase would re-break the
+      runtime lookup, because the application has always requested the lowercase name.
+    -->
+
+    <changeSet author="oriso" id="renameDpaAdminSignatureSequenceToLowercase">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <sqlCheck expectedResult="1">SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'tenantservice' AND TABLE_TYPE = 'SEQUENCE' AND CAST(TABLE_NAME AS BINARY) = CAST('SEQUENCE_TENANT_DPA_ADMIN_SIGNATURE' AS BINARY)</sqlCheck>
+                <sqlCheck expectedResult="0">SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'tenantservice' AND TABLE_TYPE = 'SEQUENCE' AND CAST(TABLE_NAME AS BINARY) = CAST('sequence_tenant_dpa_admin_signature' AS BINARY)</sqlCheck>
+            </and>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0026_fix_dpa_admin_sequence_name_case/renameDpaAdminSignatureSequenceToLowercase.sql" stripComments="true" />
+        <rollback/>
+    </changeSet>
+
+    <changeSet author="oriso" id="createLowercaseDpaAdminSequenceIfMissing">
+        <sqlFile path="db/changelog/changeset/0026_fix_dpa_admin_sequence_name_case/createLowercaseDpaAdminSequenceIfMissing.sql" stripComments="true" />
+        <rollback/>
+    </changeSet>
+</databaseChangeLog>
