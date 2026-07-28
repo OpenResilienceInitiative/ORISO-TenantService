@@ -11,26 +11,24 @@ paths:
       summary: 'Returns the hal root entry point. [Authorization: Role: user-admin]'
       operationId: getRoot
       responses:
-        200:
+        '200':
           description: OK - successfull operation
           content:
             application/hal+json:
               schema:
                 $ref: '#/components/schemas/RootDTO'
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /useradmin/sessions:
     get:
       tags:
         - admin-user-controller
-      summary: 'Returns the list of sessions by filter query parameter. [Authorization: Role:
-      user-admin]'
+      summary: 'Returns the list of sessions by filter query parameter. [Authorization: Role: user-admin]'
       operationId: getSessions
       parameters:
         - name: filter
           in: query
-          description: 'The filter parameters to search for. If no filter is set all sessions are
-          being returned. If more than one filter is set the first given filter is used only.'
+          description: The filter parameters to search for. If no filter is set all sessions are being returned. If more than one filter is set the first given filter is used only.
           schema:
             $ref: '#/components/schemas/SessionFilter'
         - name: page
@@ -46,20 +44,20 @@ paths:
           schema:
             type: integer
       responses:
-        200:
+        '200':
           description: OK - successfull operation
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/SessionAdminResultDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /useradmin/consultants:
     get:
       tags:
@@ -69,8 +67,7 @@ paths:
       parameters:
         - name: filter
           in: query
-          description: 'The filter parameters to search for. If no filter is set all consultant are
-                being returned.'
+          description: The filter parameters to search for. If no filter is set all consultant are being returned.
           schema:
             $ref: '#/components/schemas/ConsultantFilter'
         - name: page
@@ -91,20 +88,20 @@ paths:
           schema:
             $ref: '#/components/schemas/Sort'
       responses:
-        200:
+        '200':
           description: OK - successfull operation
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/ConsultantSearchResultDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     post:
       tags:
         - admin-user-controller
@@ -112,27 +109,27 @@ paths:
       operationId: createConsultant
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/CreateConsultantDTO'
         required: true
       responses:
-        201:
+        '201':
           description: CREATED - consultant was created successfully
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/ConsultantAdminResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        409:
+        '409':
           description: CONFLICT - invalid/unavailable username or email address
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /useradmin/consultants/{consultantId}:
     get:
       tags:
@@ -147,22 +144,22 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - consultant found
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/ConsultantAdminResponseDTO'
-        204:
+        '204':
           description: NO CONTENT - consultant with the specific id was not found
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     put:
       tags:
         - admin-user-controller
@@ -170,7 +167,7 @@ paths:
       operationId: updateConsultant
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/UpdateAdminConsultantDTO'
         required: true
@@ -182,20 +179,20 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - consultant was updated successfully
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/ConsultantAdminResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     delete:
       tags:
         - admin-user-controller
@@ -214,18 +211,18 @@ paths:
             type: boolean
           description: parameter specifying if consultant sessions need to be removed prior the deletion
       responses:
-        200:
+        '200':
           description: OK - consultant was marked for deletion successfully
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - consultant not found
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /useradmin/askers/{askerId}:
     get:
       tags:
@@ -240,22 +237,22 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - asker found
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/AskerResponseDTO'
-        204:
+        '204':
           description: NO CONTENT - asker with the specific id was not found
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     delete:
       tags:
         - admin-user-controller
@@ -269,20 +266,20 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - asker was marked for deletion successfully
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - asker not found
-        409:
+        '409':
           description: CONFLICT - asker is already marked for deletion
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /useradmin/report:
     get:
       tags:
@@ -290,7 +287,7 @@ paths:
       summary: 'Returns an generated report containing data integration violations. [Authorization: Role: user-admin]'
       operationId: generateViolationReport
       responses:
-        200:
+        '200':
           description: OK - successfull operation
           content:
             application/json:
@@ -298,18 +295,17 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ViolationDTO'
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /useradmin/agencies/{agencyId}/consultants:
     get:
       tags:
         - admin-user-controller
-      summary: 'Returns the list of consultants for a given agency Id. [Authorization: Role:
-            user-admin]'
+      summary: 'Returns the list of consultants for a given agency Id. [Authorization: Role: user-admin]'
       operationId: getAgencyConsultants
       parameters:
         - name: agencyId
@@ -319,26 +315,25 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - successfull operation
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AgencyConsultantResponseDTO'
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - agency with given id does not exist
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /useradmin/consultants/{consultantId}/agencies:
     get:
       tags:
         - admin-user-controller
-      summary: 'Returns the list of agencies for a given consultant Id. [Authorization: Role:
-        user-admin]'
+      summary: 'Returns the list of agencies for a given consultant Id. [Authorization: Role: user-admin]'
       operationId: getConsultantAgencies
       parameters:
         - name: consultantId
@@ -348,21 +343,20 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - successfull operation
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/ConsultantAgencyResponseDTO'
-
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - consultant with given id does not exist
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     post:
       tags:
         - admin-user-controller
@@ -377,21 +371,21 @@ paths:
             type: string
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/CreateConsultantAgencyDTO'
         required: true
       responses:
-        201:
+        '201':
           description: CREATED - consultant-agency relation was created successfully
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     put:
       tags:
         - admin-user-controller
@@ -406,23 +400,23 @@ paths:
             type: string
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               type: array
               items:
                 $ref: '#/components/schemas/CreateConsultantAgencyDTO'
         required: true
       responses:
-        200:
+        '200':
           description: OK - consultant-agency relations have been set
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /useradmin/consultants/{consultantId}/agencies/{agencyId}:
     delete:
       tags:
@@ -444,17 +438,46 @@ paths:
             type: integer
             format: int64
       responses:
-        200:
+        '200':
           description: OK - consultant-agency relation was deleted successfully
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
-
+        - Bearer: []
+  /useradmin/agency/{agencyId}/changetype:
+    post:
+      tags:
+        - admin-user-controller
+      summary: 'Change an agency from team-agency to default and vice-versa and switch the associated consultant accounts to team consultant or default consultant. Ongoing team counselings change to 1:1 when converting agency to default status. 1:1 counselings remain single counselings when swapping the agency to team-agency. This endpoint must be used only internally from AgencyService to ensure the regarding agency has been flagged correctly too. [Authorization: Role: user-admin]'
+      operationId: changeAgencyType
+      parameters:
+        - name: agencyId
+          in: path
+          description: Agency Id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgencyTypeDTO'
+      responses:
+        '200':
+          description: OK - assigned consultants were changed successfully
+        '400':
+          description: BAD REQUEST - invalid/incomplete request
+        '401':
+          description: UNAUTHORIZED - no/invalid role/authorization
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
   /useradmin/agencyadmins:
     get:
       tags:
@@ -464,8 +487,7 @@ paths:
       parameters:
         - name: filter
           in: query
-          description: 'The filter parameters to search for. If no filter is set all admins are
-                being returned.'
+          description: The filter parameters to search for. If no filter is set all admins are being returned.
           schema:
             $ref: '#/components/schemas/AdminFilter'
         - name: page
@@ -486,20 +508,20 @@ paths:
           schema:
             $ref: '#/components/schemas/Sort'
       responses:
-        200:
+        '200':
           description: OK - successfull operation
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AdminSearchResultDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     post:
       tags:
         - admin-user-controller
@@ -507,28 +529,27 @@ paths:
       operationId: createAgencyAdmin
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/CreateAdminDTO'
         required: true
       responses:
-        201:
+        '201':
           description: CREATED - Agency Admin was created successfully
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AdminResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        409:
+        '409':
           description: CONFLICT - invalid/unavailable username or email address
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
-
+        - Bearer: []
   /useradmin/agencyadmins/search:
     get:
       tags:
@@ -538,8 +559,7 @@ paths:
       parameters:
         - name: query
           in: query
-          description: URL-encoded infix to search for in id first name, last name, or email.
-            A non-encoded star symbol searches for all.
+          description: URL-encoded infix to search for in id first name, last name, or email. A non-encoded star symbol searches for all.
           required: true
           schema:
             type: string
@@ -563,33 +583,38 @@ paths:
           description: field to sort by
           schema:
             type: string
-            enum: [ FIRSTNAME, LASTNAME, EMAIL ]
+            enum:
+              - FIRSTNAME
+              - LASTNAME
+              - EMAIL
+              - UPDATE_DATE
             default: FIRSTNAME
-            pattern: '^(FIRSTNAME|LASTNAME|EMAIL)$'
+            pattern: ^(FIRSTNAME|LASTNAME|EMAIL|UPDATE_DATE)$
         - name: order
           in: query
           description: sort order
           schema:
             type: string
-            enum: [ ASC, DESC ]
+            enum:
+              - ASC
+              - DESC
             default: ASC
-            pattern: '^(ASC|DESC)$'
+            pattern: ^(ASC|DESC)$
       responses:
-        200:
+        '200':
           description: OK - successful operation
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AdminSearchResultDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
-
+        - Bearer: []
   /useradmin/agencyadmins/{adminId}:
     get:
       tags:
@@ -604,22 +629,22 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - consultant found
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/AdminResponseDTO'
-        204:
+        '204':
           description: NO CONTENT - agency admin with the specific id was not found
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     put:
       tags:
         - admin-user-controller
@@ -627,7 +652,7 @@ paths:
       operationId: updateAgencyAdmin
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/UpdateAgencyAdminDTO'
         required: true
@@ -639,20 +664,20 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - agency admin was updated successfully
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AdminResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     delete:
       tags:
         - admin-user-controller
@@ -666,24 +691,23 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - agency admin was marked for deletion successfully
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - agency admin not found
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /useradmin/agencyadmins/{adminId}/agencies:
     get:
       tags:
         - admin-user-controller
-      summary: 'Returns the list of agencies for a given admin Id. [Authorization: Role:
-        restricted-agency-admin]'
+      summary: 'Returns the list of agencies for a given admin Id. [Authorization: Role: restricted-agency-admin]'
       operationId: getAdminAgencies
       parameters:
         - name: adminId
@@ -693,24 +717,23 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - successful operation
           content:
-            'application/json':
+            application/json:
               schema:
                 type: array
                 items:
                   type: integer
                   format: int64
-
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - consultant with given id does not exist
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     post:
       tags:
         - admin-user-controller
@@ -725,21 +748,21 @@ paths:
             type: string
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/CreateAdminAgencyRelationDTO'
         required: true
       responses:
-        201:
+        '201':
           description: CREATED - admin-agency relation was created successfully
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     put:
       tags:
         - admin-user-controller
@@ -754,25 +777,23 @@ paths:
             type: string
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               type: array
               items:
                 $ref: '#/components/schemas/CreateAdminAgencyRelationDTO'
         required: true
       responses:
-        200:
+        '200':
           description: OK - admin-agency relations have been set
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
-
-
+        - Bearer: []
   /useradmin/agencyadmins/{adminId}/agencies/{agencyId}:
     delete:
       tags:
@@ -794,17 +815,16 @@ paths:
             type: integer
             format: int64
       responses:
-        200:
+        '200':
           description: OK - admin-agency relation was deleted successfully
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
-
+        - Bearer: []
   /useradmin/tenantadmins:
     get:
       tags:
@@ -819,22 +839,22 @@ paths:
           schema:
             type: integer
       responses:
-        200:
+        '200':
           description: OK - successful operation
           content:
-            'application/json':
+            application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/AdminResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     post:
       tags:
         - admin-user-controller
@@ -842,28 +862,27 @@ paths:
       operationId: createTenantAdmin
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/CreateAdminDTO'
         required: true
       responses:
-        201:
+        '201':
           description: CREATED - Agency Admin was created successfully
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AdminResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        409:
+        '409':
           description: CONFLICT - invalid/unavailable username or email address
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
-
+        - Bearer: []
   /useradmin/tenantadmins/search:
     get:
       tags:
@@ -873,8 +892,7 @@ paths:
       parameters:
         - name: query
           in: query
-          description: URL-encoded infix to search for in first name, last name, email or tenant id.
-            A non-encoded star symbol searches for all.
+          description: URL-encoded infix to search for in first name, last name, email or tenant id. A non-encoded star symbol searches for all.
           required: true
           schema:
             type: string
@@ -898,33 +916,39 @@ paths:
           description: field to sort by
           schema:
             type: string
-            enum: [ FIRSTNAME, LASTNAME, EMAIL, TENANT_ID ]
+            enum:
+              - FIRSTNAME
+              - LASTNAME
+              - EMAIL
+              - TENANT_ID
+              - UPDATE_DATE
             default: FIRSTNAME
-            pattern: '^(FIRSTNAME|LASTNAME|EMAIL|TENANT_ID)$'
+            pattern: ^(FIRSTNAME|LASTNAME|EMAIL|TENANT_ID|UPDATE_DATE)$
         - name: order
           in: query
           description: sort order
           schema:
             type: string
-            enum: [ ASC, DESC ]
+            enum:
+              - ASC
+              - DESC
             default: ASC
-            pattern: '^(ASC|DESC)$'
+            pattern: ^(ASC|DESC)$
       responses:
-        200:
+        '200':
           description: OK - successful operation
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AdminSearchResultDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
-
+        - Bearer: []
   /useradmin/tenantadmins/{adminId}:
     get:
       tags:
@@ -939,22 +963,22 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - consultant found
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/AdminResponseDTO'
-        204:
+        '204':
           description: NO CONTENT - agency admin with the specific id was not found
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     put:
       tags:
         - admin-user-controller
@@ -962,7 +986,7 @@ paths:
       operationId: updateTenantAdmin
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/UpdateTenantAdminDTO'
         required: true
@@ -974,20 +998,20 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - agency admin was updated successfully
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AdminResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
     delete:
       tags:
         - admin-user-controller
@@ -1001,52 +1025,49 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: OK - agency admin was marked for deletion successfully
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid role/authorization
-        404:
+        '404':
           description: NOT FOUND - agency admin not found
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
-
+        - Bearer: []
   /useradmin/data:
     patch:
       tags:
         - admin-user-controller
-      summary: 'Sets or updates the email, first and lastname of authorized admin account
-        [Authorization:  Role: single-tenant-admin, restricted-agency-admin]'
+      summary: 'Sets or updates the email, first and lastname of authorized admin account [Authorization: Role: single-tenant-admin, restricted-agency-admin]'
       operationId: patchAdminData
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/PatchAdminDTO'
         required: true
       responses:
-        200:
+        '200':
           description: OK - admin was updated successfully
           content:
-            'application/hal+json':
+            application/hal+json:
               schema:
                 $ref: '#/components/schemas/AdminResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid Keycloak token
-        403:
+        '403':
           description: FORBIDDEN - no/invalid role/authorization or CSRF token
-        409:
+        '409':
           description: CONFLICT - invalid/unavailable email
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
-
+        - Bearer: []
 components:
   schemas:
     RootDTO:
@@ -1056,7 +1077,6 @@ components:
       properties:
         _links:
           $ref: '#/components/schemas/RootLinks'
-
     RootLinks:
       type: object
       required:
@@ -1074,7 +1094,6 @@ components:
           $ref: '#/components/schemas/HalLink'
         deleteAsker:
           $ref: '#/components/schemas/HalLink'
-
     HalLink:
       type: object
       required:
@@ -1084,10 +1103,13 @@ components:
           type: string
         method:
           type: string
-          enum: [ GET, POST, DELETE, PUT ]
+          enum:
+            - GET
+            - POST
+            - DELETE
+            - PUT
         templated:
           type: boolean
-
     SessionAdminResultDTO:
       type: object
       properties:
@@ -1099,7 +1121,6 @@ components:
           $ref: '#/components/schemas/PaginationLinks'
         total:
           type: integer
-
     SessionAdminDTO:
       type: object
       properties:
@@ -1109,32 +1130,33 @@ components:
           example: 94
         userId:
           type: string
-          example: "1da238c6-cd46-4162-80f1-bff74eafe77f"
+          example: 1da238c6-cd46-4162-80f1-bff74eafe77f
         consultantId:
           type: string
-          example: "1da238c6-cd46-4162-80f1-bff74eafe77f"
+          example: 1da238c6-cd46-4162-80f1-bff74eafe77f
         username:
           type: string
-          example: "enc.OBSXEZTPOJWWC3TDMUWWC43LMVZC2NZS"
+          example: enc.OBSXEZTPOJWWC3TDMUWWC43LMVZC2NZS
         email:
           type: string
-          example: "email@beratungcaritas.de"
+          example: email@beratungcaritas.de
         consultingType:
           type: integer
           example: 1
         postcode:
           type: string
-          example: "12345"
+          example: '12345'
         agencyId:
           type: integer
           example: 1
+        isTeamSession:
+          type: boolean
         messageDate:
           type: string
         createDate:
           type: string
         updateDate:
           type: string
-
     PaginationLinks:
       type: object
       required:
@@ -1146,11 +1168,11 @@ components:
           $ref: '#/components/schemas/HalLink'
         previous:
           $ref: '#/components/schemas/HalLink'
-
     CreateConsultantDTO:
       type: object
       required:
         - username
+        - password
         - firstname
         - lastname
         - email
@@ -1159,22 +1181,29 @@ components:
       properties:
         username:
           type: string
-          example: "max.mustermann"
+          example: max.mustermann
           minLength: 1
+          maxLength: 255
+        password:
+          type: string
+          format: password
+          example: SecurePass123!
+          description: Password for the consultant
+          minLength: 8
           maxLength: 255
         firstname:
           type: string
-          example: "Max"
+          example: Max
           minLength: 1
           maxLength: 255
         lastname:
           type: string
-          example: "Mustermann"
+          example: Mustermann
           minLength: 1
           maxLength: 255
         email:
           type: string
-          example: "max@mustermann.de"
+          example: max@mustermann.de
           minLength: 1
           maxLength: 255
         formalLanguage:
@@ -1185,20 +1214,50 @@ components:
           example: true
         absenceMessage:
           type: string
-          example: "I am absent until..."
+          example: I am absent until...
           minLength: 1
           maxLength: 10000
         tenantId:
           type: integer
           format: int64
-          example: "1"
+          example: '1'
         isGroupchatConsultant:
           $ref: '#/components/schemas/IsGroupchatConsultant'
-
+        topicIds:
+          type: array
+          description: ids of topics directly assigned to the consultant
+          items:
+            type: integer
+            format: int64
+          example:
+            - 3
+            - 7
+            - 12
+        agencyIds:
+          type: array
+          description: ids of agencies assigned atomically with the consultant
+          items:
+            type: integer
+            format: int64
+          example:
+            - 5
+            - 9
+        publicSlug:
+          type: string
+          example: nikunj-rohit
+          description: Optional public slug. Admin-created values go live immediately.
     IsGroupchatConsultant:
       type: boolean
       example: true
-
+    IsSupervisor:
+      type: boolean
+      example: true
+      description: Flag that indicates if the consultant can be added as a supervisor
+    AssignedSupervisorId:
+      type: string
+      maxLength: 36
+      example: 8bb2b0a4-2c5b-4f5a-9c3a-1d2e3f4a5b6c
+      description: 'Supervision (auto-assigned): the consultant id of this counsellor''s standing supervisor, who is automatically attached read-only to every case the counsellor accepts. At most one; the target must itself have isSupervisor = true and may not be the counsellor themselves. Omitted/null leaves the current assignment untouched; an empty string clears it (clearing stops future auto-attachment and does not detach supervisors already on in-flight cases).'
     UpdateAdminConsultantDTO:
       type: object
       required:
@@ -1210,17 +1269,17 @@ components:
       properties:
         firstname:
           type: string
-          example: "Max"
+          example: Max
           minLength: 1
           maxLength: 255
         lastname:
           type: string
-          example: "Mustermann"
+          example: Mustermann
           minLength: 1
           maxLength: 255
         email:
           type: string
-          example: "max@mustermann.de"
+          example: max@mustermann.de
           minLength: 1
           maxLength: 255
         formalLanguage:
@@ -1231,7 +1290,7 @@ components:
           example: true
         absenceMessage:
           type: string
-          example: "I am absent until..."
+          example: I am absent until...
           minLength: 1
           maxLength: 10000
         languages:
@@ -1250,34 +1309,58 @@ components:
           description: Flag that indicates does the user accepted new data privacy text
         isGroupchatConsultant:
           $ref: '#/components/schemas/IsGroupchatConsultant'
-
+        isSupervisor:
+          $ref: '#/components/schemas/IsSupervisor'
+        assignedSupervisorId:
+          $ref: '#/components/schemas/AssignedSupervisorId'
+        topicIds:
+          type: array
+          description: replaces the full set of topics assigned to the consultant
+          items:
+            type: integer
+            format: int64
+          example:
+            - 3
+            - 7
+            - 12
+        publicSlug:
+          type: string
+          example: nikunj-rohit
+          description: Optional public slug. Admin edits go live immediately; empty clears it.
+        rejectPendingPublicSlug:
+          type: boolean
+          example: false
+          description: If true, rejects the currently pending public slug without changing the active slug.
     ConsultantDTO:
       type: object
       properties:
         id:
           type: string
-          example: "0f2cca9c-9303-4791-a0a5-a1ce16f1524f"
+          example: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
         username:
           type: string
-          example: "max.mustermann"
+          example: max.mustermann
         firstname:
           type: string
-          example: "Max"
+          example: Max
         lastname:
           type: string
-          example: "Mustermann"
+          example: Mustermann
         email:
           type: string
-          example: "max@mustermann.de"
+          example: max@mustermann.de
         formalLanguage:
           type: boolean
           example: true
+        teamConsultant:
+          type: boolean
+          example: false
         absent:
           type: boolean
           example: true
         absenceMessage:
           type: string
-          example: "I am absent until..."
+          example: I am absent until...
         createDate:
           type: string
         updateDate:
@@ -1289,16 +1372,65 @@ components:
         agencies:
           type: array
           items:
-            $ref: './../services/agencyadminservice.yaml#/components/schemas/AgencyAdminResponseDTO'
+            $ref: '#/components/schemas/AgencyAdminResponseDTO'
         isGroupchatConsultant:
           $ref: '#/components/schemas/IsGroupchatConsultant'
+        isSupervisor:
+          $ref: '#/components/schemas/IsSupervisor'
+        assignedSupervisorId:
+          $ref: '#/components/schemas/AssignedSupervisorId'
         tenantId:
           type: integer
         tenantName:
           type: string
         displayName:
           type: string
-
+        publicName:
+          type: string
+        publicSlug:
+          type: string
+          example: nikunj-rohit
+        pendingPublicSlug:
+          type: string
+          example: nikunj-rohit
+        publicSlugStatus:
+          type: string
+          enum:
+            - PENDING
+            - APPROVED
+            - REJECTED
+        roleInOrg:
+          type: string
+        vacated:
+          type: boolean
+        adminRights:
+          type: boolean
+        topics:
+          type: array
+          description: topics directly assigned to the consultant, enriched with names
+          items:
+            $ref: '#/components/schemas/ConsultantTopicDTO'
+        hasOtherIdentity:
+          type: boolean
+          description: true if this consultant also holds an admin identity on the same account
+        otherIdentityTypes:
+          type: array
+          description: which admin identities this consultant additionally holds
+          items:
+            type: string
+            enum:
+              - TENANT_ADMIN
+              - AGENCY_ADMIN
+    ConsultantTopicDTO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 3
+        name:
+          type: string
+          example: Addiction
     CreateAdminDTO:
       type: object
       required:
@@ -1309,28 +1441,32 @@ components:
       properties:
         username:
           type: string
-          example: "max.mustermann"
+          example: max.mustermann
           minLength: 1
+          maxLength: 255
+        password:
+          type: string
+          format: password
+          minLength: 8
           maxLength: 255
         firstname:
           type: string
-          example: "Max"
+          example: Max
           minLength: 1
           maxLength: 255
         lastname:
           type: string
-          example: "Mustermann"
+          example: Mustermann
           minLength: 1
           maxLength: 255
         email:
           type: string
-          example: "max@mustermann.de"
+          example: max@mustermann.de
           minLength: 1
           maxLength: 255
         tenantId:
           type: integer
-          example: "1"
-
+          example: '1'
     PatchAdminDTO:
       type: object
       required:
@@ -1340,50 +1476,46 @@ components:
       properties:
         firstname:
           type: string
-          example: "Max"
+          example: Max
           minLength: 1
           maxLength: 255
         lastname:
           type: string
-          example: "Mustermann"
+          example: Mustermann
           minLength: 1
           maxLength: 255
         email:
           type: string
           format: email
-          example: "maxmuster@mann.com"
-
+          example: maxmuster@mann.com
     UpdateAgencyAdminDTO:
       allOf:
         - $ref: '#/components/schemas/PatchAdminDTO'
-
     UpdateTenantAdminDTO:
       allOf:
         - $ref: '#/components/schemas/PatchAdminDTO'
       properties:
         tenantId:
           type: integer
-          example: "1"
-
-
+          example: '1'
     AdminDTO:
       type: object
       properties:
         id:
           type: string
-          example: "0f2cca9c-9303-4791-a0a5-a1ce16f1524f"
+          example: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
         username:
           type: string
-          example: "max.mustermann"
+          example: max.mustermann
         firstname:
           type: string
-          example: "Max"
+          example: Max
         lastname:
           type: string
-          example: "Mustermann"
+          example: Mustermann
         email:
           type: string
-          example: "max@mustermann.de"
+          example: max@mustermann.de
         createDate:
           type: string
         updateDate:
@@ -1399,32 +1531,39 @@ components:
         agencies:
           type: array
           items:
-            $ref: './../services/agencyadminservice.yaml#/components/schemas/AgencyAdminResponseDTO'
-
+            $ref: '#/components/schemas/AgencyAdminResponseDTO'
+        publicName:
+          type: string
+        roleInOrg:
+          type: string
+        vacated:
+          type: boolean
+        adminRights:
+          type: boolean
+        hasOtherIdentity:
+          type: boolean
+          description: true if this admin also holds a consultant identity on the same account
     AskerResponseDTO:
       type: object
       properties:
         id:
           type: string
-          example: "0f2cca9c-9303-4791-a0a5-a1ce16f1524f"
+          example: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
         username:
           type: string
           example: max94
         email:
           type: string
-          example: "max@mustermann.de"
-
+          example: max@mustermann.de
     AskerDTO:
       type: object
       properties:
         id:
           type: string
-          example: "0f2cca9c-9303-4791-a0a5-a1ce16f1524f"
+          example: 0f2cca9c-9303-4791-a0a5-a1ce16f1524f
         email:
           type: string
-          example: "max@mustermann.de"
-
-
+          example: max@mustermann.de
     ConsultantAdminResponseDTO:
       type: object
       properties:
@@ -1432,7 +1571,6 @@ components:
           $ref: '#/components/schemas/ConsultantDTO'
         _links:
           $ref: '#/components/schemas/ConsultantLinks'
-
     ConsultantSearchResultDTO:
       type: object
       properties:
@@ -1444,7 +1582,6 @@ components:
           $ref: '#/components/schemas/PaginationLinks'
         total:
           type: integer
-
     ConsultantLinks:
       type: object
       required:
@@ -1460,7 +1597,6 @@ components:
           $ref: '#/components/schemas/HalLink'
         addAgency:
           $ref: '#/components/schemas/HalLink'
-
     AdminResponseDTO:
       type: object
       properties:
@@ -1468,7 +1604,6 @@ components:
           $ref: '#/components/schemas/AdminDTO'
         _links:
           $ref: '#/components/schemas/AdminLinks'
-
     AdminSearchResultDTO:
       type: object
       properties:
@@ -1480,7 +1615,6 @@ components:
           $ref: '#/components/schemas/PaginationLinks'
         total:
           type: integer
-
     AdminLinks:
       type: object
       required:
@@ -1496,7 +1630,6 @@ components:
           $ref: '#/components/schemas/HalLink'
         addAgency:
           $ref: '#/components/schemas/HalLink'
-
     SessionFilter:
       type: object
       properties:
@@ -1508,7 +1641,6 @@ components:
           type: string
         consultingType:
           type: integer
-
     ConsultantFilter:
       type: object
       properties:
@@ -1523,7 +1655,6 @@ components:
           format: int64
         absent:
           type: boolean
-
     AdminFilter:
       type: object
       properties:
@@ -1536,25 +1667,23 @@ components:
         agencyId:
           type: integer
           format: int64
-
     Sort:
       type: object
       properties:
         field:
           type: string
-          example: 'firstName|lastName|username|email'
+          example: firstName|lastName|username|email
           enum:
-            - 'firstName'
-            - 'lastName'
-            - 'username'
-            - 'email'
+            - firstName
+            - lastName
+            - username
+            - email
         order:
           type: string
-          example: 'ASC|DESC'
+          example: ASC|DESC
           enum:
-            - 'ASC'
-            - 'DESC'
-
+            - ASC
+            - DESC
     CreateConsultantAgencyDTO:
       type: object
       required:
@@ -1569,7 +1698,6 @@ components:
           type: string
           minLength: 1
           maxLength: 255
-
     ConsultantAgencyResponseDTO:
       type: object
       required:
@@ -1579,12 +1707,11 @@ components:
         _embedded:
           type: array
           items:
-            $ref: './../services/agencyadminservice.yaml#/components/schemas/AgencyAdminFullResponseDTO'
+            $ref: '#/components/schemas/AgencyAdminFullResponseDTO'
         _links:
           $ref: '#/components/schemas/AgencyLinks'
         total:
           type: integer
-
     CreateAdminAgencyRelationDTO:
       type: object
       required:
@@ -1594,7 +1721,6 @@ components:
           type: integer
           format: int64
           example: 15
-
     AdminAgencyResponseDTO:
       type: object
       required:
@@ -1604,12 +1730,78 @@ components:
         _embedded:
           type: array
           items:
-            $ref: './../services/agencyadminservice.yaml#/components/schemas/AgencyAdminFullResponseDTO'
+            $ref: '#/components/schemas/AgencyAdminFullResponseDTO'
         _links:
           $ref: '#/components/schemas/AgencyLinks'
         total:
           type: integer
-
+    AgencyAdminResponseDTO:
+      type: object
+      description: UserService compatibility view. This provider-owned response remains stable even when the AgencyService client model evolves independently.
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 9223372036854776000
+          example: 684
+        dioceseId:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 9223372036854776000
+          example: 684
+        name:
+          type: string
+          maxLength: 100
+          example: Suchtberatung Freiburg
+        description:
+          type: string
+          maxLength: 65534
+          example: 'Our agency provides help for the following topics: Lorem ipsum..'
+        postcode:
+          type: string
+          minLength: 5
+          maxLength: 5
+          example: '79106'
+        city:
+          type: string
+          maxLength: 100
+          example: Bonn
+        teamAgency:
+          type: boolean
+          example: false
+        offline:
+          type: boolean
+          example: false
+        consultingType:
+          type: integer
+          minimum: 0
+          maximum: 127
+          example: 1
+        url:
+          type: string
+          maxLength: 500
+          example: https://www.domain.com
+        external:
+          type: boolean
+          example: false
+        createDate:
+          type: string
+          example: '2019-08-23T08:52:05'
+        updateDate:
+          type: string
+          example: '2019-12-02T13:12:08'
+        deleteDate:
+          type: string
+          example: '2020-09-02T15:53:23'
+    AgencyAdminFullResponseDTO:
+      type: object
+      properties:
+        _embedded:
+          $ref: '#/components/schemas/AgencyAdminResponseDTO'
+        _links:
+          $ref: '#/components/schemas/AgencyLinks-2'
     AgencyLinks:
       type: object
       required:
@@ -1617,7 +1809,6 @@ components:
       properties:
         self:
           $ref: '#/components/schemas/HalLink'
-
     ConsultantAgencyLinks:
       type: object
       required:
@@ -1625,7 +1816,6 @@ components:
       properties:
         self:
           $ref: '#/components/schemas/HalLink'
-
     AgencyConsultantResponseDTO:
       type: object
       required:
@@ -1640,15 +1830,14 @@ components:
           $ref: '#/components/schemas/ConsultantAgencyLinks'
         total:
           type: integer
-
     ViolationDTO:
       type: object
       properties:
         violationType:
           type: string
           enum:
-            - 'CONSULTANT'
-            - 'ASKER'
+            - CONSULTANT
+            - ASKER
         identifier:
           type: string
         reason:
@@ -1657,7 +1846,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AdditionalInformationDTO'
-
     AdditionalInformationDTO:
       type: object
       properties:
@@ -1665,7 +1853,34 @@ components:
           type: string
         value:
           type: string
-
+    AgencyTypeDTO:
+      type: object
+      required:
+        - agencyType
+      properties:
+        agencyType:
+          type: string
+          enum:
+            - TEAM_AGENCY
+            - DEFAULT_AGENCY
+    DefaultLinks:
+      type: object
+      required:
+        - self
+      properties:
+        self:
+          $ref: '#/components/schemas/HalLink'
+        update:
+          $ref: '#/components/schemas/HalLink'
+        delete:
+          $ref: '#/components/schemas/HalLink'
+    AgencyLinks-2:
+      allOf:
+        - $ref: '#/components/schemas/DefaultLinks'
+        - type: object
+          properties:
+            postcodeRanges:
+              $ref: '#/components/schemas/HalLink'
   securitySchemes:
     Bearer:
       type: apiKey

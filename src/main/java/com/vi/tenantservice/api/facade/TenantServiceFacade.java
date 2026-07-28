@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -439,15 +440,28 @@ public class TenantServiceFacade {
                 tenantConverter.toRestrictedTenantDTO(tenantById.get(), lang)));
   }
 
+  public List<RestrictedTenantDTO> findRestrictedTenantsByIds(Set<Long> ids) {
+    String lang = translationService.getCurrentLanguageContext();
+    TenantAdminControls controls = tenantAdminControlsService.getControls();
+    return tenantService.findRestrictedTenantDataByIds(ids).stream()
+        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
+        .map(tenant -> withEffectivePermissions(tenant, controls))
+        .toList();
+  }
+
   /**
    * Bakes the platform admin controls into the public settings so the counselling app receives
    * effective feature flags (forced-off disabled, enforced-on locked on) without seeing the
    * controls themselves. See ADR-013 P4.
    */
   private RestrictedTenantDTO withEffectivePermissions(RestrictedTenantDTO dto) {
+    return withEffectivePermissions(dto, tenantAdminControlsService.getControls());
+  }
+
+  private RestrictedTenantDTO withEffectivePermissions(
+      RestrictedTenantDTO dto, TenantAdminControls controls) {
     if (dto != null) {
-      effectivePermissionSettingsApplier.applyTo(
-          dto.getSettings(), tenantAdminControlsService.getControls());
+      effectivePermissionSettingsApplier.applyTo(dto.getSettings(), controls);
     }
     return dto;
   }

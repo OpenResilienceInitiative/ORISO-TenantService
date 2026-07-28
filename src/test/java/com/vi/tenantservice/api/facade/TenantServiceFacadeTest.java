@@ -6,6 +6,7 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -48,6 +49,7 @@ import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDT
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -511,6 +513,25 @@ class TenantServiceFacadeTest {
     // then: the public settings served to the counselling app reflect the platform constraint
     assertThat(result).isPresent();
     assertThat(result.get().getSettings().getFeatureVideoCallsEnabled()).isFalse();
+  }
+
+  @Test
+  void findRestrictedTenantsByIds_Should_loadPlatformControlsOnceForTheBatch() {
+    var firstTenant = mock(TenantRestrictedData.class);
+    var secondTenant = mock(TenantRestrictedData.class);
+    var firstDto = new RestrictedTenantDTO().id(1L).settings(new Settings());
+    var secondDto = new RestrictedTenantDTO().id(2L).settings(new Settings());
+    when(tenantService.findRestrictedTenantDataByIds(Set.of(1L, 2L)))
+        .thenReturn(List.of(firstTenant, secondTenant));
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(converter.toRestrictedTenantDTO(firstTenant, DE)).thenReturn(firstDto);
+    when(converter.toRestrictedTenantDTO(secondTenant, DE)).thenReturn(secondDto);
+    when(tenantAdminControlsService.getControls()).thenReturn(new TenantAdminControls());
+
+    var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
+
+    assertThat(result).containsExactly(firstDto, secondDto);
+    verify(tenantAdminControlsService, times(1)).getControls();
   }
 
   @Test

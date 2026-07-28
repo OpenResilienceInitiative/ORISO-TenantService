@@ -11,23 +11,23 @@ paths:
       summary: 'Returns a list of all consulting types with basic properties '
       operationId: getBasicConsultingTypeList
       responses:
-        200:
+        '200':
           description: successful operation
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/BasicConsultingTypeListResponseDTO'
-        204:
+        '204':
           description: successful operation, but no content
-        403:
+        '403':
           description: FORBIDDEN - no/invalid role/authorization or CSRF token
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /consultingtypes/{consultingTypeId}/basic:
     get:
       tags:
         - consulting-type-controller
-      summary: 'Returns the consulting type with basic set of properties for a given consulting type id'
+      summary: Returns the consulting type with basic set of properties for a given consulting type id
       operationId: getBasicConsultingTypeById
       parameters:
         - name: consultingTypeId
@@ -37,23 +37,23 @@ paths:
           schema:
             type: integer
       responses:
-        200:
+        '200':
           description: successful operation
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/BasicConsultingTypeResponseDTO'
-        404:
-          description: NOT FOUND - ConsultingType not found
-        403:
+        '403':
           description: FORBIDDEN - no/invalid role/authorization or CSRF token
-        500:
+        '404':
+          description: NOT FOUND - ConsultingType not found
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /consultingtypes/{consultingTypeId}/extended:
     get:
       tags:
         - consulting-type-controller
-      summary: 'Returns the consulting type with extended set of properties for a given consulting type id'
+      summary: Returns the consulting type with extended set of properties for a given consulting type id
       operationId: getExtendedConsultingTypeById
       parameters:
         - name: consultingTypeId
@@ -63,23 +63,23 @@ paths:
           schema:
             type: integer
       responses:
-        200:
+        '200':
           description: successful operation
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/ExtendedConsultingTypeResponseDTO'
-        404:
-          description: NOT FOUND - ConsultingType not found
-        403:
+        '403':
           description: FORBIDDEN - no/invalid role/authorization or CSRF token
-        500:
+        '404':
+          description: NOT FOUND - ConsultingType not found
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /consultingtypes/{consultingTypeId}/full:
     get:
       tags:
         - consulting-type-controller
-      summary: 'Returns the consulting type with all properties for a given consulting type id'
+      summary: Returns the consulting type with all properties for a given consulting type id
       operationId: getFullConsultingTypeById
       parameters:
         - name: consultingTypeId
@@ -89,23 +89,23 @@ paths:
           schema:
             type: integer
       responses:
-        200:
+        '200':
           description: successful operation
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/FullConsultingTypeResponseDTO'
-        404:
-          description: NOT FOUND - ConsultingType not found
-        403:
+        '403':
           description: FORBIDDEN - no/invalid role/authorization or CSRF token
-        500:
+        '404':
+          description: NOT FOUND - ConsultingType not found
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /consultingtypes/byslug/{slug}/full:
     get:
       tags:
         - consulting-type-controller
-      summary: 'Returns the consulting type with all properties for a given consulting type slug'
+      summary: Returns the consulting type with all properties for a given consulting type slug
       operationId: getFullConsultingTypeBySlug
       parameters:
         - name: slug
@@ -115,23 +115,23 @@ paths:
           schema:
             type: string
       responses:
-        200:
+        '200':
           description: successful operation
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/FullConsultingTypeResponseDTO'
-        404:
-          description: NOT FOUND - ConsultingType not found
-        403:
+        '403':
           description: FORBIDDEN - no/invalid role/authorization or CSRF token
-        500:
+        '404':
+          description: NOT FOUND - ConsultingType not found
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /consultingtypes/bytenant/{tenantId}/full:
     get:
       tags:
         - consulting-type-controller
-      summary: 'Returns the consulting type with all properties for a given consulting type tenantId'
+      summary: Returns the consulting type with all properties for a given consulting type tenantId
       operationId: getFullConsultingTypeByTenantId
       parameters:
         - name: tenantId
@@ -141,38 +141,37 @@ paths:
           schema:
             type: integer
       responses:
-        200:
+        '200':
           description: successful operation
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/FullConsultingTypeResponseDTO'
-        404:
-          description: NOT FOUND - ConsultingType not found
-        403:
+        '403':
           description: FORBIDDEN - no/invalid role/authorization or CSRF token
-        500:
+        '404':
+          description: NOT FOUND - ConsultingType not found
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /consultingtypes/groups:
     get:
       tags:
         - consulting-type-controller
-      summary: 'Returns the group structure of all consulting types'
+      summary: Returns the group structure of all consulting types
       operationId: getConsultingTypeGroups
       responses:
-        200:
+        '200':
           description: successful operation
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/ConsultingTypeGroupsResponseDTO'
-        204:
+        '204':
           description: NO CONTENT - no groups defined
-        403:
+        '403':
           description: FORBIDDEN - no/invalid role/authorization or CSRF token
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
-
   /consultingtypes:
     post:
       tags:
@@ -181,25 +180,25 @@ paths:
       operationId: createConsultingType
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/ConsultingTypeDTO'
         required: true
       responses:
-        201:
+        '201':
           description: CREATED - consulting type was created successfully
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/FullConsultingTypeResponseDTO'
-        400:
+        '400':
           description: BAD REQUEST - invalid/incomplete request or body object
-        403:
+        '403':
           description: FORBIDDEN - no/invalid CSRF token
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
-        - Bearer: [ ]
+        - Bearer: []
   /consultingtypes/{id}:
     patch:
       tags:
@@ -215,31 +214,28 @@ paths:
             type: integer
       requestBody:
         content:
-          'application/json':
+          application/json:
             schema:
               $ref: '#/components/schemas/ConsultingTypePatchDTO'
       responses:
-        200:
+        '200':
           description: Successful operation
           content:
-            'application/json':
+            application/json:
               schema:
                 $ref: '#/components/schemas/FullConsultingTypeResponseDTO'
-        401:
+        '401':
           description: UNAUTHORIZED - no/invalid Keycloak token
-        409:
+        '409':
           description: CONFLICT - unique constraint validation fails
-        500:
+        '500':
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
-
 components:
   schemas:
-
     BasicConsultingTypeListResponseDTO:
       type: array
       items:
         $ref: '#/components/schemas/BasicConsultingTypeResponseDTO'
-
     BasicConsultingTypeResponseDTO:
       type: object
       properties:
@@ -251,7 +247,7 @@ components:
           example: 100
         description:
           type: string
-          example: "Lorem ipsum dolor sit amet, consetetur sadipscing elitr."
+          example: Lorem ipsum dolor sit amet, consetetur sadipscing elitr.
         furtherInformation:
           allOf:
             - $ref: '#/components/schemas/FurtherInformationDTO'
@@ -267,6 +263,9 @@ components:
         isSubsequentRegistrationAllowed:
           type: boolean
           example: true
+        isAnonymousConversationAllowed:
+          type: boolean
+          example: false
         showAskerProfile:
           type: boolean
           example: true
@@ -276,7 +275,6 @@ components:
         languageFormal:
           type: boolean
           example: true
-
     ExtendedConsultingTypeResponseDTO:
       type: object
       allOf:
@@ -286,6 +284,9 @@ components:
             slug:
               type: string
               example: part-of-url
+            excludeNonMainConsultantsFromTeamSessions:
+              type: boolean
+              example: true
             whiteSpot:
               allOf:
                 - $ref: '#/components/schemas/WhiteSpotDTO'
@@ -303,7 +304,9 @@ components:
                 - $ref: '#/components/schemas/SessionDataInitializingDTO'
             roles:
               $ref: '#/components/schemas/RolesDTO'
-
+            notifications:
+              allOf:
+                - $ref: '#/components/schemas/NotificationsDTO'
     FullConsultingTypeResponseDTO:
       type: object
       allOf:
@@ -312,7 +315,8 @@ components:
           properties:
             requiredComponents:
               type: object
-
+            welcomeScreen:
+              $ref: '#/components/schemas/WelcomeScreenDTO'
     ConsultingTypeDTO:
       type: object
       properties:
@@ -321,7 +325,7 @@ components:
           example: 100
         description:
           type: string
-          example: "Lorem ipsum dolor sit amet, consetetur sadipscing elitr."
+          example: Lorem ipsum dolor sit amet, consetetur sadipscing elitr.
         groups:
           type: array
           items:
@@ -329,9 +333,15 @@ components:
         slug:
           type: string
           example: part-of-url
+        excludeNonMainConsultantsFromTeamSessions:
+          type: boolean
+          example: true
         isSubsequentRegistrationAllowed:
           type: boolean
           example: true
+        isAnonymousConversationAllowed:
+          type: boolean
+          example: false
         showAskerProfile:
           type: boolean
           example: true
@@ -370,28 +380,31 @@ components:
             - $ref: '#/components/schemas/SessionDataInitializingDTO'
         roles:
           $ref: '#/components/schemas/RolesDTO'
+        notifications:
+          allOf:
+            - $ref: '#/components/schemas/NotificationsDTO'
         requiredComponents:
           $ref: '#/components/schemas/RequiredComponentsDTO'
-
+        welcomeScreen:
+          $ref: '#/components/schemas/WelcomeScreenDTO'
     FurtherInformationDTO:
       type: object
       properties:
         label:
           type: string
-          example: "Lorem ipsum"
+          example: Lorem ipsum
         url:
           type: string
-          example: "https://www.domain.com"
+          example: https://www.domain.com
     UrlsDTO:
       type: object
       properties:
         requiredAidMissingRedirectUrl:
           type: string
-          example: "https://www.domain.tld/path"
+          example: https://www.domain.tld/path
         registrationPostcodeFallbackUrl:
           type: string
-          example: "https://www.domain.tld/path"
-
+          example: https://www.domain.tld/path
     RegistrationDTO:
       type: object
       properties:
@@ -410,17 +423,15 @@ components:
         mandatoryFields:
           allOf:
             - $ref: '#/components/schemas/RegistrationMandatoryFieldsDTO'
-
     RegistrationNotesDTO:
       type: object
       properties:
         agencySelection:
           type: string
-          example: "Lorem ipsum"
+          example: Lorem ipsum
         password:
           type: string
-          example: "Lorem impsum"
-
+          example: Lorem impsum
     RegistrationMandatoryFieldsDTO:
       type: object
       properties:
@@ -430,7 +441,6 @@ components:
         state:
           type: boolean
           example: false
-
     WhiteSpotDTO:
       type: object
       properties:
@@ -440,7 +450,6 @@ components:
         whiteSpotAgencyId:
           type: integer
           example: 4567
-
     GroupChatDTO:
       type: object
       properties:
@@ -451,7 +460,6 @@ components:
           type: array
           items:
             type: string
-
     WelcomeMessageDTO:
       type: object
       properties:
@@ -461,7 +469,6 @@ components:
         welcomeMessageText:
           type: string
           example: Lorem ipsum
-
     SessionDataInitializingDTO:
       type: object
       properties:
@@ -480,13 +487,11 @@ components:
         state:
           type: boolean
           example: true
-
     RolesDTO:
       type: object
       properties:
         consultant:
           $ref: '#/components/schemas/RoleConsultantDTO'
-
     RoleConsultantDTO:
       type: object
       properties:
@@ -494,7 +499,38 @@ components:
           type: array
           items:
             type: string
-
+    NotificationsDTO:
+      type: object
+      properties:
+        teamSessions:
+          allOf:
+            - $ref: '#/components/schemas/TeamSessionsDTO'
+    TeamSessionsDTO:
+      type: object
+      properties:
+        newMessage:
+          allOf:
+            - $ref: '#/components/schemas/NewMessageDTO'
+    NewMessageDTO:
+      type: object
+      properties:
+        allTeamConsultants:
+          type: boolean
+          example: true
+    WelcomeScreenDTO:
+      type: object
+      properties:
+        anonymous:
+          $ref: '#/components/schemas/AnonymousScreenDTO'
+    AnonymousScreenDTO:
+      type: object
+      properties:
+        title:
+          type: string
+          example: Lorem ipsum
+        text:
+          type: string
+          example: Lorem ipsum dolor sit amet, consetetur...
     RequiredComponentsDTO:
       type: object
       properties:
@@ -512,7 +548,6 @@ components:
           properties:
             isEnabled:
               type: boolean
-
     OptionDTO:
       type: object
       properties:
@@ -520,23 +555,20 @@ components:
           type: string
         value:
           type: string
-
     ConsultingTypeGroupsResponseDTO:
       type: array
       items:
         $ref: '#/components/schemas/ConsultingTypeGroupResponseDTO'
-
     ConsultingTypeGroupResponseDTO:
       type: object
       properties:
         title:
           type: string
-          example: 'Lorem ipsum'
+          example: Lorem ipsum
         consultingTypes:
           type: array
           items:
             $ref: '#/components/schemas/ConsultingTypeCoreDTO'
-
     ConsultingTypeCoreDTO:
       type: object
       properties:
@@ -548,11 +580,10 @@ components:
           properties:
             default:
               type: string
-              example: "Lorem ipsum"
+              example: Lorem ipsum
             long:
               type: string
-              example: "Lorem ipsum"
-
+              example: Lorem ipsum
     ConsultingTypePatchDTO:
       type: object
       properties:
@@ -568,3 +599,6 @@ components:
         welcomeMessage:
           allOf:
             - $ref: '#/components/schemas/WelcomeMessageDTO'
+        notifications:
+          allOf:
+            - $ref: '#/components/schemas/NotificationsDTO'

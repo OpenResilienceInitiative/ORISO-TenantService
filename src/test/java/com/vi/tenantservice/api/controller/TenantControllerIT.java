@@ -36,6 +36,8 @@ import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -68,6 +70,7 @@ class TenantControllerIT {
   private static final String TENANTADMIN_RESOURCE_SLASH = TENANTADMIN_RESOURCE + "/";
   private static final String PUBLIC_TENANT_RESOURCE = "/tenant/public/";
   private static final String PUBLIC_TENANT_RESOURCE_BY_ID = "/tenant/public/id/";
+  private static final String PUBLIC_TENANT_RESOURCE_BY_IDS = "/tenant/public/ids";
   private static final String PUBLIC_SINGLE_TENANT_RESOURCE = PUBLIC_TENANT_RESOURCE + "single";
   private static final String EXISTING_TENANT = TENANT_RESOURCE_SLASH + "1";
 
@@ -603,6 +606,52 @@ class TenantControllerIT {
     mockMvc
         .perform(get(NON_EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
         .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void
+      getRestrictedTenantDataByTenantIds_Should_returnExistingTenantsAndOmitMissingIdsWithoutAuthentication()
+          throws Exception {
+    mockMvc
+        .perform(
+            post(PUBLIC_TENANT_RESOURCE_BY_IDS)
+                .contentType(APPLICATION_JSON)
+                .content("[1, 1, 9999]"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(1)))
+        .andExpect(jsonPath("$[0].id").value(1))
+        .andExpect(jsonPath("$[0].name").exists())
+        .andExpect(jsonPath("$[0].licensing").doesNotExist());
+  }
+
+  @Test
+  void getRestrictedTenantDataByTenantIds_Should_rejectEmptyBatch() throws Exception {
+    mockMvc
+        .perform(post(PUBLIC_TENANT_RESOURCE_BY_IDS).contentType(APPLICATION_JSON).content("[]"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void getRestrictedTenantDataByTenantIds_Should_rejectNullIds() throws Exception {
+    mockMvc
+        .perform(
+            post(PUBLIC_TENANT_RESOURCE_BY_IDS).contentType(APPLICATION_JSON).content("[1, null]"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void getRestrictedTenantDataByTenantIds_Should_rejectMoreThanOneHundredIds() throws Exception {
+    String overLimitRequest =
+        LongStream.rangeClosed(1, 101)
+            .mapToObj(String::valueOf)
+            .collect(Collectors.joining(",", "[", "]"));
+
+    mockMvc
+        .perform(
+            post(PUBLIC_TENANT_RESOURCE_BY_IDS)
+                .contentType(APPLICATION_JSON)
+                .content(overLimitRequest))
+        .andExpect(status().isBadRequest());
   }
 
   @Test
