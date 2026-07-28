@@ -49,4 +49,5 @@
   <include file="db/changelog/changeset/0022_widen_tenant_settings_column/0022-changeSet.xml"/>
   <include file="db/changelog/changeset/0023_tenant_media/0023-changeSet.xml"/>
   <include file="db/changelog/changeset/0024_tenant_id_reservation/0024-changeSet.xml"/>
+  <include file="db/changelog/changeset/0025_tenant_dpa_admin_signature/0025-changeSet.xml"/>
 </databaseChangeLog>

@@ -16,9 +16,11 @@ import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.TenantDpaService;
+import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.api.validation.InputSanitizer;
+import com.vi.tenantservice.config.security.AuthorisationService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -34,9 +36,11 @@ import org.springframework.security.access.AccessDeniedException;
 class TenantDpaFacadeTest {
 
   @Mock private TenantDpaService tenantDpaService;
+  @Mock private TenantDpaStatusService tenantDpaStatusService;
   @Mock private TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   @Mock private TenantService tenantService;
   @Mock private InputSanitizer inputSanitizer;
+  @Mock private AuthorisationService authorisationService;
   @InjectMocks private TenantDpaFacade tenantDpaFacade;
 
   @Test

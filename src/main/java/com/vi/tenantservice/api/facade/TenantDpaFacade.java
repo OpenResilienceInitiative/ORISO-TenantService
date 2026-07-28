@@ -1,17 +1,21 @@
 package com.vi.tenantservice.api.facade;
 
+import com.vi.tenantservice.api.model.DpaAdminSignRequestDTO;
 import com.vi.tenantservice.api.model.DpaGateStatusDTO;
 import com.vi.tenantservice.api.model.DpaSignInviteDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
+import com.vi.tenantservice.api.model.DpaStatusDTO;
 import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.TenantDpaService;
+import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.api.util.TranslationMetaUtil;
 import com.vi.tenantservice.api.validation.InputSanitizer;
+import com.vi.tenantservice.config.security.AuthorisationService;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -41,9 +45,11 @@ public class TenantDpaFacade {
   private static final Duration INVITE_TTL = Duration.ofDays(14);
 
   private final @NonNull TenantDpaService tenantDpaService;
+  private final @NonNull TenantDpaStatusService tenantDpaStatusService;
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   private final @NonNull TenantService tenantService;
   private final @NonNull InputSanitizer inputSanitizer;
+  private final @NonNull AuthorisationService authorisationService;
 
   @Value("${app.base.url:}")
   private String appBaseUrl;
@@ -85,6 +91,58 @@ public class TenantDpaFacade {
     boolean published = version != null;
     boolean signed = published && tenantDpaService.isSignedForVersion(tenantId, version);
     return new DpaGateStatusDTO().dpaPublished(published).dpaSigned(signed);
+  }
+
+  /**
+   * The authoritative DPA state of the tenant for its authenticated tenant admins (TEN-INV-U9).
+   * Guarded like every other method here: a single-tenant admin can only read their own tenant.
+   */
+  public DpaStatusDTO getDpaStatus(Long tenantId) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    return toStatusDto(tenantDpaStatusService.getStatus(tenantId));
+  }
+
+  /**
+   * Signs the tenant's currently published DPA version as the authenticated tenant admin. The
+   * signer identity is taken from the access token — never from the request — and the submitted
+   * form is persisted verbatim as an append-only, revision-safe audit row. Signing an already-VALID
+   * tenant has no duplicate effect and simply returns the current status.
+   */
+  public DpaStatusDTO signDpa(Long tenantId, DpaAdminSignRequestDTO request) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    var form =
+        new TenantDpaStatusService.AdminSignatureForm(
+            request.getSignerName(),
+            request.getSignerPosition(),
+            request.getSignerEmail(),
+            request.getSignerOrganisation(),
+            request.getLanguage(),
+            buildFormDataJson(request));
+    return toStatusDto(
+        tenantDpaStatusService.sign(
+            tenantId, authorisationService.getUserId(), authorisationService.getUsername(), form));
+  }
+
+  /** Verbatim JSON snapshot of the submitted sign form for the audit row. */
+  private static String buildFormDataJson(DpaAdminSignRequestDTO request) {
+    var formData = new LinkedHashMap<String, Object>();
+    formData.put("signerName", request.getSignerName());
+    formData.put("signerPosition", request.getSignerPosition());
+    formData.put("signerEmail", request.getSignerEmail());
+    formData.put("signerOrganisation", request.getSignerOrganisation());
+    formData.put("language", request.getLanguage());
+    formData.put("accepted", request.getAccepted());
+    return JsonConverter.convertToJson(formData);
+  }
+
+  private static DpaStatusDTO toStatusDto(TenantDpaStatusService.DpaStatusView view) {
+    return new DpaStatusDTO()
+        .tenantId(view.tenantId())
+        .status(DpaStatusDTO.StatusEnum.fromValue(view.status().name()))
+        .currentDpaVersion(view.currentVersion() == null ? null : view.currentVersion().toString())
+        .signedDpaVersion(view.signedVersion() == null ? null : view.signedVersion().toString())
+        .signedAt(view.signedAt() == null ? null : view.signedAt().toString())
+        .signedBy(view.signedBy());
   }
 
   /**

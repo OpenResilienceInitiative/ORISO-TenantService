@@ -924,6 +924,71 @@ paths:
           description: FORBIDDEN - not authorized to access this tenant
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/status:
+    summary: 'Authoritative DPA status of a tenant for its authenticated tenant admins'
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Returns the authoritative DPA state (MISSING, UNSIGNED, OUTDATED, VALID,
+        INCONSISTENT) of a tenant [Authorization: Authority.GET_TENANT]'
+      operationId: getDataProcessingAgreementStatus
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaStatusDTO'
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/sign:
+    summary: 'Sign the currently published DPA version as an authenticated tenant admin'
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Signs the current DPA version; persists signer identity, version, timestamp and
+        form data append-only. Idempotent for an already-VALID tenant.
+        [Authorization: Authority.UPDATE_TENANT]'
+      operationId: signDataProcessingAgreement
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DpaAdminSignRequestDTO'
+      responses:
+        200:
+          description: Successful operation - returns the resulting authoritative DPA status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaStatusDTO'
+        400:
+          description: BAD REQUEST - the agreement checkbox was not accepted
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        409:
+          description: CONFLICT - the tenant has no published DPA to sign yet
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/media:
     post:
       tags:
@@ -1107,6 +1172,70 @@ components:
           type: boolean
         dpaSigned:
           type: boolean
+    DpaStatusDTO:
+      type: object
+      required:
+        - tenantId
+        - status
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+          example: 7
+        status:
+          type: string
+          description: MISSING = no DPA ever published and nothing signed, UNSIGNED = published
+            but never signed, OUTDATED = only an older version is signed, VALID = the current
+            version is signed, INCONSISTENT = stored signature data contradicts the publish
+            history
+          enum: [ MISSING, UNSIGNED, OUTDATED, VALID, INCONSISTENT ]
+        currentDpaVersion:
+          type: string
+          description: Activation timestamp of the currently published DPA version, if any
+          example: "2026-07-01T12:00:00"
+        signedDpaVersion:
+          type: string
+          description: Newest DPA version a signature exists for, if any
+          example: "2026-05-01T10:00:00"
+        signedAt:
+          type: string
+          description: Timestamp of the signature covering the newest signed version
+          example: "2026-05-02T09:30:00"
+        signedBy:
+          type: string
+          description: Display name of the signer of the newest signed version
+          example: "Toni Tenantadmin"
+    DpaAdminSignRequestDTO:
+      type: object
+      required:
+        - signerName
+        - accepted
+      properties:
+        signerName:
+          type: string
+          maxLength: 255
+          example: "Toni Tenantadmin"
+        signerPosition:
+          type: string
+          maxLength: 255
+          example: "Geschäftsführung"
+        signerEmail:
+          type: string
+          maxLength: 255
+          format: email
+          example: "toni@example.org"
+        signerOrganisation:
+          type: string
+          maxLength: 255
+          example: "Träger Nord e.V."
+        accepted:
+          type: boolean
+          description: Must be true - the signer explicitly accepted the current DPA version
+          example: true
+        language:
+          type: string
+          maxLength: 10
+          example: "de"
     DpaSignatureRequestDTO:
       type: object
       required:
