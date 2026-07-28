@@ -28,8 +28,13 @@ paths:
           description: BAD REQUEST - invalid/incomplete request or body object
         401:
           description: UNAUTHORIZED - no/invalid Keycloak token
+        409:
+          description: CONFLICT - the requested tenant ID is already assigned or reserved
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+        503:
+          description: SERVICE UNAVAILABLE - AUTO tenant ID allocation exhausted its retry
+            budget under contention; retry later
     get:
       tags:
         - tenant-controller
@@ -469,6 +474,9 @@ paths:
           description: CONFLICT - the requested ID is already assigned or reserved
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+        503:
+          description: SERVICE UNAVAILABLE - AUTO reservation exhausted its retry budget
+            under contention; retry later
       security:
         - Bearer: [ ]
   /tenantadmin/tenant-ids/reservations/{id}:
@@ -949,6 +957,8 @@ paths:
                 $ref: '#/components/schemas/DpaStatusDTO'
         403:
           description: FORBIDDEN - not authorized to access this tenant
+        404:
+          description: NOT FOUND - no tenant with the given id exists
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}/dpa/sign:

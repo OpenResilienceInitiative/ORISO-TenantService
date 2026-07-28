@@ -1,5 +1,6 @@
 package com.vi.tenantservice.api.facade;
 
+import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.model.DpaAdminSignRequestDTO;
 import com.vi.tenantservice.api.model.DpaGateStatusDTO;
 import com.vi.tenantservice.api.model.DpaSignInviteDTO;
@@ -99,6 +100,10 @@ public class TenantDpaFacade {
    */
   public DpaStatusDTO getDpaStatus(Long tenantId) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    if (tenantService.findTenantById(tenantId).isEmpty()) {
+      // a platform admin can query any id; an absent tenant must not read as 200 MISSING
+      throw new TenantNotFoundException("Tenant with id " + tenantId + " not found");
+    }
     return toStatusDto(tenantDpaStatusService.getStatus(tenantId));
   }
 

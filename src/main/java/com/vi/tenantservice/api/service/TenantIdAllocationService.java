@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api.service;
 
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
+import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantIdAllocationStatus;
 import com.vi.tenantservice.api.model.TenantIdReservationEntity;
@@ -14,7 +15,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -39,7 +40,8 @@ public class TenantIdAllocationService {
   /** Tenant ID 0 is the technical tenant and never assignable. */
   private static final long MIN_ASSIGNABLE_TENANT_ID = 1L;
 
-  private static final int MAX_AUTO_RESERVE_ATTEMPTS = 20;
+  /** Shared retry budget for AUTO allocation, also used by the facade's create-retry loop. */
+  public static final int MAX_AUTO_ATTEMPTS = 20;
 
   private final TenantRepository tenantRepository;
   private final TenantIdReservationRepository reservationRepository;
@@ -106,7 +108,9 @@ public class TenantIdAllocationService {
       }
       try {
         return insertReservationInNewTransaction(requestedId, reservedBy);
-      } catch (DataAccessException e) {
+      } catch (DataIntegrityViolationException e) {
+        // only a lost duplicate-key race is a conflict; infrastructure failures (connection
+        // loss, lock-wait timeout, ...) must surface as 500 instead of blaming the ID
         throw new TenantIdAllocationConflictException(
             "Tenant ID " + requestedId + " is already assigned or reserved", e);
       }
@@ -115,20 +119,20 @@ public class TenantIdAllocationService {
   }
 
   private TenantIdReservationEntity reserveSmallestFreeId(String reservedBy) {
-    for (int attempt = 1; attempt <= MAX_AUTO_RESERVE_ATTEMPTS; attempt++) {
+    for (int attempt = 1; attempt <= MAX_AUTO_ATTEMPTS; attempt++) {
       long candidate = smallestFreeId();
       try {
         return insertReservationInNewTransaction(candidate, reservedBy);
-      } catch (DataAccessException | TenantIdAllocationConflictException e) {
+      } catch (DataIntegrityViolationException | TenantIdAllocationConflictException e) {
         log.info(
             "Lost the race for AUTO tenant ID {} (attempt {}/{}), retrying with next candidate",
             candidate,
             attempt,
-            MAX_AUTO_RESERVE_ATTEMPTS);
+            MAX_AUTO_ATTEMPTS);
       }
     }
-    throw new IllegalStateException(
-        "Could not auto-reserve a tenant ID after " + MAX_AUTO_RESERVE_ATTEMPTS + " attempts");
+    throw new TenantIdAllocationExhaustedException(
+        "Could not auto-reserve a tenant ID after " + MAX_AUTO_ATTEMPTS + " attempts");
   }
 
   private TenantIdReservationEntity insertReservationInNewTransaction(
@@ -210,11 +214,29 @@ public class TenantIdAllocationService {
   }
 
   /**
-   * Removes the ledger row of a tenant ID whose creation was rolled back after commit (e.g.
-   * consulting type creation failed), so the ID becomes assignable again.
+   * Compensates a tenant creation that was rolled back after commit (e.g. consulting type creation
+   * failed). When the assignment consumed an open invite's reservation (the caller presents the
+   * matching reservation token), the ledger row is restored to RESERVED with its original token so
+   * the invite keeps its ID. A row created fresh in the failed creation is deleted, making the ID
+   * assignable again.
    */
   @Transactional
-  public void releaseAssignment(long tenantId) {
+  public void rollbackAssignment(long tenantId, String reservationToken) {
+    if (reservationToken != null && !reservationToken.isBlank()) {
+      int restored =
+          reservationRepository.restoreReservation(
+              tenantId,
+              reservationToken,
+              TenantIdReservationStatus.ASSIGNED,
+              TenantIdReservationStatus.RESERVED,
+              LocalDateTime.now(ZoneOffset.UTC));
+      if (restored == 1) {
+        log.info(
+            "Rolled back tenant creation for ID {}: restored the consumed invite reservation",
+            tenantId);
+        return;
+      }
+    }
     reservationRepository.deleteByTenantIdAndStatus(tenantId, TenantIdReservationStatus.ASSIGNED);
   }
 
@@ -222,7 +244,7 @@ public class TenantIdAllocationService {
     try {
       reservationRepository.saveAndFlush(
           newLedgerRow(tenantId, TenantIdReservationStatus.ASSIGNED, null));
-    } catch (DataAccessException e) {
+    } catch (DataIntegrityViolationException e) {
       throw new TenantIdAllocationConflictException(
           "Tenant ID " + tenantId + " is already assigned or reserved", e);
     }
