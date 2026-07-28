@@ -27,6 +27,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
 
 /**
  * Status derivation and audit-proof admin signing for the tenant DPA (TEN-INV-U9,
@@ -43,6 +44,7 @@ class TenantDpaStatusServiceTest {
   @Mock private TenantDpaSignatureRepository signatureRepository;
   @Mock private TenantDpaVersionRepository versionRepository;
   @Mock private TenantRepository tenantRepository;
+  @Mock private PlatformTransactionManager transactionManager;
 
   @InjectMocks private TenantDpaStatusService service;
 
@@ -295,8 +297,15 @@ class TenantDpaStatusServiceTest {
     verify(adminSignatureRepository, never()).save(any());
   }
 
+  /**
+   * Guards the catch placement only: a {@link DataIntegrityViolationException} crossing the insert
+   * transaction's boundary is absorbed and the authoritative status is re-read. Under real flush
+   * semantics the violation surfaces at the inner transaction's commit, not from {@code save()}
+   * itself — that timing (and the resulting no-500-for-the-loser guarantee) is proven against the
+   * real Spring/JPA stack in {@code TenantDpaStatusServiceConcurrencyIT}.
+   */
   @Test
-  void sign_Should_stayIdempotent_When_aConcurrentSignatureWinsTheUniqueConstraintRace() {
+  void sign_Should_absorbTheUniqueConstraintViolation_When_aConcurrentSignatureWinsTheRace() {
     givenTenantWithEmbeddedVersion(VERSION_2);
     givenNoSignatures();
     when(adminSignatureRepository.save(any()))
@@ -311,6 +320,7 @@ class TenantDpaStatusServiceTest {
 
     // the losing writer must not blow up; it reports the (re-computed) authoritative status
     assertThat(status).isNotNull();
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
   }
 
   @Test

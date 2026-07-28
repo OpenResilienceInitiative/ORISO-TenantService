@@ -17,7 +17,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Authoritative DPA status derivation and audit-proof in-app signing for authenticated tenant
@@ -61,6 +64,7 @@ public class TenantDpaStatusService {
   private final TenantDpaSignatureRepository signatureRepository;
   private final TenantDpaVersionRepository versionRepository;
   private final TenantRepository tenantRepository;
+  private final PlatformTransactionManager transactionManager;
 
   /** Computes the authoritative DPA state for the tenant. */
   @Transactional(readOnly = true)
@@ -84,9 +88,18 @@ public class TenantDpaStatusService {
    * a second row, and a concurrent duplicate insert (unique constraint on tenant + version) is
    * absorbed by re-reading the authoritative status.
    *
+   * <p>Deliberately NOT {@code @Transactional}: the INSERT of the audit row runs in its own
+   * REQUIRES_NEW transaction so that a unique-constraint violation from a concurrent double-submit
+   * surfaces at THAT transaction's flush/commit — inside the catch below — instead of at an outer
+   * flush outside any catch. With a surrounding transaction the losing request would (a) see the
+   * violation escape this method (HTTP 500) or (b) after catching it, sit on a rollback-only
+   * transaction that dies at commit with {@code UnexpectedRollbackException}. Keeping the method
+   * non-transactional also guarantees the final re-read observes the winning, committed row
+   * regardless of the database's isolation level. Real-flush-semantics proof:
+   * TenantDpaStatusServiceConcurrencyIT.
+   *
    * @throws DpaNotPublishedException if the tenant has no published DPA to sign.
    */
-  @Transactional
   public DpaStatusView sign(
       Long tenantId, String signerUserId, String signerUsername, AdminSignatureForm form) {
     var status = getStatus(tenantId);
@@ -98,22 +111,27 @@ public class TenantDpaStatusService {
       return status;
     }
     var now = LocalDateTime.now();
+    var entity =
+        TenantDpaAdminSignatureEntity.builder()
+            .tenantId(tenantId)
+            .dpaVersion(status.currentVersion())
+            .signerUserId(signerUserId)
+            .signerUsername(signerUsername)
+            .signerName(form.signerName())
+            .signerPosition(form.signerPosition())
+            .signerEmail(form.signerEmail())
+            .signerOrganisation(form.signerOrganisation())
+            .language(form.language())
+            .formData(form.formDataJson())
+            .signedAt(now)
+            .createDate(now)
+            .build();
+    var insertTransaction = new TransactionTemplate(transactionManager);
+    insertTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     try {
-      adminSignatureRepository.save(
-          TenantDpaAdminSignatureEntity.builder()
-              .tenantId(tenantId)
-              .dpaVersion(status.currentVersion())
-              .signerUserId(signerUserId)
-              .signerUsername(signerUsername)
-              .signerName(form.signerName())
-              .signerPosition(form.signerPosition())
-              .signerEmail(form.signerEmail())
-              .signerOrganisation(form.signerOrganisation())
-              .language(form.language())
-              .formData(form.formDataJson())
-              .signedAt(now)
-              .createDate(now)
-              .build());
+      // the catch must wrap the whole transaction boundary: with a SEQUENCE-generated id the
+      // INSERT is deferred until the flush at this template's commit, not save() itself
+      insertTransaction.executeWithoutResult(tx -> adminSignatureRepository.save(entity));
     } catch (DataIntegrityViolationException e) {
       log.info(
           "Concurrent DPA signature for tenant {} version {} was absorbed (unique constraint)",
