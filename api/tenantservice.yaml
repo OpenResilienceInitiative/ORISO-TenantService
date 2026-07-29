@@ -807,10 +807,14 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}/dpa/gate:
     summary: 'DPA legal-gate status of a tenant'
+    description: 'Boolean projection of the authoritative DPA status (/dpa/status): dpaPublished
+      means a DPA is in force for the tenant (its own or the governing operator DPA), dpaSigned
+      means that exact version is signed - by an authenticated tenant admin in-app or by the
+      authorised signer through a forwarded invite.'
     get:
       tags:
         - tenant-controller
-      summary: 'Whether the tenant DPA is published and signed [Authorization: Authority.GET_TENANT]'
+      summary: 'Whether a DPA is in force for the tenant and signed [Authorization: Authority.GET_TENANT]'
       operationId: getDataProcessingAgreementGate
       parameters:
         - name: id
@@ -833,6 +837,10 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}/dpa/invite:
     summary: 'Create a single-use DPA sign invite (link) for a tenant'
+    description: 'Forwarding path of the SAME single agreement: the natural person authorised to
+      sign for the tenant organisation need not be an app user. The invite covers the DPA version
+      in force for the tenant - its own published DPA, or the governing operator DPA - and the
+      resulting signature always belongs to this tenant.'
     post:
       tags:
         - tenant-controller
@@ -905,11 +913,17 @@ paths:
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}/dpa/versions:
-    summary: 'Published DPA versions of a tenant (newest first)'
+    summary: 'Published versions of the DPA in force for a tenant (newest first)'
+    description: 'The tenant''s own publish history if it authored a DPA, otherwise the governing
+      operator DPA (tenant app.dpa.operator-tenant-id) it is measured against - the same document
+      the DPA status and the in-app signing path use, so a tenant always has the agreement it is
+      blocked on available to read. The content is the unchanged multilingual map; the caller
+      picks the language.'
     get:
       tags:
         - tenant-controller
-      summary: 'Lists the published DPA versions of a tenant [Authorization: Authority.GET_TENANT]'
+      summary: 'Lists the published versions of the DPA in force for a tenant
+        [Authorization: Authority.GET_TENANT]'
       operationId: getDataProcessingAgreementVersions
       parameters:
         - name: id

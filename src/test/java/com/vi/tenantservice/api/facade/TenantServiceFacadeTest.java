@@ -48,7 +48,6 @@ import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
-import com.vi.tenantservice.api.validation.InputSanitizer;
 import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
@@ -121,8 +120,6 @@ class TenantServiceFacadeTest {
   @Mock private TenantResolverService tenantResolverService;
 
   @Mock private TenantDpaStatusService tenantDpaStatusService;
-
-  @Mock private InputSanitizer inputSanitizer;
 
   @Mock
   private TenantFacadeDependentSettingsOverrideService tenantFacadeDependentSettingsOverrideService;
@@ -273,7 +270,6 @@ class TenantServiceFacadeTest {
     when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
     when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
     when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
-    when(inputSanitizer.sanitize(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
     // when
     tenantServiceFacade.createTenant(tenantMultilingualDTO);
@@ -297,6 +293,65 @@ class TenantServiceFacadeTest {
   }
 
   /**
+   * The signer fields are PLAIN TEXT of a legal record. Running them through the HTML sanitizer
+   * entity-encoded the audit trail (#569 defect 2), so the stored signature no longer matched what
+   * the signer submitted. They are persisted verbatim; consumers encode at render time.
+   */
+  @Test
+  void createTenant_Should_storeTheOnboardingSignerFieldsVerbatim() {
+    // given a signer whose plain-text fields carry characters an HTML sanitizer would mangle
+    tenantMultilingualDTO.setOnboardingDpaAcceptance(
+        onboardingAcceptance()
+            .signerUsername("toni&nord")
+            .signerName("Toni & Söhne <Tenantadmin>")
+            .signerPosition("Leitung Recht & Ordnung")
+            .signerEmail("toni+dpa@traeger-nord.example")
+            .signerOrganisation("Träger & Nord e.V."));
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+
+    // when
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    // then
+    var formCaptor = ArgumentCaptor.forClass(AdminSignatureForm.class);
+    verify(tenantDpaStatusService)
+        .signOnboarding(
+            org.mockito.ArgumentMatchers.eq(ID),
+            org.mockito.ArgumentMatchers.eq("kc-admin-id"),
+            org.mockito.ArgumentMatchers.eq("toni&nord"),
+            any(),
+            formCaptor.capture());
+    var form = formCaptor.getValue();
+    assertThat(form.signerName()).isEqualTo("Toni & Söhne <Tenantadmin>");
+    assertThat(form.signerPosition()).isEqualTo("Leitung Recht & Ordnung");
+    assertThat(form.signerEmail()).isEqualTo("toni+dpa@traeger-nord.example");
+    assertThat(form.signerOrganisation()).isEqualTo("Träger & Nord e.V.");
+    assertThat(form.formDataJson()).contains("Toni & Söhne <Tenantadmin>");
+    assertThat(form.formDataJson()).contains("Träger & Nord e.V.");
+  }
+
+  /** Verbatim is not unbounded: an over-long field is rejected instead of silently truncated. */
+  @Test
+  void createTenant_Should_rollback_When_aSignerFieldExceedsItsColumnLength() {
+    // given
+    tenantMultilingualDTO.setOnboardingDpaAcceptance(
+        onboardingAcceptance().signerName("x".repeat(256)));
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+
+    // when
+    assertThrows(
+        RuntimeException.class, () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then
+    verify(tenantService).delete(tenantEntity);
+    verify(tenantDpaStatusService, never()).signOnboarding(anyLong(), any(), any(), any(), any());
+  }
+
+  /**
    * Never report a successful onboarding for an unrecorded acceptance: a failing signature write
    * rolls the tenant creation back (reservation restored) so the invite link stays retryable.
    */
@@ -309,7 +364,6 @@ class TenantServiceFacadeTest {
     when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
     when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
     when(tenantService.create(tenantEntity, "reservation-token")).thenReturn(tenantEntity);
-    when(inputSanitizer.sanitize(any())).thenAnswer(invocation -> invocation.getArgument(0));
     doThrow(new IllegalStateException("signature write failed"))
         .when(tenantDpaStatusService)
         .signOnboarding(anyLong(), any(), any(), any(), any());

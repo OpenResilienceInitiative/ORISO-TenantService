@@ -3,6 +3,8 @@ package com.vi.tenantservice.api.controller;
 import static com.vi.tenantservice.api.authorisation.UserRole.SINGLE_TENANT_ADMIN;
 import static com.vi.tenantservice.api.authorisation.UserRole.TENANT_ADMIN;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.when;
@@ -14,6 +16,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.jayway.jsonpath.JsonPath;
 import com.vi.tenantservice.TenantServiceApplication;
 import com.vi.tenantservice.api.authorisation.Authority;
 import com.vi.tenantservice.api.authorisation.UserRole;
@@ -63,6 +66,10 @@ class TenantControllerDpaStatusIT {
 
   private static final String DPA_STATUS = "/tenantadmin/%d/dpa/status";
   private static final String DPA_SIGN = "/tenantadmin/%d/dpa/sign";
+  private static final String DPA_VERSIONS = "/tenantadmin/%d/dpa/versions";
+  private static final String DPA_GATE = "/tenantadmin/%d/dpa/gate";
+  private static final String DPA_INVITE = "/tenantadmin/%d/dpa/invite";
+  private static final String DPA_PUBLIC = "/tenant/public/dpa/confirm/%s";
 
   private static final String TENANTADMIN_RESOURCE = "/tenantadmin";
 
@@ -71,6 +78,9 @@ class TenantControllerDpaStatusIT {
 
   /** Governing operator DPA holder ({@code app.dpa.operator-tenant-id}, #569). */
   private static final long OPERATOR_TENANT = 1L;
+
+  /** A tenant that is governed by the operator DPA instead of authoring one of its own. */
+  private static final long GOVERNED_TENANT = FOREIGN_TENANT;
 
   private static final long ONBOARDED_TENANT = 42L;
   private static final LocalDateTime VERSION_1 = LocalDateTime.of(2026, 5, 1, 10, 0, 0);
@@ -83,6 +93,21 @@ class TenantControllerDpaStatusIT {
         "signerPosition": "Geschäftsführung",
         "signerEmail": "toni@example.org",
         "signerOrganisation": "Träger Nord e.V.",
+        "language": "de",
+        "accepted": true
+      }
+      """;
+
+  /** Body of the public, token-based confirmation used by the forwarding path. */
+  private static final String CONFIRM_BODY =
+      """
+      {
+        "signerName": "Erika Extern",
+        "signerPosition": "Vorstand",
+        "signerEmail": "erika@example.org",
+        "signerOrganisation": "Träger Nord e.V.",
+        "signerIsMember": false,
+        "forwardedByUserId": "admin-user-2",
         "language": "de",
         "accepted": true
       }
@@ -500,6 +525,118 @@ class TenantControllerDpaStatusIT {
         .andExpect(jsonPath("status", is("UNSIGNED")));
 
     assertThat(adminSignatureRepository.countByTenantId(ONBOARDED_TENANT)).isZero();
+  }
+
+  // --- the governing operator DPA is readable and signable (#569 defect 1) -----------------
+
+  /**
+   * The dead end this fix removes: a tenant WITHOUT its own DPA is measured against the governing
+   * operator document (status UNSIGNED), so the very same document must be readable through the
+   * in-app signing path — otherwise the U10 blocker renders with nothing to sign.
+   */
+  @Test
+  void getVersions_Should_serveTheGoverningOperatorDpa_When_theTenantHasNoOwnDpa()
+      throws Exception {
+    publishDpaVersion(OPERATOR_TENANT, VERSION_2);
+
+    mockMvc
+        .perform(get(DPA_VERSIONS.formatted(GOVERNED_TENANT)).with(tenantAdminOf(GOVERNED_TENANT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(1)))
+        .andExpect(jsonPath("$[0].activationDate", is(VERSION_2.toString())))
+        .andExpect(jsonPath("$[0].content", containsString("AVV v" + VERSION_2)));
+  }
+
+  /** The fallback is additive: a tenant that authored its own DPA keeps pure tenant semantics. */
+  @Test
+  void getVersions_Should_serveOnlyTheOwnDpa_When_theTenantPublishedOne() throws Exception {
+    publishDpaVersion(OPERATOR_TENANT, VERSION_1);
+    publishDpaVersion(GOVERNED_TENANT, VERSION_2);
+
+    mockMvc
+        .perform(get(DPA_VERSIONS.formatted(GOVERNED_TENANT)).with(tenantAdminOf(GOVERNED_TENANT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(1)))
+        .andExpect(jsonPath("$[0].activationDate", is(VERSION_2.toString())));
+  }
+
+  /**
+   * Read the governing document, sign it, and the gate is resolved — the complete in-app loop for a
+   * tenant that has no DPA of its own.
+   */
+  @Test
+  void signDpa_Should_resolveTheGate_When_theTenantSignsTheGoverningOperatorDpa() throws Exception {
+    publishDpaVersion(OPERATOR_TENANT, VERSION_2);
+
+    mockMvc
+        .perform(get(DPA_STATUS.formatted(GOVERNED_TENANT)).with(tenantAdminOf(GOVERNED_TENANT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("status", is("UNSIGNED")));
+
+    mockMvc
+        .perform(
+            post(DPA_SIGN.formatted(GOVERNED_TENANT))
+                .with(tenantAdminOf(GOVERNED_TENANT))
+                .contentType(APPLICATION_JSON)
+                .content(SIGN_BODY))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("status", is("VALID")))
+        .andExpect(jsonPath("signedDpaVersion", is(VERSION_2.toString())));
+
+    // ... and the consultation gate agrees, so agency work is not blocked afterwards
+    mockMvc
+        .perform(get(DPA_GATE.formatted(GOVERNED_TENANT)).with(tenantAdminOf(GOVERNED_TENANT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("dpaPublished", is(true)))
+        .andExpect(jsonPath("dpaSigned", is(true)));
+  }
+
+  /**
+   * The forwarding path (a natural person authorised to sign for the organisation who need not be
+   * an app user) must reach the same governing document — otherwise it stays a dead end for exactly
+   * the tenants the in-app path was just fixed for.
+   */
+  @Test
+  void createSignInvite_Should_forwardTheGoverningOperatorDpa_When_theTenantHasNoOwnDpa()
+      throws Exception {
+    publishDpaVersion(OPERATOR_TENANT, VERSION_2);
+
+    var inviteResponse =
+        mockMvc
+            .perform(
+                post(DPA_INVITE.formatted(GOVERNED_TENANT)).with(tenantAdminOf(GOVERNED_TENANT)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String token = JsonPath.read(inviteResponse, "$.token");
+
+    mockMvc
+        .perform(get(DPA_PUBLIC.formatted(token)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("tenantName", is("tenant-" + GOVERNED_TENANT)))
+        .andExpect(jsonPath("dpaVersion", is(VERSION_2.toString())))
+        .andExpect(jsonPath("content", containsString("AVV v" + VERSION_2)));
+
+    mockMvc
+        .perform(
+            post(DPA_PUBLIC.formatted(token)).contentType(APPLICATION_JSON).content(CONFIRM_BODY))
+        .andExpect(status().isOk());
+
+    // the forwarded signature counts for the gate exactly like an admin signature
+    mockMvc
+        .perform(get(DPA_STATUS.formatted(GOVERNED_TENANT)).with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("status", is("VALID")))
+        .andExpect(jsonPath("signedBy", is("Erika Extern")));
+  }
+
+  @Test
+  void createSignInvite_Should_returnConflict_When_noGoverningDpaIsPublishedAnywhere()
+      throws Exception {
+    mockMvc
+        .perform(post(DPA_INVITE.formatted(GOVERNED_TENANT)).with(tenantAdminOf(GOVERNED_TENANT)))
+        .andExpect(status().isConflict());
   }
 
   /** A tenant creation whose acceptance names an unpublished version must not survive. */

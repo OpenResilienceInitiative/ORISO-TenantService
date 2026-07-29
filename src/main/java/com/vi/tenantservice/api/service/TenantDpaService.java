@@ -39,6 +39,7 @@ public class TenantDpaService {
   private final TenantDpaSignatureRepository signatureRepository;
   private final TenantDpaVersionRepository versionRepository;
   private final TenantRepository tenantRepository;
+  private final GoverningDpaResolver governingDpaResolver;
 
   /** Persists a SIGNED confirmation of the given DPA version for a tenant. */
   public TenantDpaSignatureEntity recordSignature(
@@ -144,13 +145,17 @@ public class TenantDpaService {
   /**
    * Resolves the exact immutable DPA snapshot bound to a still-valid invitation. The token is only
    * read here; previewing the contract never consumes it.
+   *
+   * <p>The snapshot is looked up through the governing document (#569): a tenant without a DPA of
+   * its own forwards the operator document under its own tenant id, so the published version lives
+   * on the operator while the signature belongs to the tenant.
    */
   @Transactional(readOnly = true)
   public DpaSignPreview getSignPreview(String rawToken) {
     var pending = requireValidPendingSignature(rawToken);
     var publishedVersion =
-        versionRepository
-            .findFirstByTenantIdAndActivationDate(pending.getTenantId(), pending.getDpaVersion())
+        governingDpaResolver
+            .findPublishedVersion(pending.getTenantId(), pending.getDpaVersion())
             .orElseThrow(
                 () ->
                     new InvalidDpaSignTokenException(

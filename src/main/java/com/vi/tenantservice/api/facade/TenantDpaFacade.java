@@ -8,8 +8,10 @@ import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaStatusDTO;
 import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
+import com.vi.tenantservice.api.model.TenantDpaStatus;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
+import com.vi.tenantservice.api.service.GoverningDpaResolver;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantService;
@@ -47,6 +49,7 @@ public class TenantDpaFacade {
 
   private final @NonNull TenantDpaService tenantDpaService;
   private final @NonNull TenantDpaStatusService tenantDpaStatusService;
+  private final @NonNull GoverningDpaResolver governingDpaResolver;
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   private final @NonNull TenantService tenantService;
   private final @NonNull InputSanitizer inputSanitizer;
@@ -56,19 +59,26 @@ public class TenantDpaFacade {
   private String appBaseUrl;
 
   /**
-   * Creates a single-use sign invite for the tenant's currently published DPA and returns the raw
-   * token plus a user-facing sign link. Requires a published DPA (an activation date).
+   * Creates a single-use sign invite for the DPA version currently in force for the tenant and
+   * returns the raw token plus a user-facing sign link.
    *
-   * @throws DpaNotPublishedException if the tenant has not published a DPA yet.
+   * <p>The invite is the forwarding path of the SAME single agreement: the natural person
+   * authorised to sign for the tenant organisation need not be an app user. It therefore covers the
+   * governing document — the tenant's own published DPA if it authored one, otherwise the operator
+   * DPA — exactly like the in-app signing path, so a tenant without a DPA of its own can forward
+   * too. The PENDING row is always written under the TENANT's id, so the resulting signature counts
+   * for the tenant's gate.
+   *
+   * @throws DpaNotPublishedException if no DPA governs the tenant yet.
    */
   public DpaSignInviteDTO createSignInvite(Long tenantId) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
-    var version = resolveCurrentDpaVersion(tenantId);
-    if (version == null) {
+    var governing = governingDpaResolver.resolve(tenantId);
+    if (governing == null) {
       throw new DpaNotPublishedException(
           "Tenant " + tenantId + " has no published DPA to sign yet");
     }
-    var rawToken = tenantDpaService.createSignInvite(tenantId, version, INVITE_TTL);
+    var rawToken = tenantDpaService.createSignInvite(tenantId, governing.version(), INVITE_TTL);
     return new DpaSignInviteDTO()
         .token(rawToken)
         .signLink(buildSignLink(rawToken))
@@ -85,13 +95,20 @@ public class TenantDpaFacade {
     return tenantDpaService.getSignatures(tenantId).stream().map(TenantDpaFacade::toDto).toList();
   }
 
-  /** Whether the tenant's DPA is published and signed (the consultation gate). */
+  /**
+   * Whether a DPA is in force for the tenant and signed (the consultation gate).
+   *
+   * <p>Derived from the SAME authoritative status as the U9 gate (#569): it therefore covers the
+   * governing operator document and counts admin signatures as well as forwarded ones. Anything
+   * else would leave a tenant that just resolved the U10 blocker blocked from agency work with
+   * nothing left to sign.
+   */
   public DpaGateStatusDTO getGateStatus(Long tenantId) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
-    var version = resolveCurrentDpaVersion(tenantId);
-    boolean published = version != null;
-    boolean signed = published && tenantDpaService.isSignedForVersion(tenantId, version);
-    return new DpaGateStatusDTO().dpaPublished(published).dpaSigned(signed);
+    var status = tenantDpaStatusService.getStatus(tenantId);
+    return new DpaGateStatusDTO()
+        .dpaPublished(status.currentVersion() != null)
+        .dpaSigned(status.status() == TenantDpaStatus.VALID);
   }
 
   /**
@@ -148,27 +165,6 @@ public class TenantDpaFacade {
         .signedDpaVersion(view.signedVersion() == null ? null : view.signedVersion().toString())
         .signedAt(view.signedAt() == null ? null : view.signedAt().toString())
         .signedBy(view.signedBy());
-  }
-
-  /**
-   * Resolves the active DPA version from the tenant row and falls back to the append-only publish
-   * history when a legacy narrow tenant update cleared the embedded activation date. A missing
-   * tenant never falls back, so historical rows cannot resurrect a deleted tenant.
-   */
-  private LocalDateTime resolveCurrentDpaVersion(Long tenantId) {
-    var tenant = tenantService.findTenantById(tenantId);
-    if (tenant.isEmpty()) {
-      return null;
-    }
-    var embeddedVersion = tenant.get().getContentDataProcessingAgreementActivationDate();
-    if (embeddedVersion != null) {
-      return embeddedVersion;
-    }
-    return tenantDpaService.getVersions(tenantId).stream()
-        .map(TenantDpaVersionEntity::getActivationDate)
-        .filter(Objects::nonNull)
-        .findFirst()
-        .orElse(null);
   }
 
   /**
@@ -249,10 +245,19 @@ public class TenantDpaFacade {
     return !Objects.equals(meta, previousMeta);
   }
 
-  /** The tenant's published DPA versions (newest first) for the read-only "look back" viewer. */
+  /**
+   * The published versions (newest first) of the DPA document in force for the tenant — its own
+   * publish history, or the governing operator document when it never published one (#569).
+   *
+   * <p>This is the document the tenant admin reads before signing: measuring a tenant against the
+   * operator DPA while serving it nothing to read is the non-actionable dead end #569 removes. The
+   * multilingual content map is returned unchanged, so the caller still picks the signer's
+   * language. Signatures stay strictly per-tenant — only the CONTENT is shared.
+   */
   public List<DpaVersionDTO> getVersions(Long tenantId) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
-    return tenantDpaService.getVersions(tenantId).stream()
+    var documentTenantId = governingDpaResolver.documentTenantIdFor(tenantId);
+    return tenantDpaService.getVersions(documentTenantId).stream()
         .map(TenantDpaFacade::toVersionDto)
         .toList();
   }
