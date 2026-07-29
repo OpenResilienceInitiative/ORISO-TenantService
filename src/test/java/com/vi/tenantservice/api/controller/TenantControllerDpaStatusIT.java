@@ -179,6 +179,13 @@ class TenantControllerDpaStatusIT {
   // --- status scenarios -------------------------------------------------------------------
 
   @Test
+  void getStatus_Should_return404_When_tenantDoesNotExist() throws Exception {
+    mockMvc
+        .perform(get(DPA_STATUS.formatted(999L)).with(platformAdmin()))
+        .andExpect(status().isNotFound());
+  }
+
+  @Test
   void getStatus_Should_returnMissing_When_noDpaWasEverPublished() throws Exception {
     mockMvc
         .perform(get(DPA_STATUS.formatted(OWN_TENANT)).with(tenantAdminOf(OWN_TENANT)))

@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.facade;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -17,6 +18,8 @@ import com.vi.tenantservice.api.authorisation.Authority.AuthorityValue;
 import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
 import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.TenantConverter;
+import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
+import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
@@ -61,6 +64,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestClientException;
 
 @ExtendWith(MockitoExtension.class)
 class TenantServiceFacadeTest {
@@ -231,6 +235,82 @@ class TenantServiceFacadeTest {
 
     // then
     verify(tenantService).create(tenantEntity, "reservation-token");
+  }
+
+  @Test
+  void createTenant_Should_rollbackWithReservationToken_When_consultingTypeCreationFails() {
+    // given (TEN-INV hardening: a consumed invite reservation must be restored, not deleted)
+    tenantMultilingualDTO.setTenantIdReservationToken("reservation-token");
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, "reservation-token")).thenReturn(tenantEntity);
+    doThrow(new RestClientException("consulting type service down"))
+        .when(consultingTypeService)
+        .createDefaultConsultingTypes(tenantEntity.getId());
+
+    // when (the facade converts the failure to a BadRequestException; in this plain unit-test
+    // classpath no JAX-RS RuntimeDelegate is present, so only RuntimeException can be asserted)
+    assertThrows(
+        RuntimeException.class, () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then
+    verify(tenantService).delete(tenantEntity);
+    verify(tenantIdAllocationService).rollbackAssignment(ID, "reservation-token");
+  }
+
+  @Test
+  void createTenant_Should_keepLedgerRow_When_rollbackTenantDeleteFails() {
+    // given (TEN-INV hardening: if the tenant row survives, the ASSIGNED ledger row must too)
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+    doThrow(new RestClientException("consulting type service down"))
+        .when(consultingTypeService)
+        .createDefaultConsultingTypes(tenantEntity.getId());
+    doThrow(new RuntimeException("delete failed")).when(tenantService).delete(tenantEntity);
+
+    // when
+    assertThrows(
+        RuntimeException.class, () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then
+    verify(tenantIdAllocationService, never()).rollbackAssignment(anyLong(), any());
+  }
+
+  @Test
+  void createTenant_Should_throwExhausted_When_autoIdAllocationRetriesAreUsedUp() {
+    // given (TEN-INV hardening: AUTO exhaustion is a 503 contention condition, not a 409)
+    TenantEntity autoEntity = new TenantEntity();
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(autoEntity);
+    when(tenantService.create(autoEntity, null))
+        .thenThrow(new TenantIdAllocationConflictException("lost the race"));
+
+    // when
+    assertThrows(
+        TenantIdAllocationExhaustedException.class,
+        () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then (the facade's retry budget is aligned with the allocation service's)
+    verify(tenantService, times(TenantIdAllocationService.MAX_AUTO_ATTEMPTS))
+        .create(autoEntity, null);
+  }
+
+  @Test
+  void createTenant_Should_throwConflict_When_manualIdIsTaken() {
+    // given (manual mode keeps its 409 and is never retried)
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null))
+        .thenThrow(new TenantIdAllocationConflictException("taken"));
+
+    // when
+    assertThrows(
+        TenantIdAllocationConflictException.class,
+        () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then
+    verify(tenantService, times(1)).create(tenantEntity, null);
   }
 
   @Test

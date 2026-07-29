@@ -40,6 +40,8 @@ class TenantIdAllocationServiceIT {
   @Autowired private TenantRepository tenantRepository;
   @Autowired private TenantIdReservationRepository reservationRepository;
 
+  @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
+
   @BeforeEach
   void seedWorkedExample() {
     cleanUp();
@@ -130,6 +132,52 @@ class TenantIdAllocationServiceIT {
   void release_Should_returnFalse_When_noOpenReservationExists() {
     assertThat(allocationService.release(21L)).isFalse();
     assertThat(allocationService.release(30L)).isFalse();
+  }
+
+  @Test
+  void rollbackAssignment_Should_restoreReservationWithOriginalToken_When_reservationWasConsumed() {
+    var reservation = allocationService.reserve(40L, "invite-flow");
+    var originalToken = reservation.getToken();
+    var entity = TenantEntity.builder().id(40L).build();
+    inTransaction(() -> allocationService.assignIdForNewTenant(entity, originalToken));
+    assertThat(allocationService.getStatus(40L)).isEqualTo(TenantIdAllocationStatus.ASSIGNED);
+
+    allocationService.rollbackAssignment(40L, originalToken);
+
+    assertThat(allocationService.getStatus(40L)).isEqualTo(TenantIdAllocationStatus.RESERVED);
+    var restoredRow = reservationRepository.findById(40L).orElseThrow();
+    assertThat(restoredRow.getStatus()).isEqualTo(TenantIdReservationStatus.RESERVED);
+    assertThat(restoredRow.getToken()).isEqualTo(originalToken);
+  }
+
+  @Test
+  void rollbackAssignment_Should_deleteLedgerRow_When_rowWasCreatedFreshWithoutToken() {
+    var entity = TenantEntity.builder().build();
+    inTransaction(() -> allocationService.assignIdForNewTenant(entity, null));
+    long assignedId = entity.getId();
+    assertThat(allocationService.getStatus(assignedId))
+        .isEqualTo(TenantIdAllocationStatus.ASSIGNED);
+
+    allocationService.rollbackAssignment(assignedId, null);
+
+    assertThat(reservationRepository.findById(assignedId)).isEmpty();
+    assertThat(allocationService.getStatus(assignedId)).isEqualTo(TenantIdAllocationStatus.FREE);
+  }
+
+  @Test
+  void rollbackAssignment_Should_deleteLedgerRow_When_tokenDoesNotMatchFreshRow() {
+    var entity = TenantEntity.builder().id(41L).build();
+    inTransaction(() -> allocationService.assignIdForNewTenant(entity, null));
+
+    allocationService.rollbackAssignment(41L, "some-stale-token");
+
+    assertThat(reservationRepository.findById(41L)).isEmpty();
+    assertThat(allocationService.getStatus(41L)).isEqualTo(TenantIdAllocationStatus.FREE);
+  }
+
+  private void inTransaction(Runnable action) {
+    new org.springframework.transaction.support.TransactionTemplate(transactionManager)
+        .executeWithoutResult(transactionStatus -> action.run());
   }
 
   @Test

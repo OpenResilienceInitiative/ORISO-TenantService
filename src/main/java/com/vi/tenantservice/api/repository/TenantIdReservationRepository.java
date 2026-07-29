@@ -32,6 +32,23 @@ public interface TenantIdReservationRepository
       @Param("assigned") TenantIdReservationStatus assigned,
       @Param("now") LocalDateTime now);
 
+  /**
+   * Compensating update for a rolled-back tenant creation that had consumed an open invite's
+   * reservation: flips the row back from ASSIGNED to RESERVED, but only when the caller presents
+   * the original reservation token. Returns the number of updated rows (0 when the row was created
+   * fresh in the failed creation, i.e. its token does not match).
+   */
+  @Modifying
+  @Query(
+      "UPDATE TenantIdReservationEntity r SET r.status = :reserved, r.updateDate = :now "
+          + "WHERE r.tenantId = :tenantId AND r.status = :assigned AND r.token = :token")
+  int restoreReservation(
+      @Param("tenantId") long tenantId,
+      @Param("token") String token,
+      @Param("assigned") TenantIdReservationStatus assigned,
+      @Param("reserved") TenantIdReservationStatus reserved,
+      @Param("now") LocalDateTime now);
+
   @Modifying
   @Query(
       "DELETE FROM TenantIdReservationEntity r "

@@ -12,6 +12,7 @@ import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
+import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
@@ -72,7 +73,11 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 public class TenantServiceFacade {
 
   private static final int TECHNICAL_TENANT_ID = 0;
-  private static final int MAX_AUTO_ID_CREATE_ATTEMPTS = 3;
+
+  /** AUTO create retries share the allocation service's retry budget (TEN-INV hardening). */
+  private static final int MAX_AUTO_ID_CREATE_ATTEMPTS =
+      TenantIdAllocationService.MAX_AUTO_ATTEMPTS;
+
   private final @NonNull TenantService tenantService;
   private final @NonNull TenantIdAllocationService tenantIdAllocationService;
   private final @NonNull TenantConverter tenantConverter;
@@ -111,12 +116,12 @@ public class TenantServiceFacade {
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
-    TenantEntity createdTenant =
-        createWithIdAllocationRetry(entity, tenantDTO.getTenantIdReservationToken());
+    String reservationToken = tenantDTO.getTenantIdReservationToken();
+    TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
       createDefaultConsultingTypeSettings(createdTenant);
     } catch (ConsultingTypeCreationException ex) {
-      performRollback(createdTenant);
+      performRollback(createdTenant, reservationToken);
       log.error(
           "Error while creating consulting types for tenant with id {}", createdTenant.getId(), ex);
       throw new BadRequestException(
@@ -129,7 +134,8 @@ public class TenantServiceFacade {
 
   /**
    * Creates the tenant with authoritative ID allocation (TEN-INV-U1). In AUTO mode (no ID in the
-   * request) a lost race for the smallest free ID is retried with the next candidate; a manual ID
+   * request) a lost race for the smallest free ID is retried with the next candidate; exhausting
+   * the retry budget is a server-side contention condition and surfaces as HTTP 503. A manual ID
    * conflict is never retried and surfaces as HTTP 409.
    */
   private TenantEntity createWithIdAllocationRetry(TenantEntity entity, String reservationToken) {
@@ -147,12 +153,33 @@ public class TenantServiceFacade {
         }
       }
     }
+    if (autoMode) {
+      throw new TenantIdAllocationExhaustedException(
+          "Could not allocate an AUTO tenant ID after " + attempts + " attempts", lastConflict);
+    }
     throw lastConflict;
   }
 
-  private void performRollback(TenantEntity createdTenant) {
-    tenantService.delete(createdTenant);
-    tenantIdAllocationService.releaseAssignment(createdTenant.getId());
+  /**
+   * Compensates a tenant creation whose consulting-type provisioning failed after commit. When the
+   * creation consumed an open invite's reservation, the ledger row is restored to RESERVED with its
+   * original token (the invite keeps its ID); a row created fresh in the failed creation is
+   * deleted. If the tenant row itself cannot be deleted, the ASSIGNED ledger row is deliberately
+   * kept: the ID is still occupied by the surviving tenant row, and deleting or restoring the
+   * ledger row would let a second allocation hand out the same ID twice.
+   */
+  private void performRollback(TenantEntity createdTenant, String reservationToken) {
+    try {
+      tenantService.delete(createdTenant);
+    } catch (RuntimeException ex) {
+      log.error(
+          "Rollback of tenant {} could not delete the tenant row; keeping its ASSIGNED ledger row"
+              + " so the ledger stays consistent with the surviving tenant",
+          createdTenant.getId(),
+          ex);
+      return;
+    }
+    tenantIdAllocationService.rollbackAssignment(createdTenant.getId(), reservationToken);
   }
 
   private void populateTenantSettingsAndActivationDates(
