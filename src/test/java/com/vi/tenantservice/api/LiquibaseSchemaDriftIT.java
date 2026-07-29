@@ -66,7 +66,8 @@ class LiquibaseSchemaDriftIT {
           "sequence_tenant",
           "sequence_tenant_admin_controls",
           "sequence_tenant_dpa_signature",
-          "sequence_tenant_dpa_version"
+          "sequence_tenant_dpa_version",
+          "sequence_tenant_dpa_admin_signature"
         }) {
       Integer count =
           jdbcTemplate.queryForObject(
@@ -83,7 +84,11 @@ class LiquibaseSchemaDriftIT {
   void allEntityTables_shouldExist() {
     for (String table :
         new String[] {
-          "tenant", "tenant_admin_controls", "tenant_dpa_signature", "tenant_dpa_version"
+          "tenant",
+          "tenant_admin_controls",
+          "tenant_dpa_signature",
+          "tenant_dpa_version",
+          "tenant_dpa_admin_signature"
         }) {
       Integer count =
           jdbcTemplate.queryForObject(

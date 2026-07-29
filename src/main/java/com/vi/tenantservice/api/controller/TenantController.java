@@ -5,11 +5,13 @@ import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.DpaAdminSignRequestDTO;
 import com.vi.tenantservice.api.model.DpaGateStatusDTO;
 import com.vi.tenantservice.api.model.DpaSignInviteDTO;
 import com.vi.tenantservice.api.model.DpaSignPreviewDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaSignatureRequestDTO;
+import com.vi.tenantservice.api.model.DpaStatusDTO;
 import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NextFreeTenantIdDTO;
@@ -175,6 +177,30 @@ public class TenantController implements TenantApi, TenantadminApi {
   ResponseEntity<Void> handleDpaNotPublished(DpaNotPublishedException e) {
     log.info("DPA sign invite rejected: {}", e.getMessage());
     return new ResponseEntity<>(HttpStatus.CONFLICT);
+  }
+
+  /**
+   * Authoritative DPA state of a tenant for its authenticated tenant admins (TEN-INV-U9). The
+   * facade guard restricts single-tenant admins to their own tenant.
+   */
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  public ResponseEntity<DpaStatusDTO> getDataProcessingAgreementStatus(@NotNull Long id) {
+    return new ResponseEntity<>(tenantDpaFacade.getDpaStatus(id), HttpStatus.OK);
+  }
+
+  /**
+   * In-app signing of the currently published DPA version by an authenticated tenant admin. The
+   * signer identity is taken from the access token; the submitted form is persisted append-only.
+   */
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<DpaStatusDTO> signDataProcessingAgreement(
+      @NotNull Long id, @Valid DpaAdminSignRequestDTO request) {
+    if (!Boolean.TRUE.equals(request.getAccepted())) {
+      return ResponseEntity.badRequest().build();
+    }
+    return new ResponseEntity<>(tenantDpaFacade.signDpa(id, request), HttpStatus.OK);
   }
 
   @Override

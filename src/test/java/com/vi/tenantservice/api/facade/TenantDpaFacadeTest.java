@@ -12,13 +12,17 @@ import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
+import com.vi.tenantservice.api.model.TenantDpaStatus;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
+import com.vi.tenantservice.api.service.GoverningDpaResolver;
 import com.vi.tenantservice.api.service.TenantDpaService;
+import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.api.validation.InputSanitizer;
+import com.vi.tenantservice.config.security.AuthorisationService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -34,9 +38,12 @@ import org.springframework.security.access.AccessDeniedException;
 class TenantDpaFacadeTest {
 
   @Mock private TenantDpaService tenantDpaService;
+  @Mock private TenantDpaStatusService tenantDpaStatusService;
+  @Mock private GoverningDpaResolver governingDpaResolver;
   @Mock private TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   @Mock private TenantService tenantService;
   @Mock private InputSanitizer inputSanitizer;
+  @Mock private AuthorisationService authorisationService;
   @InjectMocks private TenantDpaFacade tenantDpaFacade;
 
   @Test
@@ -82,13 +89,10 @@ class TenantDpaFacadeTest {
   }
 
   @Test
-  void getGateStatus_Should_reportPublishedAndSigned() {
+  void getGateStatus_Should_reportPublishedAndSigned_When_theAuthoritativeStatusIsValid() {
     // given
-    var version = LocalDateTime.now();
-    var tenant = new TenantEntity();
-    tenant.setContentDataProcessingAgreementActivationDate(version);
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(tenant));
-    when(tenantDpaService.isSignedForVersion(5L, version)).thenReturn(true);
+    var version = LocalDateTime.of(2026, 7, 19, 20, 0);
+    givenStatus(5L, TenantDpaStatus.VALID, version);
 
     // when
     var status = tenantDpaFacade.getGateStatus(5L);
@@ -100,9 +104,9 @@ class TenantDpaFacadeTest {
   }
 
   @Test
-  void getGateStatus_Should_reportNotPublished_andSkipSignedCheck_When_noActivationDate() {
-    // given a tenant with no DPA activation date (not published)
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
+  void getGateStatus_Should_reportNotPublished_When_noDpaIsInForce() {
+    // given a tenant with no DPA of its own and no governing operator DPA
+    givenStatus(5L, TenantDpaStatus.MISSING, null);
 
     // when
     var status = tenantDpaFacade.getGateStatus(5L);
@@ -110,48 +114,36 @@ class TenantDpaFacadeTest {
     // then
     assertThat(status.getDpaPublished()).isFalse();
     assertThat(status.getDpaSigned()).isFalse();
-    verify(tenantDpaService, never()).isSignedForVersion(any(), any());
   }
 
+  /**
+   * The gate must agree with the U9 status: a tenant measured against the governing operator DPA is
+   * "published" for the gate too, otherwise signing it in-app leaves agency work blocked forever.
+   */
   @Test
-  void getGateStatus_Should_recoverLatestPublishedVersion_When_tenantActivationWasCleared() {
-    var version = LocalDateTime.of(2026, 7, 19, 20, 0);
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
-    when(tenantDpaService.getVersions(5L))
-        .thenReturn(
-            List.of(
-                TenantDpaVersionEntity.builder()
-                    .tenantId(5L)
-                    .activationDate(version)
-                    .content("{\"de\":\"published\"}")
-                    .build()));
-    when(tenantDpaService.isSignedForVersion(5L, version)).thenReturn(true);
+  void getGateStatus_Should_reportPublishedButUnsigned_When_theGoverningDpaIsNotSignedYet() {
+    givenStatus(5L, TenantDpaStatus.UNSIGNED, LocalDateTime.of(2026, 7, 19, 20, 0));
 
     var status = tenantDpaFacade.getGateStatus(5L);
 
     assertThat(status.getDpaPublished()).isTrue();
-    assertThat(status.getDpaSigned()).isTrue();
-  }
-
-  @Test
-  void getGateStatus_Should_notRecoverHistory_When_tenantDoesNotExist() {
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.empty());
-
-    var status = tenantDpaFacade.getGateStatus(5L);
-
-    assertThat(status.getDpaPublished()).isFalse();
     assertThat(status.getDpaSigned()).isFalse();
-    verify(tenantDpaService, never()).getVersions(any());
-    verify(tenantDpaService, never()).isSignedForVersion(any(), any());
+  }
+
+  private void givenStatus(Long tenantId, TenantDpaStatus status, LocalDateTime currentVersion) {
+    when(tenantDpaStatusService.getStatus(tenantId))
+        .thenReturn(
+            new TenantDpaStatusService.DpaStatusView(
+                tenantId, status, currentVersion, null, null, null));
   }
 
   @Test
-  void createSignInvite_Should_returnTokenAndLink_When_dpaPublished() {
-    // given a tenant with a published DPA
-    var tenant = new TenantEntity();
-    tenant.setContentDataProcessingAgreementActivationDate(LocalDateTime.now());
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(tenant));
-    when(tenantDpaService.createSignInvite(eq(5L), any(), any())).thenReturn("RAWTOKEN");
+  void createSignInvite_Should_returnTokenAndLink_When_aDpaIsInForce() {
+    // given a tenant governed by its own published DPA
+    var version = LocalDateTime.of(2026, 7, 19, 20, 0);
+    when(governingDpaResolver.resolve(5L))
+        .thenReturn(new GoverningDpaResolver.GoverningDpa(5L, version));
+    when(tenantDpaService.createSignInvite(eq(5L), eq(version), any())).thenReturn("RAWTOKEN");
 
     // when
     var result = tenantDpaFacade.createSignInvite(5L);
@@ -164,9 +156,9 @@ class TenantDpaFacadeTest {
   }
 
   @Test
-  void createSignInvite_Should_throw_When_dpaNotPublished() {
-    // given a tenant with no DPA activation date
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
+  void createSignInvite_Should_throw_When_noDpaIsInForce() {
+    // given a tenant with no DPA of its own and no governing operator DPA
+    when(governingDpaResolver.resolve(5L)).thenReturn(null);
 
     // when / then
     assertThatThrownBy(() -> tenantDpaFacade.createSignInvite(5L))
@@ -174,24 +166,23 @@ class TenantDpaFacadeTest {
     verify(tenantDpaService, never()).createSignInvite(any(), any(), any());
   }
 
+  /**
+   * The forwarding path covers the same governing document as the in-app path (#569): the invite
+   * carries the OPERATOR's version but is recorded under the TENANT, so the resulting signature
+   * counts for that tenant's gate.
+   */
   @Test
-  void createSignInvite_Should_recoverLatestPublishedVersion_When_tenantActivationWasCleared() {
-    var version = LocalDateTime.of(2026, 7, 19, 20, 0);
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
-    when(tenantDpaService.getVersions(5L))
-        .thenReturn(
-            List.of(
-                TenantDpaVersionEntity.builder()
-                    .tenantId(5L)
-                    .activationDate(version)
-                    .content("{\"de\":\"published\"}")
-                    .build()));
-    when(tenantDpaService.createSignInvite(eq(5L), eq(version), any())).thenReturn("RAWTOKEN");
+  void createSignInvite_Should_forwardTheOperatorVersion_UnderTheTenantId() {
+    var operatorVersion = LocalDateTime.of(2026, 7, 19, 20, 0);
+    when(governingDpaResolver.resolve(5L))
+        .thenReturn(new GoverningDpaResolver.GoverningDpa(1L, operatorVersion));
+    when(tenantDpaService.createSignInvite(eq(5L), eq(operatorVersion), any()))
+        .thenReturn("RAWTOKEN");
 
     var result = tenantDpaFacade.createSignInvite(5L);
 
     assertThat(result.getToken()).isEqualTo("RAWTOKEN");
-    verify(tenantDpaService).createSignInvite(eq(5L), eq(version), any());
+    verify(tenantDpaService).createSignInvite(eq(5L), eq(operatorVersion), any());
   }
 
   @Test
@@ -216,7 +207,8 @@ class TenantDpaFacadeTest {
 
   @Test
   void getVersions_Should_assertTenantAccess_andMapVersions() {
-    // given
+    // given a tenant governed by its own published DPA
+    when(governingDpaResolver.documentTenantIdFor(5L)).thenReturn(5L);
     when(tenantDpaService.getVersions(5L))
         .thenReturn(
             List.of(
@@ -233,6 +225,35 @@ class TenantDpaFacadeTest {
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getContent()).isEqualTo("{\"de\":\"x\"}");
     assertThat(result.get(0).getActivationDate()).isNotBlank();
+  }
+
+  /**
+   * The document a tenant is MEASURED against must be the document it can READ (#569): otherwise
+   * the U10 blocker renders with nothing to sign and cannot be resolved.
+   */
+  @Test
+  void getVersions_Should_serveTheGoverningOperatorDocument_When_theTenantHasNoOwnDpa() {
+    // given a tenant governed by the operator DPA (tenant 1)
+    when(governingDpaResolver.documentTenantIdFor(5L)).thenReturn(1L);
+    when(tenantDpaService.getVersions(1L))
+        .thenReturn(
+            List.of(
+                TenantDpaVersionEntity.builder()
+                    .tenantId(1L)
+                    .activationDate(LocalDateTime.of(2026, 7, 1, 12, 0))
+                    .content("{\"de\":\"operator\",\"en\":\"operator-en\"}")
+                    .build()));
+
+    // when
+    var result = tenantDpaFacade.getVersions(5L);
+
+    // then the full multilingual map is passed through — the caller picks the signer's language
+    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
+    verify(tenantDpaService, never()).getVersions(5L);
+    assertThat(result).hasSize(1);
+    assertThat(result.get(0).getContent())
+        .isEqualTo("{\"de\":\"operator\",\"en\":\"operator-en\"}");
+    assertThat(result.get(0).getActivationDate()).isEqualTo("2026-07-01T12:00");
   }
 
   @Test

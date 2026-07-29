@@ -84,6 +84,22 @@ public class MultilingualTenantTestDataBuilder {
     return this;
   }
 
+  /** The onboarding DPA acceptance carried into the creating call (#569, TEN-INV-U9). */
+  public MultilingualTenantTestDataBuilder withOnboardingDpaAcceptance(
+      String signerUserId, String signerName, String dpaVersion) {
+    tenantMultilingualDTO.setOnboardingDpaAcceptance(
+        new com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO()
+            .accepted(true)
+            .signerUserId(signerUserId)
+            .signerUsername(signerName)
+            .signerName(signerName)
+            .signerPosition("Geschäftsführung")
+            .signerEmail("toni@example.org")
+            .signerOrganisation("Träger Nord e.V.")
+            .dpaVersion(dpaVersion));
+    return this;
+  }
+
   public MultilingualTenantTestDataBuilder withLicensing() {
     tenantMultilingualDTO.setLicensing(licensing(ALLOWED_NUMBER_OF_CONSULTANTS));
     return this;

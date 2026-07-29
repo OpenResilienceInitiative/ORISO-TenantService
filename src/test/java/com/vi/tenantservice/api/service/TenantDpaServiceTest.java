@@ -19,10 +19,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -32,7 +32,18 @@ class TenantDpaServiceTest {
   @Mock private TenantDpaSignatureRepository signatureRepository;
   @Mock private TenantDpaVersionRepository versionRepository;
   @Mock private TenantRepository tenantRepository;
-  @InjectMocks private TenantDpaService tenantDpaService;
+
+  private TenantDpaService tenantDpaService;
+
+  @BeforeEach
+  void setUp() {
+    // the governing-document resolver runs for real over the mocked repositories: the preview must
+    // resolve the exact snapshot the invite was issued for (#569)
+    var governingDpaResolver = new GoverningDpaResolver(tenantRepository, versionRepository);
+    tenantDpaService =
+        new TenantDpaService(
+            signatureRepository, versionRepository, tenantRepository, governingDpaResolver);
+  }
 
   @Test
   void recordSignature_Should_persistSignedRecordWithVersionAndSigner() {
