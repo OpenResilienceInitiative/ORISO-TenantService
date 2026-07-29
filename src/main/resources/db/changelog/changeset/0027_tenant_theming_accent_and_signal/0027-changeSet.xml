@@ -1,0 +1,38 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Persist the light accent and the signal colour of the tenant seed set
+      (ORISO-TenantService#154).
+
+      The Admin theme builder has always submitted the full seed set
+      { primaryColor, accent, secondaryColor, signal }, but only primaryColor and
+      secondaryColor had columns, so the light accent ("Helle Akzentfarbe") and the
+      signal colour were accepted with a 2xx and thrown away. theming_primary_color
+      keeps its meaning unchanged (it is the DARK accent; other consumers depend on it)
+      and theming_accent is its LIGHT counterpart. theming_signal is added in the same
+      changeset so no field the Admin panel sends stays silently dropped.
+
+      MIGRATION DECISION — deliberately NO backfill. Existing tenants get NULL, not a
+      value derived from theming_primary_color. A derived colour written into the column
+      would be indistinguishable from one an administrator actually chose, which is the
+      exact failure mode this issue is about. NULL is the honest state "never configured";
+      consumers derive their own light accent from primaryColor and must present it as
+      derived. Both columns are therefore nullable, and no UPDATE runs here.
+
+      varchar(15) matches the existing theming_primary_color / theming_secondary_color
+      columns; the precondition marks the changeset ran where the columns already exist,
+      so it is safe on fresh and on already-patched databases.
+    -->
+    <changeSet author="oriso" id="addThemingAccentAndSignal">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant" columnName="theming_accent"/>
+            </not>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0027_tenant_theming_accent_and_signal/addThemingAccentAndSignal.sql" stripComments="true" />
+        <rollback>
+            <sql>ALTER TABLE `tenantservice`.`tenant` DROP COLUMN `theming_accent`, DROP COLUMN `theming_signal`;</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

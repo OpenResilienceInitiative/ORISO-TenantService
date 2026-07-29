@@ -111,6 +111,8 @@ class TenantInputSanitizerTest {
         .sanitizeAllowingFormattingAndLinks(Mockito.anyString());
     verify(inputSanitizer).sanitize(tenantDTO.getTheming().getPrimaryColor());
     verify(inputSanitizer).sanitize(tenantDTO.getTheming().getSecondaryColor());
+    verify(inputSanitizer).sanitize(tenantDTO.getTheming().getAccent());
+    verify(inputSanitizer).sanitize(tenantDTO.getTheming().getSignal());
     verifyNoMoreInteractions(inputSanitizer);
   }
 

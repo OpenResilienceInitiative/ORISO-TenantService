@@ -49,4 +49,7 @@
   <include file="db/changelog/changeset/0022_widen_tenant_settings_column/0022-changeSet.xml"/>
   <include file="db/changelog/changeset/0023_tenant_media/0023-changeSet.xml"/>
   <include file="db/changelog/changeset/0024_tenant_id_reservation/0024-changeSet.xml"/>
+  <!-- 0025/0026 are reserved by the open DPA stack (PR #149); this changeset takes 0027 so the
+       two branches never claim the same number. -->
+  <include file="db/changelog/changeset/0027_tenant_theming_accent_and_signal/0027-changeSet.xml"/>
 </databaseChangeLog>

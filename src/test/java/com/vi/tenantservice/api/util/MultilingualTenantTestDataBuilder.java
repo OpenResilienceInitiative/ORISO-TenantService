@@ -22,6 +22,8 @@ public class MultilingualTenantTestDataBuilder {
   private static final String CLAIM = "claim";
   private static final String SECONDARY_COLOR = "secondaryColor";
   private static final String PRIMARY_COLOR = "primary color";
+  private static final String ACCENT = "accent color";
+  private static final String SIGNAL = "signal color";
   private static final String FAVICON = "favicon";
   private static final String LOGO = "logo";
   private static final int ALLOWED_NUMBER_OF_CONSULTANTS = 2000;
@@ -132,10 +134,23 @@ public class MultilingualTenantTestDataBuilder {
     return tenantMultilingualDTO;
   }
 
+  /**
+   * The colour pair the Admin theme builder submits: {@code primaryColor} is the dark accent and
+   * {@code accent} the light accent (ORISO-TenantService#154).
+   */
+  public MultilingualTenantTestDataBuilder withThemingAccents(
+      String accentDark, String accentLight, String signal) {
+    tenantMultilingualDTO.setTheming(
+        new Theming().primaryColor(accentDark).accent(accentLight).signal(signal));
+    return this;
+  }
+
   private Theming theming() {
     Theming theming = new Theming();
     theming.setSecondaryColor(SECONDARY_COLOR);
     theming.setPrimaryColor(PRIMARY_COLOR);
+    theming.setAccent(ACCENT);
+    theming.setSignal(SIGNAL);
     theming.setFavicon(FAVICON);
     theming.setLogo(LOGO);
     return theming;

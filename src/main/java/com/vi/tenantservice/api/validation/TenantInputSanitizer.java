@@ -49,6 +49,8 @@ public class TenantInputSanitizer {
       output.getTheming().setFavicon(inputSanitizer.sanitize(theming.getFavicon()));
       output.getTheming().setPrimaryColor(inputSanitizer.sanitize(theming.getPrimaryColor()));
       output.getTheming().setSecondaryColor(inputSanitizer.sanitize(theming.getSecondaryColor()));
+      output.getTheming().setAccent(inputSanitizer.sanitize(theming.getAccent()));
+      output.getTheming().setSignal(inputSanitizer.sanitize(theming.getSignal()));
       output.getTheming().setAssociationLogo(inputSanitizer.sanitize(theming.getAssociationLogo()));
     }
   }
