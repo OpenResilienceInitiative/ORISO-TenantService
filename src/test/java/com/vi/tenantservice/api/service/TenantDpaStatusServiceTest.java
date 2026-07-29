@@ -27,6 +27,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 
 /**
@@ -37,6 +38,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 class TenantDpaStatusServiceTest {
 
   private static final Long TENANT_ID = 7L;
+  private static final Long OPERATOR_TENANT_ID = 1L;
   private static final LocalDateTime VERSION_1 = LocalDateTime.of(2026, 5, 1, 10, 0);
   private static final LocalDateTime VERSION_2 = LocalDateTime.of(2026, 7, 1, 12, 0);
 
@@ -56,6 +58,24 @@ class TenantDpaStatusServiceTest {
                     .id(TENANT_ID)
                     .contentDataProcessingAgreementActivationDate(version)
                     .build()));
+  }
+
+  /** The governing operator DPA (#569): tenant {@code app.dpa.operator-tenant-id}. */
+  private void givenOperatorDpa(LocalDateTime version) {
+    ReflectionTestUtils.setField(service, "operatorTenantId", OPERATOR_TENANT_ID);
+    when(tenantRepository.findById(OPERATOR_TENANT_ID))
+        .thenReturn(
+            Optional.of(
+                TenantEntity.builder()
+                    .id(OPERATOR_TENANT_ID)
+                    .contentDataProcessingAgreementActivationDate(version)
+                    .build()));
+  }
+
+  private void givenTenantWithoutOwnDpa() {
+    givenTenantWithEmbeddedVersion(null);
+    when(versionRepository.findByTenantIdOrderByActivationDateDesc(TENANT_ID))
+        .thenReturn(List.of());
   }
 
   private void givenNoSignatures() {
@@ -321,6 +341,221 @@ class TenantDpaStatusServiceTest {
     // the losing writer must not blow up; it reports the (re-computed) authoritative status
     assertThat(status).isNotNull();
     assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
+  }
+
+  // --- governing operator DPA (#569) -------------------------------------------------------
+
+  /**
+   * Frank's domain rule (2026-07-29): there is one governing operator DPA. A tenant that never
+   * published one of its own — every tenant created through the public onboarding, and every tenant
+   * a platform admin seeds directly — is measured against the operator's version.
+   */
+  @Test
+  void getStatus_Should_measureAgainstTheOperatorDpa_When_theTenantPublishedNoneOfItsOwn() {
+    givenOperatorDpa(VERSION_2);
+    givenTenantWithoutOwnDpa();
+    givenNoSignatures();
+
+    var status = service.getStatus(TENANT_ID);
+
+    // blocked, but ACTIONABLE: the admin can sign the operator DPA in-app (was: MISSING)
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
+    assertThat(status.currentVersion()).isEqualTo(VERSION_2);
+  }
+
+  @Test
+  void getStatus_Should_returnValid_When_theOnboardingSignatureCoversTheOperatorVersion() {
+    givenOperatorDpa(VERSION_2);
+    givenTenantWithoutOwnDpa();
+    when(adminSignatureRepository.findByTenantIdOrderBySignedAtDescIdDesc(TENANT_ID))
+        .thenReturn(List.of(adminSignature(VERSION_2)));
+    when(signatureRepository.findByTenantIdAndStatus(TENANT_ID, DpaSignatureStatus.SIGNED))
+        .thenReturn(List.of());
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.VALID);
+    assertThat(status.currentVersion()).isEqualTo(VERSION_2);
+    assertThat(status.signedVersion()).isEqualTo(VERSION_2);
+  }
+
+  /** The fallback is additive: a tenant with its own published DPA keeps being measured by it. */
+  @Test
+  void getStatus_Should_notFallBackToTheOperator_When_theTenantHasItsOwnPublishedDpa() {
+    ReflectionTestUtils.setField(service, "operatorTenantId", OPERATOR_TENANT_ID);
+    givenTenantWithEmbeddedVersion(VERSION_1);
+    when(adminSignatureRepository.findByTenantIdOrderBySignedAtDescIdDesc(TENANT_ID))
+        .thenReturn(List.of(adminSignature(VERSION_1)));
+    when(signatureRepository.findByTenantIdAndStatus(TENANT_ID, DpaSignatureStatus.SIGNED))
+        .thenReturn(List.of());
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.VALID);
+    assertThat(status.currentVersion()).isEqualTo(VERSION_1);
+  }
+
+  @Test
+  void getStatus_Should_returnMissing_When_notEvenTheOperatorPublishedADpa() {
+    ReflectionTestUtils.setField(service, "operatorTenantId", OPERATOR_TENANT_ID);
+    givenTenantWithoutOwnDpa();
+    when(tenantRepository.findById(OPERATOR_TENANT_ID))
+        .thenReturn(Optional.of(TenantEntity.builder().id(OPERATOR_TENANT_ID).build()));
+    when(versionRepository.findByTenantIdOrderByActivationDateDesc(OPERATOR_TENANT_ID))
+        .thenReturn(List.of());
+    givenNoSignatures();
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.MISSING);
+  }
+
+  /** An absent tenant must never look like "has a contract in force". */
+  @Test
+  void getStatus_Should_notResolveAnyVersion_When_theTenantDoesNotExist() {
+    ReflectionTestUtils.setField(service, "operatorTenantId", OPERATOR_TENANT_ID);
+    when(tenantRepository.findById(TENANT_ID)).thenReturn(Optional.empty());
+    givenNoSignatures();
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.MISSING);
+    assertThat(status.currentVersion()).isNull();
+  }
+
+  // --- onboarding acceptance (#569) --------------------------------------------------------
+
+  @Test
+  void signOnboarding_Should_persistTheAcceptanceWithTheSignerIdentityPassedIn() {
+    givenOperatorDpa(VERSION_2);
+    givenTenantWithoutOwnDpa();
+    givenNoSignatures();
+
+    var status =
+        service.signOnboarding(
+            TENANT_ID,
+            "onboarded-admin-id",
+            "toni@traeger-nord.example",
+            VERSION_2,
+            new TenantDpaStatusService.AdminSignatureForm(
+                "Toni Tenantadmin",
+                "Geschäftsführung",
+                "toni@traeger-nord.example",
+                "Träger Nord e.V.",
+                null,
+                "{\"accepted\":true}"));
+
+    var captor = ArgumentCaptor.forClass(TenantDpaAdminSignatureEntity.class);
+    verify(adminSignatureRepository).save(captor.capture());
+    var saved = captor.getValue();
+    assertThat(saved.getTenantId()).isEqualTo(TENANT_ID);
+    assertThat(saved.getDpaVersion()).isEqualTo(VERSION_2);
+    assertThat(saved.getSignerUserId()).isEqualTo("onboarded-admin-id");
+    assertThat(saved.getSignerUsername()).isEqualTo("toni@traeger-nord.example");
+    assertThat(saved.getSignerName()).isEqualTo("Toni Tenantadmin");
+    assertThat(saved.getSignerOrganisation()).isEqualTo("Träger Nord e.V.");
+    assertThat(saved.getFormData()).contains("\"accepted\":true");
+    assertThat(saved.getSignedAt()).isNotNull();
+    assertThat(status).isNotNull();
+  }
+
+  @Test
+  void signOnboarding_Should_useTheVersionInForce_When_noShownVersionIsSubmitted() {
+    givenOperatorDpa(VERSION_2);
+    givenTenantWithoutOwnDpa();
+    givenNoSignatures();
+
+    service.signOnboarding(
+        TENANT_ID,
+        "onboarded-admin-id",
+        "toni",
+        null,
+        new TenantDpaStatusService.AdminSignatureForm("Toni", null, null, null, null, "{}"));
+
+    var captor = ArgumentCaptor.forClass(TenantDpaAdminSignatureEntity.class);
+    verify(adminSignatureRepository).save(captor.capture());
+    assertThat(captor.getValue().getDpaVersion()).isEqualTo(VERSION_2);
+  }
+
+  /**
+   * The operator republished between rendering the text and submitting the registration: the
+   * signature records what was actually shown, so the tenant lands on OUTDATED (blocked but
+   * signable in-app) instead of claiming a signature on unseen wording.
+   */
+  @Test
+  void signOnboarding_Should_recordTheShownVersion_When_theOperatorRepublishedInBetween() {
+    givenOperatorDpa(VERSION_2);
+    givenTenantWithoutOwnDpa();
+    givenNoSignatures();
+    when(versionRepository.findFirstByTenantIdAndActivationDate(TENANT_ID, VERSION_1))
+        .thenReturn(Optional.empty());
+    when(versionRepository.findFirstByTenantIdAndActivationDate(OPERATOR_TENANT_ID, VERSION_1))
+        .thenReturn(
+            Optional.of(
+                TenantDpaVersionEntity.builder()
+                    .tenantId(OPERATOR_TENANT_ID)
+                    .activationDate(VERSION_1)
+                    .content("{}")
+                    .build()));
+
+    service.signOnboarding(
+        TENANT_ID,
+        "onboarded-admin-id",
+        "toni",
+        VERSION_1,
+        new TenantDpaStatusService.AdminSignatureForm("Toni", null, null, null, null, "{}"));
+
+    var captor = ArgumentCaptor.forClass(TenantDpaAdminSignatureEntity.class);
+    verify(adminSignatureRepository).save(captor.capture());
+    assertThat(captor.getValue().getDpaVersion()).isEqualTo(VERSION_1);
+  }
+
+  @Test
+  void signOnboarding_Should_reject_When_theSubmittedVersionWasNeverPublished() {
+    givenOperatorDpa(VERSION_2);
+    givenTenantWithoutOwnDpa();
+    givenNoSignatures();
+    when(versionRepository.findFirstByTenantIdAndActivationDate(TENANT_ID, VERSION_1))
+        .thenReturn(Optional.empty());
+    when(versionRepository.findFirstByTenantIdAndActivationDate(OPERATOR_TENANT_ID, VERSION_1))
+        .thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                service.signOnboarding(
+                    TENANT_ID,
+                    "onboarded-admin-id",
+                    "toni",
+                    VERSION_1,
+                    new TenantDpaStatusService.AdminSignatureForm(
+                        "Toni", null, null, null, null, "{}")))
+        .isInstanceOf(DpaNotPublishedException.class);
+
+    verify(adminSignatureRepository, never()).save(any());
+  }
+
+  @Test
+  void signOnboarding_Should_reject_When_noGoverningDpaIsPublishedAtAll() {
+    ReflectionTestUtils.setField(service, "operatorTenantId", OPERATOR_TENANT_ID);
+    givenTenantWithoutOwnDpa();
+    when(tenantRepository.findById(OPERATOR_TENANT_ID))
+        .thenReturn(Optional.of(TenantEntity.builder().id(OPERATOR_TENANT_ID).build()));
+    when(versionRepository.findByTenantIdOrderByActivationDateDesc(OPERATOR_TENANT_ID))
+        .thenReturn(List.of());
+    givenNoSignatures();
+
+    assertThatThrownBy(
+            () ->
+                service.signOnboarding(
+                    TENANT_ID,
+                    "onboarded-admin-id",
+                    "toni",
+                    null,
+                    new TenantDpaStatusService.AdminSignatureForm(
+                        "Toni", null, null, null, null, "{}")))
+        .isInstanceOf(DpaNotPublishedException.class);
+
+    verify(adminSignatureRepository, never()).save(any());
   }
 
   @Test
