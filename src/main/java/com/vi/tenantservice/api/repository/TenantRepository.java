@@ -18,6 +18,9 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
   @Query("SELECT t.id FROM TenantEntity t WHERE t.subdomain = :subdomain")
   Long findIdBySubdomain(@Param("subdomain") String subdomain);
 
+  @Query("SELECT t.id FROM TenantEntity t")
+  List<Long> findAllIds();
+
   @Query(
       value =
           "SELECT new com.vi.tenantservice.api.model.TenantDataView("
@@ -32,6 +35,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.themingFavicon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
+              + "t.themingAccent, "
+              + "t.themingSignal, "
               + "t.contentImpressum, "
               + "t.contentClaim, "
               + "t.contentPrivacy, "
@@ -58,6 +63,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.themingFavicon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
+              + "t.themingAccent, "
+              + "t.themingSignal, "
               + "t.contentImpressum, "
               + "t.contentClaim, "
               + "t.contentPrivacy, "
@@ -84,6 +91,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.themingFavicon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
+              + "t.themingAccent, "
+              + "t.themingSignal, "
               + "t.contentImpressum, "
               + "t.contentClaim, "
               + "t.contentPrivacy, "
@@ -114,6 +123,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.themingFavicon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
+              + "t.themingAccent, "
+              + "t.themingSignal, "
               + "t.contentImpressum, "
               + "t.contentClaim, "
               + "t.contentPrivacy, "
@@ -135,6 +146,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.themingFavicon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
+              + "t.themingAccent, "
+              + "t.themingSignal, "
               + "t.contentImpressum, "
               + "t.contentClaim, "
               + "t.contentPrivacy, "
@@ -156,6 +169,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.themingFavicon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
+              + "t.themingAccent, "
+              + "t.themingSignal, "
               + "t.contentImpressum, "
               + "t.contentClaim, "
               + "t.contentPrivacy, "

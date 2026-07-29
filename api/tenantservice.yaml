@@ -28,8 +28,13 @@ paths:
           description: BAD REQUEST - invalid/incomplete request or body object
         401:
           description: UNAUTHORIZED - no/invalid Keycloak token
+        409:
+          description: CONFLICT - the requested tenant ID is already assigned or reserved
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+        503:
+          description: SERVICE UNAVAILABLE - AUTO tenant ID allocation exhausted its retry
+            budget under contention; retry later
     get:
       tags:
         - tenant-controller
@@ -366,6 +371,143 @@ paths:
           description: Not found
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/tenant-ids/{id}/availability:
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Returns the allocation status of a single tenant ID [Authorization: platform admin]'
+      operationId: getTenantIdAvailability
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID to check
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        200:
+          description: OK - successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantIdAvailabilityDTO'
+        400:
+          description: BAD REQUEST - invalid/incomplete request
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - no platform admin authority
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
+  /tenantadmin/tenant-ids/next-free:
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Returns the next free tenant ID from a value in a direction, skipping assigned
+        and reserved IDs [Authorization: platform admin]'
+      operationId: getNextFreeTenantId
+      parameters:
+        - name: from
+          in: query
+          description: Value to navigate from (exclusive)
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: direction
+          in: query
+          description: Navigation direction
+          required: true
+          schema:
+            type: string
+            enum: [ UP, DOWN ]
+      responses:
+        200:
+          description: OK - successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NextFreeTenantIdDTO'
+        400:
+          description: BAD REQUEST - invalid/incomplete request
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - no platform admin authority
+        404:
+          description: NOT FOUND - no free tenant ID exists in the given direction
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
+  /tenantadmin/tenant-ids/reservations:
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Reserves a tenant ID for an open invite. Without a tenantId in the body (AUTO
+        mode) the smallest currently free ID is reserved atomically [Authorization: platform admin]'
+      operationId: reserveTenantId
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/TenantIdReservationRequestDTO'
+      responses:
+        201:
+          description: CREATED - the ID was reserved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantIdReservationDTO'
+        400:
+          description: BAD REQUEST - invalid/incomplete request
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - no platform admin authority
+        409:
+          description: CONFLICT - the requested ID is already assigned or reserved
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+        503:
+          description: SERVICE UNAVAILABLE - AUTO reservation exhausted its retry budget
+            under contention; retry later
+      security:
+        - Bearer: [ ]
+  /tenantadmin/tenant-ids/reservations/{id}:
+    delete:
+      tags:
+        - tenant-controller
+      summary: 'Releases an unconsumed tenant ID reservation so the ID becomes assignable
+        again [Authorization: platform admin]'
+      operationId: releaseTenantIdReservation
+      parameters:
+        - name: id
+          in: path
+          description: Reserved tenant ID to release
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        204:
+          description: NO CONTENT - reservation released
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - no platform admin authority
+        404:
+          description: NOT FOUND - no open reservation exists for this ID
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
   /tenant:
     get:
       tags:
@@ -665,10 +807,14 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}/dpa/gate:
     summary: 'DPA legal-gate status of a tenant'
+    description: 'Boolean projection of the authoritative DPA status (/dpa/status): dpaPublished
+      means a DPA is in force for the tenant (its own or the governing operator DPA), dpaSigned
+      means that exact version is signed - by an authenticated tenant admin in-app or by the
+      authorised signer through a forwarded invite.'
     get:
       tags:
         - tenant-controller
-      summary: 'Whether the tenant DPA is published and signed [Authorization: Authority.GET_TENANT]'
+      summary: 'Whether a DPA is in force for the tenant and signed [Authorization: Authority.GET_TENANT]'
       operationId: getDataProcessingAgreementGate
       parameters:
         - name: id
@@ -691,6 +837,10 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}/dpa/invite:
     summary: 'Create a single-use DPA sign invite (link) for a tenant'
+    description: 'Forwarding path of the SAME single agreement: the natural person authorised to
+      sign for the tenant organisation need not be an app user. The invite covers the DPA version
+      in force for the tenant - its own published DPA, or the governing operator DPA - and the
+      resulting signature always belongs to this tenant.'
     post:
       tags:
         - tenant-controller
@@ -763,11 +913,17 @@ paths:
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}/dpa/versions:
-    summary: 'Published DPA versions of a tenant (newest first)'
+    summary: 'Published versions of the DPA in force for a tenant (newest first)'
+    description: 'The tenant''s own publish history if it authored a DPA, otherwise the governing
+      operator DPA (tenant app.dpa.operator-tenant-id) it is measured against - the same document
+      the DPA status and the in-app signing path use, so a tenant always has the agreement it is
+      blocked on available to read. The content is the unchanged multilingual map; the caller
+      picks the language.'
     get:
       tags:
         - tenant-controller
-      summary: 'Lists the published DPA versions of a tenant [Authorization: Authority.GET_TENANT]'
+      summary: 'Lists the published versions of the DPA in force for a tenant
+        [Authorization: Authority.GET_TENANT]'
       operationId: getDataProcessingAgreementVersions
       parameters:
         - name: id
@@ -788,6 +944,73 @@ paths:
                   $ref: '#/components/schemas/DpaVersionDTO'
         403:
           description: FORBIDDEN - not authorized to access this tenant
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/status:
+    summary: 'Authoritative DPA status of a tenant for its authenticated tenant admins'
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Returns the authoritative DPA state (MISSING, UNSIGNED, OUTDATED, VALID,
+        INCONSISTENT) of a tenant [Authorization: Authority.GET_TENANT]'
+      operationId: getDataProcessingAgreementStatus
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaStatusDTO'
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        404:
+          description: NOT FOUND - no tenant with the given id exists
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/sign:
+    summary: 'Sign the currently published DPA version as an authenticated tenant admin'
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Signs the current DPA version; persists signer identity, version, timestamp and
+        form data append-only. Idempotent for an already-VALID tenant.
+        [Authorization: Authority.UPDATE_TENANT]'
+      operationId: signDataProcessingAgreement
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DpaAdminSignRequestDTO'
+      responses:
+        200:
+          description: Successful operation - returns the resulting authoritative DPA status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaStatusDTO'
+        400:
+          description: BAD REQUEST - the agreement checkbox was not accepted
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        409:
+          description: CONFLICT - the tenant has no published DPA to sign yet
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/media:
@@ -973,6 +1196,70 @@ components:
           type: boolean
         dpaSigned:
           type: boolean
+    DpaStatusDTO:
+      type: object
+      required:
+        - tenantId
+        - status
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+          example: 7
+        status:
+          type: string
+          description: MISSING = no DPA ever published and nothing signed, UNSIGNED = published
+            but never signed, OUTDATED = only an older version is signed, VALID = the current
+            version is signed, INCONSISTENT = stored signature data contradicts the publish
+            history
+          enum: [ MISSING, UNSIGNED, OUTDATED, VALID, INCONSISTENT ]
+        currentDpaVersion:
+          type: string
+          description: Activation timestamp of the currently published DPA version, if any
+          example: "2026-07-01T12:00:00"
+        signedDpaVersion:
+          type: string
+          description: Newest DPA version a signature exists for, if any
+          example: "2026-05-01T10:00:00"
+        signedAt:
+          type: string
+          description: Timestamp of the signature covering the newest signed version
+          example: "2026-05-02T09:30:00"
+        signedBy:
+          type: string
+          description: Display name of the signer of the newest signed version
+          example: "Toni Tenantadmin"
+    DpaAdminSignRequestDTO:
+      type: object
+      required:
+        - signerName
+        - accepted
+      properties:
+        signerName:
+          type: string
+          maxLength: 255
+          example: "Toni Tenantadmin"
+        signerPosition:
+          type: string
+          maxLength: 255
+          example: "Geschäftsführung"
+        signerEmail:
+          type: string
+          maxLength: 255
+          format: email
+          example: "toni@example.org"
+        signerOrganisation:
+          type: string
+          maxLength: 255
+          example: "Träger Nord e.V."
+        accepted:
+          type: boolean
+          description: Must be true - the signer explicitly accepted the current DPA version
+          example: true
+        language:
+          type: string
+          maxLength: 10
+          example: "de"
     DpaSignatureRequestDTO:
       type: object
       required:
@@ -1115,6 +1402,13 @@ components:
               type: string
             updateDate:
               type: string
+            tenantIdReservationToken:
+              type: string
+              maxLength: 36
+              description: Token of an open tenant ID reservation. When creating a tenant with
+                a reserved ID, the matching token proves ownership of the reservation, which is
+                then consumed atomically with the creation. Without a matching token a reserved
+                ID is rejected with a conflict.
             licensing:
               $ref: '#/components/schemas/Licensing'
             theming:
@@ -1126,6 +1420,56 @@ components:
             settings:
               $ref:
                 '#/components/schemas/Settings'
+            onboardingDpaAcceptance:
+              $ref: '#/components/schemas/OnboardingDpaAcceptanceDTO'
+    OnboardingDpaAcceptanceDTO:
+      type: object
+      description: 'Creation-only: the data processing agreement acceptance a tenant admin gave
+        while onboarding through a public invite link (TEN-INV-U9/#569). Persisted append-only as
+        the tenant''s admin signature in the SAME unit of work as the tenant creation, so a tenant
+        never exists without the acceptance that created it. Ignored on update. Only the
+        tenant-creating authority (platform admin / technical user) may submit it, which is why
+        the signer identity is taken from the body instead of the access token: the signer is the
+        freshly created tenant admin, not the calling service account.'
+      required:
+        - accepted
+        - signerUserId
+        - signerName
+      properties:
+        accepted:
+          type: boolean
+          description: Must be true - the tenant admin explicitly accepted the agreement
+          example: true
+        signerUserId:
+          type: string
+          maxLength: 255
+          description: Keycloak user id of the tenant-admin account created for this onboarding
+        signerUsername:
+          type: string
+          maxLength: 255
+        signerName:
+          type: string
+          maxLength: 255
+          example: "Toni Tenantadmin"
+        signerPosition:
+          type: string
+          maxLength: 255
+        signerEmail:
+          type: string
+          maxLength: 255
+        signerOrganisation:
+          type: string
+          maxLength: 255
+        language:
+          type: string
+          maxLength: 10
+        dpaVersion:
+          type: string
+          description: Activation timestamp of the operator DPA version that was actually shown
+            to the signer (ISO-8601 local date-time, as served by DpaVersionDTO.activationDate).
+            Must be a genuinely published version; an unknown value is rejected with a conflict.
+            Omitted means "the version currently in force".
+          example: "2026-07-01T12:00:00"
     BasicTenantLicensingDTO:
       type: object
       required:
@@ -1188,6 +1532,10 @@ components:
           example: 1
     Theming:
       type: object
+      description: >-
+        Tenant branding. The two accents form a pair: `primaryColor` is the DARK accent
+        and `accent` is the LIGHT accent. Which one a surface uses depends on the surface's
+        background, not on the user's theme preference alone — see the field descriptions.
       properties:
         logo:
           type: string
@@ -1200,10 +1548,29 @@ components:
           example: "base64 encoded image"
         primaryColor:
           type: string
-          example: "#FFFFFF"
+          example: "#8B1A2B"
+          description: >-
+            The DARK accent ("Dunkle Akzentfarbe"). Used on LIGHT-MODE surfaces, where a dark
+            colour carries the contrast. Historic field name — semantics are unchanged and
+            existing consumers depend on it, so it is not renamed.
+        accent:
+          type: string
+          example: "#FFB3C7"
+          description: >-
+            The LIGHT accent ("Helle Akzentfarbe"). Used on DARK-MODE surfaces, where a light
+            colour carries the contrast. May be null for tenants configured before this field
+            existed; consumers then derive a light accent from `primaryColor` and must present
+            that as a derived value, never as a configured one.
         secondaryColor:
           type: string
           example: "#FFFFFF"
+        signal:
+          type: string
+          example: "#D93025"
+          description: >-
+            Optional signal/attention colour of the tenant seed set (errors, warnings,
+            destructive actions). Persisted so nothing the Admin panel submits is silently
+            dropped; may be null when the tenant has never configured one.
     Content:
       type: object
       required:
@@ -1799,3 +2166,55 @@ components:
           enum: [ GET, POST, DELETE, PUT ]
         templated:
           type: boolean
+
+    TenantIdAvailabilityDTO:
+      type: object
+      required:
+        - id
+        - status
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 21
+        status:
+          type: string
+          description: FREE = assignable, RESERVED = held by an open invite,
+            ASSIGNED = consumed by an existing tenant
+          enum: [ FREE, RESERVED, ASSIGNED ]
+
+    NextFreeTenantIdDTO:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 36
+
+    TenantIdReservationRequestDTO:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Specific tenant ID to reserve. Omit for AUTO mode, which reserves
+            the smallest currently free ID atomically.
+
+    TenantIdReservationDTO:
+      type: object
+      required:
+        - tenantId
+        - token
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+          example: 21
+        token:
+          type: string
+          maxLength: 36
+          description: Reservation token. Required to consume the reserved ID when the
+            tenant is created.

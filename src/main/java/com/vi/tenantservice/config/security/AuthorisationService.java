@@ -71,6 +71,20 @@ public class AuthorisationService {
     }
   }
 
+  /**
+   * Stable user id of the authenticated principal for audit trails: the {@code userId} claim when
+   * present (the Keycloak attribute the platform stamps into its tokens), otherwise the JWT
+   * subject.
+   */
+  public String getUserId() {
+    Jwt principal = getPrincipal();
+    Object userIdClaim = principal.getClaims().get("userId");
+    if (userIdClaim != null) {
+      return userIdClaim.toString();
+    }
+    return principal.getSubject();
+  }
+
   private Authentication getAuthentication() {
     return SecurityContextHolder.getContext().getAuthentication();
   }

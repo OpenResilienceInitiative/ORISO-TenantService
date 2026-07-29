@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api.controller;
 
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
+import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import jakarta.validation.ConstraintViolationException;
@@ -29,6 +30,12 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
       return handleExceptionInternal(ex, "", customHttpHeader, HttpStatus.BAD_REQUEST, request);
     }
     return handleExceptionInternal(ex, "", customHttpHeader, HttpStatus.CONFLICT, request);
+  }
+
+  @ExceptionHandler(value = {TenantIdAllocationConflictException.class})
+  @ResponseStatus(HttpStatus.CONFLICT)
+  protected void handleTenantIdAllocationConflict(TenantIdAllocationConflictException e) {
+    logger.info("Returning HTTP 409 Conflict for tenant ID allocation: " + e.getMessage());
   }
 
   @ExceptionHandler(value = {TenantAuthorisationException.class})

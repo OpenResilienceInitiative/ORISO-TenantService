@@ -11,6 +11,8 @@ import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
 import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
+import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
+import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
@@ -19,6 +21,7 @@ import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
+import com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminControls;
@@ -28,6 +31,9 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantDpaStatusService;
+import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
+import com.vi.tenantservice.api.service.TenantIdAllocationService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -41,9 +47,11 @@ import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsul
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
 import jakarta.ws.rs.BadRequestException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -70,7 +78,18 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 public class TenantServiceFacade {
 
   private static final int TECHNICAL_TENANT_ID = 0;
+
+  /** AUTO create retries share the allocation service's retry budget (TEN-INV hardening). */
+  private static final int MAX_AUTO_ID_CREATE_ATTEMPTS =
+      TenantIdAllocationService.MAX_AUTO_ATTEMPTS;
+
+  /** Column widths of tenant_dpa_admin_signature (changeset 0025) and the API contract. */
+  private static final int MAX_SIGNER_FIELD_LENGTH = 255;
+
+  private static final int MAX_LANGUAGE_LENGTH = 10;
+
   private final @NonNull TenantService tenantService;
+  private final @NonNull TenantIdAllocationService tenantIdAllocationService;
   private final @NonNull TenantConverter tenantConverter;
   private final @NonNull TenantInputSanitizer tenantInputSanitizer;
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
@@ -93,6 +112,8 @@ public class TenantServiceFacade {
 
   private final @NonNull TenantResolverService tenantResolverService;
 
+  private final @NonNull TenantDpaStatusService tenantDpaStatusService;
+
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
   @Value("${feature.multitenancy.with.single.domain.enabled}")
@@ -107,23 +128,169 @@ public class TenantServiceFacade {
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
-    TenantEntity createdTenant = tenantService.create(entity);
+    String reservationToken = tenantDTO.getTenantIdReservationToken();
+    TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
       createDefaultConsultingTypeSettings(createdTenant);
     } catch (ConsultingTypeCreationException ex) {
-      performRollback(createdTenant);
+      performRollback(createdTenant, reservationToken);
       log.error(
           "Error while creating consulting types for tenant with id {}", createdTenant.getId(), ex);
       throw new BadRequestException(
           "Error while creating consulting types for tenant with id " + createdTenant.getId());
     }
+    recordOnboardingDpaAcceptance(
+        createdTenant, tenantDTO.getOnboardingDpaAcceptance(), reservationToken);
     var createdTenantDto = tenantConverter.toMultilingualDTO(createdTenant);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(createdTenantDto);
     return createdTenantDto;
   }
 
-  private void performRollback(TenantEntity createdTenant) {
-    tenantService.delete(createdTenant);
+  /**
+   * Persists the DPA acceptance a tenant admin gave while onboarding through a public invite link
+   * (#569, TEN-INV-U9) as the tenant's append-only admin signature.
+   *
+   * <p>This runs INSIDE the tenant creation on purpose. The acceptance is the signature that makes
+   * the new tenant's DPA status VALID, so a tenant must never exist without it — otherwise the
+   * freshly onboarded admin logs in straight into the non-bypassable DPA blocker (U10) with nothing
+   * to act on. Recording it from the caller after the creation returned could not be compensated:
+   * the caller cannot restore a consumed ID reservation, whereas failing here reuses the very same
+   * rollback the consulting-type provisioning uses — tenant row deleted, reservation restored to
+   * RESERVED with its original token, so the invite link stays usable for a retry.
+   */
+  private void recordOnboardingDpaAcceptance(
+      TenantEntity createdTenant, OnboardingDpaAcceptanceDTO acceptance, String reservationToken) {
+    if (acceptance == null) {
+      return;
+    }
+    try {
+      if (!Boolean.TRUE.equals(acceptance.getAccepted())
+          || isBlank(acceptance.getSignerUserId())
+          || isBlank(acceptance.getSignerName())) {
+        throw new BadRequestException(
+            "onboardingDpaAcceptance requires accepted=true, signerUserId and signerName");
+      }
+      tenantDpaStatusService.signOnboarding(
+          createdTenant.getId(),
+          bounded(acceptance.getSignerUserId(), MAX_SIGNER_FIELD_LENGTH, "signerUserId"),
+          bounded(acceptance.getSignerUsername(), MAX_SIGNER_FIELD_LENGTH, "signerUsername"),
+          parseDpaVersion(acceptance.getDpaVersion()),
+          new AdminSignatureForm(
+              bounded(acceptance.getSignerName(), MAX_SIGNER_FIELD_LENGTH, "signerName"),
+              bounded(acceptance.getSignerPosition(), MAX_SIGNER_FIELD_LENGTH, "signerPosition"),
+              bounded(acceptance.getSignerEmail(), MAX_SIGNER_FIELD_LENGTH, "signerEmail"),
+              bounded(
+                  acceptance.getSignerOrganisation(),
+                  MAX_SIGNER_FIELD_LENGTH,
+                  "signerOrganisation"),
+              bounded(acceptance.getLanguage(), MAX_LANGUAGE_LENGTH, "language"),
+              buildOnboardingFormDataJson(acceptance)));
+    } catch (RuntimeException ex) {
+      performRollback(createdTenant, reservationToken);
+      log.error(
+          "Onboarding DPA acceptance could not be recorded for tenant {} — the tenant creation was"
+              + " rolled back so the acceptance is never silently lost",
+          createdTenant.getId(),
+          ex);
+      throw ex;
+    }
+  }
+
+  /** Verbatim JSON snapshot of the submitted onboarding acceptance (audit evidence). */
+  private String buildOnboardingFormDataJson(OnboardingDpaAcceptanceDTO acceptance) {
+    var formData = new LinkedHashMap<String, Object>();
+    formData.put("signerName", acceptance.getSignerName());
+    formData.put("signerPosition", acceptance.getSignerPosition());
+    formData.put("signerEmail", acceptance.getSignerEmail());
+    formData.put("signerOrganisation", acceptance.getSignerOrganisation());
+    formData.put("language", acceptance.getLanguage());
+    formData.put("accepted", acceptance.getAccepted());
+    formData.put("dpaVersion", acceptance.getDpaVersion());
+    formData.put("source", "PUBLIC_TENANT_ADMIN_ONBOARDING");
+    return convertToJson(formData);
+  }
+
+  /**
+   * The signer fields are PLAIN TEXT of an append-only legal record, so they are stored exactly as
+   * the signer submitted them (#569). Running them through an HTML sanitizer entity-encoded the
+   * audit trail — a stored value that no longer matches what was signed. They are never interpreted
+   * as markup here; consumers encode them at RENDER time (the admin UI sanitizes its own output).
+   *
+   * <p>Verbatim is not unbounded: a value longer than its column is rejected rather than silently
+   * truncated by the database. The API contract bounds these fields too ({@code maxLength} in
+   * tenantservice.yaml); this guard keeps the invariant when the facade is reached directly.
+   */
+  private static String bounded(String value, int maxLength, String field) {
+    if (value != null && value.length() > maxLength) {
+      throw new BadRequestException(
+          "onboardingDpaAcceptance." + field + " exceeds " + maxLength + " characters");
+    }
+    return value;
+  }
+
+  private static LocalDateTime parseDpaVersion(String dpaVersion) {
+    if (isBlank(dpaVersion)) {
+      return null;
+    }
+    try {
+      return LocalDateTime.parse(dpaVersion.trim());
+    } catch (DateTimeParseException ex) {
+      throw new BadRequestException("onboardingDpaAcceptance.dpaVersion is not a valid timestamp");
+    }
+  }
+
+  private static boolean isBlank(String value) {
+    return value == null || value.trim().isEmpty();
+  }
+
+  /**
+   * Creates the tenant with authoritative ID allocation (TEN-INV-U1). In AUTO mode (no ID in the
+   * request) a lost race for the smallest free ID is retried with the next candidate; exhausting
+   * the retry budget is a server-side contention condition and surfaces as HTTP 503. A manual ID
+   * conflict is never retried and surfaces as HTTP 409.
+   */
+  private TenantEntity createWithIdAllocationRetry(TenantEntity entity, String reservationToken) {
+    boolean autoMode = entity.getId() == null;
+    int attempts = autoMode ? MAX_AUTO_ID_CREATE_ATTEMPTS : 1;
+    TenantIdAllocationConflictException lastConflict = null;
+    for (int attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        return tenantService.create(entity, reservationToken);
+      } catch (TenantIdAllocationConflictException ex) {
+        lastConflict = ex;
+        if (autoMode) {
+          log.info("Lost the race for an AUTO tenant ID (attempt {}), retrying", attempt);
+          entity.setId(null);
+        }
+      }
+    }
+    if (autoMode) {
+      throw new TenantIdAllocationExhaustedException(
+          "Could not allocate an AUTO tenant ID after " + attempts + " attempts", lastConflict);
+    }
+    throw lastConflict;
+  }
+
+  /**
+   * Compensates a tenant creation whose consulting-type provisioning failed after commit. When the
+   * creation consumed an open invite's reservation, the ledger row is restored to RESERVED with its
+   * original token (the invite keeps its ID); a row created fresh in the failed creation is
+   * deleted. If the tenant row itself cannot be deleted, the ASSIGNED ledger row is deliberately
+   * kept: the ID is still occupied by the surviving tenant row, and deleting or restoring the
+   * ledger row would let a second allocation hand out the same ID twice.
+   */
+  private void performRollback(TenantEntity createdTenant, String reservationToken) {
+    try {
+      tenantService.delete(createdTenant);
+    } catch (RuntimeException ex) {
+      log.error(
+          "Rollback of tenant {} could not delete the tenant row; keeping its ASSIGNED ledger row"
+              + " so the ledger stays consistent with the surviving tenant",
+          createdTenant.getId(),
+          ex);
+      return;
+    }
+    tenantIdAllocationService.rollbackAssignment(createdTenant.getId(), reservationToken);
   }
 
   private void populateTenantSettingsAndActivationDates(
@@ -222,15 +389,10 @@ public class TenantServiceFacade {
   }
 
   private void validateCreateTenantInput(MultilingualTenantDTO tenantDTO) {
+    // A tenant ID in the request switches the creation to manual allocation mode; it is
+    // re-validated against the allocation ledger inside the creating transaction (TEN-INV-U1),
+    // so no upfront ID check happens here.
     validateTenantInput(tenantDTO);
-    validateId(tenantDTO);
-  }
-
-  private void validateId(MultilingualTenantDTO tenantDTO) {
-    if (nonNull(tenantDTO.getId())) {
-      throw new TenantValidationException(
-          HttpStatusExceptionReason.ID_MUST_BE_NULL_WHEN_CREATING_TENANT);
-    }
   }
 
   private void validateContent(MultilingualTenantDTO tenantDTO, List<String> isoCountries) {

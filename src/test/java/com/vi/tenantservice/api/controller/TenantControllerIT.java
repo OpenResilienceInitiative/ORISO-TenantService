@@ -86,6 +86,9 @@ class TenantControllerIT {
   private static final String SCRIPT_CONTENT = "<script>error</script>";
   private static final int PAGE_SIZE = 3;
   private static final int CONSULTING_TYPE_ID = 2;
+  private static final String ACCENT_DARK = "#8B1A2B";
+  private static final String ACCENT_LIGHT = "#FFB3C7";
+  private static final String SIGNAL_COLOR = "#D93025";
 
   @Autowired private WebApplicationContext context;
 
@@ -460,6 +463,73 @@ class TenantControllerIT {
                         .jsonify())
                 .contentType(APPLICATION_JSON))
         .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void updateTenant_Should_roundTripBothAccents_When_calledWithTenantAdminAuthority()
+      throws Exception {
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+
+    mockMvc
+        .perform(
+            put(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    multilingualTenantTestDataBuilder
+                        .withId(1L)
+                        .withName("tenant")
+                        .withSubdomain("accentsubdomain")
+                        .withThemingAccents(ACCENT_DARK, ACCENT_LIGHT, SIGNAL_COLOR)
+                        .withLicensing()
+                        .jsonify()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.primaryColor").value(ACCENT_DARK))
+        .andExpect(jsonPath("$.theming.accent").value(ACCENT_LIGHT))
+        .andExpect(jsonPath("$.theming.signal").value(SIGNAL_COLOR));
+
+    mockMvc
+        .perform(
+            get(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.primaryColor").value(ACCENT_DARK))
+        .andExpect(jsonPath("$.theming.accent").value(ACCENT_LIGHT))
+        .andExpect(jsonPath("$.theming.signal").value(SIGNAL_COLOR));
+  }
+
+  @Test
+  void getRestrictedTenantData_Should_exposeBothAccents_When_lightAccentWasSaved()
+      throws Exception {
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+
+    mockMvc
+        .perform(
+            put(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    multilingualTenantTestDataBuilder
+                        .withId(1L)
+                        .withName("tenant")
+                        .withSubdomain("accentsubdomain")
+                        .withThemingAccents(ACCENT_DARK, ACCENT_LIGHT, SIGNAL_COLOR)
+                        .withLicensing()
+                        .jsonify()))
+        .andExpect(status().isOk());
+
+    // the mail renderer and every other public consumer read the pair from this endpoint
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.primaryColor").value(ACCENT_DARK))
+        .andExpect(jsonPath("$.theming.accent").value(ACCENT_LIGHT))
+        .andExpect(jsonPath("$.theming.signal").value(SIGNAL_COLOR));
   }
 
   @Test

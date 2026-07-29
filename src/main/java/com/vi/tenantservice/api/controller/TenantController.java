@@ -5,16 +5,22 @@ import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.DpaAdminSignRequestDTO;
 import com.vi.tenantservice.api.model.DpaGateStatusDTO;
 import com.vi.tenantservice.api.model.DpaSignInviteDTO;
 import com.vi.tenantservice.api.model.DpaSignPreviewDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaSignatureRequestDTO;
+import com.vi.tenantservice.api.model.DpaStatusDTO;
 import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
+import com.vi.tenantservice.api.model.NextFreeTenantIdDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.model.TenantIdAvailabilityDTO;
+import com.vi.tenantservice.api.model.TenantIdReservationDTO;
+import com.vi.tenantservice.api.model.TenantIdReservationRequestDTO;
 import com.vi.tenantservice.api.model.TenantMediaResponseDTO;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeyUpdateDTO;
@@ -26,6 +32,7 @@ import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
 import com.vi.tenantservice.api.service.MediaSizeLimitExceededException;
 import com.vi.tenantservice.api.service.TenantDpaService;
+import com.vi.tenantservice.api.service.TenantIdAllocationService;
 import com.vi.tenantservice.api.service.TenantMediaService;
 import com.vi.tenantservice.api.service.UnsupportedMediaContentException;
 import com.vi.tenantservice.api.service.translation.TranslationErrorCode;
@@ -74,6 +81,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   private final @NonNull TenantDpaFacade tenantDpaFacade;
   private final @NonNull TranslationFacade translationFacade;
   private final @NonNull TenantMediaService tenantMediaService;
+  private final @NonNull TenantIdAllocationService tenantIdAllocationService;
 
   /**
    * Public read-only preview of the exact DPA version referenced by a valid sign token. Merely
@@ -169,6 +177,30 @@ public class TenantController implements TenantApi, TenantadminApi {
   ResponseEntity<Void> handleDpaNotPublished(DpaNotPublishedException e) {
     log.info("DPA sign invite rejected: {}", e.getMessage());
     return new ResponseEntity<>(HttpStatus.CONFLICT);
+  }
+
+  /**
+   * Authoritative DPA state of a tenant for its authenticated tenant admins (TEN-INV-U9). The
+   * facade guard restricts single-tenant admins to their own tenant.
+   */
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  public ResponseEntity<DpaStatusDTO> getDataProcessingAgreementStatus(@NotNull Long id) {
+    return new ResponseEntity<>(tenantDpaFacade.getDpaStatus(id), HttpStatus.OK);
+  }
+
+  /**
+   * In-app signing of the currently published DPA version by an authenticated tenant admin. The
+   * signer identity is taken from the access token; the submitted form is persisted append-only.
+   */
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<DpaStatusDTO> signDataProcessingAgreement(
+      @NotNull Long id, @Valid DpaAdminSignRequestDTO request) {
+    if (!Boolean.TRUE.equals(request.getAccepted())) {
+      return ResponseEntity.badRequest().build();
+    }
+    return new ResponseEntity<>(tenantDpaFacade.signDpa(id, request), HttpStatus.OK);
   }
 
   @Override
@@ -283,6 +315,58 @@ public class TenantController implements TenantApi, TenantadminApi {
     return tenantById.isEmpty()
         ? new ResponseEntity<>(HttpStatus.NOT_FOUND)
         : new ResponseEntity<>(tenantById.get(), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  public ResponseEntity<TenantIdAvailabilityDTO> getTenantIdAvailability(Long id) {
+    var status = tenantIdAllocationService.getStatus(id);
+    return ResponseEntity.ok(
+        new TenantIdAvailabilityDTO()
+            .id(id)
+            .status(TenantIdAvailabilityDTO.StatusEnum.valueOf(status.name())));
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  public ResponseEntity<NextFreeTenantIdDTO> getNextFreeTenantId(Long from, String direction) {
+    boolean upwards = "UP".equalsIgnoreCase(direction);
+    if (!upwards && !"DOWN".equalsIgnoreCase(direction)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "direction must be UP or DOWN");
+    }
+    return tenantIdAllocationService
+        .nextFreeId(from, upwards)
+        .map(nextFreeId -> ResponseEntity.ok(new NextFreeTenantIdDTO().id(nextFreeId)))
+        .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  public ResponseEntity<TenantIdReservationDTO> reserveTenantId(
+      TenantIdReservationRequestDTO tenantIdReservationRequestDTO) {
+    var requestedId =
+        tenantIdReservationRequestDTO == null ? null : tenantIdReservationRequestDTO.getTenantId();
+    log.info(
+        "Reserving tenant ID {} by user {}",
+        requestedId == null ? "AUTO" : requestedId,
+        authorisationService.getUsername());
+    var reservation =
+        tenantIdAllocationService.reserve(requestedId, authorisationService.getUsername());
+    return ResponseEntity.status(HttpStatus.CREATED)
+        .body(
+            new TenantIdReservationDTO()
+                .tenantId(reservation.getTenantId())
+                .token(reservation.getToken()));
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  public ResponseEntity<Void> releaseTenantIdReservation(Long id) {
+    log.info(
+        "Releasing tenant ID reservation {} by user {}", id, authorisationService.getUsername());
+    return tenantIdAllocationService.release(id)
+        ? ResponseEntity.noContent().build()
+        : ResponseEntity.notFound().build();
   }
 
   @Override

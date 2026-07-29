@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS TENANT
     theming_favicon longtext,
     theming_primary_color varchar(15),
     theming_secondary_color varchar(15),
+    theming_accent varchar(15),
+    theming_signal varchar(15),
     content_impressum longtext,
     content_claim varchar(1024),
     content_privacy longtext,
@@ -27,6 +29,24 @@ ADD CONSTRAINT IF NOT EXISTS unique_subdomain UNIQUE (subdomain);
 CREATE SEQUENCE IF NOT EXISTS SEQUENCE_TENANT
     START WITH 100000
     INCREMENT BY 1;
+
+CREATE TABLE IF NOT EXISTS TENANT_ID_RESERVATION
+(
+    TENANT_ID bigint NOT NULL,
+    STATUS varchar(16) NOT NULL,
+    TOKEN varchar(36) NOT NULL,
+    RESERVED_BY varchar(255),
+    CREATE_DATE datetime NOT NULL,
+    UPDATE_DATE datetime NOT NULL,
+    PRIMARY KEY (TENANT_ID)
+);
+
+-- mirrors uq_tenant_id_reservation_token of the MariaDB migration 0024 so the
+-- test schema enforces the same token uniqueness as production
+ALTER TABLE TENANT_ID_RESERVATION
+ADD CONSTRAINT IF NOT EXISTS UQ_TENANT_ID_RESERVATION_TOKEN UNIQUE (TOKEN);
+
+TRUNCATE TABLE TENANT_ID_RESERVATION;
 
 CREATE TABLE IF NOT EXISTS TENANT_ADMIN_CONTROLS
 (

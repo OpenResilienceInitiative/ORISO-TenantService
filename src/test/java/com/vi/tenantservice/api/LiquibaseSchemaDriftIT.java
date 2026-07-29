@@ -66,7 +66,8 @@ class LiquibaseSchemaDriftIT {
           "sequence_tenant",
           "sequence_tenant_admin_controls",
           "sequence_tenant_dpa_signature",
-          "sequence_tenant_dpa_version"
+          "sequence_tenant_dpa_version",
+          "sequence_tenant_dpa_admin_signature"
         }) {
       Integer count =
           jdbcTemplate.queryForObject(
@@ -83,7 +84,11 @@ class LiquibaseSchemaDriftIT {
   void allEntityTables_shouldExist() {
     for (String table :
         new String[] {
-          "tenant", "tenant_admin_controls", "tenant_dpa_signature", "tenant_dpa_version"
+          "tenant",
+          "tenant_admin_controls",
+          "tenant_dpa_signature",
+          "tenant_dpa_version",
+          "tenant_dpa_admin_signature"
         }) {
       Integer count =
           jdbcTemplate.queryForObject(
@@ -92,6 +97,24 @@ class LiquibaseSchemaDriftIT {
               Integer.class,
               table);
       assertThat(count).as("table %s", table).isEqualTo(1);
+    }
+  }
+
+  @Test
+  void tenantTheming_shouldCarryBothAccentsAndTheSignalColour() {
+    // ORISO-TenantService#154: the light accent and the signal colour used to have no column at
+    // all, so the Admin panel's values were accepted and dropped. ddl-auto=validate would catch a
+    // missing column via the entity, but only as an opaque context-startup failure - name them.
+    for (String column :
+        new String[] {"theming_primary_color", "theming_accent", "theming_signal"}) {
+      Integer count =
+          jdbcTemplate.queryForObject(
+              "SELECT COUNT(*) FROM information_schema.columns"
+                  + " WHERE table_schema = DATABASE() AND table_name = 'tenant'"
+                  + " AND column_name = ?",
+              Integer.class,
+              column);
+      assertThat(count).as("tenant column %s", column).isEqualTo(1);
     }
   }
 }

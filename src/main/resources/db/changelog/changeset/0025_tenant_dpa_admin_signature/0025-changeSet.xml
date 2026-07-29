@@ -1,0 +1,22 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Append-only tenant-admin DPA signature audit table (TEN-INV-U9, ORISO-TenantService#144).
+      Every in-app signing of the currently published DPA version by an authenticated tenant
+      admin inserts exactly one row (signer identity from the access token, DPA version,
+      timestamp, verbatim form-data JSON). The application never updates or deletes rows here;
+      the unique key (tenant_id, dpa_version) makes signing idempotent-safe under concurrency.
+    -->
+    <changeSet author="oriso" id="createTenantDpaAdminSignatureTable">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="tenant_dpa_admin_signature"/>
+            </not>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0025_tenant_dpa_admin_signature/createTenantDpaAdminSignature.sql" stripComments="true" />
+        <rollback>
+            <sqlFile path="db/changelog/changeset/0025_tenant_dpa_admin_signature/createTenantDpaAdminSignature-rollback.sql" stripComments="true" />
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

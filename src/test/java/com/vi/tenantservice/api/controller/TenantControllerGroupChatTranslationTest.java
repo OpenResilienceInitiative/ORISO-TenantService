@@ -38,6 +38,7 @@ class TenantControllerGroupChatTranslationTest {
   @Mock private TenantDpaFacade tenantDpaFacade;
   @Mock private TranslationFacade translationFacade;
   @Mock com.vi.tenantservice.api.service.TenantMediaService tenantMediaService;
+  @Mock com.vi.tenantservice.api.service.TenantIdAllocationService tenantIdAllocationService;
 
   @InjectMocks private TenantController controller;
 

@@ -27,6 +27,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Slf4j
@@ -45,10 +46,25 @@ public class TenantService {
 
   private final @NonNull ConfigurationFileLoader configurationFileLoader;
 
+  private final @NonNull TenantIdAllocationService tenantIdAllocationService;
+
+  @Transactional
   public TenantEntity create(TenantEntity tenantEntity) {
+    return create(tenantEntity, null);
+  }
+
+  /**
+   * Creates a tenant with authoritative ID allocation (TEN-INV-U1): without a pre-set ID the
+   * smallest currently free tenant ID is assigned atomically; with a pre-set ID the ID is
+   * re-validated against the allocation ledger inside this transaction (a reserved ID is consumed
+   * only with the matching reservation token, a taken ID is rejected with a conflict).
+   */
+  @Transactional
+  public TenantEntity create(TenantEntity tenantEntity, String tenantIdReservationToken) {
     validateTenant(tenantEntity);
     overrideSubdomainIfNeededForSingleDomainMultitenancy(tenantEntity);
     setCreateAndUpdateDate(tenantEntity);
+    tenantIdAllocationService.assignIdForNewTenant(tenantEntity, tenantIdReservationToken);
     return tenantRepository.save(tenantEntity);
   }
 

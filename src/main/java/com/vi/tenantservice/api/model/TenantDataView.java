@@ -19,6 +19,8 @@ public class TenantDataView implements TenantData {
   private final String themingFavicon;
   private final String themingPrimaryColor;
   private final String themingSecondaryColor;
+  private final String themingAccent;
+  private final String themingSignal;
   private final String contentImpressum;
   private final String contentClaim;
   private final String contentPrivacy;

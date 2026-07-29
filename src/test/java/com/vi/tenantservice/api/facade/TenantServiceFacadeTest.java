@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.facade;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -17,12 +18,15 @@ import com.vi.tenantservice.api.authorisation.Authority.AuthorityValue;
 import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
 import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.TenantConverter;
+import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
+import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.Content;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
+import com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
@@ -34,6 +38,9 @@ import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantDpaStatusService;
+import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
+import com.vi.tenantservice.api.service.TenantIdAllocationService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -46,6 +53,7 @@ import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
@@ -53,6 +61,7 @@ import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -60,6 +69,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestClientException;
 
 @ExtendWith(MockitoExtension.class)
 class TenantServiceFacadeTest {
@@ -109,6 +119,8 @@ class TenantServiceFacadeTest {
 
   @Mock private TenantResolverService tenantResolverService;
 
+  @Mock private TenantDpaStatusService tenantDpaStatusService;
+
   @Mock
   private TenantFacadeDependentSettingsOverrideService tenantFacadeDependentSettingsOverrideService;
 
@@ -119,6 +131,7 @@ class TenantServiceFacadeTest {
       new EffectivePermissionSettingsApplier();
 
   @Mock private SingleDomainTenantOverrideService singleDomainTenantOverrideService;
+  @Mock private TenantIdAllocationService tenantIdAllocationService;
 
   @InjectMocks private TenantServiceFacade tenantServiceFacade;
 
@@ -132,14 +145,14 @@ class TenantServiceFacadeTest {
     // given
     when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
     when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
-    when(tenantService.create(tenantEntity)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
 
     // when
     tenantServiceFacade.createTenant(tenantMultilingualDTO);
 
     // then
     verify(converter).toEntity(sanitizedTenantDTO);
-    verify(tenantService).create(tenantEntity);
+    verify(tenantService).create(tenantEntity, null);
     verify(consultingTypeService).createDefaultConsultingTypes(tenantEntity.getId());
     verify(applicationSettingsService, never()).saveMainTenantSubDomain(any());
   }
@@ -157,7 +170,7 @@ class TenantServiceFacadeTest {
 
     when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
     when(converter.toEntity(tenantMultilingualDTO)).thenReturn(entity);
-    when(tenantService.create(entity)).thenReturn(entity);
+    when(tenantService.create(entity, null)).thenReturn(entity);
     ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
     when(tenantService.getAllTenantData()).thenReturn(List.of(technicalTenant));
     when(subdomainExtractor.getCurrentSubdomain()).thenReturn(Optional.of("app1"));
@@ -167,7 +180,7 @@ class TenantServiceFacadeTest {
 
     // then
     verify(converter).toEntity(sanitizedTenantDTO);
-    verify(tenantService).create(entity);
+    verify(tenantService).create(entity, null);
     verify(consultingTypeService).createDefaultConsultingTypes(entity.getId());
     verify(applicationSettingsService).saveMainTenantSubDomain("app1");
   }
@@ -185,7 +198,7 @@ class TenantServiceFacadeTest {
 
     when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
     when(converter.toEntity(tenantMultilingualDTO)).thenReturn(entity);
-    when(tenantService.create(entity)).thenReturn(entity);
+    when(tenantService.create(entity, null)).thenReturn(entity);
     ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
     when(tenantService.getAllTenantData()).thenReturn(List.of(technicalTenant));
     when(subdomainExtractor.getCurrentSubdomain()).thenReturn(Optional.of("app2"));
@@ -216,18 +229,259 @@ class TenantServiceFacadeTest {
   }
 
   @Test
-  void createTenant_Should_throwBadRequest_When_tenantIdIsProvided() {
-    // given
-    MultilingualTenantDTO tenantDTOWithId = mock(MultilingualTenantDTO.class);
-    when(tenantDTOWithId.getId()).thenReturn(1L);
-    when(tenantInputSanitizer.sanitize(tenantDTOWithId)).thenReturn(sanitizedTenantDTO);
+  void createTenant_Should_passReservationTokenToAllocationAwareCreate_When_tokenIsProvided() {
+    // given (TEN-INV-U1: manual IDs are no longer rejected upfront; they are re-validated
+    // against the allocation ledger inside the creating transaction)
+    tenantMultilingualDTO.setTenantIdReservationToken("reservation-token");
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, "reservation-token")).thenReturn(tenantEntity);
+
+    // when
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
 
     // then
+    verify(tenantService).create(tenantEntity, "reservation-token");
+  }
+
+  // --- onboarding DPA acceptance (#569, TEN-INV-U9) ---------------------------------------
+
+  private OnboardingDpaAcceptanceDTO onboardingAcceptance() {
+    return new OnboardingDpaAcceptanceDTO()
+        .accepted(true)
+        .signerUserId("kc-admin-id")
+        .signerUsername("toni@traeger-nord.example")
+        .signerName("Toni Tenantadmin")
+        .signerPosition("Geschäftsführung")
+        .signerEmail("toni@traeger-nord.example")
+        .signerOrganisation("Träger Nord e.V.")
+        .dpaVersion("2026-07-01T12:00:00");
+  }
+
+  /**
+   * The acceptance the invitee gave in the public onboarding must land in the append-only audit
+   * trail — otherwise the tenant's DPA status can never resolve to VALID and the freshly onboarded
+   * admin logs straight into the non-bypassable blocker (#569 defect 1 + 2).
+   */
+  @Test
+  void createTenant_Should_persistTheOnboardingDpaAcceptance_When_itIsSubmitted() {
+    // given
+    tenantMultilingualDTO.setOnboardingDpaAcceptance(onboardingAcceptance());
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+
+    // when
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    // then
+    var formCaptor = ArgumentCaptor.forClass(AdminSignatureForm.class);
+    verify(tenantDpaStatusService)
+        .signOnboarding(
+            org.mockito.ArgumentMatchers.eq(ID),
+            org.mockito.ArgumentMatchers.eq("kc-admin-id"),
+            org.mockito.ArgumentMatchers.eq("toni@traeger-nord.example"),
+            org.mockito.ArgumentMatchers.eq(LocalDateTime.of(2026, 7, 1, 12, 0)),
+            formCaptor.capture());
+    var form = formCaptor.getValue();
+    assertThat(form.signerName()).isEqualTo("Toni Tenantadmin");
+    assertThat(form.signerPosition()).isEqualTo("Geschäftsführung");
+    assertThat(form.signerEmail()).isEqualTo("toni@traeger-nord.example");
+    assertThat(form.signerOrganisation()).isEqualTo("Träger Nord e.V.");
+    assertThat(form.formDataJson()).contains("PUBLIC_TENANT_ADMIN_ONBOARDING");
+    assertThat(form.formDataJson()).contains("\"accepted\":true");
+  }
+
+  /**
+   * The signer fields are PLAIN TEXT of a legal record. Running them through the HTML sanitizer
+   * entity-encoded the audit trail (#569 defect 2), so the stored signature no longer matched what
+   * the signer submitted. They are persisted verbatim; consumers encode at render time.
+   */
+  @Test
+  void createTenant_Should_storeTheOnboardingSignerFieldsVerbatim() {
+    // given a signer whose plain-text fields carry characters an HTML sanitizer would mangle
+    tenantMultilingualDTO.setOnboardingDpaAcceptance(
+        onboardingAcceptance()
+            .signerUsername("toni&nord")
+            .signerName("Toni & Söhne <Tenantadmin>")
+            .signerPosition("Leitung Recht & Ordnung")
+            .signerEmail("toni+dpa@traeger-nord.example")
+            .signerOrganisation("Träger & Nord e.V."));
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+
+    // when
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    // then
+    var formCaptor = ArgumentCaptor.forClass(AdminSignatureForm.class);
+    verify(tenantDpaStatusService)
+        .signOnboarding(
+            org.mockito.ArgumentMatchers.eq(ID),
+            org.mockito.ArgumentMatchers.eq("kc-admin-id"),
+            org.mockito.ArgumentMatchers.eq("toni&nord"),
+            any(),
+            formCaptor.capture());
+    var form = formCaptor.getValue();
+    assertThat(form.signerName()).isEqualTo("Toni & Söhne <Tenantadmin>");
+    assertThat(form.signerPosition()).isEqualTo("Leitung Recht & Ordnung");
+    assertThat(form.signerEmail()).isEqualTo("toni+dpa@traeger-nord.example");
+    assertThat(form.signerOrganisation()).isEqualTo("Träger & Nord e.V.");
+    assertThat(form.formDataJson()).contains("Toni & Söhne <Tenantadmin>");
+    assertThat(form.formDataJson()).contains("Träger & Nord e.V.");
+  }
+
+  /** Verbatim is not unbounded: an over-long field is rejected instead of silently truncated. */
+  @Test
+  void createTenant_Should_rollback_When_aSignerFieldExceedsItsColumnLength() {
+    // given
+    tenantMultilingualDTO.setOnboardingDpaAcceptance(
+        onboardingAcceptance().signerName("x".repeat(256)));
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+
+    // when
     assertThrows(
-        TenantValidationException.class,
-        () -> {
-          tenantServiceFacade.createTenant(tenantDTOWithId);
-        });
+        RuntimeException.class, () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then
+    verify(tenantService).delete(tenantEntity);
+    verify(tenantDpaStatusService, never()).signOnboarding(anyLong(), any(), any(), any(), any());
+  }
+
+  /**
+   * Never report a successful onboarding for an unrecorded acceptance: a failing signature write
+   * rolls the tenant creation back (reservation restored) so the invite link stays retryable.
+   */
+  @Test
+  void
+      createTenant_Should_rollbackWithReservationToken_When_theOnboardingAcceptanceCannotBeStored() {
+    // given
+    tenantMultilingualDTO.setTenantIdReservationToken("reservation-token");
+    tenantMultilingualDTO.setOnboardingDpaAcceptance(onboardingAcceptance());
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, "reservation-token")).thenReturn(tenantEntity);
+    doThrow(new IllegalStateException("signature write failed"))
+        .when(tenantDpaStatusService)
+        .signOnboarding(anyLong(), any(), any(), any(), any());
+
+    // when
+    assertThrows(
+        RuntimeException.class, () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then
+    verify(tenantService).delete(tenantEntity);
+    verify(tenantIdAllocationService).rollbackAssignment(ID, "reservation-token");
+  }
+
+  @Test
+  void createTenant_Should_notTouchTheAuditTrail_When_noOnboardingAcceptanceIsSubmitted() {
+    // given (platform admin seeding a tenant directly — tenant B of the chain test)
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+
+    // when
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    // then
+    verifyNoInteractions(tenantDpaStatusService);
+  }
+
+  @Test
+  void createTenant_Should_rollback_When_theAcceptanceCheckboxWasNotTicked() {
+    // given
+    tenantMultilingualDTO.setOnboardingDpaAcceptance(onboardingAcceptance().accepted(false));
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+
+    // when
+    assertThrows(
+        RuntimeException.class, () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then
+    verify(tenantService).delete(tenantEntity);
+    verify(tenantDpaStatusService, never()).signOnboarding(anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
+  void createTenant_Should_rollbackWithReservationToken_When_consultingTypeCreationFails() {
+    // given (TEN-INV hardening: a consumed invite reservation must be restored, not deleted)
+    tenantMultilingualDTO.setTenantIdReservationToken("reservation-token");
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, "reservation-token")).thenReturn(tenantEntity);
+    doThrow(new RestClientException("consulting type service down"))
+        .when(consultingTypeService)
+        .createDefaultConsultingTypes(tenantEntity.getId());
+
+    // when (the facade converts the failure to a BadRequestException; in this plain unit-test
+    // classpath no JAX-RS RuntimeDelegate is present, so only RuntimeException can be asserted)
+    assertThrows(
+        RuntimeException.class, () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then
+    verify(tenantService).delete(tenantEntity);
+    verify(tenantIdAllocationService).rollbackAssignment(ID, "reservation-token");
+  }
+
+  @Test
+  void createTenant_Should_keepLedgerRow_When_rollbackTenantDeleteFails() {
+    // given (TEN-INV hardening: if the tenant row survives, the ASSIGNED ledger row must too)
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+    doThrow(new RestClientException("consulting type service down"))
+        .when(consultingTypeService)
+        .createDefaultConsultingTypes(tenantEntity.getId());
+    doThrow(new RuntimeException("delete failed")).when(tenantService).delete(tenantEntity);
+
+    // when
+    assertThrows(
+        RuntimeException.class, () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then
+    verify(tenantIdAllocationService, never()).rollbackAssignment(anyLong(), any());
+  }
+
+  @Test
+  void createTenant_Should_throwExhausted_When_autoIdAllocationRetriesAreUsedUp() {
+    // given (TEN-INV hardening: AUTO exhaustion is a 503 contention condition, not a 409)
+    TenantEntity autoEntity = new TenantEntity();
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(autoEntity);
+    when(tenantService.create(autoEntity, null))
+        .thenThrow(new TenantIdAllocationConflictException("lost the race"));
+
+    // when
+    assertThrows(
+        TenantIdAllocationExhaustedException.class,
+        () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then (the facade's retry budget is aligned with the allocation service's)
+    verify(tenantService, times(TenantIdAllocationService.MAX_AUTO_ATTEMPTS))
+        .create(autoEntity, null);
+  }
+
+  @Test
+  void createTenant_Should_throwConflict_When_manualIdIsTaken() {
+    // given (manual mode keeps its 409 and is never retried)
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null))
+        .thenThrow(new TenantIdAllocationConflictException("taken"));
+
+    // when
+    assertThrows(
+        TenantIdAllocationConflictException.class,
+        () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    // then
+    verify(tenantService, times(1)).create(tenantEntity, null);
   }
 
   @Test
