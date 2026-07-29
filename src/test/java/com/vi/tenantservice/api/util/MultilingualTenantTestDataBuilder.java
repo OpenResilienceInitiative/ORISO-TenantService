@@ -53,6 +53,11 @@ public class MultilingualTenantTestDataBuilder {
     return this;
   }
 
+  public MultilingualTenantTestDataBuilder withTenantIdReservationToken(String reservationToken) {
+    tenantMultilingualDTO.setTenantIdReservationToken(reservationToken);
+    return this;
+  }
+
   public MultilingualTenantTestDataBuilder withSettingTopicsInRegistrationEnabled(
       boolean topicsInRegistrationEnabled) {
     tenantMultilingualDTO.setSettings(

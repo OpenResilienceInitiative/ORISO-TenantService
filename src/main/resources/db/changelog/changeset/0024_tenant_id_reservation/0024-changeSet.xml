@@ -1,0 +1,23 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Authoritative tenant ID allocation ledger (TEN-INV-U1, ORISO-TenantService#143).
+      Every reserve (open invite) and every new tenant creation writes a row here inside the
+      creating transaction, so the primary key is the database-level guarantee that an ID is
+      handed out exactly once: of two parallel requests for the same ID exactly one wins, and
+      two parallel AUTO reservations always end up with different IDs.
+      status: RESERVED (held by an open invite) | ASSIGNED (consumed by a real tenant).
+      Tenants created before this ledger existed have no row; their IDs count as assigned
+      because the tenant table itself is always consulted as well.
+    -->
+    <changeSet author="oriso" id="createTenantIdReservationTable">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="tenant_id_reservation"/>
+            </not>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0024_tenant_id_reservation/createTenantIdReservationTable.sql" stripComments="true" />
+        <rollback><sql>DROP TABLE `tenantservice`.`tenant_id_reservation`;</sql></rollback>
+    </changeSet>
+</databaseChangeLog>

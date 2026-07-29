@@ -31,6 +31,7 @@ class TenantServiceTest {
   @Mock private TenantRepository tenantRepository;
   @Mock private ApplicationSettingsService applicationSettingsService;
   @Mock private ConfigurationFileLoader configurationFileLoader;
+  @Mock private TenantIdAllocationService tenantIdAllocationService;
 
   @InjectMocks private TenantService tenantService;
 

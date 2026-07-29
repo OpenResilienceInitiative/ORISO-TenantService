@@ -11,6 +11,7 @@ import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
 import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
+import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
@@ -28,6 +29,7 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantIdAllocationService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -70,7 +72,9 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 public class TenantServiceFacade {
 
   private static final int TECHNICAL_TENANT_ID = 0;
+  private static final int MAX_AUTO_ID_CREATE_ATTEMPTS = 3;
   private final @NonNull TenantService tenantService;
+  private final @NonNull TenantIdAllocationService tenantIdAllocationService;
   private final @NonNull TenantConverter tenantConverter;
   private final @NonNull TenantInputSanitizer tenantInputSanitizer;
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
@@ -107,7 +111,8 @@ public class TenantServiceFacade {
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
-    TenantEntity createdTenant = tenantService.create(entity);
+    TenantEntity createdTenant =
+        createWithIdAllocationRetry(entity, tenantDTO.getTenantIdReservationToken());
     try {
       createDefaultConsultingTypeSettings(createdTenant);
     } catch (ConsultingTypeCreationException ex) {
@@ -122,8 +127,32 @@ public class TenantServiceFacade {
     return createdTenantDto;
   }
 
+  /**
+   * Creates the tenant with authoritative ID allocation (TEN-INV-U1). In AUTO mode (no ID in the
+   * request) a lost race for the smallest free ID is retried with the next candidate; a manual ID
+   * conflict is never retried and surfaces as HTTP 409.
+   */
+  private TenantEntity createWithIdAllocationRetry(TenantEntity entity, String reservationToken) {
+    boolean autoMode = entity.getId() == null;
+    int attempts = autoMode ? MAX_AUTO_ID_CREATE_ATTEMPTS : 1;
+    TenantIdAllocationConflictException lastConflict = null;
+    for (int attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        return tenantService.create(entity, reservationToken);
+      } catch (TenantIdAllocationConflictException ex) {
+        lastConflict = ex;
+        if (autoMode) {
+          log.info("Lost the race for an AUTO tenant ID (attempt {}), retrying", attempt);
+          entity.setId(null);
+        }
+      }
+    }
+    throw lastConflict;
+  }
+
   private void performRollback(TenantEntity createdTenant) {
     tenantService.delete(createdTenant);
+    tenantIdAllocationService.releaseAssignment(createdTenant.getId());
   }
 
   private void populateTenantSettingsAndActivationDates(
@@ -222,15 +251,10 @@ public class TenantServiceFacade {
   }
 
   private void validateCreateTenantInput(MultilingualTenantDTO tenantDTO) {
+    // A tenant ID in the request switches the creation to manual allocation mode; it is
+    // re-validated against the allocation ledger inside the creating transaction (TEN-INV-U1),
+    // so no upfront ID check happens here.
     validateTenantInput(tenantDTO);
-    validateId(tenantDTO);
-  }
-
-  private void validateId(MultilingualTenantDTO tenantDTO) {
-    if (nonNull(tenantDTO.getId())) {
-      throw new TenantValidationException(
-          HttpStatusExceptionReason.ID_MUST_BE_NULL_WHEN_CREATING_TENANT);
-    }
   }
 
   private void validateContent(MultilingualTenantDTO tenantDTO, List<String> isoCountries) {

@@ -366,6 +366,140 @@ paths:
           description: Not found
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/tenant-ids/{id}/availability:
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Returns the allocation status of a single tenant ID [Authorization: platform admin]'
+      operationId: getTenantIdAvailability
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID to check
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        200:
+          description: OK - successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantIdAvailabilityDTO'
+        400:
+          description: BAD REQUEST - invalid/incomplete request
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - no platform admin authority
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
+  /tenantadmin/tenant-ids/next-free:
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Returns the next free tenant ID from a value in a direction, skipping assigned
+        and reserved IDs [Authorization: platform admin]'
+      operationId: getNextFreeTenantId
+      parameters:
+        - name: from
+          in: query
+          description: Value to navigate from (exclusive)
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: direction
+          in: query
+          description: Navigation direction
+          required: true
+          schema:
+            type: string
+            enum: [ UP, DOWN ]
+      responses:
+        200:
+          description: OK - successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NextFreeTenantIdDTO'
+        400:
+          description: BAD REQUEST - invalid/incomplete request
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - no platform admin authority
+        404:
+          description: NOT FOUND - no free tenant ID exists in the given direction
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
+  /tenantadmin/tenant-ids/reservations:
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Reserves a tenant ID for an open invite. Without a tenantId in the body (AUTO
+        mode) the smallest currently free ID is reserved atomically [Authorization: platform admin]'
+      operationId: reserveTenantId
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/TenantIdReservationRequestDTO'
+      responses:
+        201:
+          description: CREATED - the ID was reserved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantIdReservationDTO'
+        400:
+          description: BAD REQUEST - invalid/incomplete request
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - no platform admin authority
+        409:
+          description: CONFLICT - the requested ID is already assigned or reserved
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
+  /tenantadmin/tenant-ids/reservations/{id}:
+    delete:
+      tags:
+        - tenant-controller
+      summary: 'Releases an unconsumed tenant ID reservation so the ID becomes assignable
+        again [Authorization: platform admin]'
+      operationId: releaseTenantIdReservation
+      parameters:
+        - name: id
+          in: path
+          description: Reserved tenant ID to release
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        204:
+          description: NO CONTENT - reservation released
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - no platform admin authority
+        404:
+          description: NOT FOUND - no open reservation exists for this ID
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
   /tenant:
     get:
       tags:
@@ -1115,6 +1249,13 @@ components:
               type: string
             updateDate:
               type: string
+            tenantIdReservationToken:
+              type: string
+              maxLength: 36
+              description: Token of an open tenant ID reservation. When creating a tenant with
+                a reserved ID, the matching token proves ownership of the reservation, which is
+                then consumed atomically with the creation. Without a matching token a reserved
+                ID is rejected with a conflict.
             licensing:
               $ref: '#/components/schemas/Licensing'
             theming:
@@ -1799,3 +1940,55 @@ components:
           enum: [ GET, POST, DELETE, PUT ]
         templated:
           type: boolean
+
+    TenantIdAvailabilityDTO:
+      type: object
+      required:
+        - id
+        - status
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 21
+        status:
+          type: string
+          description: FREE = assignable, RESERVED = held by an open invite,
+            ASSIGNED = consumed by an existing tenant
+          enum: [ FREE, RESERVED, ASSIGNED ]
+
+    NextFreeTenantIdDTO:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 36
+
+    TenantIdReservationRequestDTO:
+      type: object
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Specific tenant ID to reserve. Omit for AUTO mode, which reserves
+            the smallest currently free ID atomically.
+
+    TenantIdReservationDTO:
+      type: object
+      required:
+        - tenantId
+        - token
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+          example: 21
+        token:
+          type: string
+          maxLength: 36
+          description: Reservation token. Required to consume the reserved ID when the
+            tenant is created.
