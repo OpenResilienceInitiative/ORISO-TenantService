@@ -1406,6 +1406,56 @@ components:
             settings:
               $ref:
                 '#/components/schemas/Settings'
+            onboardingDpaAcceptance:
+              $ref: '#/components/schemas/OnboardingDpaAcceptanceDTO'
+    OnboardingDpaAcceptanceDTO:
+      type: object
+      description: 'Creation-only: the data processing agreement acceptance a tenant admin gave
+        while onboarding through a public invite link (TEN-INV-U9/#569). Persisted append-only as
+        the tenant''s admin signature in the SAME unit of work as the tenant creation, so a tenant
+        never exists without the acceptance that created it. Ignored on update. Only the
+        tenant-creating authority (platform admin / technical user) may submit it, which is why
+        the signer identity is taken from the body instead of the access token: the signer is the
+        freshly created tenant admin, not the calling service account.'
+      required:
+        - accepted
+        - signerUserId
+        - signerName
+      properties:
+        accepted:
+          type: boolean
+          description: Must be true - the tenant admin explicitly accepted the agreement
+          example: true
+        signerUserId:
+          type: string
+          maxLength: 255
+          description: Keycloak user id of the tenant-admin account created for this onboarding
+        signerUsername:
+          type: string
+          maxLength: 255
+        signerName:
+          type: string
+          maxLength: 255
+          example: "Toni Tenantadmin"
+        signerPosition:
+          type: string
+          maxLength: 255
+        signerEmail:
+          type: string
+          maxLength: 255
+        signerOrganisation:
+          type: string
+          maxLength: 255
+        language:
+          type: string
+          maxLength: 10
+        dpaVersion:
+          type: string
+          description: Activation timestamp of the operator DPA version that was actually shown
+            to the signer (ISO-8601 local date-time, as served by DpaVersionDTO.activationDate).
+            Must be a genuinely published version; an unknown value is rejected with a conflict.
+            Omitted means "the version currently in force".
+          example: "2026-07-01T12:00:00"
     BasicTenantLicensingDTO:
       type: object
       required:

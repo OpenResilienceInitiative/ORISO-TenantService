@@ -26,6 +26,7 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.repository.TenantDpaAdminSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
+import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
@@ -33,6 +34,7 @@ import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.service.httpheader.SecurityHeaderSupplier;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
+import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -62,8 +64,15 @@ class TenantControllerDpaStatusIT {
   private static final String DPA_STATUS = "/tenantadmin/%d/dpa/status";
   private static final String DPA_SIGN = "/tenantadmin/%d/dpa/sign";
 
+  private static final String TENANTADMIN_RESOURCE = "/tenantadmin";
+
   private static final long OWN_TENANT = 1L;
   private static final long FOREIGN_TENANT = 2L;
+
+  /** Governing operator DPA holder ({@code app.dpa.operator-tenant-id}, #569). */
+  private static final long OPERATOR_TENANT = 1L;
+
+  private static final long ONBOARDED_TENANT = 42L;
   private static final LocalDateTime VERSION_1 = LocalDateTime.of(2026, 5, 1, 10, 0, 0);
   private static final LocalDateTime VERSION_2 = LocalDateTime.of(2026, 7, 1, 12, 0, 0);
 
@@ -85,6 +94,7 @@ class TenantControllerDpaStatusIT {
   @Autowired private TenantDpaVersionRepository versionRepository;
   @Autowired private TenantDpaSignatureRepository signatureRepository;
   @Autowired private TenantDpaAdminSignatureRepository adminSignatureRepository;
+  @Autowired private TenantIdReservationRepository reservationRepository;
 
   @MockitoBean AuthorisationService authorisationService;
   @MockitoBean ApplicationSettingsService applicationSettingsService;
@@ -113,6 +123,9 @@ class TenantControllerDpaStatusIT {
     signatureRepository.deleteAll();
     versionRepository.deleteAll();
     tenantRepository.deleteAll();
+    // creating a tenant marks its ID ASSIGNED in the allocation ledger — reset it too, otherwise
+    // the next test's creation of the same ID answers 409 instead of exercising the DPA path
+    reservationRepository.deleteAll();
   }
 
   private void seedTenant(long id, LocalDateTime dpaActivationDate) {
@@ -412,5 +425,106 @@ class TenantControllerDpaStatusIT {
         .andExpect(status().isOk())
         .andExpect(jsonPath("status", is("UNSIGNED")))
         .andExpect(jsonPath("signedBy", is(nullValue())));
+  }
+
+  // --- public onboarding continuity (#569) -------------------------------------------------
+
+  /**
+   * The whole point of #569: a tenant created through the public onboarding carries the invitee's
+   * DPA acceptance, so its very first status read is VALID and the U10 blocker lets the freshly
+   * onboarded admin in — no "no DPA has been published for your organisation" dead end.
+   */
+  @Test
+  void createTenant_Should_leaveTheOnboardedTenantWithAValidDpa() throws Exception {
+    publishDpaVersion(OPERATOR_TENANT, VERSION_2);
+
+    mockMvc
+        .perform(
+            post(TENANTADMIN_RESOURCE)
+                .with(platformAdmin())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    new MultilingualTenantTestDataBuilder()
+                        .withId(ONBOARDED_TENANT)
+                        .withName("Traeger Nord")
+                        .withSubdomain("traeger-nord")
+                        .withLicensing()
+                        .withOnboardingDpaAcceptance(
+                            "kc-onboarded-admin", "Toni Tenantadmin", VERSION_2.toString())
+                        .jsonify()))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(get(DPA_STATUS.formatted(ONBOARDED_TENANT)).with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("status", is("VALID")))
+        .andExpect(jsonPath("currentDpaVersion", is(VERSION_2.toString())))
+        .andExpect(jsonPath("signedDpaVersion", is(VERSION_2.toString())))
+        .andExpect(jsonPath("signedBy", is("Toni Tenantadmin")));
+
+    assertThat(adminSignatureRepository.countByTenantId(ONBOARDED_TENANT)).isEqualTo(1L);
+    var signature =
+        adminSignatureRepository.findByTenantIdOrderBySignedAtDescIdDesc(ONBOARDED_TENANT).get(0);
+    assertThat(signature.getSignerUserId()).isEqualTo("kc-onboarded-admin");
+    assertThat(signature.getDpaVersion()).isEqualTo(VERSION_2);
+    assertThat(signature.getFormData()).contains("PUBLIC_TENANT_ADMIN_ONBOARDING");
+  }
+
+  /**
+   * The counter-case that must keep working: a tenant a platform admin seeds directly signs
+   * nothing, so the gate still blocks it — now with the actionable UNSIGNED state instead of the
+   * unsignable MISSING dead end, because the governing operator DPA applies to every tenant.
+   */
+  @Test
+  void createTenant_Should_leaveASeededTenantBlocked_When_noAcceptanceIsSubmitted()
+      throws Exception {
+    publishDpaVersion(OPERATOR_TENANT, VERSION_2);
+
+    mockMvc
+        .perform(
+            post(TENANTADMIN_RESOURCE)
+                .with(platformAdmin())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    new MultilingualTenantTestDataBuilder()
+                        .withId(ONBOARDED_TENANT)
+                        .withName("Seeded Tenant")
+                        .withSubdomain("seeded-tenant")
+                        .withLicensing()
+                        .jsonify()))
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(get(DPA_STATUS.formatted(ONBOARDED_TENANT)).with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("status", is("UNSIGNED")));
+
+    assertThat(adminSignatureRepository.countByTenantId(ONBOARDED_TENANT)).isZero();
+  }
+
+  /** A tenant creation whose acceptance names an unpublished version must not survive. */
+  @Test
+  void createTenant_Should_notCreateTheTenant_When_theAcceptanceNamesAnUnknownDpaVersion()
+      throws Exception {
+    publishDpaVersion(OPERATOR_TENANT, VERSION_2);
+
+    mockMvc
+        .perform(
+            post(TENANTADMIN_RESOURCE)
+                .with(platformAdmin())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    new MultilingualTenantTestDataBuilder()
+                        .withId(ONBOARDED_TENANT)
+                        .withName("Traeger Nord")
+                        .withSubdomain("traeger-nord")
+                        .withLicensing()
+                        .withOnboardingDpaAcceptance(
+                            "kc-onboarded-admin", "Toni Tenantadmin", VERSION_1.toString())
+                        .jsonify()))
+        .andExpect(status().is4xxClientError());
+
+    assertThat(tenantRepository.findById(ONBOARDED_TENANT)).isEmpty();
+    assertThat(adminSignatureRepository.countByTenantId(ONBOARDED_TENANT)).isZero();
   }
 }

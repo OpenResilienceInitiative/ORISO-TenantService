@@ -21,6 +21,7 @@ import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
+import com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminControls;
@@ -30,6 +31,8 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantDpaStatusService;
+import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
@@ -38,15 +41,18 @@ import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
+import com.vi.tenantservice.api.validation.InputSanitizer;
 import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
 import jakarta.ws.rs.BadRequestException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -102,6 +108,10 @@ public class TenantServiceFacade {
 
   private final @NonNull TenantResolverService tenantResolverService;
 
+  private final @NonNull TenantDpaStatusService tenantDpaStatusService;
+
+  private final @NonNull InputSanitizer inputSanitizer;
+
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
   @Value("${feature.multitenancy.with.single.domain.enabled}")
@@ -127,9 +137,95 @@ public class TenantServiceFacade {
       throw new BadRequestException(
           "Error while creating consulting types for tenant with id " + createdTenant.getId());
     }
+    recordOnboardingDpaAcceptance(
+        createdTenant, tenantDTO.getOnboardingDpaAcceptance(), reservationToken);
     var createdTenantDto = tenantConverter.toMultilingualDTO(createdTenant);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(createdTenantDto);
     return createdTenantDto;
+  }
+
+  /**
+   * Persists the DPA acceptance a tenant admin gave while onboarding through a public invite link
+   * (#569, TEN-INV-U9) as the tenant's append-only admin signature.
+   *
+   * <p>This runs INSIDE the tenant creation on purpose. The acceptance is the signature that makes
+   * the new tenant's DPA status VALID, so a tenant must never exist without it — otherwise the
+   * freshly onboarded admin logs in straight into the non-bypassable DPA blocker (U10) with nothing
+   * to act on. Recording it from the caller after the creation returned could not be compensated:
+   * the caller cannot restore a consumed ID reservation, whereas failing here reuses the very same
+   * rollback the consulting-type provisioning uses — tenant row deleted, reservation restored to
+   * RESERVED with its original token, so the invite link stays usable for a retry.
+   */
+  private void recordOnboardingDpaAcceptance(
+      TenantEntity createdTenant, OnboardingDpaAcceptanceDTO acceptance, String reservationToken) {
+    if (acceptance == null) {
+      return;
+    }
+    try {
+      if (!Boolean.TRUE.equals(acceptance.getAccepted())
+          || isBlank(acceptance.getSignerUserId())
+          || isBlank(acceptance.getSignerName())) {
+        throw new BadRequestException(
+            "onboardingDpaAcceptance requires accepted=true, signerUserId and signerName");
+      }
+      tenantDpaStatusService.signOnboarding(
+          createdTenant.getId(),
+          acceptance.getSignerUserId(),
+          sanitize(acceptance.getSignerUsername()),
+          parseDpaVersion(acceptance.getDpaVersion()),
+          new AdminSignatureForm(
+              sanitize(acceptance.getSignerName()),
+              sanitize(acceptance.getSignerPosition()),
+              sanitize(acceptance.getSignerEmail()),
+              sanitize(acceptance.getSignerOrganisation()),
+              sanitize(acceptance.getLanguage()),
+              buildOnboardingFormDataJson(acceptance)));
+    } catch (RuntimeException ex) {
+      performRollback(createdTenant, reservationToken);
+      log.error(
+          "Onboarding DPA acceptance could not be recorded for tenant {} — the tenant creation was"
+              + " rolled back so the acceptance is never silently lost",
+          createdTenant.getId(),
+          ex);
+      throw ex;
+    }
+  }
+
+  /** Verbatim JSON snapshot of the submitted onboarding acceptance (audit evidence). */
+  private String buildOnboardingFormDataJson(OnboardingDpaAcceptanceDTO acceptance) {
+    var formData = new LinkedHashMap<String, Object>();
+    formData.put("signerName", sanitize(acceptance.getSignerName()));
+    formData.put("signerPosition", sanitize(acceptance.getSignerPosition()));
+    formData.put("signerEmail", sanitize(acceptance.getSignerEmail()));
+    formData.put("signerOrganisation", sanitize(acceptance.getSignerOrganisation()));
+    formData.put("language", sanitize(acceptance.getLanguage()));
+    formData.put("accepted", acceptance.getAccepted());
+    formData.put("dpaVersion", acceptance.getDpaVersion());
+    formData.put("source", "PUBLIC_TENANT_ADMIN_ONBOARDING");
+    return convertToJson(formData);
+  }
+
+  /**
+   * The signer fields arrive from a PUBLIC onboarding form, so they are stripped of markup before
+   * they enter the audit trail (the authenticated in-app sign path is a trusted admin form).
+   */
+  private String sanitize(String value) {
+    return value == null ? null : inputSanitizer.sanitize(value);
+  }
+
+  private static LocalDateTime parseDpaVersion(String dpaVersion) {
+    if (isBlank(dpaVersion)) {
+      return null;
+    }
+    try {
+      return LocalDateTime.parse(dpaVersion.trim());
+    } catch (DateTimeParseException ex) {
+      throw new BadRequestException("onboardingDpaAcceptance.dpaVersion is not a valid timestamp");
+    }
+  }
+
+  private static boolean isBlank(String value) {
+    return value == null || value.trim().isEmpty();
   }
 
   /**
