@@ -20,6 +20,10 @@ public interface TenantRestrictedData {
 
   String getThemingSecondaryColor();
 
+  String getThemingAccent();
+
+  String getThemingSignal();
+
   String getContentImpressum();
 
   String getContentClaim();

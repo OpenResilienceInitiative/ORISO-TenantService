@@ -1532,6 +1532,10 @@ components:
           example: 1
     Theming:
       type: object
+      description: >-
+        Tenant branding. The two accents form a pair: `primaryColor` is the DARK accent
+        and `accent` is the LIGHT accent. Which one a surface uses depends on the surface's
+        background, not on the user's theme preference alone — see the field descriptions.
       properties:
         logo:
           type: string
@@ -1544,10 +1548,29 @@ components:
           example: "base64 encoded image"
         primaryColor:
           type: string
-          example: "#FFFFFF"
+          example: "#8B1A2B"
+          description: >-
+            The DARK accent ("Dunkle Akzentfarbe"). Used on LIGHT-MODE surfaces, where a dark
+            colour carries the contrast. Historic field name — semantics are unchanged and
+            existing consumers depend on it, so it is not renamed.
+        accent:
+          type: string
+          example: "#FFB3C7"
+          description: >-
+            The LIGHT accent ("Helle Akzentfarbe"). Used on DARK-MODE surfaces, where a light
+            colour carries the contrast. May be null for tenants configured before this field
+            existed; consumers then derive a light accent from `primaryColor` and must present
+            that as a derived value, never as a configured one.
         secondaryColor:
           type: string
           example: "#FFFFFF"
+        signal:
+          type: string
+          example: "#D93025"
+          description: >-
+            Optional signal/attention colour of the tenant seed set (errors, warnings,
+            destructive actions). Persisted so nothing the Admin panel submits is silently
+            dropped; may be null when the tenant has never configured one.
     Content:
       type: object
       required:

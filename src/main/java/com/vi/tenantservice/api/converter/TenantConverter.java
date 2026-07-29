@@ -201,7 +201,9 @@ public class TenantConverter {
           .themingLogo(tenantDTO.getTheming().getLogo())
           .themingAssociationLogo(tenantDTO.getTheming().getAssociationLogo())
           .themingPrimaryColor(tenantDTO.getTheming().getPrimaryColor())
-          .themingSecondaryColor(tenantDTO.getTheming().getSecondaryColor());
+          .themingSecondaryColor(tenantDTO.getTheming().getSecondaryColor())
+          .themingAccent(tenantDTO.getTheming().getAccent())
+          .themingSignal(tenantDTO.getTheming().getSignal());
     }
   }
 
@@ -751,7 +753,9 @@ public class TenantConverter {
         .logo(tenant.getThemingLogo())
         .associationLogo(tenant.getThemingAssociationLogo())
         .primaryColor(tenant.getThemingPrimaryColor())
-        .secondaryColor(tenant.getThemingSecondaryColor());
+        .secondaryColor(tenant.getThemingSecondaryColor())
+        .accent(tenant.getThemingAccent())
+        .signal(tenant.getThemingSignal());
   }
 
   private Content toContentDTO(TenantRestrictedData tenant, String lang) {

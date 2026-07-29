@@ -65,6 +65,14 @@ public class TenantEntity implements TenantData {
   @Column(name = "theming_secondary_color")
   private String themingSecondaryColor;
 
+  /** Light accent ("Helle Akzentfarbe"), the counterpart of {@link #themingPrimaryColor}. */
+  @Column(name = "theming_accent")
+  private String themingAccent;
+
+  /** Optional signal/attention colour of the tenant seed set. */
+  @Column(name = "theming_signal")
+  private String themingSignal;
+
   @Column(name = "content_impressum")
   private String contentImpressum;
 

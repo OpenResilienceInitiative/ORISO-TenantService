@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS TENANT
     theming_favicon longtext,
     theming_primary_color varchar(15),
     theming_secondary_color varchar(15),
+    theming_accent varchar(15),
+    theming_signal varchar(15),
     content_impressum longtext,
     content_claim varchar(1024),
     content_privacy longtext,
