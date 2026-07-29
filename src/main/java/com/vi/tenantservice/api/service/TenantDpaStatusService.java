@@ -3,19 +3,14 @@ package com.vi.tenantservice.api.service;
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaAdminSignatureEntity;
 import com.vi.tenantservice.api.model.TenantDpaStatus;
-import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.repository.TenantDpaAdminSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
-import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
-import com.vi.tenantservice.api.repository.TenantRepository;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -32,14 +27,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * tenant admin signature audit trail, and the legacy token-based public-link signatures — a tenant
  * that validly confirmed via either channel counts as signed.
  *
- * <p>Governing document (#569, Frank's domain rule of 2026-07-29): there is exactly ONE data
- * processing agreement relationship — platform operator &lt;-&gt; tenant — and one governing,
- * versioned operator DPA document. A tenant does not author a DPA of its own, so a tenant WITHOUT
- * its own published DPA is measured against the operator's currently published version (tenant
- * {@code app.dpa.operator-tenant-id}). Tenants that DO carry their own published DPA keep being
- * measured against it: that legacy per-tenant authoring predates the rule and retiring it is a
- * separate product decision, so this fallback is deliberately additive — no tenant that is VALID
- * today can be turned into a blocked one by it.
+ * <p>Governing document (#569, Frank's domain rule of 2026-07-29): the version a tenant is measured
+ * against is resolved by {@link GoverningDpaResolver} — its own published DPA if it authored one,
+ * otherwise the operator's. The same resolver serves the reading, signing and forwarding paths, so
+ * a tenant is never measured against a document it cannot obtain.
  *
  * <p>NOTE (IDOR guard, same rule as {@link TenantDpaService}): this service takes a raw tenant id
  * and must only ever be called through a layer that derives/validates the tenant against the
@@ -72,16 +63,8 @@ public class TenantDpaStatusService {
 
   private final TenantDpaAdminSignatureRepository adminSignatureRepository;
   private final TenantDpaSignatureRepository signatureRepository;
-  private final TenantDpaVersionRepository versionRepository;
-  private final TenantRepository tenantRepository;
+  private final GoverningDpaResolver governingDpaResolver;
   private final PlatformTransactionManager transactionManager;
-
-  /**
-   * Tenant holding the governing operator DPA document; {@code 0} or negative disables the fallback
-   * (then a tenant without its own published DPA stays MISSING, the pre-#569 behaviour).
-   */
-  @Value("${app.dpa.operator-tenant-id:1}")
-  private long operatorTenantId;
 
   /** Computes the authoritative DPA state for the tenant. */
   @Transactional(readOnly = true)
@@ -175,17 +158,6 @@ public class TenantDpaStatusService {
     return getStatus(tenantId);
   }
 
-  /** Whether the version exists in the publish history governing this tenant. */
-  private boolean isPublishedVersion(Long tenantId, LocalDateTime version) {
-    if (versionRepository.findFirstByTenantIdAndActivationDate(tenantId, version).isPresent()) {
-      return true;
-    }
-    return operatorFallbackApplies(tenantId)
-        && versionRepository
-            .findFirstByTenantIdAndActivationDate(operatorTenantId, version)
-            .isPresent();
-  }
-
   private void persistSignature(
       Long tenantId,
       LocalDateTime version,
@@ -223,50 +195,16 @@ public class TenantDpaStatusService {
   }
 
   /**
-   * The DPA version currently in force for the tenant: its own published version if it has one,
-   * otherwise the governing operator DPA version. A missing tenant never resolves a version — an
-   * absent tenant must never read as "has a contract to sign".
+   * The DPA version currently in force for the tenant — its own published version if it has one,
+   * otherwise the governing operator DPA version (see {@link GoverningDpaResolver}).
    */
   private LocalDateTime resolveCurrentVersion(Long tenantId) {
-    var tenant = tenantRepository.findById(tenantId);
-    if (tenant.isEmpty()) {
-      return null;
-    }
-    var own =
-        publishedVersionOf(
-            tenantId, tenant.get().getContentDataProcessingAgreementActivationDate());
-    if (own != null) {
-      return own;
-    }
-    if (!operatorFallbackApplies(tenantId)) {
-      return null;
-    }
-    var operator = tenantRepository.findById(operatorTenantId);
-    return operator
-        .map(
-            entity ->
-                publishedVersionOf(
-                    operatorTenantId, entity.getContentDataProcessingAgreementActivationDate()))
-        .orElse(null);
+    var governing = governingDpaResolver.resolve(tenantId);
+    return governing == null ? null : governing.version();
   }
 
-  /**
-   * A tenant's own published DPA version: the passed embedded activation date, falling back to the
-   * newest entry of the append-only publish history when a legacy narrow tenant update cleared it.
-   */
-  private LocalDateTime publishedVersionOf(Long tenantId, LocalDateTime embeddedVersion) {
-    if (embeddedVersion != null) {
-      return embeddedVersion;
-    }
-    return versionRepository.findByTenantIdOrderByActivationDateDesc(tenantId).stream()
-        .map(TenantDpaVersionEntity::getActivationDate)
-        .filter(Objects::nonNull)
-        .findFirst()
-        .orElse(null);
-  }
-
-  private boolean operatorFallbackApplies(Long tenantId) {
-    return operatorTenantId > 0 && !Long.valueOf(operatorTenantId).equals(tenantId);
+  private boolean isPublishedVersion(Long tenantId, LocalDateTime version) {
+    return governingDpaResolver.isPublishedVersion(tenantId, version);
   }
 
   private List<SignedEntry> collectSignedEntries(Long tenantId) {

@@ -41,7 +41,6 @@ import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
-import com.vi.tenantservice.api.validation.InputSanitizer;
 import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
@@ -84,6 +83,11 @@ public class TenantServiceFacade {
   private static final int MAX_AUTO_ID_CREATE_ATTEMPTS =
       TenantIdAllocationService.MAX_AUTO_ATTEMPTS;
 
+  /** Column widths of tenant_dpa_admin_signature (changeset 0025) and the API contract. */
+  private static final int MAX_SIGNER_FIELD_LENGTH = 255;
+
+  private static final int MAX_LANGUAGE_LENGTH = 10;
+
   private final @NonNull TenantService tenantService;
   private final @NonNull TenantIdAllocationService tenantIdAllocationService;
   private final @NonNull TenantConverter tenantConverter;
@@ -109,8 +113,6 @@ public class TenantServiceFacade {
   private final @NonNull TenantResolverService tenantResolverService;
 
   private final @NonNull TenantDpaStatusService tenantDpaStatusService;
-
-  private final @NonNull InputSanitizer inputSanitizer;
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
@@ -170,15 +172,18 @@ public class TenantServiceFacade {
       }
       tenantDpaStatusService.signOnboarding(
           createdTenant.getId(),
-          acceptance.getSignerUserId(),
-          sanitize(acceptance.getSignerUsername()),
+          bounded(acceptance.getSignerUserId(), MAX_SIGNER_FIELD_LENGTH, "signerUserId"),
+          bounded(acceptance.getSignerUsername(), MAX_SIGNER_FIELD_LENGTH, "signerUsername"),
           parseDpaVersion(acceptance.getDpaVersion()),
           new AdminSignatureForm(
-              sanitize(acceptance.getSignerName()),
-              sanitize(acceptance.getSignerPosition()),
-              sanitize(acceptance.getSignerEmail()),
-              sanitize(acceptance.getSignerOrganisation()),
-              sanitize(acceptance.getLanguage()),
+              bounded(acceptance.getSignerName(), MAX_SIGNER_FIELD_LENGTH, "signerName"),
+              bounded(acceptance.getSignerPosition(), MAX_SIGNER_FIELD_LENGTH, "signerPosition"),
+              bounded(acceptance.getSignerEmail(), MAX_SIGNER_FIELD_LENGTH, "signerEmail"),
+              bounded(
+                  acceptance.getSignerOrganisation(),
+                  MAX_SIGNER_FIELD_LENGTH,
+                  "signerOrganisation"),
+              bounded(acceptance.getLanguage(), MAX_LANGUAGE_LENGTH, "language"),
               buildOnboardingFormDataJson(acceptance)));
     } catch (RuntimeException ex) {
       performRollback(createdTenant, reservationToken);
@@ -194,11 +199,11 @@ public class TenantServiceFacade {
   /** Verbatim JSON snapshot of the submitted onboarding acceptance (audit evidence). */
   private String buildOnboardingFormDataJson(OnboardingDpaAcceptanceDTO acceptance) {
     var formData = new LinkedHashMap<String, Object>();
-    formData.put("signerName", sanitize(acceptance.getSignerName()));
-    formData.put("signerPosition", sanitize(acceptance.getSignerPosition()));
-    formData.put("signerEmail", sanitize(acceptance.getSignerEmail()));
-    formData.put("signerOrganisation", sanitize(acceptance.getSignerOrganisation()));
-    formData.put("language", sanitize(acceptance.getLanguage()));
+    formData.put("signerName", acceptance.getSignerName());
+    formData.put("signerPosition", acceptance.getSignerPosition());
+    formData.put("signerEmail", acceptance.getSignerEmail());
+    formData.put("signerOrganisation", acceptance.getSignerOrganisation());
+    formData.put("language", acceptance.getLanguage());
     formData.put("accepted", acceptance.getAccepted());
     formData.put("dpaVersion", acceptance.getDpaVersion());
     formData.put("source", "PUBLIC_TENANT_ADMIN_ONBOARDING");
@@ -206,11 +211,21 @@ public class TenantServiceFacade {
   }
 
   /**
-   * The signer fields arrive from a PUBLIC onboarding form, so they are stripped of markup before
-   * they enter the audit trail (the authenticated in-app sign path is a trusted admin form).
+   * The signer fields are PLAIN TEXT of an append-only legal record, so they are stored exactly as
+   * the signer submitted them (#569). Running them through an HTML sanitizer entity-encoded the
+   * audit trail — a stored value that no longer matches what was signed. They are never interpreted
+   * as markup here; consumers encode them at RENDER time (the admin UI sanitizes its own output).
+   *
+   * <p>Verbatim is not unbounded: a value longer than its column is rejected rather than silently
+   * truncated by the database. The API contract bounds these fields too ({@code maxLength} in
+   * tenantservice.yaml); this guard keeps the invariant when the facade is reached directly.
    */
-  private String sanitize(String value) {
-    return value == null ? null : inputSanitizer.sanitize(value);
+  private static String bounded(String value, int maxLength, String field) {
+    if (value != null && value.length() > maxLength) {
+      throw new BadRequestException(
+          "onboardingDpaAcceptance." + field + " exceeds " + maxLength + " characters");
+    }
+    return value;
   }
 
   private static LocalDateTime parseDpaVersion(String dpaVersion) {

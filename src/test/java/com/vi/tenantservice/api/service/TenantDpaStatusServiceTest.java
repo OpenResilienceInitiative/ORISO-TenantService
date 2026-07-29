@@ -20,10 +20,10 @@ import com.vi.tenantservice.api.repository.TenantRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -48,7 +48,26 @@ class TenantDpaStatusServiceTest {
   @Mock private TenantRepository tenantRepository;
   @Mock private PlatformTransactionManager transactionManager;
 
-  @InjectMocks private TenantDpaStatusService service;
+  /**
+   * The governing-document resolver runs for real over the mocked repositories: the version a
+   * tenant is measured against and the document it can read and sign must come from the same logic
+   * (#569), so stubbing it away here would hide exactly the divergence these tests guard.
+   */
+  private GoverningDpaResolver governingDpaResolver;
+
+  private TenantDpaStatusService service;
+
+  @BeforeEach
+  void setUp() {
+    // operatorTenantId stays 0 (fallback disabled) unless a test opts in via givenOperatorDpa
+    governingDpaResolver = new GoverningDpaResolver(tenantRepository, versionRepository);
+    service =
+        new TenantDpaStatusService(
+            adminSignatureRepository,
+            signatureRepository,
+            governingDpaResolver,
+            transactionManager);
+  }
 
   private void givenTenantWithEmbeddedVersion(LocalDateTime version) {
     when(tenantRepository.findById(TENANT_ID))
@@ -62,7 +81,7 @@ class TenantDpaStatusServiceTest {
 
   /** The governing operator DPA (#569): tenant {@code app.dpa.operator-tenant-id}. */
   private void givenOperatorDpa(LocalDateTime version) {
-    ReflectionTestUtils.setField(service, "operatorTenantId", OPERATOR_TENANT_ID);
+    ReflectionTestUtils.setField(governingDpaResolver, "operatorTenantId", OPERATOR_TENANT_ID);
     when(tenantRepository.findById(OPERATOR_TENANT_ID))
         .thenReturn(
             Optional.of(
@@ -382,7 +401,7 @@ class TenantDpaStatusServiceTest {
   /** The fallback is additive: a tenant with its own published DPA keeps being measured by it. */
   @Test
   void getStatus_Should_notFallBackToTheOperator_When_theTenantHasItsOwnPublishedDpa() {
-    ReflectionTestUtils.setField(service, "operatorTenantId", OPERATOR_TENANT_ID);
+    ReflectionTestUtils.setField(governingDpaResolver, "operatorTenantId", OPERATOR_TENANT_ID);
     givenTenantWithEmbeddedVersion(VERSION_1);
     when(adminSignatureRepository.findByTenantIdOrderBySignedAtDescIdDesc(TENANT_ID))
         .thenReturn(List.of(adminSignature(VERSION_1)));
@@ -397,7 +416,7 @@ class TenantDpaStatusServiceTest {
 
   @Test
   void getStatus_Should_returnMissing_When_notEvenTheOperatorPublishedADpa() {
-    ReflectionTestUtils.setField(service, "operatorTenantId", OPERATOR_TENANT_ID);
+    ReflectionTestUtils.setField(governingDpaResolver, "operatorTenantId", OPERATOR_TENANT_ID);
     givenTenantWithoutOwnDpa();
     when(tenantRepository.findById(OPERATOR_TENANT_ID))
         .thenReturn(Optional.of(TenantEntity.builder().id(OPERATOR_TENANT_ID).build()));
@@ -413,7 +432,7 @@ class TenantDpaStatusServiceTest {
   /** An absent tenant must never look like "has a contract in force". */
   @Test
   void getStatus_Should_notResolveAnyVersion_When_theTenantDoesNotExist() {
-    ReflectionTestUtils.setField(service, "operatorTenantId", OPERATOR_TENANT_ID);
+    ReflectionTestUtils.setField(governingDpaResolver, "operatorTenantId", OPERATOR_TENANT_ID);
     when(tenantRepository.findById(TENANT_ID)).thenReturn(Optional.empty());
     givenNoSignatures();
 
@@ -536,7 +555,7 @@ class TenantDpaStatusServiceTest {
 
   @Test
   void signOnboarding_Should_reject_When_noGoverningDpaIsPublishedAtAll() {
-    ReflectionTestUtils.setField(service, "operatorTenantId", OPERATOR_TENANT_ID);
+    ReflectionTestUtils.setField(governingDpaResolver, "operatorTenantId", OPERATOR_TENANT_ID);
     givenTenantWithoutOwnDpa();
     when(tenantRepository.findById(OPERATOR_TENANT_ID))
         .thenReturn(Optional.of(TenantEntity.builder().id(OPERATOR_TENANT_ID).build()));
