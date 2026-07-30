@@ -43,8 +43,11 @@ runs:
       push: ${{ inputs.push_to_ghcr }}
       tags: ${{ steps.meta.outputs.tags }}
       labels: ${{ steps.meta.outputs.labels }}
-      cache-from: type=gha
-      cache-to: type=gha,mode=max
+      # Scope the GHA cache per image so images built from this shared action
+      # can't collide on one cache namespace — future-proofs against a second
+      # image being added (root cause of OpenResilienceInitiative/ORISO-Admin#424).
+      cache-from: type=gha,scope=${{ inputs.image_name }}
+      cache-to: type=gha,mode=max,scope=${{ inputs.image_name }}
   
   - name: Build Summary
     shell: bash
