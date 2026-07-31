@@ -18,9 +18,53 @@ public class InputSanitizer {
   /** Marker the admin editor sets on headings whose anchor was explicitly removed. */
   private static final Pattern ANCHOR_REMOVED_TRUE = Pattern.compile("true");
 
+  /**
+   * Media types the admin's branding uploader can actually produce (see FormFileUploaderField in
+   * ORISO-Admin). SVG is deliberately absent: it can carry script and no upload path creates it.
+   */
+  private static final Pattern ALLOWED_IMAGE_DATA_URL =
+      Pattern.compile(
+          "^data:image/(?:png|jpe?g|x-icon|vnd\\.microsoft\\.icon);base64,[A-Za-z0-9+/]+={0,2}$",
+          Pattern.CASE_INSENSITIVE);
+
+  private static final Pattern ALLOWED_HTTP_URL =
+      Pattern.compile("^https?://[^\\s\"'<>]+$", Pattern.CASE_INSENSITIVE);
+
   public String sanitize(String input) {
     var sanitizer = new HtmlPolicyBuilder().toFactory();
     return sanitizer.sanitize(input);
+  }
+
+  /**
+   * Validate a branding asset (logo, favicon, association logo) as the URL it is, instead of
+   * sanitizing it as markup.
+   *
+   * <p>{@link #sanitize(String)} is an HTML sanitizer: handed plain text it HTML-ENCODES the
+   * output. For a base64 data URL that means every {@code +} comes back as {@code &#43;} and the
+   * trailing {@code =} as {@code &#61;} — the value is no longer a decodable URL. Browsers answer
+   * {@code ERR_INVALID_URL}, the {@code <img>} fires {@code onError}, and the public sign-in stage
+   * drops the tenant logo without a trace. The same corruption silently disabled the tenant
+   * favicon.
+   *
+   * <p>These fields are never markup, so the answer is a whitelist, not an escape: an http(s) URL
+   * or a base64 data URL in one of the image types the admin uploader produces passes through
+   * BYTE-FOR-BYTE; anything else — {@code javascript:}, {@code data:text/html}, SVG, raw markup —
+   * is rejected outright rather than mangled into something that neither renders nor fails loudly.
+   *
+   * @return the value unchanged when it is an acceptable asset URL, {@code null} when it is not
+   */
+  public String sanitizeAssetUrl(String input) {
+    if (input == null || input.isEmpty()) {
+      return input;
+    }
+
+    var trimmed = input.trim();
+    if (ALLOWED_HTTP_URL.matcher(trimmed).matches()
+        || ALLOWED_IMAGE_DATA_URL.matcher(trimmed).matches()) {
+      return input;
+    }
+
+    return null;
   }
 
   public String sanitizeAllowingFormatting(String input) {
