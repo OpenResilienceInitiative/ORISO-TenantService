@@ -45,13 +45,19 @@ public class TenantInputSanitizer {
   private void sanitizeTheming(MultilingualTenantDTO input, MultilingualTenantDTO output) {
     Theming theming = input.getTheming();
     if (theming != null) {
-      output.getTheming().setLogo(inputSanitizer.sanitize(theming.getLogo()));
-      output.getTheming().setFavicon(inputSanitizer.sanitize(theming.getFavicon()));
+      // Assets are URLs, not markup — HTML-sanitizing them encoded the base64
+      // payload ("+" -> "&#43;") and left an undecodable data URL behind, which
+      // is what made the tenant logo and favicon disappear from every public
+      // surface. See InputSanitizer#sanitizeAssetUrl.
+      output.getTheming().setLogo(inputSanitizer.sanitizeAssetUrl(theming.getLogo()));
+      output.getTheming().setFavicon(inputSanitizer.sanitizeAssetUrl(theming.getFavicon()));
+      output
+          .getTheming()
+          .setAssociationLogo(inputSanitizer.sanitizeAssetUrl(theming.getAssociationLogo()));
       output.getTheming().setPrimaryColor(inputSanitizer.sanitize(theming.getPrimaryColor()));
       output.getTheming().setSecondaryColor(inputSanitizer.sanitize(theming.getSecondaryColor()));
       output.getTheming().setAccent(inputSanitizer.sanitize(theming.getAccent()));
       output.getTheming().setSignal(inputSanitizer.sanitize(theming.getSignal()));
-      output.getTheming().setAssociationLogo(inputSanitizer.sanitize(theming.getAssociationLogo()));
     }
   }
 

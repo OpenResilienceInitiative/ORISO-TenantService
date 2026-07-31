@@ -103,9 +103,11 @@ class TenantInputSanitizerTest {
     verify(inputSanitizer).sanitize(tenantDTO.getSubdomain());
     verify(inputSanitizer).sanitize(tenantDTO.getAddress());
     verify(inputSanitizer).sanitize(tenantDTO.getDescription());
-    verify(inputSanitizer).sanitize(tenantDTO.getTheming().getLogo());
-    verify(inputSanitizer).sanitize(tenantDTO.getTheming().getFavicon());
-    verify(inputSanitizer).sanitize(tenantDTO.getTheming().getAssociationLogo());
+    // Assets go through the URL whitelist, NOT the HTML sanitizer — the latter
+    // encoded their base64 payload and broke every stored logo/favicon.
+    verify(inputSanitizer).sanitizeAssetUrl(tenantDTO.getTheming().getLogo());
+    verify(inputSanitizer).sanitizeAssetUrl(tenantDTO.getTheming().getFavicon());
+    verify(inputSanitizer).sanitizeAssetUrl(tenantDTO.getTheming().getAssociationLogo());
     verify(inputSanitizer).sanitizeAllowingFormatting(Mockito.anyString());
     verify(inputSanitizer, Mockito.times(3))
         .sanitizeAllowingFormattingAndLinks(Mockito.anyString());
