@@ -86,6 +86,24 @@ class TenantSettingsTest {
   }
 
   @Test
+  void applyDefaults_should_defaultEmailVisibleAndRequired_toFalse() {
+    var settings = new TenantSettings().applyDefaults();
+
+    assertThat(settings.getEmailVisible()).isFalse();
+    assertThat(settings.getEmailRequired()).isFalse();
+  }
+
+  @Test
+  void applyDefaults_should_preferExplicitEmailFlagValues() {
+    var settings =
+        JsonConverter.convertFromJson("{\"emailVisible\": true, \"emailRequired\": true}")
+            .applyDefaults();
+
+    assertThat(settings.getEmailVisible()).isTrue();
+    assertThat(settings.getEmailRequired()).isTrue();
+  }
+
+  @Test
   void fullyPopulatedSettings_should_fitIntoTheSettingsColumn() {
     // The tenant.settings column is TEXT (64k bytes) since changeset 0022 — the old
     // VARCHAR(4000) overflowed once the media flag families landed. Guard with a generous

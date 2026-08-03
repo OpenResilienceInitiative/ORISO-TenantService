@@ -1837,6 +1837,16 @@ components:
         featureCentralDataProtectionTemplateEnabled:
           type: boolean
           example: "false"
+        emailVisible:
+          type: boolean
+          default: false
+          example: "false"
+          description: "Whether the registration flow shows an email field at all."
+        emailRequired:
+          type: boolean
+          default: false
+          example: "false"
+          description: "Whether the email field, when shown, must be filled in."
         tenantAdminControls:
           $ref: '#/components/schemas/TenantAdminControls'
 
