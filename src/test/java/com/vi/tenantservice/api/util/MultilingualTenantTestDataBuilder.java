@@ -135,6 +135,8 @@ public class MultilingualTenantTestDataBuilder {
         .featureMediaAiScanEnabled(false)
         .showAskerProfile(true)
         .isVideoCallAllowed(true)
+        .emailVisible(true)
+        .emailRequired(true)
         .featureCentralDataProtectionTemplateEnabled(true)
         .extendedSettings(
             new ConsultingTypePatchDTO().isVideoCallAllowed(true).languageFormal(true));

@@ -64,7 +64,22 @@ class TenantConverterTest {
     assertThat(converted.getTheming()).isEqualTo(tenantDTO.getTheming());
     assertThat(converted.getSettings().getIsVideoCallAllowed()).isTrue();
     assertThat(converted.getSettings().getShowAskerProfile()).isTrue();
+    assertThat(converted.getSettings().getEmailVisible()).isTrue();
+    assertThat(converted.getSettings().getEmailRequired()).isTrue();
     // content comparision is skipped, due to i18n feature, so the structure is different
+  }
+
+  @Test
+  void toEntity_should_roundTripEmailVisibleAndEmailRequired() {
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().emailVisible(true).emailRequired(true);
+
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+    TenantDTO converted = tenantConverter.toDTO(entity, "de");
+
+    assertThat(converted.getSettings().getEmailVisible()).isTrue();
+    assertThat(converted.getSettings().getEmailRequired()).isTrue();
   }
 
   @Test
@@ -451,6 +466,8 @@ class TenantConverterTest {
     assertThat(actual.getActiveLanguages()).isEqualTo(expected.getActiveLanguages());
     assertThat(actual.getShowAskerProfile()).isEqualTo(expected.getShowAskerProfile());
     assertThat(actual.getIsVideoCallAllowed()).isEqualTo(expected.getIsVideoCallAllowed());
+    assertThat(actual.getEmailVisible()).isEqualTo(expected.getEmailVisible());
+    assertThat(actual.getEmailRequired()).isEqualTo(expected.getEmailRequired());
     assertThat(actual.getFeatureCentralDataProtectionTemplateEnabled())
         .isEqualTo(expected.getFeatureCentralDataProtectionTemplateEnabled());
     assertThat(actual.getTenantAdminControls()).isEqualTo(expected.getTenantAdminControls());
@@ -483,6 +500,8 @@ class TenantConverterTest {
     assertThat(actual.getActiveLanguages()).isEqualTo(expected.getActiveLanguages());
     assertThat(actual.getShowAskerProfile()).isEqualTo(expected.getShowAskerProfile());
     assertThat(actual.getIsVideoCallAllowed()).isEqualTo(expected.getIsVideoCallAllowed());
+    assertThat(actual.getEmailVisible()).isEqualTo(expected.getEmailVisible());
+    assertThat(actual.getEmailRequired()).isEqualTo(expected.getEmailRequired());
     assertThat(actual.getFeatureCentralDataProtectionTemplateEnabled())
         .isEqualTo(expected.getFeatureCentralDataProtectionTemplateEnabled());
     assertThat(actual.getTenantAdminControls()).isEqualTo(expected.getTenantAdminControls());
@@ -520,6 +539,8 @@ class TenantConverterTest {
     assertThat(settings.getFeatureDemographicsEnabled()).isFalse();
     assertThat(settings.getFeatureStatisticsEnabled()).isFalse();
     assertThat(settings.getFeatureToolsEnabled()).isFalse();
+    assertThat(settings.getEmailVisible()).isFalse();
+    assertThat(settings.getEmailRequired()).isFalse();
     // then — true-default fields (sample of 3)
     assertThat(settings.getFeatureAudioCallsEnabled()).isTrue();
     assertThat(settings.getFeatureAnonymousChatEnabled()).isTrue();
