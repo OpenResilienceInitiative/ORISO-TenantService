@@ -123,6 +123,16 @@ class InputSanitizerTest {
   }
 
   @Test
+  void sanitizeAssetUrl_should_rejectInvalidBase64Payloads() {
+    assertThat(inputSanitizer.sanitizeAssetUrl("data:image/png;base64,A")).isNull();
+  }
+
+  @Test
+  void sanitizeAssetUrl_should_rejectHttpUrlsWithoutHosts() {
+    assertThat(inputSanitizer.sanitizeAssetUrl("https:///logo.png")).isNull();
+  }
+
+  @Test
   void sanitizeAssetUrl_should_passThroughEmptiness() {
     assertThat(inputSanitizer.sanitizeAssetUrl(null)).isNull();
     assertThat(inputSanitizer.sanitizeAssetUrl("")).isEqualTo("");

@@ -96,11 +96,18 @@ class TenantSettingsTest {
   @Test
   void applyDefaults_should_preferExplicitEmailFlagValues() {
     var settings =
-        JsonConverter.convertFromJson("{\"emailVisible\": true, \"emailRequired\": true}")
+        JsonConverter.convertFromJson("{\"emailVisible\": true, \"emailRequired\": false}")
             .applyDefaults();
 
     assertThat(settings.getEmailVisible()).isTrue();
-    assertThat(settings.getEmailRequired()).isTrue();
+    assertThat(settings.getEmailRequired()).isFalse();
+
+    var inverseSettings =
+        JsonConverter.convertFromJson("{\"emailVisible\": false, \"emailRequired\": true}")
+            .applyDefaults();
+
+    assertThat(inverseSettings.getEmailVisible()).isFalse();
+    assertThat(inverseSettings.getEmailRequired()).isTrue();
   }
 
   @Test

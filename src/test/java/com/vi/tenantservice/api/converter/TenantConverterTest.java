@@ -71,15 +71,20 @@ class TenantConverterTest {
 
   @Test
   void toEntity_should_roundTripEmailVisibleAndEmailRequired() {
+    assertEmailSettingsRoundTrip(true, false);
+    assertEmailSettingsRoundTrip(false, true);
+  }
+
+  private void assertEmailSettingsRoundTrip(boolean emailVisible, boolean emailRequired) {
     MultilingualTenantDTO tenantDTO =
         new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
-    tenantDTO.getSettings().emailVisible(true).emailRequired(true);
+    tenantDTO.getSettings().emailVisible(emailVisible).emailRequired(emailRequired);
 
     TenantEntity entity = tenantConverter.toEntity(tenantDTO);
     TenantDTO converted = tenantConverter.toDTO(entity, "de");
 
-    assertThat(converted.getSettings().getEmailVisible()).isTrue();
-    assertThat(converted.getSettings().getEmailRequired()).isTrue();
+    assertThat(converted.getSettings().getEmailVisible()).isEqualTo(emailVisible);
+    assertThat(converted.getSettings().getEmailRequired()).isEqualTo(emailRequired);
   }
 
   @Test

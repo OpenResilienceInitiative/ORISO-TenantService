@@ -1,5 +1,7 @@
 package com.vi.tenantservice.api.validation;
 
+import java.net.URI;
+import java.util.Base64;
 import java.util.regex.Pattern;
 import org.owasp.html.HtmlPolicyBuilder;
 import org.springframework.stereotype.Component;
@@ -59,12 +61,32 @@ public class InputSanitizer {
     }
 
     var trimmed = input.trim();
-    if (ALLOWED_HTTP_URL.matcher(trimmed).matches()
-        || ALLOWED_IMAGE_DATA_URL.matcher(trimmed).matches()) {
+    if (isAllowedAssetUrl(trimmed)) {
       return input;
     }
 
     return null;
+  }
+
+  private static boolean isAllowedAssetUrl(String value) {
+    if (ALLOWED_HTTP_URL.matcher(value).matches()) {
+      try {
+        return URI.create(value).getHost() != null;
+      } catch (IllegalArgumentException ignored) {
+        return false;
+      }
+    }
+
+    if (ALLOWED_IMAGE_DATA_URL.matcher(value).matches()) {
+      try {
+        Base64.getDecoder().decode(value.substring(value.indexOf(',') + 1));
+        return true;
+      } catch (IllegalArgumentException ignored) {
+        return false;
+      }
+    }
+
+    return false;
   }
 
   public String sanitizeAllowingFormatting(String input) {
