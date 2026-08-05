@@ -154,6 +154,8 @@ public class TenantConverter {
         .activeLanguages(nullAsGerman(settings.getActiveLanguages()))
         .isVideoCallAllowed(settings.getIsVideoCallAllowed())
         .showAskerProfile(settings.getShowAskerProfile())
+        .emailVisible(settings.getEmailVisible())
+        .emailRequired(settings.getEmailRequired())
         .featureCentralDataProtectionTemplateEnabled(
             settings.getFeatureCentralDataProtectionTemplateEnabled())
         .tenantAdminControls(toTenantAdminControlsSettings(settings.getTenantAdminControls()))
@@ -336,6 +338,8 @@ public class TenantConverter {
             tenantSettings.getFeatureMediaAiScanSupervisionChatsEnabled())
         .isVideoCallAllowed(tenantSettings.getIsVideoCallAllowed())
         .showAskerProfile(tenantSettings.getShowAskerProfile())
+        .emailVisible(tenantSettings.getEmailVisible())
+        .emailRequired(tenantSettings.getEmailRequired())
         .featureCentralDataProtectionTemplateEnabled(
             tenantSettings.getFeatureCentralDataProtectionTemplateEnabled())
         .tenantAdminControls(toTenantAdminControls(tenantSettings.getTenantAdminControls()))

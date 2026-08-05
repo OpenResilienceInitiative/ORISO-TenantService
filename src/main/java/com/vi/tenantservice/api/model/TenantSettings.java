@@ -77,6 +77,12 @@ public class TenantSettings {
   Boolean isVideoCallAllowed;
   Boolean showAskerProfile;
 
+  /** Whether the registration flow shows an email field at all. */
+  Boolean emailVisible;
+
+  /** Whether the email field, when shown, must be filled in. */
+  Boolean emailRequired;
+
   String featureToolsOIDCToken;
   List<String> activeLanguages;
 
@@ -145,7 +151,9 @@ public class TenantSettings {
               Map.entry("featureMediaAiScanSupervisionChatsEnabled", false),
               Map.entry("isVideoCallAllowed", false),
               Map.entry("showAskerProfile", false),
-              Map.entry("featureCentralDataProtectionTemplateEnabled", false)));
+              Map.entry("featureCentralDataProtectionTemplateEnabled", false),
+              Map.entry("emailVisible", false),
+              Map.entry("emailRequired", false)));
 
   public static Map<String, Boolean> getBooleanFieldDefaults() {
     return BOOLEAN_FIELD_DEFAULTS;
@@ -287,6 +295,12 @@ public class TenantSettings {
     if (featureCentralDataProtectionTemplateEnabled == null) {
       featureCentralDataProtectionTemplateEnabled =
           BOOLEAN_FIELD_DEFAULTS.get("featureCentralDataProtectionTemplateEnabled");
+    }
+    if (emailVisible == null) {
+      emailVisible = BOOLEAN_FIELD_DEFAULTS.get("emailVisible");
+    }
+    if (emailRequired == null) {
+      emailRequired = BOOLEAN_FIELD_DEFAULTS.get("emailRequired");
     }
     return this;
   }
