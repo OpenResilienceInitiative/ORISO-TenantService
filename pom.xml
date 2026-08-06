@@ -44,7 +44,7 @@
         <awaitility.version>4.2.0</awaitility.version>
         <awaitility-proxy.version>3.1.6</awaitility-proxy.version>
         <easy-random-core.version>5.0.0</easy-random-core.version>
-        <assertj-core.version>3.23.1</assertj-core.version>
+        <assertj-core.version>3.27.7</assertj-core.version>
         <spring-security-oauth2-test-webmvc-addons.version>3.0.1</spring-security-oauth2-test-webmvc-addons.version>
         <liquibase-core.version>4.23.2</liquibase-core.version>
         <maven.compiler.source>21</maven.compiler.source>
