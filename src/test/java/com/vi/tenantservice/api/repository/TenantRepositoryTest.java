@@ -9,15 +9,34 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.jdbc.Sql;
+import org.springframework.test.context.jdbc.Sql.ExecutionPhase;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
-@TestPropertySource(properties = "spring.profiles.active=testing")
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
+// Runs fully self-contained against an embedded H2 database: the MariaDB dialect
+// and driver from the "testing" profile are overridden here, Hibernate builds the
+// schema from the entities (ddl-auto=create-drop) and the single seed tenant is
+// inserted before each test method.
+@TestPropertySource(
+    properties = {
+      "spring.datasource.url=jdbc:h2:mem:tenantrepositorytest;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
+      "spring.datasource.driver-class-name=org.h2.Driver",
+      "spring.datasource.username=sa",
+      "spring.datasource.password=",
+      "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+      "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect",
+      "spring.jpa.hibernate.ddl-auto=create-drop",
+      "spring.liquibase.enabled=false"
+    })
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ExtendWith(SpringExtension.class)
 @DataJpaTest
+@Sql(
+    value = "/database/TenantRepositoryTestData.sql",
+    executionPhase = ExecutionPhase.BEFORE_TEST_METHOD)
 class TenantRepositoryTest {
 
   private static final long EXISTING_ID = 1L;
@@ -84,5 +103,27 @@ class TenantRepositoryTest {
 
     // then
     assertNotNull(tenant);
+  }
+
+  @Test
+  void findTenantDataById_Should_NotRequireDpaColumnsInProjection() {
+    // when
+    var tenant = tenantRepository.findTenantDataById(EXISTING_ID);
+
+    // then
+    assertNotNull(tenant);
+    assertThat(tenant.getId()).isEqualTo(EXISTING_ID);
+    assertThat(tenant.getName()).isEqualTo("Happylife Gmbh");
+    assertThat(tenant.getSubdomain()).isEqualTo("happylife");
+  }
+
+  @Test
+  void findAllTenantData_Should_NotRequireDpaColumnsInProjection() {
+    // when
+    var tenants = tenantRepository.findAllTenantData();
+
+    // then
+    assertThat(tenants.size()).isEqualTo(1);
+    assertThat(tenants.get(0).getId()).isEqualTo(EXISTING_ID);
   }
 }

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <description>VI SaaS: TenantService</description>
@@ -14,30 +15,30 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.0.0</version>
+        <version>4.0.1</version>
         <relativePath/>
     </parent>
 
-    <properties> <!-- upper version is used to add the new features with the new versions of Java and spring boot, basic code changes are already made and as new features arrive they will use the upper version -->
+    <properties> <!-- upper version is used to add the new features with the new versions of Java and
+        spring boot, basic code changes are already made and as new features arrive they will use
+        the upper version -->
         <java.upper.version>21</java.upper.version>
         <springboot.upper.version>4.0.1</springboot.upper.version>
         <spring.upper.version>6.2.0</spring.upper.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <java.version>17</java.version>
+        <java.version>21</java.version>
+        <keycloak.version>17.0.0</keycloak.version>
         <swagger.version>3.0.0</swagger.version>
         <h2.version>2.1.214</h2.version>
-        <spring.security>6.0.5</spring.security>
+        <spring-security.version>7.0.1</spring-security.version>
         <owasp.java.html.sanitizer>20211018.1</owasp.java.html.sanitizer>
-        <hibernate.validator.version>8.0.0.Final</hibernate.validator.version>
-        <liquibase.maven.plugin.version>4.23.1</liquibase.maven.plugin.version>
-        <openapi.generator.maven.version>6.6.0</openapi.generator.maven.version>
+        <liquibase.maven.plugin.version>4.23.2</liquibase.maven.plugin.version>
+        <openapi.generator.maven.version>7.17.0</openapi.generator.maven.version>
         <jackson.databind.nullable.version>0.2.3</jackson.databind.nullable.version>
+        <jakarta.ws.rs-api.version>3.1.0</jakarta.ws.rs-api.version>
         <springfox.boot.starter.version>3.0.0</springfox.boot.starter.version>
-        <keycloak-spring-boot-starter.version>19.0.3</keycloak-spring-boot-starter.version>
-        <keycloak-spring-security-adapter.version>16.0.0</keycloak-spring-security-adapter.version>
-        <keycloak-admin-client.version>16.0.0</keycloak-admin-client.version>
-        <lombok.version>1.18.24</lombok.version>
+        <lombok.version>1.18.38</lombok.version>
         <commons-lang3.version>3.12.0</commons-lang3.version>
         <commons-collections4.version>4.4</commons-collections4.version>
         <awaitility.version>4.2.0</awaitility.version>
@@ -45,41 +46,37 @@
         <easy-random-core.version>5.0.0</easy-random-core.version>
         <assertj-core.version>3.23.1</assertj-core.version>
         <spring-security-oauth2-test-webmvc-addons.version>3.0.1</spring-security-oauth2-test-webmvc-addons.version>
-        <liquibase-core.version>4.23.1</liquibase-core.version>
-        <maven.compiler.source>17</maven.compiler.source>
-        <maven.compiler.target>17</maven.compiler.target>
-        <release.train.version>2022.0.5</release.train.version>
-        <sentry.version>8.43.2</sentry.version>
+        <liquibase-core.version>4.23.2</liquibase-core.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <mockito.version>5.20.0</mockito.version>
 
     </properties>
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.cloud</groupId>
-                <artifactId>spring-cloud-dependencies</artifactId>
-                <version>2022.0.5</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 
     <dependencies>
         <!-- Security dependencies -->
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-web</artifactId>
-            <version>${spring.security}</version>
+            <version>${spring-security.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-config</artifactId>
-            <version>${spring.security}</version>
+            <version>${spring-security.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-core</artifactId>
-            <version>${spring.security}</version>
+            <version>${spring-security.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
         <dependency>
@@ -109,41 +106,57 @@
             <artifactId>spring-boot-starter-hateoas</artifactId>
         </dependency>
 
+        <!-- Spring Boot 4 split tracing autoconfiguration out of the actuator
+          starter (unlike metrics, which spring-boot-starter-actuator still pulls
+          in via spring-boot-starter-micrometer-metrics). Without these two
+          modules, MicrometerTracingAutoConfiguration / OpenTelemetryTracingAutoConfiguration /
+          OtlpTracingAutoConfiguration never load: io.micrometer.tracing.Tracer
+          falls back to Tracer.NOOP (or, as was the case here, doesn't even get a
+          NoopTracerAutoConfiguration bean because the whole autoconfiguration
+          class is simply absent from the classpath), so no span is ever created
+          regardless of how the OTLP exporter properties are set. Verified by
+          diffing `unzip -l` of this service's running jar against AgencyService's:
+          Agency has spring-boot-micrometer-tracing-4.0.1.jar and
+          spring-boot-micrometer-tracing-opentelemetry-4.0.1.jar; this service did
+          not, despite having the io.micrometer bridge and OTLP exporter jars below. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-micrometer-tracing</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-micrometer-tracing-opentelemetry</artifactId>
+        </dependency>
+        <!-- Provides the base io.opentelemetry.api.OpenTelemetry SDK bean
+          (OpenTelemetrySdkAutoConfiguration) that OtlpTracingAutoConfiguration's
+          otelTracer bean requires - not pulled in by
+          spring-boot-micrometer-tracing-opentelemetry itself. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-opentelemetry</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-tracing-bridge-otel</artifactId>
         </dependency>
         <dependency>
             <groupId>io.opentelemetry</groupId>
-            <artifactId>opentelemetry-exporter-zipkin</artifactId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.sentry</groupId>
-            <artifactId>sentry-spring-boot-starter-jakarta</artifactId>
-            <version>${sentry.version}</version>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-otlp</artifactId>
         </dependency>
         <dependency>
-            <groupId>io.sentry</groupId>
-            <artifactId>sentry-logback</artifactId>
-            <version>${sentry.version}</version>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.0.1</version>
         </dependency>
 
         <!-- Spring actuator  -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-actuator-autoconfigure</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-actuator-autoconfigure</artifactId>
-            <version>3.0.6</version>
         </dependency>
         <!-- Persistence -->
 
@@ -155,7 +168,6 @@
         <dependency>
             <groupId>org.hibernate.validator</groupId>
             <artifactId>hibernate-validator</artifactId>
-            <version>${hibernate.validator.version}</version>
         </dependency>
 
         <dependency>
@@ -174,6 +186,13 @@
             <groupId>org.liquibase</groupId>
             <artifactId>liquibase-core</artifactId>
             <version>${liquibase-core.version}</version>
+        </dependency>
+
+        <!-- Spring Boot 4 moved LiquibaseAutoConfiguration into its own module;
+             without this, spring.liquibase.* is silently ignored at boot. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-liquibase</artifactId>
         </dependency>
 
         <dependency>
@@ -220,18 +239,22 @@
             <groupId>io.springfox</groupId>
             <artifactId>springfox-boot-starter</artifactId>
             <version>${springfox.boot.starter.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.plugin</groupId>
+                    <artifactId>spring-plugin-core</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.springframework.plugin</groupId>
+                    <artifactId>spring-plugin-metadata</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>io.swagger.parser.v3</groupId>
             <artifactId>swagger-parser</artifactId>
             <version>2.1.15</version>
         </dependency>
-        <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-            <version>2.0.0</version>
-        </dependency>
-
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
@@ -241,8 +264,13 @@
         <!-- Keycloak dependencies -->
         <dependency>
             <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-spring-security-adapter</artifactId>
+            <version>${keycloak.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.keycloak</groupId>
             <artifactId>keycloak-spring-boot-starter</artifactId>
-            <version>${keycloak-spring-boot-starter.version}</version>
+            <version>${keycloak.version}</version>
             <exclusions>
                 <exclusion>
                     <groupId>ch.qos.logback</groupId>
@@ -250,12 +278,16 @@
                 </exclusion>
             </exclusions>
         </dependency>
-
-        <!-- https://mvnrepository.com/artifact/javax.ws.rs/javax.ws.rs-api -->
         <dependency>
-            <groupId>javax.ws.rs</groupId>
-            <artifactId>javax.ws.rs-api</artifactId>
-            <version>2.1.1</version>
+            <groupId>org.keycloak</groupId>
+            <artifactId>keycloak-admin-client</artifactId>
+            <version>${keycloak.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>jakarta.ws.rs</groupId>
+            <artifactId>jakarta.ws.rs-api</artifactId>
+            <version>${jakarta.ws.rs-api.version}</version>
         </dependency>
 
         <dependency>
@@ -293,12 +325,6 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>${slf4j.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <version>${slf4j.version}</version>
         </dependency>
 
 
@@ -309,9 +335,24 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-jdbc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-data-jpa-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
-            <version>${spring.security}</version>
+            <version>${spring-security.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -338,10 +379,27 @@
             <version>${assertj-core.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- In-memory span exporter for asserting real spans get created/exported
+          end-to-end through the tracing autoconfiguration - see
+          TracingSmokeIT. Version pinned to the same OTel SDK line already used
+          by spring-boot-opentelemetry (${opentelemetry.version}), inherited
+          from spring-boot-dependencies. -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-sdk-testing</artifactId>
+            <version>${opentelemetry.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
-            <version>5.0.0</version>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>3.3.1</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -367,11 +425,6 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-properties-migrator</artifactId>
-            <scope>runtime</scope>
-        </dependency>
     </dependencies>
 
     <build>
@@ -386,12 +439,15 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <jvmArguments>--enable-preview</jvmArguments>
+                </configuration>
             </plugin>
             <!-- OpenApi codegen maven plugin: generates api stubs -->
             <plugin>
                 <groupId>org.openapitools</groupId>
                 <artifactId>openapi-generator-maven-plugin</artifactId>
-                <version>6.6.0</version>
+                <version>${openapi.generator.maven.version}</version>
                 <executions>
                     <execution>
                         <goals>
@@ -406,7 +462,8 @@
 
                             <inputSpec>${project.basedir}/api/tenantservice.yaml</inputSpec>
                             <generatorName>spring</generatorName>
-                            <apiPackage>${project.groupId}.${project.artifactId}.generated.api.controller</apiPackage>
+                            <apiPackage>
+                                ${project.groupId}.${project.artifactId}.generated.api.controller</apiPackage>
                             <modelPackage>${project.groupId}.${project.artifactId}.api.model</modelPackage>
                             <generateSupportingFiles>true</generateSupportingFiles>
                             <apisToGenerate></apisToGenerate>
@@ -507,17 +564,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <skipTests>false</skipTests>
-                    <argLine>--enable-preview</argLine>
                     <excludedGroups>SkipOnCI</excludedGroups>
-                    <!--
-                        TEMPORARY: 
-                        Do not fail the build when tests fail. JUnit XML reports
-                        are still written to target/surefire-reports/, and a
-                        human-readable summary is printed at the end of the build.
-                        Set to false (or pass -Dmaven.test.failure.ignore=false)
-                        when failures should block the build (e.g. in CI).
-                    -->
-                    <testFailureIgnore>true</testFailureIgnore>
                 </configuration>
                 <executions>
                     <execution>
@@ -548,11 +595,33 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>spring-7-openapi-client-compatibility</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <replace dir="${project.build.directory}/generated-sources"
+                                    token="headers.entrySet()" value="headers.headerSet()">
+                                    <include name="**/ApiClient.java"/>
+                                </replace>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Liquibase Maven plugin -->
             <plugin>
                 <groupId>org.liquibase</groupId>
                 <artifactId>liquibase-maven-plugin</artifactId>
-                <version>4.23.1</version>
+                <version>${liquibase.maven.plugin.version}</version>
                 <configuration>
                     <propertyFile>src/main/resources/liquibase.properties</propertyFile>
                 </configuration>
@@ -561,12 +630,12 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
-                <version>2.23.0</version>
+                <version>2.43.0</version>
                 <configuration>
                     <java>
                         <toggleOffOn />
                         <googleJavaFormat>
-                            <version>1.15.0</version>
+                            <version>1.22.0</version>
                             <style>GOOGLE</style>
                         </googleJavaFormat>
                     </java>
@@ -584,9 +653,15 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
-                    <source>17</source>
-                    <target>17</target>
-                    <compilerArgs>--enable-preview</compilerArgs>
+                    <source>21</source>
+                    <target>21</target>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
         </plugins>

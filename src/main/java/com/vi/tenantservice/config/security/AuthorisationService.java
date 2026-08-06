@@ -2,11 +2,12 @@ package com.vi.tenantservice.config.security;
 
 import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.RoleAuthorizationAuthorityMapper;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import org.apache.commons.codec.binary.Base32;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -52,8 +53,36 @@ public class AuthorisationService {
     return Optional.of(tenantId);
   }
 
-  public Object getUsername() {
-    return getPrincipal().getClaims().get("username");
+  public String getUsername() {
+    Object raw = getPrincipal().getClaims().get("username");
+    if (raw == null) {
+      return null;
+    }
+    String username = raw.toString();
+    if (!username.startsWith("enc.")) {
+      return username;
+    }
+    try {
+      return new String(
+          new Base32().decode(username.substring(4).toUpperCase().replace(".", "=")),
+          StandardCharsets.UTF_8);
+    } catch (IllegalArgumentException e) {
+      throw new AccessDeniedException("Invalid encoded username claim in JWT token", e);
+    }
+  }
+
+  /**
+   * Stable user id of the authenticated principal for audit trails: the {@code userId} claim when
+   * present (the Keycloak attribute the platform stamps into its tokens), otherwise the JWT
+   * subject.
+   */
+  public String getUserId() {
+    Jwt principal = getPrincipal();
+    Object userIdClaim = principal.getClaims().get("userId");
+    if (userIdClaim != null) {
+      return userIdClaim.toString();
+    }
+    return principal.getSubject();
   }
 
   private Authentication getAuthentication() {
@@ -71,11 +100,14 @@ public class AuthorisationService {
   }
 
   public Collection<String> extractRealmRoles(Jwt jwt) {
-    Map<String, Object> realmAccess = (Map<String, Object>) jwt.getClaims().get("realm_access");
-    if (realmAccess != null) {
-      var roles = (List<String>) realmAccess.get("roles");
-      if (roles != null) {
-        return roles;
+    Object realmAccess = jwt.getClaims().get("realm_access");
+    if (realmAccess instanceof Map<?, ?> realmAccessMap) {
+      Object roles = realmAccessMap.get("roles");
+      if (roles instanceof Collection<?> roleCollection) {
+        return roleCollection.stream()
+            .filter(String.class::isInstance)
+            .map(String.class::cast)
+            .toList();
       }
     }
     return Lists.newArrayList();

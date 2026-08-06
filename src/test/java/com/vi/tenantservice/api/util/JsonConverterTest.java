@@ -62,7 +62,7 @@ class JsonConverterTest {
             + "\"featureAppointmentsEnabled\":false,"
             + "\"featureGroupChatV2Enabled\":false,"
             + "\"featureToolsEnabled\":false,"
-            + "\"featureAttachmentUploadDisabled\":true,"
+            + "\"featureMediaUploadEnabled\":false,"
             + "\"featureToolsOIDCToken\":null"
             + "}";
 
@@ -71,14 +71,14 @@ class JsonConverterTest {
 
     // then
     assertThat(tenantSettings, notNullValue());
-    assertThat(tenantSettings.isFeatureStatisticsEnabled(), is(true));
-    assertThat(tenantSettings.isFeatureTopicsEnabled(), is(true));
-    assertThat(tenantSettings.isTopicsInRegistrationEnabled(), is(true));
-    assertThat(tenantSettings.isFeatureDemographicsEnabled(), is(false));
-    assertThat(tenantSettings.isFeatureAppointmentsEnabled(), is(false));
-    assertThat(tenantSettings.isFeatureGroupChatV2Enabled(), is(false));
-    assertThat(tenantSettings.isFeatureToolsEnabled(), is(false));
-    assertThat(tenantSettings.isFeatureAttachmentUploadDisabled(), is(true));
+    assertThat(tenantSettings.getFeatureStatisticsEnabled(), is(true));
+    assertThat(tenantSettings.getFeatureTopicsEnabled(), is(true));
+    assertThat(tenantSettings.getTopicsInRegistrationEnabled(), is(true));
+    assertThat(tenantSettings.getFeatureDemographicsEnabled(), is(false));
+    assertThat(tenantSettings.getFeatureAppointmentsEnabled(), is(false));
+    assertThat(tenantSettings.getFeatureGroupChatV2Enabled(), is(false));
+    assertThat(tenantSettings.getFeatureToolsEnabled(), is(false));
+    assertThat(tenantSettings.getFeatureMediaUploadEnabled(), is(false));
     assertThat(tenantSettings.getFeatureToolsOIDCToken(), nullValue());
   }
 

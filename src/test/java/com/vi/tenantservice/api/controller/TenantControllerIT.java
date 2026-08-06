@@ -36,16 +36,18 @@ import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.Sql.ExecutionPhase;
 import org.springframework.test.web.servlet.MockMvc;
@@ -56,6 +58,7 @@ import org.springframework.web.context.WebApplicationContext;
 @SpringBootTest(classes = TenantServiceApplication.class)
 @TestPropertySource(properties = "spring.profiles.active=testing")
 @AutoConfigureMockMvc(addFilters = false)
+@Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class TenantControllerIT {
 
   private static final String TENANT_RESOURCE = "/tenant";
@@ -67,6 +70,7 @@ class TenantControllerIT {
   private static final String TENANTADMIN_RESOURCE_SLASH = TENANTADMIN_RESOURCE + "/";
   private static final String PUBLIC_TENANT_RESOURCE = "/tenant/public/";
   private static final String PUBLIC_TENANT_RESOURCE_BY_ID = "/tenant/public/id/";
+  private static final String PUBLIC_TENANT_RESOURCE_BY_IDS = "/tenant/public/ids";
   private static final String PUBLIC_SINGLE_TENANT_RESOURCE = PUBLIC_TENANT_RESOURCE + "single";
   private static final String EXISTING_TENANT = TENANT_RESOURCE_SLASH + "1";
 
@@ -82,29 +86,32 @@ class TenantControllerIT {
   private static final String SCRIPT_CONTENT = "<script>error</script>";
   private static final int PAGE_SIZE = 3;
   private static final int CONSULTING_TYPE_ID = 2;
+  private static final String ACCENT_DARK = "#8B1A2B";
+  private static final String ACCENT_LIGHT = "#FFB3C7";
+  private static final String SIGNAL_COLOR = "#D93025";
 
   @Autowired private WebApplicationContext context;
 
-  @MockBean AuthorisationService authorisationService;
+  @MockitoBean AuthorisationService authorisationService;
 
-  @MockBean ApplicationSettingsService applicationSettingsService;
+  @MockitoBean ApplicationSettingsService applicationSettingsService;
 
-  @MockBean ApplicationSettingsApiControllerFactory applicationSettingsApiControllerFactory;
+  @MockitoBean ApplicationSettingsApiControllerFactory applicationSettingsApiControllerFactory;
 
-  @MockBean ConsultingTypeServiceApiControllerFactory consultingTypeServiceApiControllerFactory;
+  @MockitoBean ConsultingTypeServiceApiControllerFactory consultingTypeServiceApiControllerFactory;
 
-  @MockBean
+  @MockitoBean
   com.vi.tenantservice.consultingtypeservice.generated.web.ConsultingTypeControllerApi
       consultingTypeControllerApi;
 
-  @MockBean SecurityHeaderSupplier securityHeaderSupplier;
-  @MockBean TenantResolverService tenantResolverService;
+  @MockitoBean SecurityHeaderSupplier securityHeaderSupplier;
+  @MockitoBean TenantResolverService tenantResolverService;
 
-  @MockBean ConsultingTypeService consultingTypeService;
+  @MockitoBean ConsultingTypeService consultingTypeService;
 
-  @MockBean UserAdminService userAdminService;
+  @MockitoBean UserAdminService userAdminService;
 
-  @MockBean SubdomainExtractor subdomainExtractor;
+  @MockitoBean SubdomainExtractor subdomainExtractor;
 
   private MockMvc mockMvc;
 
@@ -159,7 +166,7 @@ class TenantControllerIT {
         .andExpect(jsonPath("settings.featureDemographicsEnabled", is(false)))
         .andExpect(jsonPath("settings.featureAppointmentsEnabled", is(false)))
         .andExpect(jsonPath("settings.featureGroupChatV2Enabled", is(false)))
-        .andExpect(jsonPath("settings.featureAttachmentUploadDisabled", is(true)))
+        .andExpect(jsonPath("settings.featureMediaUploadEnabled", is(false)))
         .andExpect(jsonPath("settings.featureToolsOICDToken", is("token")))
         .andExpect(jsonPath("settings.activeLanguages", is(Lists.newArrayList("de", "en"))));
   }
@@ -261,7 +268,7 @@ class TenantControllerIT {
                 .sendFurtherStepsMessage(true)
                 .welcomeMessage(
                     new com.vi.tenantservice.consultingtypeservice.generated.web.model
-                            .ExtendedConsultingTypeResponseDTOAllOfWelcomeMessage()
+                            .WelcomeMessageDTO()
                         .welcomeMessageText("welcome")
                         .sendWelcomeMessage(true))
                 .isVideoCallAllowed(true));
@@ -412,8 +419,7 @@ class TenantControllerIT {
             new com.vi.tenantservice.applicationsettingsservice.generated.web.model
                 .ApplicationSettingsDTO();
     settingsDTO.setLegalContentChangesBySingleTenantAdminsAllowed(
-        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
-                .ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled()
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO()
             .value(value));
     when(applicationSettingsService.getApplicationSettings()).thenReturn(settingsDTO);
   }
@@ -460,6 +466,73 @@ class TenantControllerIT {
   }
 
   @Test
+  void updateTenant_Should_roundTripBothAccents_When_calledWithTenantAdminAuthority()
+      throws Exception {
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+
+    mockMvc
+        .perform(
+            put(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    multilingualTenantTestDataBuilder
+                        .withId(1L)
+                        .withName("tenant")
+                        .withSubdomain("accentsubdomain")
+                        .withThemingAccents(ACCENT_DARK, ACCENT_LIGHT, SIGNAL_COLOR)
+                        .withLicensing()
+                        .jsonify()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.primaryColor").value(ACCENT_DARK))
+        .andExpect(jsonPath("$.theming.accent").value(ACCENT_LIGHT))
+        .andExpect(jsonPath("$.theming.signal").value(SIGNAL_COLOR));
+
+    mockMvc
+        .perform(
+            get(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.primaryColor").value(ACCENT_DARK))
+        .andExpect(jsonPath("$.theming.accent").value(ACCENT_LIGHT))
+        .andExpect(jsonPath("$.theming.signal").value(SIGNAL_COLOR));
+  }
+
+  @Test
+  void getRestrictedTenantData_Should_exposeBothAccents_When_lightAccentWasSaved()
+      throws Exception {
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+
+    mockMvc
+        .perform(
+            put(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    multilingualTenantTestDataBuilder
+                        .withId(1L)
+                        .withName("tenant")
+                        .withSubdomain("accentsubdomain")
+                        .withThemingAccents(ACCENT_DARK, ACCENT_LIGHT, SIGNAL_COLOR)
+                        .withLicensing()
+                        .jsonify()))
+        .andExpect(status().isOk());
+
+    // the mail renderer and every other public consumer read the pair from this endpoint
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.primaryColor").value(ACCENT_DARK))
+        .andExpect(jsonPath("$.theming.accent").value(ACCENT_LIGHT))
+        .andExpect(jsonPath("$.theming.signal").value(SIGNAL_COLOR));
+  }
+
+  @Test
   void getTenant_Should_returnSettings() throws Exception {
     var builder = new AuthenticationMockBuilder();
     giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
@@ -475,7 +548,7 @@ class TenantControllerIT {
         .andExpect(jsonPath("settings.featureDemographicsEnabled", is(true)))
         .andExpect(jsonPath("settings.featureAppointmentsEnabled", is(true)))
         .andExpect(jsonPath("settings.featureGroupChatV2Enabled", is(true)))
-        .andExpect(jsonPath("settings.featureAttachmentUploadDisabled", is(false)))
+        .andExpect(jsonPath("settings.featureMediaUploadEnabled", is(true)))
         .andExpect(jsonPath("settings.activeLanguages", is(Lists.newArrayList("de"))));
   }
 
@@ -603,6 +676,52 @@ class TenantControllerIT {
     mockMvc
         .perform(get(NON_EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
         .andExpect(status().isNotFound());
+  }
+
+  @Test
+  void
+      getRestrictedTenantDataByTenantIds_Should_returnExistingTenantsAndOmitMissingIdsWithoutAuthentication()
+          throws Exception {
+    mockMvc
+        .perform(
+            post(PUBLIC_TENANT_RESOURCE_BY_IDS)
+                .contentType(APPLICATION_JSON)
+                .content("[1, 1, 9999]"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(1)))
+        .andExpect(jsonPath("$[0].id").value(1))
+        .andExpect(jsonPath("$[0].name").exists())
+        .andExpect(jsonPath("$[0].licensing").doesNotExist());
+  }
+
+  @Test
+  void getRestrictedTenantDataByTenantIds_Should_rejectEmptyBatch() throws Exception {
+    mockMvc
+        .perform(post(PUBLIC_TENANT_RESOURCE_BY_IDS).contentType(APPLICATION_JSON).content("[]"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void getRestrictedTenantDataByTenantIds_Should_rejectNullIds() throws Exception {
+    mockMvc
+        .perform(
+            post(PUBLIC_TENANT_RESOURCE_BY_IDS).contentType(APPLICATION_JSON).content("[1, null]"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void getRestrictedTenantDataByTenantIds_Should_rejectMoreThanOneHundredIds() throws Exception {
+    String overLimitRequest =
+        LongStream.rangeClosed(1, 101)
+            .mapToObj(String::valueOf)
+            .collect(Collectors.joining(",", "[", "]"));
+
+    mockMvc
+        .perform(
+            post(PUBLIC_TENANT_RESOURCE_BY_IDS)
+                .contentType(APPLICATION_JSON)
+                .content(overLimitRequest))
+        .andExpect(status().isBadRequest());
   }
 
   @Test
@@ -840,6 +959,59 @@ class TenantControllerIT {
   }
 
   @Test
+  void searchTenants_Should_returnOk_When_sortedBySubdomain() throws Exception {
+    // given
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+
+    // when
+    var content =
+        this.mockMvc
+            .perform(
+                get(TENANTADMIN_SEARCH + "?query=*&page=1&perPage=10&field=SUBDOMAIN&order=ASC")
+                    .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("_embedded", hasSize(PAGE_SIZE)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    // then
+    var subdomains =
+        com.jayway.jsonpath.JsonPath.<java.util.List<String>>read(
+            content, "$._embedded[*].subdomain");
+    org.assertj.core.api.Assertions.assertThat(subdomains).isSorted();
+  }
+
+  @Test
+  void searchTenants_Should_returnOk_When_sortedByBeraterCountDescending() throws Exception {
+    // given
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+
+    // when
+    var content =
+        this.mockMvc
+            .perform(
+                get(TENANTADMIN_SEARCH + "?query=*&page=1&perPage=10&field=BERATERCOUNT&order=DESC")
+                    .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("_embedded", hasSize(PAGE_SIZE)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    // then
+    var beraterCounts =
+        com.jayway.jsonpath.JsonPath.<java.util.List<Integer>>read(
+            content, "$._embedded[*].beraterCount");
+    org.assertj.core.api.Assertions.assertThat(beraterCounts)
+        .isSortedAccordingTo(java.util.Comparator.reverseOrder());
+  }
+
+  @Test
   void searchTenants_Should_returnUnauthorized_When_attemptedToGetTenantWithoutTenantAuthority()
       throws Exception {
     // when, then
@@ -951,6 +1123,65 @@ class TenantControllerIT {
         .andExpect(jsonPath("$[0].name").exists())
         .andExpect(jsonPath("$[0].subdomain").exists())
         .andExpect(jsonPath("$[0].beraterCount").exists())
-        .andExpect(jsonPath("$[0].adminEmails").doesNotExist());
+        // No tenant admins are mocked here, so the enrichment step leaves adminEmails untouched.
+        // The generated AdminTenantDTO now default-initializes the field to an empty list, so it
+        // serializes as an empty array rather than being absent.
+        .andExpect(jsonPath("$[0].adminEmails", hasSize(0)));
+  }
+
+  // --- machine-translation provider API keys (platform-global, super admin only) ---
+
+  private void givenSuperAdminAccessToken() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+  }
+
+  @Test
+  void translationApiKeys_Should_beStoredViaPut_andOnlyEverReadBackMasked() throws Exception {
+    givenSuperAdminAccessToken();
+    var builder = new AuthenticationMockBuilder();
+
+    mockMvc
+        .perform(
+            put("/tenantadmin/translation/keys/openrouter")
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON)
+                .content("{\"apiKey\":\"sk-or-v1-0123456789abcd\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("openrouter", is("sk-\u2026abcd")));
+
+    mockMvc
+        .perform(
+            get("/tenantadmin/translation/keys")
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("openrouter", is("sk-\u2026abcd")))
+        .andExpect(jsonPath("mistral", is((String) null)));
+  }
+
+  @Test
+  void getTranslationApiKeys_Should_returnForbidden_When_tokenIsNotSuperAdmin() throws Exception {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(1L));
+    var builder = new AuthenticationMockBuilder();
+
+    mockMvc
+        .perform(
+            get("/tenantadmin/translation/keys")
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void setTranslationApiKey_Should_returnForbidden_When_calledWithoutTenantAdminAuthority()
+      throws Exception {
+    mockMvc
+        .perform(
+            put("/tenantadmin/translation/keys/openrouter")
+                .with(
+                    user("not important")
+                        .authorities((GrantedAuthority) SINGLE_TENANT_ADMIN::getValue))
+                .contentType(APPLICATION_JSON)
+                .content("{\"apiKey\":\"sk-or-v1-0123456789abcd\"}"))
+        .andExpect(status().isForbidden());
   }
 }

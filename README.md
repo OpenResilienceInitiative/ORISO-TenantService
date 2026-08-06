@@ -89,6 +89,9 @@ cluster IPs because they break when services or pods are recreated.
 
 ## Local Development
 
+For the full mixed local frontend/UserService/TenantService setup, see
+[`documentation/local-development.md`](documentation/local-development.md).
+
 Prerequisites:
 
 - JDK 17

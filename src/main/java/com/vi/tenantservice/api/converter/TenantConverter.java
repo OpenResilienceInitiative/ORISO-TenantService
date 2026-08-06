@@ -25,8 +25,10 @@ import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionTogglesSetting
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantEntity.TenantEntityBuilder;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.model.Theming;
@@ -59,7 +61,9 @@ public class TenantConverter {
         TenantEntity.builder()
             .id(tenantDTO.getId())
             .name(tenantDTO.getName())
-            .subdomain(tenantDTO.getSubdomain());
+            .subdomain(tenantDTO.getSubdomain())
+            .address(tenantDTO.getAddress())
+            .description(tenantDTO.getDescription());
     contentToEntity(tenantDTO, builder);
     licensingToEntity(tenantDTO, builder);
     themingToEntity(tenantDTO, builder);
@@ -76,64 +80,84 @@ public class TenantConverter {
 
   private TenantSettings toEntitySettings(Settings settings) {
     return TenantSettings.builder()
-        .topicsInRegistrationEnabled(nullAsFalse(settings.getTopicsInRegistrationEnabled()))
-        .featureDemographicsEnabled(nullAsFalse(settings.getFeatureDemographicsEnabled()))
-        .featureTopicsEnabled(nullAsFalse(settings.getFeatureTopicsEnabled()))
-        .featureAppointmentsEnabled(nullAsFalse(settings.getFeatureAppointmentsEnabled()))
-        .featureStatisticsEnabled(nullAsFalse(settings.getFeatureStatisticsEnabled()))
-        .featureGroupChatV2Enabled(nullAsFalse(settings.getFeatureGroupChatV2Enabled()))
-        .featureToolsEnabled(nullAsFalse(settings.getFeatureToolsEnabled()))
-        .featureAnonymousChatEnabled(nullAsTrue(settings.getFeatureAnonymousChatEnabled()))
-        .featureCallsEnabled(nullAsTrue(settings.getFeatureCallsEnabled()))
-        .featureSupervisionEnabled(nullAsTrue(settings.getFeatureSupervisionEnabled()))
+        .topicsInRegistrationEnabled(settings.getTopicsInRegistrationEnabled())
+        .featureDemographicsEnabled(settings.getFeatureDemographicsEnabled())
+        .featureTopicsEnabled(settings.getFeatureTopicsEnabled())
+        .featureAppointmentsEnabled(settings.getFeatureAppointmentsEnabled())
+        .featureStatisticsEnabled(settings.getFeatureStatisticsEnabled())
+        .featureGroupChatV2Enabled(settings.getFeatureGroupChatV2Enabled())
+        .featureTeamDiscussionEnabled(settings.getFeatureTeamDiscussionEnabled())
+        .featureToolsEnabled(settings.getFeatureToolsEnabled())
+        .featureAnonymousChatEnabled(settings.getFeatureAnonymousChatEnabled())
+        .featureCallsEnabled(settings.getFeatureCallsEnabled())
+        .featureSupervisionEnabled(settings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
-            nullAsTrue(settings.getFeatureSupervisionAnonymousChatsEnabled()))
+            settings.getFeatureSupervisionAnonymousChatsEnabled())
         .featureSupervisionOneOnOneChatsEnabled(
-            nullAsTrue(settings.getFeatureSupervisionOneOnOneChatsEnabled()))
-        .featureAudioCallsEnabled(nullAsTrue(settings.getFeatureAudioCallsEnabled()))
+            settings.getFeatureSupervisionOneOnOneChatsEnabled())
+        .featureAudioCallsEnabled(settings.getFeatureAudioCallsEnabled())
         .featureAudioCallsAnonymousChatsEnabled(
-            nullAsTrue(settings.getFeatureAudioCallsAnonymousChatsEnabled()))
-        .featureAudioCallsOneOnOneChatsEnabled(
-            nullAsTrue(settings.getFeatureAudioCallsOneOnOneChatsEnabled()))
-        .featureAudioCallsGroupChatsEnabled(
-            nullAsTrue(settings.getFeatureAudioCallsGroupChatsEnabled()))
+            settings.getFeatureAudioCallsAnonymousChatsEnabled())
+        .featureAudioCallsOneOnOneChatsEnabled(settings.getFeatureAudioCallsOneOnOneChatsEnabled())
+        .featureAudioCallsGroupChatsEnabled(settings.getFeatureAudioCallsGroupChatsEnabled())
         .featureAudioCallsSupervisionChatsEnabled(
-            nullAsTrue(settings.getFeatureAudioCallsSupervisionChatsEnabled()))
-        .featureVideoCallsEnabled(nullAsTrue(settings.getFeatureVideoCallsEnabled()))
+            settings.getFeatureAudioCallsSupervisionChatsEnabled())
+        .featureVideoCallsEnabled(settings.getFeatureVideoCallsEnabled())
         .featureVideoCallsAnonymousChatsEnabled(
-            nullAsTrue(settings.getFeatureVideoCallsAnonymousChatsEnabled()))
-        .featureVideoCallsOneOnOneChatsEnabled(
-            nullAsTrue(settings.getFeatureVideoCallsOneOnOneChatsEnabled()))
-        .featureVideoCallsGroupChatsEnabled(
-            nullAsTrue(settings.getFeatureVideoCallsGroupChatsEnabled()))
+            settings.getFeatureVideoCallsAnonymousChatsEnabled())
+        .featureVideoCallsOneOnOneChatsEnabled(settings.getFeatureVideoCallsOneOnOneChatsEnabled())
+        .featureVideoCallsGroupChatsEnabled(settings.getFeatureVideoCallsGroupChatsEnabled())
         .featureVideoCallsSupervisionChatsEnabled(
-            nullAsTrue(settings.getFeatureVideoCallsSupervisionChatsEnabled()))
-        .featureThreadsEnabled(nullAsTrue(settings.getFeatureThreadsEnabled()))
-        .featureThreadsAnonymousChatsEnabled(
-            nullAsTrue(settings.getFeatureThreadsAnonymousChatsEnabled()))
-        .featureThreadsGroupChatsEnabled(nullAsTrue(settings.getFeatureThreadsGroupChatsEnabled()))
-        .featureThreadsOneOnOneEnabled(nullAsTrue(settings.getFeatureThreadsOneOnOneEnabled()))
-        .featureThreadsSupervisionChatsEnabled(
-            nullAsTrue(settings.getFeatureThreadsSupervisionChatsEnabled()))
-        .featureVoiceMessagesEnabled(nullAsTrue(settings.getFeatureVoiceMessagesEnabled()))
+            settings.getFeatureVideoCallsSupervisionChatsEnabled())
+        .featureThreadsEnabled(settings.getFeatureThreadsEnabled())
+        .featureThreadsAnonymousChatsEnabled(settings.getFeatureThreadsAnonymousChatsEnabled())
+        .featureThreadsGroupChatsEnabled(settings.getFeatureThreadsGroupChatsEnabled())
+        .featureThreadsOneOnOneEnabled(settings.getFeatureThreadsOneOnOneEnabled())
+        .featureThreadsSupervisionChatsEnabled(settings.getFeatureThreadsSupervisionChatsEnabled())
+        .featureVoiceMessagesEnabled(settings.getFeatureVoiceMessagesEnabled())
         .featureVoiceMessagesAnonymousChatsEnabled(
-            nullAsTrue(settings.getFeatureVoiceMessagesAnonymousChatsEnabled()))
+            settings.getFeatureVoiceMessagesAnonymousChatsEnabled())
         .featureVoiceMessagesOneOnOneChatsEnabled(
-            nullAsTrue(settings.getFeatureVoiceMessagesOneOnOneChatsEnabled()))
-        .featureVoiceMessagesGroupChatsEnabled(
-            nullAsTrue(settings.getFeatureVoiceMessagesGroupChatsEnabled()))
+            settings.getFeatureVoiceMessagesOneOnOneChatsEnabled())
+        .featureVoiceMessagesGroupChatsEnabled(settings.getFeatureVoiceMessagesGroupChatsEnabled())
         .featureVoiceMessagesSupervisionChatsEnabled(
-            nullAsTrue(settings.getFeatureVoiceMessagesSupervisionChatsEnabled()))
+            settings.getFeatureVoiceMessagesSupervisionChatsEnabled())
         .featureSystemNotificationEmailsEnabled(
-            nullAsFalse(settings.getFeatureSystemNotificationEmailsEnabled()))
+            settings.getFeatureSystemNotificationEmailsEnabled())
         .smtp(toTenantSmtpSettings(settings.getSmtp()))
         .featureToolsOIDCToken(settings.getFeatureToolsOICDToken())
-        .featureAttachmentUploadDisabled(nullAsFalse(settings.getFeatureAttachmentUploadDisabled()))
+        .featureMediaUploadEnabled(settings.getFeatureMediaUploadEnabled())
+        .featureMediaUploadAnonymousChatsEnabled(
+            settings.getFeatureMediaUploadAnonymousChatsEnabled())
+        .featureMediaUploadOneOnOneChatsEnabled(
+            settings.getFeatureMediaUploadOneOnOneChatsEnabled())
+        .featureMediaUploadGroupChatsEnabled(settings.getFeatureMediaUploadGroupChatsEnabled())
+        .featureMediaUploadSupervisionChatsEnabled(
+            settings.getFeatureMediaUploadSupervisionChatsEnabled())
+        .featureMediaInlineDisplayEnabled(settings.getFeatureMediaInlineDisplayEnabled())
+        .featureMediaInlineDisplayAnonymousChatsEnabled(
+            settings.getFeatureMediaInlineDisplayAnonymousChatsEnabled())
+        .featureMediaInlineDisplayOneOnOneChatsEnabled(
+            settings.getFeatureMediaInlineDisplayOneOnOneChatsEnabled())
+        .featureMediaInlineDisplayGroupChatsEnabled(
+            settings.getFeatureMediaInlineDisplayGroupChatsEnabled())
+        .featureMediaInlineDisplaySupervisionChatsEnabled(
+            settings.getFeatureMediaInlineDisplaySupervisionChatsEnabled())
+        .featureMediaAiScanEnabled(settings.getFeatureMediaAiScanEnabled())
+        .featureMediaAiScanAnonymousChatsEnabled(
+            settings.getFeatureMediaAiScanAnonymousChatsEnabled())
+        .featureMediaAiScanOneOnOneChatsEnabled(
+            settings.getFeatureMediaAiScanOneOnOneChatsEnabled())
+        .featureMediaAiScanGroupChatsEnabled(settings.getFeatureMediaAiScanGroupChatsEnabled())
+        .featureMediaAiScanSupervisionChatsEnabled(
+            settings.getFeatureMediaAiScanSupervisionChatsEnabled())
         .activeLanguages(nullAsGerman(settings.getActiveLanguages()))
-        .isVideoCallAllowed(nullAsFalse(settings.getIsVideoCallAllowed()))
-        .showAskerProfile(nullAsFalse(settings.getShowAskerProfile()))
+        .isVideoCallAllowed(settings.getIsVideoCallAllowed())
+        .showAskerProfile(settings.getShowAskerProfile())
+        .emailVisible(settings.getEmailVisible())
+        .emailRequired(settings.getEmailRequired())
         .featureCentralDataProtectionTemplateEnabled(
-            nullAsFalse(settings.getFeatureCentralDataProtectionTemplateEnabled()))
+            settings.getFeatureCentralDataProtectionTemplateEnabled())
         .tenantAdminControls(toTenantAdminControlsSettings(settings.getTenantAdminControls()))
         .build();
   }
@@ -147,7 +171,9 @@ public class TenantConverter {
         "createDate",
         "updateDate",
         "contentPrivacyActivationDate",
-        "contentTermsAndConditionsActivationDate");
+        "contentTermsAndConditionsActivationDate",
+        "contentDataProcessingAgreement",
+        "contentDataProcessingAgreementActivationDate");
     return targetEntity;
   }
 
@@ -177,15 +203,19 @@ public class TenantConverter {
           .themingLogo(tenantDTO.getTheming().getLogo())
           .themingAssociationLogo(tenantDTO.getTheming().getAssociationLogo())
           .themingPrimaryColor(tenantDTO.getTheming().getPrimaryColor())
-          .themingSecondaryColor(tenantDTO.getTheming().getSecondaryColor());
+          .themingSecondaryColor(tenantDTO.getTheming().getSecondaryColor())
+          .themingAccent(tenantDTO.getTheming().getAccent())
+          .themingSignal(tenantDTO.getTheming().getSignal());
     }
   }
 
-  public MultilingualTenantDTO toMultilingualDTO(TenantEntity tenant) {
+  public MultilingualTenantDTO toMultilingualDTO(TenantData tenant) {
     var tenantDTO =
         new MultilingualTenantDTO(tenant.getName())
             .id(tenant.getId())
             .subdomain(tenant.getSubdomain())
+            .address(tenant.getAddress())
+            .description(tenant.getDescription())
             .content(toMultilingualContentDTO(tenant))
             .theming(toThemingDTO(tenant))
             .licensing(toLicensingDTO(tenant))
@@ -199,9 +229,11 @@ public class TenantConverter {
     return tenantDTO;
   }
 
-  public TenantDTO toDTO(TenantEntity tenant, String lang) {
+  public TenantDTO toDTO(TenantData tenant, String lang) {
     var tenantDTO =
         new TenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
+            .address(tenant.getAddress())
+            .description(tenant.getDescription())
             .content(toContentDTO(tenant, lang))
             .theming(toThemingDTO(tenant))
             .licensing(toLicensingDTO(tenant))
@@ -215,7 +247,7 @@ public class TenantConverter {
     return tenantDTO;
   }
 
-  private Settings getSettings(TenantEntity tenant) {
+  private Settings getSettings(TenantRestrictedData tenant) {
     if (tenant.getSettings() == null) {
       return new Settings();
     } else {
@@ -224,154 +256,92 @@ public class TenantConverter {
   }
 
   private Settings getSettingsIfNotNull(String settingsJson) {
-    TenantSettings tenantSettings = JsonConverter.convertFromJson(settingsJson);
-    final boolean anonymousChatEnabled =
-        settingsJson != null && settingsJson.contains("\"featureAnonymousChatEnabled\"")
-            ? tenantSettings.isFeatureAnonymousChatEnabled()
-            : true;
-    final boolean callsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureCallsEnabled\"")
-            ? tenantSettings.isFeatureCallsEnabled()
-            : true;
-    final boolean supervisionEnabled =
-        settingsJson != null && settingsJson.contains("\"featureSupervisionEnabled\"")
-            ? tenantSettings.isFeatureSupervisionEnabled()
-            : true;
-    final boolean supervisionAnonymousChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureSupervisionAnonymousChatsEnabled\"")
-            ? tenantSettings.isFeatureSupervisionAnonymousChatsEnabled()
-            : true;
-    final boolean supervisionOneOnOneChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureSupervisionOneOnOneChatsEnabled\"")
-            ? tenantSettings.isFeatureSupervisionOneOnOneChatsEnabled()
-            : true;
-    final boolean audioCallsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureAudioCallsEnabled\"")
-            ? tenantSettings.isFeatureAudioCallsEnabled()
-            : true;
-    final boolean audioCallsAnonymousChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureAudioCallsAnonymousChatsEnabled\"")
-            ? tenantSettings.isFeatureAudioCallsAnonymousChatsEnabled()
-            : true;
-    final boolean audioCallsOneOnOneChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureAudioCallsOneOnOneChatsEnabled\"")
-            ? tenantSettings.isFeatureAudioCallsOneOnOneChatsEnabled()
-            : true;
-    final boolean audioCallsGroupChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureAudioCallsGroupChatsEnabled\"")
-            ? tenantSettings.isFeatureAudioCallsGroupChatsEnabled()
-            : true;
-    final boolean audioCallsSupervisionChatsEnabled =
-        settingsJson != null
-                && settingsJson.contains("\"featureAudioCallsSupervisionChatsEnabled\"")
-            ? tenantSettings.isFeatureAudioCallsSupervisionChatsEnabled()
-            : true;
-    final boolean videoCallsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureVideoCallsEnabled\"")
-            ? tenantSettings.isFeatureVideoCallsEnabled()
-            : true;
-    final boolean videoCallsAnonymousChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureVideoCallsAnonymousChatsEnabled\"")
-            ? tenantSettings.isFeatureVideoCallsAnonymousChatsEnabled()
-            : true;
-    final boolean videoCallsOneOnOneChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureVideoCallsOneOnOneChatsEnabled\"")
-            ? tenantSettings.isFeatureVideoCallsOneOnOneChatsEnabled()
-            : true;
-    final boolean videoCallsGroupChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureVideoCallsGroupChatsEnabled\"")
-            ? tenantSettings.isFeatureVideoCallsGroupChatsEnabled()
-            : true;
-    final boolean videoCallsSupervisionChatsEnabled =
-        settingsJson != null
-                && settingsJson.contains("\"featureVideoCallsSupervisionChatsEnabled\"")
-            ? tenantSettings.isFeatureVideoCallsSupervisionChatsEnabled()
-            : true;
-    final boolean threadsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureThreadsEnabled\"")
-            ? tenantSettings.isFeatureThreadsEnabled()
-            : true;
-    final boolean threadsAnonymousChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureThreadsAnonymousChatsEnabled\"")
-            ? tenantSettings.isFeatureThreadsAnonymousChatsEnabled()
-            : true;
-    final boolean threadsGroupChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureThreadsGroupChatsEnabled\"")
-            ? tenantSettings.isFeatureThreadsGroupChatsEnabled()
-            : true;
-    final boolean threadsOneOnOneEnabled =
-        settingsJson != null && settingsJson.contains("\"featureThreadsOneOnOneEnabled\"")
-            ? tenantSettings.isFeatureThreadsOneOnOneEnabled()
-            : true;
-    final boolean threadsSupervisionChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureThreadsSupervisionChatsEnabled\"")
-            ? tenantSettings.isFeatureThreadsSupervisionChatsEnabled()
-            : true;
-    final boolean voiceMessagesEnabled =
-        settingsJson != null && settingsJson.contains("\"featureVoiceMessagesEnabled\"")
-            ? tenantSettings.isFeatureVoiceMessagesEnabled()
-            : true;
-    final boolean voiceMessagesAnonymousChatsEnabled =
-        settingsJson != null
-                && settingsJson.contains("\"featureVoiceMessagesAnonymousChatsEnabled\"")
-            ? tenantSettings.isFeatureVoiceMessagesAnonymousChatsEnabled()
-            : true;
-    final boolean voiceMessagesOneOnOneChatsEnabled =
-        settingsJson != null
-                && settingsJson.contains("\"featureVoiceMessagesOneOnOneChatsEnabled\"")
-            ? tenantSettings.isFeatureVoiceMessagesOneOnOneChatsEnabled()
-            : true;
-    final boolean voiceMessagesGroupChatsEnabled =
-        settingsJson != null && settingsJson.contains("\"featureVoiceMessagesGroupChatsEnabled\"")
-            ? tenantSettings.isFeatureVoiceMessagesGroupChatsEnabled()
-            : true;
-    final boolean voiceMessagesSupervisionChatsEnabled =
-        settingsJson != null
-                && settingsJson.contains("\"featureVoiceMessagesSupervisionChatsEnabled\"")
-            ? tenantSettings.isFeatureVoiceMessagesSupervisionChatsEnabled()
-            : true;
+    TenantSettings tenantSettings = JsonConverter.convertFromJson(settingsJson).applyDefaults();
     return new Settings()
-        .topicsInRegistrationEnabled(tenantSettings.isTopicsInRegistrationEnabled())
-        .featureDemographicsEnabled(tenantSettings.isFeatureDemographicsEnabled())
-        .featureTopicsEnabled(tenantSettings.isFeatureTopicsEnabled())
-        .featureAppointmentsEnabled(tenantSettings.isFeatureAppointmentsEnabled())
-        .featureStatisticsEnabled(tenantSettings.isFeatureStatisticsEnabled())
-        .featureGroupChatV2Enabled(tenantSettings.isFeatureGroupChatV2Enabled())
+        .topicsInRegistrationEnabled(tenantSettings.getTopicsInRegistrationEnabled())
+        .featureDemographicsEnabled(tenantSettings.getFeatureDemographicsEnabled())
+        .featureTopicsEnabled(tenantSettings.getFeatureTopicsEnabled())
+        .featureAppointmentsEnabled(tenantSettings.getFeatureAppointmentsEnabled())
+        .featureStatisticsEnabled(tenantSettings.getFeatureStatisticsEnabled())
+        .featureGroupChatV2Enabled(tenantSettings.getFeatureGroupChatV2Enabled())
+        .featureTeamDiscussionEnabled(tenantSettings.getFeatureTeamDiscussionEnabled())
         .featureToolsOICDToken(tenantSettings.getFeatureToolsOIDCToken())
-        .featureToolsEnabled(tenantSettings.isFeatureToolsEnabled())
-        .featureAnonymousChatEnabled(anonymousChatEnabled)
-        .featureCallsEnabled(callsEnabled)
-        .featureSupervisionEnabled(supervisionEnabled)
-        .featureSupervisionAnonymousChatsEnabled(supervisionAnonymousChatsEnabled)
-        .featureSupervisionOneOnOneChatsEnabled(supervisionOneOnOneChatsEnabled)
-        .featureAudioCallsEnabled(audioCallsEnabled)
-        .featureAudioCallsAnonymousChatsEnabled(audioCallsAnonymousChatsEnabled)
-        .featureAudioCallsOneOnOneChatsEnabled(audioCallsOneOnOneChatsEnabled)
-        .featureAudioCallsGroupChatsEnabled(audioCallsGroupChatsEnabled)
-        .featureAudioCallsSupervisionChatsEnabled(audioCallsSupervisionChatsEnabled)
-        .featureVideoCallsEnabled(videoCallsEnabled)
-        .featureVideoCallsAnonymousChatsEnabled(videoCallsAnonymousChatsEnabled)
-        .featureVideoCallsOneOnOneChatsEnabled(videoCallsOneOnOneChatsEnabled)
-        .featureVideoCallsGroupChatsEnabled(videoCallsGroupChatsEnabled)
-        .featureVideoCallsSupervisionChatsEnabled(videoCallsSupervisionChatsEnabled)
-        .featureThreadsEnabled(threadsEnabled)
-        .featureThreadsAnonymousChatsEnabled(threadsAnonymousChatsEnabled)
-        .featureThreadsGroupChatsEnabled(threadsGroupChatsEnabled)
-        .featureThreadsOneOnOneEnabled(threadsOneOnOneEnabled)
-        .featureThreadsSupervisionChatsEnabled(threadsSupervisionChatsEnabled)
-        .featureVoiceMessagesEnabled(voiceMessagesEnabled)
-        .featureVoiceMessagesAnonymousChatsEnabled(voiceMessagesAnonymousChatsEnabled)
-        .featureVoiceMessagesOneOnOneChatsEnabled(voiceMessagesOneOnOneChatsEnabled)
-        .featureVoiceMessagesGroupChatsEnabled(voiceMessagesGroupChatsEnabled)
-        .featureVoiceMessagesSupervisionChatsEnabled(voiceMessagesSupervisionChatsEnabled)
+        .featureToolsEnabled(tenantSettings.getFeatureToolsEnabled())
+        .featureAnonymousChatEnabled(tenantSettings.getFeatureAnonymousChatEnabled())
+        .featureCallsEnabled(tenantSettings.getFeatureCallsEnabled())
+        .featureSupervisionEnabled(tenantSettings.getFeatureSupervisionEnabled())
+        .featureSupervisionAnonymousChatsEnabled(
+            tenantSettings.getFeatureSupervisionAnonymousChatsEnabled())
+        .featureSupervisionOneOnOneChatsEnabled(
+            tenantSettings.getFeatureSupervisionOneOnOneChatsEnabled())
+        .featureAudioCallsEnabled(tenantSettings.getFeatureAudioCallsEnabled())
+        .featureAudioCallsAnonymousChatsEnabled(
+            tenantSettings.getFeatureAudioCallsAnonymousChatsEnabled())
+        .featureAudioCallsOneOnOneChatsEnabled(
+            tenantSettings.getFeatureAudioCallsOneOnOneChatsEnabled())
+        .featureAudioCallsGroupChatsEnabled(tenantSettings.getFeatureAudioCallsGroupChatsEnabled())
+        .featureAudioCallsSupervisionChatsEnabled(
+            tenantSettings.getFeatureAudioCallsSupervisionChatsEnabled())
+        .featureVideoCallsEnabled(tenantSettings.getFeatureVideoCallsEnabled())
+        .featureVideoCallsAnonymousChatsEnabled(
+            tenantSettings.getFeatureVideoCallsAnonymousChatsEnabled())
+        .featureVideoCallsOneOnOneChatsEnabled(
+            tenantSettings.getFeatureVideoCallsOneOnOneChatsEnabled())
+        .featureVideoCallsGroupChatsEnabled(tenantSettings.getFeatureVideoCallsGroupChatsEnabled())
+        .featureVideoCallsSupervisionChatsEnabled(
+            tenantSettings.getFeatureVideoCallsSupervisionChatsEnabled())
+        .featureThreadsEnabled(tenantSettings.getFeatureThreadsEnabled())
+        .featureThreadsAnonymousChatsEnabled(
+            tenantSettings.getFeatureThreadsAnonymousChatsEnabled())
+        .featureThreadsGroupChatsEnabled(tenantSettings.getFeatureThreadsGroupChatsEnabled())
+        .featureThreadsOneOnOneEnabled(tenantSettings.getFeatureThreadsOneOnOneEnabled())
+        .featureThreadsSupervisionChatsEnabled(
+            tenantSettings.getFeatureThreadsSupervisionChatsEnabled())
+        .featureVoiceMessagesEnabled(tenantSettings.getFeatureVoiceMessagesEnabled())
+        .featureVoiceMessagesAnonymousChatsEnabled(
+            tenantSettings.getFeatureVoiceMessagesAnonymousChatsEnabled())
+        .featureVoiceMessagesOneOnOneChatsEnabled(
+            tenantSettings.getFeatureVoiceMessagesOneOnOneChatsEnabled())
+        .featureVoiceMessagesGroupChatsEnabled(
+            tenantSettings.getFeatureVoiceMessagesGroupChatsEnabled())
+        .featureVoiceMessagesSupervisionChatsEnabled(
+            tenantSettings.getFeatureVoiceMessagesSupervisionChatsEnabled())
         .featureSystemNotificationEmailsEnabled(
-            tenantSettings.isFeatureSystemNotificationEmailsEnabled())
+            tenantSettings.getFeatureSystemNotificationEmailsEnabled())
         .smtp(toSmtpConfig(tenantSettings.getSmtp()))
-        .featureAttachmentUploadDisabled(tenantSettings.isFeatureAttachmentUploadDisabled())
-        .isVideoCallAllowed(tenantSettings.isVideoCallAllowed())
-        .showAskerProfile(tenantSettings.isShowAskerProfile())
+        .featureMediaUploadEnabled(tenantSettings.getFeatureMediaUploadEnabled())
+        .featureMediaUploadAnonymousChatsEnabled(
+            tenantSettings.getFeatureMediaUploadAnonymousChatsEnabled())
+        .featureMediaUploadOneOnOneChatsEnabled(
+            tenantSettings.getFeatureMediaUploadOneOnOneChatsEnabled())
+        .featureMediaUploadGroupChatsEnabled(
+            tenantSettings.getFeatureMediaUploadGroupChatsEnabled())
+        .featureMediaUploadSupervisionChatsEnabled(
+            tenantSettings.getFeatureMediaUploadSupervisionChatsEnabled())
+        .featureMediaInlineDisplayEnabled(tenantSettings.getFeatureMediaInlineDisplayEnabled())
+        .featureMediaInlineDisplayAnonymousChatsEnabled(
+            tenantSettings.getFeatureMediaInlineDisplayAnonymousChatsEnabled())
+        .featureMediaInlineDisplayOneOnOneChatsEnabled(
+            tenantSettings.getFeatureMediaInlineDisplayOneOnOneChatsEnabled())
+        .featureMediaInlineDisplayGroupChatsEnabled(
+            tenantSettings.getFeatureMediaInlineDisplayGroupChatsEnabled())
+        .featureMediaInlineDisplaySupervisionChatsEnabled(
+            tenantSettings.getFeatureMediaInlineDisplaySupervisionChatsEnabled())
+        .featureMediaAiScanEnabled(tenantSettings.getFeatureMediaAiScanEnabled())
+        .featureMediaAiScanAnonymousChatsEnabled(
+            tenantSettings.getFeatureMediaAiScanAnonymousChatsEnabled())
+        .featureMediaAiScanOneOnOneChatsEnabled(
+            tenantSettings.getFeatureMediaAiScanOneOnOneChatsEnabled())
+        .featureMediaAiScanGroupChatsEnabled(
+            tenantSettings.getFeatureMediaAiScanGroupChatsEnabled())
+        .featureMediaAiScanSupervisionChatsEnabled(
+            tenantSettings.getFeatureMediaAiScanSupervisionChatsEnabled())
+        .isVideoCallAllowed(tenantSettings.getIsVideoCallAllowed())
+        .showAskerProfile(tenantSettings.getShowAskerProfile())
+        .emailVisible(tenantSettings.getEmailVisible())
+        .emailRequired(tenantSettings.getEmailRequired())
         .featureCentralDataProtectionTemplateEnabled(
-            tenantSettings.isFeatureCentralDataProtectionTemplateEnabled())
+            tenantSettings.getFeatureCentralDataProtectionTemplateEnabled())
         .tenantAdminControls(toTenantAdminControls(tenantSettings.getTenantAdminControls()))
         .activeLanguages(nullAsGerman(tenantSettings.getActiveLanguages()));
   }
@@ -386,6 +356,8 @@ public class TenantConverter {
         .allowedPermissionToggles(
             toTenantAdminAllowedPermissionTogglesSettings(
                 tenantAdminControls.getAllowedPermissionToggles()))
+        .enforcedPermissionToggles(
+            toEnforcedPermissionTogglesSettings(tenantAdminControls.getEnforcedPermissionToggles()))
         .build();
   }
 
@@ -431,6 +403,31 @@ public class TenantConverter {
         .voiceMessagesGroupChats(nullAsTrue(allowedPermissionToggles.getVoiceMessagesGroupChats()))
         .voiceMessagesSupervisionChats(
             nullAsTrue(allowedPermissionToggles.getVoiceMessagesSupervisionChats()))
+        .mediaUpload(nullAsTrue(allowedPermissionToggles.getMediaUpload()))
+        .mediaUploadAnonymousChats(
+            nullAsTrue(allowedPermissionToggles.getMediaUploadAnonymousChats()))
+        .mediaUploadOneOnOneChats(
+            nullAsTrue(allowedPermissionToggles.getMediaUploadOneOnOneChats()))
+        .mediaUploadGroupChats(nullAsTrue(allowedPermissionToggles.getMediaUploadGroupChats()))
+        .mediaUploadSupervisionChats(
+            nullAsTrue(allowedPermissionToggles.getMediaUploadSupervisionChats()))
+        .mediaInlineDisplay(nullAsTrue(allowedPermissionToggles.getMediaInlineDisplay()))
+        .mediaInlineDisplayAnonymousChats(
+            nullAsTrue(allowedPermissionToggles.getMediaInlineDisplayAnonymousChats()))
+        .mediaInlineDisplayOneOnOneChats(
+            nullAsTrue(allowedPermissionToggles.getMediaInlineDisplayOneOnOneChats()))
+        .mediaInlineDisplayGroupChats(
+            nullAsTrue(allowedPermissionToggles.getMediaInlineDisplayGroupChats()))
+        .mediaInlineDisplaySupervisionChats(
+            nullAsTrue(allowedPermissionToggles.getMediaInlineDisplaySupervisionChats()))
+        .mediaAiScan(nullAsTrue(allowedPermissionToggles.getMediaAiScan()))
+        .mediaAiScanAnonymousChats(
+            nullAsTrue(allowedPermissionToggles.getMediaAiScanAnonymousChats()))
+        .mediaAiScanOneOnOneChats(
+            nullAsTrue(allowedPermissionToggles.getMediaAiScanOneOnOneChats()))
+        .mediaAiScanGroupChats(nullAsTrue(allowedPermissionToggles.getMediaAiScanGroupChats()))
+        .mediaAiScanSupervisionChats(
+            nullAsTrue(allowedPermissionToggles.getMediaAiScanSupervisionChats()))
         .build();
   }
 
@@ -443,7 +440,10 @@ public class TenantConverter {
         .permissionsPageEnabled(tenantAdminControlsSettings.isPermissionsPageEnabled())
         .allowedPermissionToggles(
             toTenantAdminAllowedPermissionToggles(
-                tenantAdminControlsSettings.getAllowedPermissionToggles()));
+                tenantAdminControlsSettings.getAllowedPermissionToggles()))
+        .enforcedPermissionToggles(
+            toEnforcedPermissionToggles(
+                tenantAdminControlsSettings.getEnforcedPermissionToggles()));
   }
 
   private TenantAdminAllowedPermissionToggles toTenantAdminAllowedPermissionToggles(
@@ -495,7 +495,183 @@ public class TenantConverter {
         .voiceMessagesGroupChats(
             nullAsTrue(allowedPermissionTogglesSettings.getVoiceMessagesGroupChats()))
         .voiceMessagesSupervisionChats(
-            nullAsTrue(allowedPermissionTogglesSettings.getVoiceMessagesSupervisionChats()));
+            nullAsTrue(allowedPermissionTogglesSettings.getVoiceMessagesSupervisionChats()))
+        .mediaUpload(nullAsTrue(allowedPermissionTogglesSettings.getMediaUpload()))
+        .mediaUploadAnonymousChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaUploadAnonymousChats()))
+        .mediaUploadOneOnOneChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaUploadOneOnOneChats()))
+        .mediaUploadGroupChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaUploadGroupChats()))
+        .mediaUploadSupervisionChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaUploadSupervisionChats()))
+        .mediaInlineDisplay(nullAsTrue(allowedPermissionTogglesSettings.getMediaInlineDisplay()))
+        .mediaInlineDisplayAnonymousChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaInlineDisplayAnonymousChats()))
+        .mediaInlineDisplayOneOnOneChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaInlineDisplayOneOnOneChats()))
+        .mediaInlineDisplayGroupChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaInlineDisplayGroupChats()))
+        .mediaInlineDisplaySupervisionChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaInlineDisplaySupervisionChats()))
+        .mediaAiScan(nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScan()))
+        .mediaAiScanAnonymousChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanAnonymousChats()))
+        .mediaAiScanOneOnOneChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanOneOnOneChats()))
+        .mediaAiScanGroupChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanGroupChats()))
+        .mediaAiScanSupervisionChats(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()));
+  }
+
+  private TenantAdminAllowedPermissionTogglesSettings toEnforcedPermissionTogglesSettings(
+      TenantAdminAllowedPermissionToggles allowedPermissionToggles) {
+    if (allowedPermissionToggles == null) {
+      return null;
+    }
+    return TenantAdminAllowedPermissionTogglesSettings.builder()
+        .appearance(nullAsFalse(allowedPermissionToggles.getAppearance()))
+        .anonymousChat(nullAsFalse(allowedPermissionToggles.getAnonymousChat()))
+        .calls(nullAsFalse(allowedPermissionToggles.getCalls()))
+        .groupChat(nullAsFalse(allowedPermissionToggles.getGroupChat()))
+        .supervision(nullAsFalse(allowedPermissionToggles.getSupervision()))
+        .supervisionAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getSupervisionAnonymousChats()))
+        .supervisionOneOnOneChats(
+            nullAsFalse(allowedPermissionToggles.getSupervisionOneOnOneChats()))
+        .audioCalls(nullAsFalse(allowedPermissionToggles.getAudioCalls()))
+        .audioCallsAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getAudioCallsAnonymousChats()))
+        .audioCallsOneOnOneChats(nullAsFalse(allowedPermissionToggles.getAudioCallsOneOnOneChats()))
+        .audioCallsGroupChats(nullAsFalse(allowedPermissionToggles.getAudioCallsGroupChats()))
+        .audioCallsSupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getAudioCallsSupervisionChats()))
+        .videoCalls(nullAsFalse(allowedPermissionToggles.getVideoCalls()))
+        .videoCallsAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getVideoCallsAnonymousChats()))
+        .videoCallsOneOnOneChats(nullAsFalse(allowedPermissionToggles.getVideoCallsOneOnOneChats()))
+        .videoCallsGroupChats(nullAsFalse(allowedPermissionToggles.getVideoCallsGroupChats()))
+        .videoCallsSupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getVideoCallsSupervisionChats()))
+        .threads(nullAsFalse(allowedPermissionToggles.getThreads()))
+        .threadsAnonymousChats(nullAsFalse(allowedPermissionToggles.getThreadsAnonymousChats()))
+        .threadsOneOnOneChats(nullAsFalse(allowedPermissionToggles.getThreadsOneOnOneChats()))
+        .threadsGroupChats(nullAsFalse(allowedPermissionToggles.getThreadsGroupChats()))
+        .threadsSupervisionChats(nullAsFalse(allowedPermissionToggles.getThreadsSupervisionChats()))
+        .voiceMessages(nullAsFalse(allowedPermissionToggles.getVoiceMessages()))
+        .voiceMessagesAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getVoiceMessagesAnonymousChats()))
+        .voiceMessagesOneOnOneChats(
+            nullAsFalse(allowedPermissionToggles.getVoiceMessagesOneOnOneChats()))
+        .voiceMessagesGroupChats(nullAsFalse(allowedPermissionToggles.getVoiceMessagesGroupChats()))
+        .voiceMessagesSupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getVoiceMessagesSupervisionChats()))
+        .mediaUpload(nullAsFalse(allowedPermissionToggles.getMediaUpload()))
+        .mediaUploadAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getMediaUploadAnonymousChats()))
+        .mediaUploadOneOnOneChats(
+            nullAsFalse(allowedPermissionToggles.getMediaUploadOneOnOneChats()))
+        .mediaUploadGroupChats(nullAsFalse(allowedPermissionToggles.getMediaUploadGroupChats()))
+        .mediaUploadSupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getMediaUploadSupervisionChats()))
+        .mediaInlineDisplay(nullAsFalse(allowedPermissionToggles.getMediaInlineDisplay()))
+        .mediaInlineDisplayAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getMediaInlineDisplayAnonymousChats()))
+        .mediaInlineDisplayOneOnOneChats(
+            nullAsFalse(allowedPermissionToggles.getMediaInlineDisplayOneOnOneChats()))
+        .mediaInlineDisplayGroupChats(
+            nullAsFalse(allowedPermissionToggles.getMediaInlineDisplayGroupChats()))
+        .mediaInlineDisplaySupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getMediaInlineDisplaySupervisionChats()))
+        .mediaAiScan(nullAsFalse(allowedPermissionToggles.getMediaAiScan()))
+        .mediaAiScanAnonymousChats(
+            nullAsFalse(allowedPermissionToggles.getMediaAiScanAnonymousChats()))
+        .mediaAiScanOneOnOneChats(
+            nullAsFalse(allowedPermissionToggles.getMediaAiScanOneOnOneChats()))
+        .mediaAiScanGroupChats(nullAsFalse(allowedPermissionToggles.getMediaAiScanGroupChats()))
+        .mediaAiScanSupervisionChats(
+            nullAsFalse(allowedPermissionToggles.getMediaAiScanSupervisionChats()))
+        .build();
+  }
+
+  private TenantAdminAllowedPermissionToggles toEnforcedPermissionToggles(
+      TenantAdminAllowedPermissionTogglesSettings allowedPermissionTogglesSettings) {
+    if (allowedPermissionTogglesSettings == null) {
+      return null;
+    }
+    return new TenantAdminAllowedPermissionToggles()
+        .appearance(nullAsFalse(allowedPermissionTogglesSettings.getAppearance()))
+        .anonymousChat(nullAsFalse(allowedPermissionTogglesSettings.getAnonymousChat()))
+        .calls(nullAsFalse(allowedPermissionTogglesSettings.getCalls()))
+        .groupChat(nullAsFalse(allowedPermissionTogglesSettings.getGroupChat()))
+        .supervision(nullAsFalse(allowedPermissionTogglesSettings.getSupervision()))
+        .supervisionAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getSupervisionAnonymousChats()))
+        .supervisionOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getSupervisionOneOnOneChats()))
+        .audioCalls(nullAsFalse(allowedPermissionTogglesSettings.getAudioCalls()))
+        .audioCallsAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getAudioCallsAnonymousChats()))
+        .audioCallsOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getAudioCallsOneOnOneChats()))
+        .audioCallsGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getAudioCallsGroupChats()))
+        .audioCallsSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getAudioCallsSupervisionChats()))
+        .videoCalls(nullAsFalse(allowedPermissionTogglesSettings.getVideoCalls()))
+        .videoCallsAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVideoCallsAnonymousChats()))
+        .videoCallsOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVideoCallsOneOnOneChats()))
+        .videoCallsGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVideoCallsGroupChats()))
+        .videoCallsSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVideoCallsSupervisionChats()))
+        .threads(nullAsFalse(allowedPermissionTogglesSettings.getThreads()))
+        .threadsAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getThreadsAnonymousChats()))
+        .threadsOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getThreadsOneOnOneChats()))
+        .threadsGroupChats(nullAsFalse(allowedPermissionTogglesSettings.getThreadsGroupChats()))
+        .threadsSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getThreadsSupervisionChats()))
+        .voiceMessages(nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessages()))
+        .voiceMessagesAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesAnonymousChats()))
+        .voiceMessagesOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesOneOnOneChats()))
+        .voiceMessagesGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesGroupChats()))
+        .voiceMessagesSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesSupervisionChats()))
+        .mediaUpload(nullAsFalse(allowedPermissionTogglesSettings.getMediaUpload()))
+        .mediaUploadAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaUploadAnonymousChats()))
+        .mediaUploadOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaUploadOneOnOneChats()))
+        .mediaUploadGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaUploadGroupChats()))
+        .mediaUploadSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaUploadSupervisionChats()))
+        .mediaInlineDisplay(nullAsFalse(allowedPermissionTogglesSettings.getMediaInlineDisplay()))
+        .mediaInlineDisplayAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaInlineDisplayAnonymousChats()))
+        .mediaInlineDisplayOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaInlineDisplayOneOnOneChats()))
+        .mediaInlineDisplayGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaInlineDisplayGroupChats()))
+        .mediaInlineDisplaySupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaInlineDisplaySupervisionChats()))
+        .mediaAiScan(nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScan()))
+        .mediaAiScanAnonymousChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanAnonymousChats()))
+        .mediaAiScanOneOnOneChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanOneOnOneChats()))
+        .mediaAiScanGroupChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanGroupChats()))
+        .mediaAiScanSupervisionChats(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()));
   }
 
   private TenantSmtpSettings toTenantSmtpSettings(SmtpConfig smtpConfig) {
@@ -529,7 +705,7 @@ public class TenantConverter {
         .emailThemeColor(smtpSettings.getEmailThemeColor());
   }
 
-  public RestrictedTenantDTO toRestrictedTenantDTO(TenantEntity tenant, String lang) {
+  public RestrictedTenantDTO toRestrictedTenantDTO(TenantRestrictedData tenant, String lang) {
     return new RestrictedTenantDTO(tenant.getId(), tenant.getName())
         .content(toContentDTO(tenant, lang))
         .theming(toThemingDTO(tenant))
@@ -537,7 +713,7 @@ public class TenantConverter {
         .settings(getRestrictedPublicSettings(tenant));
   }
 
-  private Settings getRestrictedPublicSettings(TenantEntity tenant) {
+  private Settings getRestrictedPublicSettings(TenantRestrictedData tenant) {
     Settings settings = getSettings(tenant);
     settings.setFeatureToolsOICDToken(null);
     settings.setSmtp(toPublicSmtpConfig(settings.getSmtp()));
@@ -557,7 +733,7 @@ public class TenantConverter {
         .emailThemeColor(smtpConfig.getEmailThemeColor());
   }
 
-  public BasicTenantLicensingDTO toBasicLicensingTenantDTO(TenantEntity tenant) {
+  public BasicTenantLicensingDTO toBasicLicensingTenantDTO(TenantData tenant) {
     var basicTenantLicensingDTO =
         new BasicTenantLicensingDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
             .licensing(toLicensingDTO(tenant));
@@ -571,25 +747,32 @@ public class TenantConverter {
     return basicTenantLicensingDTO;
   }
 
-  public Licensing toLicensingDTO(TenantEntity tenant) {
+  public Licensing toLicensingDTO(TenantData tenant) {
     return new Licensing(tenant.getLicensingAllowedNumberOfUsers());
   }
 
-  private Theming toThemingDTO(TenantEntity tenant) {
+  private Theming toThemingDTO(TenantRestrictedData tenant) {
     return new Theming()
         .favicon(tenant.getThemingFavicon())
         .logo(tenant.getThemingLogo())
         .associationLogo(tenant.getThemingAssociationLogo())
         .primaryColor(tenant.getThemingPrimaryColor())
-        .secondaryColor(tenant.getThemingSecondaryColor());
+        .secondaryColor(tenant.getThemingSecondaryColor())
+        .accent(tenant.getThemingAccent())
+        .signal(tenant.getThemingSignal());
   }
 
-  private Content toContentDTO(TenantEntity tenant, String lang) {
+  private Content toContentDTO(TenantRestrictedData tenant, String lang) {
     String privacyPotentiallyWithPlaceholders =
         getTranslatedStringFromMap(tenant.getContentPrivacy(), lang);
     DataProtectionContactTemplateDTO dataProtectionContactTemplate =
         getDataProtectionContactTemplate(lang);
     return new Content(getTranslatedStringFromMap(tenant.getContentImpressum(), lang))
+        // Raw stored language maps (incl. the <lang>__meta machine-translation metadata keys)
+        // alongside the resolved strings, so public clients can show a "machine translated"
+        // notice. Kept lean on purpose: only for the legal contents impressum and privacy.
+        .impressumLanguages(convertMapFromJson(tenant.getContentImpressum()))
+        .privacyLanguages(convertMapFromJson(tenant.getContentPrivacy()))
         .claim(getTranslatedStringFromMap(tenant.getContentClaim(), lang))
         .privacy(privacyPotentiallyWithPlaceholders)
         .termsAndConditions(getTranslatedStringFromMap(tenant.getContentTermsAndConditions(), lang))
@@ -667,7 +850,7 @@ public class TenantConverter {
     }
   }
 
-  private MultilingualContent toMultilingualContentDTO(TenantEntity tenant) {
+  private MultilingualContent toMultilingualContentDTO(TenantData tenant) {
     return new MultilingualContent(convertMapFromJson(tenant.getContentImpressum()))
         .claim(convertMapFromJson(tenant.getContentClaim()))
         .privacy(convertMapFromJson(tenant.getContentPrivacy()))
@@ -675,9 +858,11 @@ public class TenantConverter {
         .dataProtectionContactTemplate(getMultilingualDataProtectionTemplate());
   }
 
-  public AdminTenantDTO toAdminTenantDTO(TenantEntity tenant) {
+  public AdminTenantDTO toAdminTenantDTO(TenantData tenant) {
     var adminTenantDTO =
         new AdminTenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
+            .address(tenant.getAddress())
+            .description(tenant.getDescription())
             .beraterCount(tenant.getLicensingAllowedNumberOfUsers());
     if (tenant.getCreateDate() != null) {
       adminTenantDTO.setCreateDate(tenant.getCreateDate().toString());

@@ -23,6 +23,10 @@ public class TenantDtoMapper {
         return "name";
       case "ID":
         return "id";
+      case "SUBDOMAIN":
+        return "subdomain";
+      case "BERATERCOUNT":
+        return "licensingAllowedNumberOfUsers";
       default:
     }
     throw new IllegalArgumentException("Mapping of field '" + field + "' not supported.");

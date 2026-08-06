@@ -1,0 +1,23 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Catch-up changeset (Liquibase Re-Enablement Plan 2026-07-04, package L1).
+
+      0016 created tenant_dpa_signature.signer_is_member as tinyint(1), which JDBC reports
+      as BOOLEAN. The entity maps the field through NumericBooleanConverter (JDBC INTEGER),
+      so Hibernate ddl-auto=validate rejects the column:
+        "wrong column type ... found [boolean (Types#BOOLEAN)], but expecting [integer]".
+
+      MODIFY to INT is a lossless widening (values stay 0/1). The precondition marks the
+      changeset ran on databases where the column is already INT, so it is safe on both
+      fresh and already-patched databases.
+    -->
+    <changeSet author="oriso" id="fixDpaSignatureSignerIsMemberType">
+        <preConditions onFail="MARK_RAN">
+            <sqlCheck expectedResult="1">SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenant_dpa_signature' AND COLUMN_NAME = 'signer_is_member' AND DATA_TYPE = 'tinyint'</sqlCheck>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0021_fix_dpa_signature_signer_is_member_type/fixDpaSignatureSignerIsMemberType.sql" stripComments="true" />
+        <rollback><sql/></rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - dev
+      - pre-dev
 
 env:
   REGISTRY: ghcr.io
@@ -25,7 +26,7 @@ jobs:
     - name: Compile and Package Java application
       uses: ./.github/actions/maven-build
       with:
-        java_version: '17'
+        java_version: '21'
 
     - name: Create and Publish Docker image
       uses: ./.github/actions/docker-build-push
@@ -33,3 +34,8 @@ jobs:
         push_to_ghcr: true
         image_name: oriso-tenantservice
         github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  # The former non-blocking `integration-tests` burn-in job was folded into the
+  # blocking `build` job above: `maven-build` now runs `mvnw -B verify`, so the
+  # surefire `integration-tests` execution (**/*IT.*) is part of the main gate
+  # (burn-in green since 2026-07-05; flipped 2026-07-07).

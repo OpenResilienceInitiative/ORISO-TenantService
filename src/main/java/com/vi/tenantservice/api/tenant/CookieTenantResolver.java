@@ -64,11 +64,17 @@ public class CookieTenantResolver implements TenantResolver {
         new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
     try {
       Map<String, Object> map = objectMapper.readValue(payload, Map.class);
-      Integer tenantIdFromCookie = (Integer) map.get(TENANT_ID);
-      return tenantIdFromCookie == null
-          ? Optional.empty()
-          : Optional.of(Long.valueOf(tenantIdFromCookie));
-    } catch (JsonProcessingException e) {
+      Object tenantIdFromCookie = map.get(TENANT_ID);
+      if (tenantIdFromCookie == null) {
+        return Optional.empty();
+      } else if (tenantIdFromCookie instanceof Number) {
+        return Optional.of(((Number) tenantIdFromCookie).longValue());
+      } else if (tenantIdFromCookie instanceof String) {
+        return Optional.of(Long.parseLong((String) tenantIdFromCookie));
+      } else {
+        return Optional.empty();
+      }
+    } catch (JsonProcessingException | NumberFormatException e) {
       return Optional.empty();
     }
   }

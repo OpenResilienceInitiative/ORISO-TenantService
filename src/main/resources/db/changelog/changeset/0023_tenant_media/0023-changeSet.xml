@@ -1,0 +1,19 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Tenant-owned editor images (legal/help texts), served publicly via GET /media/{id}
+      (PLAN media-upload-security 2026-07-18, decision 15). Stored as MEDIUMBLOB on purpose:
+      volumes are tiny, backups ride along, and object storage can replace this later behind
+      the same endpoint. App-side limit is 2 MB (TenantMediaService.MAX_MEDIA_BYTES).
+    -->
+    <changeSet author="oriso" id="createTenantMediaTable">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="tenant_media"/>
+            </not>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0023_tenant_media/createTenantMediaTable.sql" stripComments="true" />
+        <rollback><sql>DROP TABLE `tenantservice`.`tenant_media`;</sql></rollback>
+    </changeSet>
+</databaseChangeLog>

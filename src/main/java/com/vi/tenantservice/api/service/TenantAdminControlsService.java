@@ -13,6 +13,8 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -33,8 +35,39 @@ public class TenantAdminControlsService {
   public TenantAdminControls updateControls(TenantAdminControls tenantAdminControls) {
     TenantAdminControlsSettings controlsSettings =
         tenantConverter.toTenantAdminControlsSettings(tenantAdminControls);
+    // the DTO never carries the translation API keys - preserve the stored ones
+    TenantAdminControlsSettings existingSettings = getControlsSettings();
+    if (existingSettings != null) {
+      controlsSettings.setTranslationApiKeys(existingSettings.getTranslationApiKeys());
+    }
     saveControlsSettings(controlsSettings);
     return tenantConverter.toTenantAdminControls(controlsSettings);
+  }
+
+  /**
+   * Raw machine-translation provider API keys (provider id -> key) from the platform-global admin
+   * controls. Internal use only - admin endpoints must expose keys masked.
+   */
+  public Map<String, String> getTranslationApiKeys() {
+    TenantAdminControlsSettings controlsSettings = getControlsSettings();
+    return controlsSettings != null && controlsSettings.getTranslationApiKeys() != null
+        ? controlsSettings.getTranslationApiKeys()
+        : Map.of();
+  }
+
+  /** Stores the machine-translation API key for a provider in the platform-global controls. */
+  public void setTranslationApiKey(String provider, String apiKey) {
+    TenantAdminControlsSettings controlsSettings = getControlsSettings();
+    if (controlsSettings == null) {
+      controlsSettings = new TenantAdminControlsSettings();
+    }
+    Map<String, String> keys = new HashMap<>();
+    if (controlsSettings.getTranslationApiKeys() != null) {
+      keys.putAll(controlsSettings.getTranslationApiKeys());
+    }
+    keys.put(provider, apiKey);
+    controlsSettings.setTranslationApiKeys(keys);
+    saveControlsSettings(controlsSettings);
   }
 
   public void stripTenantAdminControlsFromTenantDto(MultilingualTenantDTO tenantDTO) {

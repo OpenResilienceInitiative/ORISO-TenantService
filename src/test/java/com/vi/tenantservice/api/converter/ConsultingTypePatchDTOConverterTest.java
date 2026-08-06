@@ -3,8 +3,8 @@ package com.vi.tenantservice.api.converter;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
-import com.vi.tenantservice.consultingtypeservice.generated.web.model.ExtendedConsultingTypeResponseDTOAllOfWelcomeMessage;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
+import com.vi.tenantservice.consultingtypeservice.generated.web.model.WelcomeMessageDTO;
 import org.jeasy.random.EasyRandom;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,9 +25,7 @@ class ConsultingTypePatchDTOConverterTest {
     fullConsultingTypeResponseDTO.languageFormal(true);
     fullConsultingTypeResponseDTO.setIsVideoCallAllowed(true);
     fullConsultingTypeResponseDTO.setWelcomeMessage(
-        new ExtendedConsultingTypeResponseDTOAllOfWelcomeMessage()
-            .sendWelcomeMessage(true)
-            .welcomeMessageText("welcome"));
+        new WelcomeMessageDTO().sendWelcomeMessage(true).welcomeMessageText("welcome"));
     fullConsultingTypeResponseDTO.setSendFurtherStepsMessage(true);
 
     // when
@@ -53,9 +51,7 @@ class ConsultingTypePatchDTOConverterTest {
     fullConsultingTypeResponseDTO.languageFormal(true);
     fullConsultingTypeResponseDTO.setIsVideoCallAllowed(true);
     fullConsultingTypeResponseDTO.setWelcomeMessage(
-        new ExtendedConsultingTypeResponseDTOAllOfWelcomeMessage()
-            .sendWelcomeMessage(true)
-            .welcomeMessageText("welcome"));
+        new WelcomeMessageDTO().sendWelcomeMessage(true).welcomeMessageText("welcome"));
     fullConsultingTypeResponseDTO.setSendFurtherStepsMessage(true);
 
     // when

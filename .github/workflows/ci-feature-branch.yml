@@ -5,6 +5,7 @@ on:
     branches-ignore: 
     - main
     - dev
+    - pre-dev
 
 jobs:
   build:
@@ -17,4 +18,9 @@ jobs:
     - name: Compile and Package Java application
       uses: ./.github/actions/maven-build
       with:
-        java_version: '17'
+        java_version: '21'
+
+  # The former non-blocking `integration-tests` burn-in job was folded into the
+  # blocking `build` job above: `maven-build` now runs `mvnw -B verify`, so the
+  # surefire `integration-tests` execution (**/*IT.*) is part of the main gate
+  # (burn-in green since 2026-07-05; flipped 2026-07-07).

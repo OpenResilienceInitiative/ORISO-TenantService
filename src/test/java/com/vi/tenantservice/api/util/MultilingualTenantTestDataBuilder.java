@@ -22,6 +22,8 @@ public class MultilingualTenantTestDataBuilder {
   private static final String CLAIM = "claim";
   private static final String SECONDARY_COLOR = "secondaryColor";
   private static final String PRIMARY_COLOR = "primary color";
+  private static final String ACCENT = "accent color";
+  private static final String SIGNAL = "signal color";
   private static final String FAVICON = "favicon";
   private static final String LOGO = "logo";
   private static final int ALLOWED_NUMBER_OF_CONSULTANTS = 2000;
@@ -53,6 +55,11 @@ public class MultilingualTenantTestDataBuilder {
     return this;
   }
 
+  public MultilingualTenantTestDataBuilder withTenantIdReservationToken(String reservationToken) {
+    tenantMultilingualDTO.setTenantIdReservationToken(reservationToken);
+    return this;
+  }
+
   public MultilingualTenantTestDataBuilder withSettingTopicsInRegistrationEnabled(
       boolean topicsInRegistrationEnabled) {
     tenantMultilingualDTO.setSettings(
@@ -74,6 +81,22 @@ public class MultilingualTenantTestDataBuilder {
 
   public MultilingualTenantTestDataBuilder withTheming() {
     tenantMultilingualDTO.setTheming(theming());
+    return this;
+  }
+
+  /** The onboarding DPA acceptance carried into the creating call (#569, TEN-INV-U9). */
+  public MultilingualTenantTestDataBuilder withOnboardingDpaAcceptance(
+      String signerUserId, String signerName, String dpaVersion) {
+    tenantMultilingualDTO.setOnboardingDpaAcceptance(
+        new com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO()
+            .accepted(true)
+            .signerUserId(signerUserId)
+            .signerUsername(signerName)
+            .signerName(signerName)
+            .signerPosition("Geschäftsführung")
+            .signerEmail("toni@example.org")
+            .signerOrganisation("Träger Nord e.V.")
+            .dpaVersion(dpaVersion));
     return this;
   }
 
@@ -103,11 +126,17 @@ public class MultilingualTenantTestDataBuilder {
         .featureStatisticsEnabled(true)
         .featureTopicsEnabled(true)
         .featureGroupChatV2Enabled(true)
+        .featureTeamDiscussionEnabled(true)
         .featureToolsEnabled(true)
         .featureToolsOICDToken("1234")
-        .featureAttachmentUploadDisabled(false)
+        .featureMediaUploadEnabled(true)
+        .featureMediaUploadAnonymousChatsEnabled(true)
+        .featureMediaInlineDisplayEnabled(true)
+        .featureMediaAiScanEnabled(false)
         .showAskerProfile(true)
         .isVideoCallAllowed(true)
+        .emailVisible(true)
+        .emailRequired(true)
         .featureCentralDataProtectionTemplateEnabled(true)
         .extendedSettings(
             new ConsultingTypePatchDTO().isVideoCallAllowed(true).languageFormal(true));
@@ -123,10 +152,23 @@ public class MultilingualTenantTestDataBuilder {
     return tenantMultilingualDTO;
   }
 
+  /**
+   * The colour pair the Admin theme builder submits: {@code primaryColor} is the dark accent and
+   * {@code accent} the light accent (ORISO-TenantService#154).
+   */
+  public MultilingualTenantTestDataBuilder withThemingAccents(
+      String accentDark, String accentLight, String signal) {
+    tenantMultilingualDTO.setTheming(
+        new Theming().primaryColor(accentDark).accent(accentLight).signal(signal));
+    return this;
+  }
+
   private Theming theming() {
     Theming theming = new Theming();
     theming.setSecondaryColor(SECONDARY_COLOR);
     theming.setPrimaryColor(PRIMARY_COLOR);
+    theming.setAccent(ACCENT);
+    theming.setSignal(SIGNAL);
     theming.setFavicon(FAVICON);
     theming.setLogo(LOGO);
     return theming;

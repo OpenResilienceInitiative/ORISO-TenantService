@@ -8,8 +8,11 @@ import static org.springframework.util.ObjectUtils.nullSafeEquals;
 import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.Authority.AuthorityValue;
 import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
+import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
+import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
+import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
@@ -18,14 +21,19 @@ import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
+import com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
-import com.vi.tenantservice.api.model.TenantEntity.TenantBase;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantDpaStatusService;
+import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
+import com.vi.tenantservice.api.service.TenantIdAllocationService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -37,18 +45,19 @@ import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
+import jakarta.ws.rs.BadRequestException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import javax.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -69,7 +78,18 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 public class TenantServiceFacade {
 
   private static final int TECHNICAL_TENANT_ID = 0;
+
+  /** AUTO create retries share the allocation service's retry budget (TEN-INV hardening). */
+  private static final int MAX_AUTO_ID_CREATE_ATTEMPTS =
+      TenantIdAllocationService.MAX_AUTO_ATTEMPTS;
+
+  /** Column widths of tenant_dpa_admin_signature (changeset 0025) and the API contract. */
+  private static final int MAX_SIGNER_FIELD_LENGTH = 255;
+
+  private static final int MAX_LANGUAGE_LENGTH = 10;
+
   private final @NonNull TenantService tenantService;
+  private final @NonNull TenantIdAllocationService tenantIdAllocationService;
   private final @NonNull TenantConverter tenantConverter;
   private final @NonNull TenantInputSanitizer tenantInputSanitizer;
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
@@ -88,7 +108,11 @@ public class TenantServiceFacade {
 
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
 
+  private final @NonNull EffectivePermissionSettingsApplier effectivePermissionSettingsApplier;
+
   private final @NonNull TenantResolverService tenantResolverService;
+
+  private final @NonNull TenantDpaStatusService tenantDpaStatusService;
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
@@ -104,23 +128,169 @@ public class TenantServiceFacade {
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
-    TenantEntity createdTenant = tenantService.create(entity);
+    String reservationToken = tenantDTO.getTenantIdReservationToken();
+    TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
       createDefaultConsultingTypeSettings(createdTenant);
     } catch (ConsultingTypeCreationException ex) {
-      performRollback(createdTenant);
+      performRollback(createdTenant, reservationToken);
       log.error(
           "Error while creating consulting types for tenant with id {}", createdTenant.getId(), ex);
       throw new BadRequestException(
           "Error while creating consulting types for tenant with id " + createdTenant.getId());
     }
+    recordOnboardingDpaAcceptance(
+        createdTenant, tenantDTO.getOnboardingDpaAcceptance(), reservationToken);
     var createdTenantDto = tenantConverter.toMultilingualDTO(createdTenant);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(createdTenantDto);
     return createdTenantDto;
   }
 
-  private void performRollback(TenantEntity createdTenant) {
-    tenantService.delete(createdTenant);
+  /**
+   * Persists the DPA acceptance a tenant admin gave while onboarding through a public invite link
+   * (#569, TEN-INV-U9) as the tenant's append-only admin signature.
+   *
+   * <p>This runs INSIDE the tenant creation on purpose. The acceptance is the signature that makes
+   * the new tenant's DPA status VALID, so a tenant must never exist without it — otherwise the
+   * freshly onboarded admin logs in straight into the non-bypassable DPA blocker (U10) with nothing
+   * to act on. Recording it from the caller after the creation returned could not be compensated:
+   * the caller cannot restore a consumed ID reservation, whereas failing here reuses the very same
+   * rollback the consulting-type provisioning uses — tenant row deleted, reservation restored to
+   * RESERVED with its original token, so the invite link stays usable for a retry.
+   */
+  private void recordOnboardingDpaAcceptance(
+      TenantEntity createdTenant, OnboardingDpaAcceptanceDTO acceptance, String reservationToken) {
+    if (acceptance == null) {
+      return;
+    }
+    try {
+      if (!Boolean.TRUE.equals(acceptance.getAccepted())
+          || isBlank(acceptance.getSignerUserId())
+          || isBlank(acceptance.getSignerName())) {
+        throw new BadRequestException(
+            "onboardingDpaAcceptance requires accepted=true, signerUserId and signerName");
+      }
+      tenantDpaStatusService.signOnboarding(
+          createdTenant.getId(),
+          bounded(acceptance.getSignerUserId(), MAX_SIGNER_FIELD_LENGTH, "signerUserId"),
+          bounded(acceptance.getSignerUsername(), MAX_SIGNER_FIELD_LENGTH, "signerUsername"),
+          parseDpaVersion(acceptance.getDpaVersion()),
+          new AdminSignatureForm(
+              bounded(acceptance.getSignerName(), MAX_SIGNER_FIELD_LENGTH, "signerName"),
+              bounded(acceptance.getSignerPosition(), MAX_SIGNER_FIELD_LENGTH, "signerPosition"),
+              bounded(acceptance.getSignerEmail(), MAX_SIGNER_FIELD_LENGTH, "signerEmail"),
+              bounded(
+                  acceptance.getSignerOrganisation(),
+                  MAX_SIGNER_FIELD_LENGTH,
+                  "signerOrganisation"),
+              bounded(acceptance.getLanguage(), MAX_LANGUAGE_LENGTH, "language"),
+              buildOnboardingFormDataJson(acceptance)));
+    } catch (RuntimeException ex) {
+      performRollback(createdTenant, reservationToken);
+      log.error(
+          "Onboarding DPA acceptance could not be recorded for tenant {} — the tenant creation was"
+              + " rolled back so the acceptance is never silently lost",
+          createdTenant.getId(),
+          ex);
+      throw ex;
+    }
+  }
+
+  /** Verbatim JSON snapshot of the submitted onboarding acceptance (audit evidence). */
+  private String buildOnboardingFormDataJson(OnboardingDpaAcceptanceDTO acceptance) {
+    var formData = new LinkedHashMap<String, Object>();
+    formData.put("signerName", acceptance.getSignerName());
+    formData.put("signerPosition", acceptance.getSignerPosition());
+    formData.put("signerEmail", acceptance.getSignerEmail());
+    formData.put("signerOrganisation", acceptance.getSignerOrganisation());
+    formData.put("language", acceptance.getLanguage());
+    formData.put("accepted", acceptance.getAccepted());
+    formData.put("dpaVersion", acceptance.getDpaVersion());
+    formData.put("source", "PUBLIC_TENANT_ADMIN_ONBOARDING");
+    return convertToJson(formData);
+  }
+
+  /**
+   * The signer fields are PLAIN TEXT of an append-only legal record, so they are stored exactly as
+   * the signer submitted them (#569). Running them through an HTML sanitizer entity-encoded the
+   * audit trail — a stored value that no longer matches what was signed. They are never interpreted
+   * as markup here; consumers encode them at RENDER time (the admin UI sanitizes its own output).
+   *
+   * <p>Verbatim is not unbounded: a value longer than its column is rejected rather than silently
+   * truncated by the database. The API contract bounds these fields too ({@code maxLength} in
+   * tenantservice.yaml); this guard keeps the invariant when the facade is reached directly.
+   */
+  private static String bounded(String value, int maxLength, String field) {
+    if (value != null && value.length() > maxLength) {
+      throw new BadRequestException(
+          "onboardingDpaAcceptance." + field + " exceeds " + maxLength + " characters");
+    }
+    return value;
+  }
+
+  private static LocalDateTime parseDpaVersion(String dpaVersion) {
+    if (isBlank(dpaVersion)) {
+      return null;
+    }
+    try {
+      return LocalDateTime.parse(dpaVersion.trim());
+    } catch (DateTimeParseException ex) {
+      throw new BadRequestException("onboardingDpaAcceptance.dpaVersion is not a valid timestamp");
+    }
+  }
+
+  private static boolean isBlank(String value) {
+    return value == null || value.trim().isEmpty();
+  }
+
+  /**
+   * Creates the tenant with authoritative ID allocation (TEN-INV-U1). In AUTO mode (no ID in the
+   * request) a lost race for the smallest free ID is retried with the next candidate; exhausting
+   * the retry budget is a server-side contention condition and surfaces as HTTP 503. A manual ID
+   * conflict is never retried and surfaces as HTTP 409.
+   */
+  private TenantEntity createWithIdAllocationRetry(TenantEntity entity, String reservationToken) {
+    boolean autoMode = entity.getId() == null;
+    int attempts = autoMode ? MAX_AUTO_ID_CREATE_ATTEMPTS : 1;
+    TenantIdAllocationConflictException lastConflict = null;
+    for (int attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        return tenantService.create(entity, reservationToken);
+      } catch (TenantIdAllocationConflictException ex) {
+        lastConflict = ex;
+        if (autoMode) {
+          log.info("Lost the race for an AUTO tenant ID (attempt {}), retrying", attempt);
+          entity.setId(null);
+        }
+      }
+    }
+    if (autoMode) {
+      throw new TenantIdAllocationExhaustedException(
+          "Could not allocate an AUTO tenant ID after " + attempts + " attempts", lastConflict);
+    }
+    throw lastConflict;
+  }
+
+  /**
+   * Compensates a tenant creation whose consulting-type provisioning failed after commit. When the
+   * creation consumed an open invite's reservation, the ledger row is restored to RESERVED with its
+   * original token (the invite keeps its ID); a row created fresh in the failed creation is
+   * deleted. If the tenant row itself cannot be deleted, the ASSIGNED ledger row is deliberately
+   * kept: the ID is still occupied by the surviving tenant row, and deleting or restoring the
+   * ledger row would let a second allocation hand out the same ID twice.
+   */
+  private void performRollback(TenantEntity createdTenant, String reservationToken) {
+    try {
+      tenantService.delete(createdTenant);
+    } catch (RuntimeException ex) {
+      log.error(
+          "Rollback of tenant {} could not delete the tenant row; keeping its ASSIGNED ledger row"
+              + " so the ledger stays consistent with the surviving tenant",
+          createdTenant.getId(),
+          ex);
+      return;
+    }
+    tenantIdAllocationService.rollbackAssignment(createdTenant.getId(), reservationToken);
   }
 
   private void populateTenantSettingsAndActivationDates(
@@ -191,7 +361,7 @@ public class TenantServiceFacade {
   }
 
   private boolean onlyTechnicalTenantExists() {
-    List<TenantEntity> tenants = tenantService.getAllTenants();
+    List<TenantData> tenants = tenantService.getAllTenantData();
     return tenants.size() == 1 && tenants.get(0).getId().equals(0L);
   }
 
@@ -219,15 +389,10 @@ public class TenantServiceFacade {
   }
 
   private void validateCreateTenantInput(MultilingualTenantDTO tenantDTO) {
+    // A tenant ID in the request switches the creation to manual allocation mode; it is
+    // re-validated against the allocation ledger inside the creating transaction (TEN-INV-U1),
+    // so no upfront ID check happens here.
     validateTenantInput(tenantDTO);
-    validateId(tenantDTO);
-  }
-
-  private void validateId(MultilingualTenantDTO tenantDTO) {
-    if (nonNull(tenantDTO.getId())) {
-      throw new TenantValidationException(
-          HttpStatusExceptionReason.ID_MUST_BE_NULL_WHEN_CREATING_TENANT);
-    }
   }
 
   private void validateContent(MultilingualTenantDTO tenantDTO, List<String> isoCountries) {
@@ -244,9 +409,21 @@ public class TenantServiceFacade {
   }
 
   private void validateTranslationKeys(List<String> isoCountries, List<String> keys) {
-    if (!keys.isEmpty() && !isoCountries.containsAll(keys)) {
+    boolean hasInvalidKey =
+        keys.stream().anyMatch(key -> !isValidTranslationKey(isoCountries, key));
+    if (hasInvalidKey) {
       throw new TenantValidationException(HttpStatusExceptionReason.LANGUAGE_KEY_NOT_VALID);
     }
+  }
+
+  private boolean isValidTranslationKey(List<String> isoCountries, String key) {
+    if (isoCountries.contains(key)) {
+      return true;
+    }
+
+    String metadataSuffix = "__meta";
+    return key.endsWith(metadataSuffix)
+        && isoCountries.contains(key.substring(0, key.length() - metadataSuffix.length()));
   }
 
   private static List<String> getLanguageLowercaseKeys(Map<String, String> translatedMap) {
@@ -327,7 +504,7 @@ public class TenantServiceFacade {
 
   public Optional<TenantDTO> findTenantById(Long id) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
-    var tenantById = tenantService.findTenantById(id);
+    var tenantById = tenantService.findTenantDataById(id);
     if (tenantById.isEmpty()) {
       return Optional.empty();
     }
@@ -337,7 +514,7 @@ public class TenantServiceFacade {
     return Optional.of(tenantDTO);
   }
 
-  private MultilingualTenantDTO getConvertedAndEnrichedTenant(TenantEntity tenantEntity) {
+  private MultilingualTenantDTO getConvertedAndEnrichedTenant(TenantData tenantEntity) {
     var multilingualTenantDTO = tenantConverter.toMultilingualDTO(tenantEntity);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(multilingualTenantDTO);
     enrichWithAdminDataIfSuperadmin(multilingualTenantDTO);
@@ -383,7 +560,15 @@ public class TenantServiceFacade {
 
   private void enrichWithAdminData(
       final Integer tenantId, final Consumer<List<String>> setAdminEmailsConsumer) {
-    List<AdminResponseDTO> tenantAdmins = userAdminService.getTenantAdmins(tenantId);
+    List<AdminResponseDTO> tenantAdmins = new ArrayList<>();
+    try {
+      tenantAdmins = userAdminService.getTenantAdmins(tenantId);
+    } catch (Exception ex) {
+      log.warn(
+          "Could not resolve tenant-admin emails for tenant {}. Returning tenant without adminEmails.",
+          tenantId,
+          ex);
+    }
     if (tenantAdmins != null && !tenantAdmins.isEmpty()) {
       log.debug("Enriching tenant with admin email data");
       setAdminEmailsConsumer.accept(getAdminEmails(tenantAdmins));
@@ -400,29 +585,57 @@ public class TenantServiceFacade {
 
   public Optional<MultilingualTenantDTO> findMultilingualTenantById(Long id) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
-    var tenantById = tenantService.findTenantById(id);
+    var tenantById = tenantService.findTenantDataById(id);
     return tenantById.isEmpty()
         ? Optional.empty()
         : Optional.of(getConvertedAndEnrichedTenant(tenantById.get()));
   }
 
   public Optional<RestrictedTenantDTO> findRestrictedTenantById(Long id) {
-    var tenantById = tenantService.findTenantById(id);
+    var tenantById = tenantService.findRestrictedTenantDataById(id);
 
     String lang = translationService.getCurrentLanguageContext();
     return tenantById.isEmpty()
         ? Optional.empty()
-        : Optional.of(tenantConverter.toRestrictedTenantDTO(tenantById.get(), lang));
+        : Optional.of(
+            withEffectivePermissions(
+                tenantConverter.toRestrictedTenantDTO(tenantById.get(), lang)));
+  }
+
+  public List<RestrictedTenantDTO> findRestrictedTenantsByIds(Set<Long> ids) {
+    String lang = translationService.getCurrentLanguageContext();
+    TenantAdminControls controls = tenantAdminControlsService.getControls();
+    return tenantService.findRestrictedTenantDataByIds(ids).stream()
+        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
+        .map(tenant -> withEffectivePermissions(tenant, controls))
+        .toList();
+  }
+
+  /**
+   * Bakes the platform admin controls into the public settings so the counselling app receives
+   * effective feature flags (forced-off disabled, enforced-on locked on) without seeing the
+   * controls themselves. See ADR-013 P4.
+   */
+  private RestrictedTenantDTO withEffectivePermissions(RestrictedTenantDTO dto) {
+    return withEffectivePermissions(dto, tenantAdminControlsService.getControls());
+  }
+
+  private RestrictedTenantDTO withEffectivePermissions(
+      RestrictedTenantDTO dto, TenantAdminControls controls) {
+    if (dto != null) {
+      effectivePermissionSettingsApplier.applyTo(dto.getSettings(), controls);
+    }
+    return dto;
   }
 
   public List<BasicTenantLicensingDTO> getAllTenants() {
-    var tenantEntities = tenantService.getAllTenants();
+    var tenantEntities = tenantService.getAllTenantData();
     return tenantEntities.stream().map(tenantConverter::toBasicLicensingTenantDTO).toList();
   }
 
   public Optional<RestrictedTenantDTO> findTenantBySubdomain(
       String subdomain, Long optionalTenantIdOverride) {
-    var tenantBySubdomain = tenantService.findTenantBySubdomain(subdomain);
+    var tenantBySubdomain = tenantService.findRestrictedTenantDataBySubdomain(subdomain);
     Optional<Long> tenantIdFromRequestOrCookie =
         resolveFromRequestOrCookie(optionalTenantIdOverride);
 
@@ -433,7 +646,9 @@ public class TenantServiceFacade {
     String lang = translationService.getCurrentLanguageContext();
     return tenantBySubdomain.isEmpty()
         ? Optional.empty()
-        : Optional.of(tenantConverter.toRestrictedTenantDTO(tenantBySubdomain.get(), lang));
+        : Optional.of(
+            withEffectivePermissions(
+                tenantConverter.toRestrictedTenantDTO(tenantBySubdomain.get(), lang)));
   }
 
   private Optional<Long> resolveFromRequestOrCookie(Long optionalTenantIdOverride) {
@@ -457,32 +672,41 @@ public class TenantServiceFacade {
             .getApplicationSettings()
             .getMainTenantSubdomainForSingleDomainMultitenancy()
             .getValue();
-    var mainTenant = tenantService.findTenantBySubdomain(mainTenantSubdomain).orElseThrow();
+    var mainTenant =
+        tenantService.findRestrictedTenantDataBySubdomain(mainTenantSubdomain).orElseThrow();
     Long actualTenantId = tenantResolverService.tryResolve().orElseThrow();
-    TenantEntity actualTenant = tenantService.findTenantById(actualTenantId).orElseThrow();
-    return singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-        mainTenant, actualTenant);
+    TenantRestrictedData actualTenant =
+        tenantService.findRestrictedTenantDataById(actualTenantId).orElseThrow();
+    return withEffectivePermissions(
+        singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
+            mainTenant, actualTenant));
   }
 
   public Optional<RestrictedTenantDTO> getTenantDataWithOverride(
-      Optional<TenantEntity> mainTenantForSingleDomainMultitenancy, Long resolvedTenantId) {
+      Optional<TenantRestrictedData> mainTenantForSingleDomainMultitenancy, Long resolvedTenantId) {
 
-    Optional<TenantEntity> tenantToOverridePrivacy = tenantService.findTenantById(resolvedTenantId);
+    if (mainTenantForSingleDomainMultitenancy.isEmpty()) {
+      return Optional.empty();
+    }
+
+    Optional<TenantRestrictedData> tenantToOverridePrivacy =
+        tenantService.findRestrictedTenantDataById(resolvedTenantId);
     if (tenantToOverridePrivacy.isEmpty()) {
       throw new BadRequestException("Tenant not found for id " + resolvedTenantId);
     }
     return Optional.of(
-        singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-            mainTenantForSingleDomainMultitenancy.orElseThrow(),
-            tenantToOverridePrivacy.orElseThrow()));
+        withEffectivePermissions(
+            singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
+                mainTenantForSingleDomainMultitenancy.get(), tenantToOverridePrivacy.get())));
   }
 
   public Optional<RestrictedTenantDTO> getSingleTenant() {
-    var tenantEntities = tenantService.getAllTenants();
+    var tenantEntities = tenantService.getAllTenantData();
     if (tenantEntities != null && tenantEntities.size() == 1) {
       var tenantEntity = tenantEntities.get(0);
       String lang = translationService.getCurrentLanguageContext();
-      return Optional.of(tenantConverter.toRestrictedTenantDTO(tenantEntity, lang));
+      return Optional.of(
+          withEffectivePermissions(tenantConverter.toRestrictedTenantDTO(tenantEntity, lang)));
     } else {
       throw new IllegalStateException("Not exactly one tenant was found.");
     }
@@ -508,22 +732,21 @@ public class TenantServiceFacade {
       }
     }
 
-    var tenantBySubdomain = tenantService.findTenantBySubdomain(subdomain.get());
-    return tenantFacadeAuthorisationService.canAccessTenant(tenantBySubdomain);
+    var tenantIdBySubdomain = tenantService.findTenantIdBySubdomain(subdomain.get());
+    return tenantFacadeAuthorisationService.canAccessTenantById(tenantIdBySubdomain);
   }
 
   public Map<String, Object> findTenantsExceptTechnicalByInfix(
       String infix, int pageNumber, Integer pageSize, String fieldName, boolean isAscending) {
     var direction = isAscending ? Direction.ASC : Direction.DESC;
     var pageRequest = PageRequest.of(pageNumber, pageSize, direction, fieldName);
-    Page<TenantBase> tenantPage = tenantService.findAllExceptTechnicalByInfix(infix, pageRequest);
-    var tenantIds = tenantPage.stream().map(TenantBase::getId).toList();
-    var fullTenants = tenantService.findAllByIds(tenantIds);
-    return mapOf(tenantPage, fullTenants);
+    Page<TenantData> tenantPage =
+        tenantService.findAllTenantDataExceptTechnicalByInfix(infix, pageRequest);
+    return mapOf(tenantPage);
   }
 
   public List<AdminTenantDTO> getAllAdminTenantsExceptTechnical() {
-    var tenantEntities = tenantService.getAllTenants();
+    var tenantEntities = new ArrayList<>(tenantService.getAllTenantData());
     excludeTechnicalTenantFrom(tenantEntities);
     List<AdminTenantDTO> adminTenantDTOS =
         tenantEntities.stream().map(tenantConverter::toAdminTenantDTO).toList();
@@ -533,19 +756,15 @@ public class TenantServiceFacade {
     return adminTenantDTOS;
   }
 
-  private void excludeTechnicalTenantFrom(List<TenantEntity> tenants) {
+  private void excludeTechnicalTenantFrom(List<? extends TenantData> tenants) {
     emptyIfNull(tenants).removeIf(tenant -> tenant.getId() == TECHNICAL_TENANT_ID);
   }
 
-  private Map<String, Object> mapOf(Page<TenantBase> tenantPage, List<TenantEntity> fullTenants) {
-    var fullTenantsLookupMap =
-        fullTenants.stream().collect(Collectors.toMap(TenantEntity::getId, Function.identity()));
-
+  private Map<String, Object> mapOf(Page<TenantData> tenantPage) {
     var tenants = new ArrayList<Map<String, Object>>();
     tenantPage.forEach(
-        tenantBase -> {
-          var fullTenant = fullTenantsLookupMap.get(tenantBase.getId());
-          var tenantMap = mapOf(tenantBase, fullTenant);
+        tenantData -> {
+          var tenantMap = mapOf(tenantData);
           tenants.add(tenantMap);
         });
 
@@ -560,28 +779,28 @@ public class TenantServiceFacade {
         tenants);
   }
 
-  private Map<String, Object> mapOf(TenantBase tenantBase, TenantEntity fullTenant) {
+  private Map<String, Object> mapOf(TenantData tenantData) {
     Map<String, Object> map = new HashMap<>();
-    map.put("id", tenantBase.getId());
-    map.put("name", tenantBase.getName());
-    map.put("subdomain", fullTenant.getSubdomain());
-    map.put("beraterCount", fullTenant.getLicensingAllowedNumberOfUsers());
+    map.put("id", tenantData.getId());
+    map.put("name", tenantData.getName());
+    map.put("subdomain", tenantData.getSubdomain());
+    map.put("beraterCount", tenantData.getLicensingAllowedNumberOfUsers());
     List<AdminResponseDTO> tenantAdmins = new ArrayList<>();
     try {
-      tenantAdmins = userAdminService.getTenantAdmins(tenantBase.getId().intValue());
+      tenantAdmins = userAdminService.getTenantAdmins(tenantData.getId().intValue());
     } catch (Exception ex) {
       log.warn(
           "Could not resolve tenant-admin emails for tenant {}. Returning tenant without adminEmails.",
-          tenantBase.getId(),
+          tenantData.getId(),
           ex);
     }
     map.put("adminEmails", getAdminEmails(tenantAdmins));
     map.put(
         "createDate",
-        nonNull(fullTenant.getCreateDate()) ? fullTenant.getCreateDate().toString() : null);
+        nonNull(tenantData.getCreateDate()) ? tenantData.getCreateDate().toString() : null);
     map.put(
         "updateDate",
-        nonNull(fullTenant.getUpdateDate()) ? fullTenant.getUpdateDate().toString() : null);
+        nonNull(tenantData.getUpdateDate()) ? tenantData.getUpdateDate().toString() : null);
     return map;
   }
 }

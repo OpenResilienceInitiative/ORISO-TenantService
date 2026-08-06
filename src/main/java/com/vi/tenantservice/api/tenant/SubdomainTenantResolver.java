@@ -25,9 +25,9 @@ public class SubdomainTenantResolver implements TenantResolver {
   private Optional<Long> resolveTenantFromSubdomain() {
     Optional<String> currentSubdomain = subdomainExtractor.getCurrentSubdomain();
     if (currentSubdomain.isPresent()) {
-      var tenant = tenantRepository.findBySubdomain(currentSubdomain.get());
-      if (tenant != null) {
-        return of(tenant.getId());
+      var tenantId = tenantRepository.findIdBySubdomain(currentSubdomain.get());
+      if (tenantId != null) {
+        return of(tenantId);
       }
     }
     return Optional.empty();

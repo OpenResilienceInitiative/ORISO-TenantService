@@ -9,8 +9,9 @@ import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
-import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled;
+import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import java.time.LocalDateTime;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -37,16 +38,16 @@ class SingleDomainTenantOverrideServiceTest {
     var actualTenant = new TenantEntity();
     when(translationService.getCurrentLanguageContext()).thenReturn("de");
     when(tenantConverter.toRestrictedTenantDTO(mainTenant, "de"))
-        .thenReturn(restrictedDTO("main privacy", LocalDateTime.now().minusDays(1), false));
+        .thenReturn(restrictedDTO("main privacy", LocalDateTime.now().minusDays(1), true));
     LocalDateTime actualPrivacyChangedDate = LocalDateTime.now();
     when(tenantConverter.toRestrictedTenantDTO(actualTenant, "de"))
-        .thenReturn(restrictedDTO("actual privacy", actualPrivacyChangedDate, true));
+        .thenReturn(restrictedDTO("actual privacy", actualPrivacyChangedDate, false));
 
     var applicationSettings =
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
             .ApplicationSettingsDTO();
     applicationSettings.setLegalContentChangesBySingleTenantAdminsAllowed(
-        new ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled().value(true));
+        new FeatureToggleDTO().value(true));
     when(applicationSettingsService.getApplicationSettings()).thenReturn(applicationSettings);
     // when
     RestrictedTenantDTO restrictedTenantDTO =
@@ -55,9 +56,11 @@ class SingleDomainTenantOverrideServiceTest {
 
     // then
     assertThat(restrictedTenantDTO.getContent().getPrivacy()).isEqualTo("actual privacy");
+    assertThat(restrictedTenantDTO.getContent().getPrivacyLanguages())
+        .isEqualTo(Map.of("de", "actual privacy"));
     assertThat(restrictedTenantDTO.getContent().getDataPrivacyConfirmation())
         .isEqualTo(actualPrivacyChangedDate);
-    assertThat(restrictedTenantDTO.getSettings().getFeatureAttachmentUploadDisabled()).isTrue();
+    assertThat(restrictedTenantDTO.getSettings().getFeatureMediaUploadEnabled()).isFalse();
   }
 
   @Test
@@ -71,16 +74,16 @@ class SingleDomainTenantOverrideServiceTest {
     when(translationService.getCurrentLanguageContext()).thenReturn("de");
     LocalDateTime mainPrivacyChangedDate = LocalDateTime.now().minusDays(1);
     when(tenantConverter.toRestrictedTenantDTO(mainTenant, "de"))
-        .thenReturn(restrictedDTO("main privacy", mainPrivacyChangedDate, false));
+        .thenReturn(restrictedDTO("main privacy", mainPrivacyChangedDate, true));
     LocalDateTime actualPrivacyChangedDate = LocalDateTime.now();
     when(tenantConverter.toRestrictedTenantDTO(actualTenant, "de"))
-        .thenReturn(restrictedDTO("actual privacy", actualPrivacyChangedDate, true));
+        .thenReturn(restrictedDTO("actual privacy", actualPrivacyChangedDate, false));
 
     var applicationSettings =
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
             .ApplicationSettingsDTO();
     applicationSettings.setLegalContentChangesBySingleTenantAdminsAllowed(
-        new ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled().value(false));
+        new FeatureToggleDTO().value(false));
     when(applicationSettingsService.getApplicationSettings()).thenReturn(applicationSettings);
     // when
     RestrictedTenantDTO restrictedTenantDTO =
@@ -91,13 +94,17 @@ class SingleDomainTenantOverrideServiceTest {
     assertThat(restrictedTenantDTO.getContent().getPrivacy()).isEqualTo("main privacy");
     assertThat(restrictedTenantDTO.getContent().getDataPrivacyConfirmation())
         .isEqualTo(mainPrivacyChangedDate);
-    assertThat(restrictedTenantDTO.getSettings().getFeatureAttachmentUploadDisabled()).isTrue();
+    assertThat(restrictedTenantDTO.getSettings().getFeatureMediaUploadEnabled()).isFalse();
   }
 
   private static RestrictedTenantDTO restrictedDTO(
-      String privacy, LocalDateTime privacyChangedDate, boolean featureAttachmentUploadDisabled) {
+      String privacy, LocalDateTime privacyChangedDate, boolean mediaUploadEnabled) {
     return new RestrictedTenantDTO()
-        .content(new Content().privacy(privacy).dataPrivacyConfirmation(privacyChangedDate))
-        .settings(new Settings().featureAttachmentUploadDisabled(featureAttachmentUploadDisabled));
+        .content(
+            new Content()
+                .privacy(privacy)
+                .privacyLanguages(Map.of("de", privacy))
+                .dataPrivacyConfirmation(privacyChangedDate))
+        .settings(new Settings().featureMediaUploadEnabled(mediaUploadEnabled));
   }
 }

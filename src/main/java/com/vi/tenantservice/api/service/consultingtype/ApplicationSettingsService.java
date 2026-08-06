@@ -6,7 +6,6 @@ import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.applicationsettingsservice.generated.ApiClient;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.ApplicationsettingsControllerApi;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTO;
-import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTOMainTenantSubdomainForSingleDomainMultitenancy;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsPatchDTO;
 import java.util.Optional;
 import lombok.NonNull;
@@ -36,9 +35,7 @@ public class ApplicationSettingsService {
         applicationSettingsApiControllerFactory.createControllerApi();
     addDefaultHeadersWithKeycloak(controllerApi.getApiClient());
     ApplicationSettingsPatchDTO applicationSettingsPatchDTO = new ApplicationSettingsPatchDTO();
-    applicationSettingsPatchDTO.setMainTenantSubdomainForSingleDomainMultitenancy(
-        new ApplicationSettingsDTOMainTenantSubdomainForSingleDomainMultitenancy()
-            .value(subdomain));
+    applicationSettingsPatchDTO.setMainTenantSubdomainForSingleDomainMultitenancy(subdomain);
     controllerApi.patchApplicationSettings(applicationSettingsPatchDTO);
   }
 

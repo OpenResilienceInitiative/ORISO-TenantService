@@ -4,9 +4,9 @@ import static com.vi.tenantservice.api.converter.ConverterUtils.nullAsFalse;
 
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
-import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
-import com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled;
+import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.springframework.stereotype.Component;
@@ -21,7 +21,7 @@ public class SingleDomainTenantOverrideService {
   private final @NonNull ApplicationSettingsService applicationSettingsService;
 
   public RestrictedTenantDTO overridePrivacyAndCertainSettings(
-      TenantEntity mainTenant, TenantEntity actualTenant) {
+      TenantRestrictedData mainTenant, TenantRestrictedData actualTenant) {
     String lang = translationService.getCurrentLanguageContext();
 
     RestrictedTenantDTO mainTenantRestrictedDTO = getRestrictedTenantDTO(mainTenant, lang);
@@ -35,11 +35,10 @@ public class SingleDomainTenantOverrideService {
   }
 
   private boolean isContentOverrideAllowed() {
-    ApplicationSettingsDTOMultitenancyWithSingleDomainEnabled
-        legalContentChangesBySingleTenantAdminsAllowed =
-            applicationSettingsService
-                .getApplicationSettings()
-                .getLegalContentChangesBySingleTenantAdminsAllowed();
+    FeatureToggleDTO legalContentChangesBySingleTenantAdminsAllowed =
+        applicationSettingsService
+            .getApplicationSettings()
+            .getLegalContentChangesBySingleTenantAdminsAllowed();
     return legalContentChangesBySingleTenantAdminsAllowed != null
         && nullAsFalse(legalContentChangesBySingleTenantAdminsAllowed.getValue());
   }
@@ -47,13 +46,39 @@ public class SingleDomainTenantOverrideService {
   private static void overrideSettings(
       RestrictedTenantDTO mainTenantRestrictedDTO,
       RestrictedTenantDTO overridingRestrictedTenantDTO) {
-    mainTenantRestrictedDTO
-        .getSettings()
-        .setFeatureAttachmentUploadDisabled(
-            overridingRestrictedTenantDTO.getSettings().getFeatureAttachmentUploadDisabled());
+    var mainSettings = mainTenantRestrictedDTO.getSettings();
+    var actualSettings = overridingRestrictedTenantDTO.getSettings();
+    mainSettings.setFeatureMediaUploadEnabled(actualSettings.getFeatureMediaUploadEnabled());
+    mainSettings.setFeatureMediaUploadAnonymousChatsEnabled(
+        actualSettings.getFeatureMediaUploadAnonymousChatsEnabled());
+    mainSettings.setFeatureMediaUploadOneOnOneChatsEnabled(
+        actualSettings.getFeatureMediaUploadOneOnOneChatsEnabled());
+    mainSettings.setFeatureMediaUploadGroupChatsEnabled(
+        actualSettings.getFeatureMediaUploadGroupChatsEnabled());
+    mainSettings.setFeatureMediaUploadSupervisionChatsEnabled(
+        actualSettings.getFeatureMediaUploadSupervisionChatsEnabled());
+    mainSettings.setFeatureMediaInlineDisplayEnabled(
+        actualSettings.getFeatureMediaInlineDisplayEnabled());
+    mainSettings.setFeatureMediaInlineDisplayAnonymousChatsEnabled(
+        actualSettings.getFeatureMediaInlineDisplayAnonymousChatsEnabled());
+    mainSettings.setFeatureMediaInlineDisplayOneOnOneChatsEnabled(
+        actualSettings.getFeatureMediaInlineDisplayOneOnOneChatsEnabled());
+    mainSettings.setFeatureMediaInlineDisplayGroupChatsEnabled(
+        actualSettings.getFeatureMediaInlineDisplayGroupChatsEnabled());
+    mainSettings.setFeatureMediaInlineDisplaySupervisionChatsEnabled(
+        actualSettings.getFeatureMediaInlineDisplaySupervisionChatsEnabled());
+    mainSettings.setFeatureMediaAiScanEnabled(actualSettings.getFeatureMediaAiScanEnabled());
+    mainSettings.setFeatureMediaAiScanAnonymousChatsEnabled(
+        actualSettings.getFeatureMediaAiScanAnonymousChatsEnabled());
+    mainSettings.setFeatureMediaAiScanOneOnOneChatsEnabled(
+        actualSettings.getFeatureMediaAiScanOneOnOneChatsEnabled());
+    mainSettings.setFeatureMediaAiScanGroupChatsEnabled(
+        actualSettings.getFeatureMediaAiScanGroupChatsEnabled());
+    mainSettings.setFeatureMediaAiScanSupervisionChatsEnabled(
+        actualSettings.getFeatureMediaAiScanSupervisionChatsEnabled());
   }
 
-  private RestrictedTenantDTO getRestrictedTenantDTO(TenantEntity mainTenant, String lang) {
+  private RestrictedTenantDTO getRestrictedTenantDTO(TenantRestrictedData mainTenant, String lang) {
     return tenantConverter.toRestrictedTenantDTO(mainTenant, lang);
   }
 
@@ -64,6 +89,8 @@ public class SingleDomainTenantOverrideService {
           .getContent()
           .dataPrivacyConfirmation(
               overridingRestrictedTenantDTO.getContent().getDataPrivacyConfirmation())
+          // keep the raw language map (incl. __meta keys) consistent with the overridden privacy
+          .privacyLanguages(overridingRestrictedTenantDTO.getContent().getPrivacyLanguages())
           .setPrivacy(overridingRestrictedTenantDTO.getContent().getPrivacy());
     }
   }

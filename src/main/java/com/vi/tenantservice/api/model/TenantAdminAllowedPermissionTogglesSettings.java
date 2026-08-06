@@ -37,4 +37,19 @@ public class TenantAdminAllowedPermissionTogglesSettings {
   Boolean voiceMessagesOneOnOneChats;
   Boolean voiceMessagesGroupChats;
   Boolean voiceMessagesSupervisionChats;
+  Boolean mediaUpload;
+  Boolean mediaUploadAnonymousChats;
+  Boolean mediaUploadOneOnOneChats;
+  Boolean mediaUploadGroupChats;
+  Boolean mediaUploadSupervisionChats;
+  Boolean mediaInlineDisplay;
+  Boolean mediaInlineDisplayAnonymousChats;
+  Boolean mediaInlineDisplayOneOnOneChats;
+  Boolean mediaInlineDisplayGroupChats;
+  Boolean mediaInlineDisplaySupervisionChats;
+  Boolean mediaAiScan;
+  Boolean mediaAiScanAnonymousChats;
+  Boolean mediaAiScanOneOnOneChats;
+  Boolean mediaAiScanGroupChats;
+  Boolean mediaAiScanSupervisionChats;
 }

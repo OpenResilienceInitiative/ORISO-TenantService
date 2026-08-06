@@ -6,12 +6,12 @@ echo ""
 
 if command -v kubectl &> /dev/null; then
     echo "Checking via Kubernetes service..."
-    kubectl -n caritas exec -it deployment/oriso-platform-tenantservice -c tenantservice -- \
+    kubectl -n "${NAMESPACE:-caritas}" exec -it deployment/oriso-platform-tenantservice -c tenantservice -- \
         curl -s http://localhost:8081/version 2>/dev/null || \
         echo "Service not accessible via kubectl"
     echo ""
     echo "Detailed info:"
-    kubectl -n caritas exec -it deployment/oriso-platform-tenantservice -c tenantservice -- \
+    kubectl -n "${NAMESPACE:-caritas}" exec -it deployment/oriso-platform-tenantservice -c tenantservice -- \
         curl -s http://localhost:8081/version/info 2>/dev/null || \
         echo "Service not accessible via kubectl"
 else

@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.converter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.DataProtectionContactTemplateDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
@@ -20,6 +21,7 @@ import com.vi.tenantservice.api.service.TemplateService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import freemarker.template.TemplateException;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -62,7 +64,78 @@ class TenantConverterTest {
     assertThat(converted.getTheming()).isEqualTo(tenantDTO.getTheming());
     assertThat(converted.getSettings().getIsVideoCallAllowed()).isTrue();
     assertThat(converted.getSettings().getShowAskerProfile()).isTrue();
+    assertThat(converted.getSettings().getEmailVisible()).isTrue();
+    assertThat(converted.getSettings().getEmailRequired()).isTrue();
     // content comparision is skipped, due to i18n feature, so the structure is different
+  }
+
+  @Test
+  void toEntity_should_roundTripEmailVisibleAndEmailRequired() {
+    assertEmailSettingsRoundTrip(true, false);
+    assertEmailSettingsRoundTrip(false, true);
+  }
+
+  private void assertEmailSettingsRoundTrip(boolean emailVisible, boolean emailRequired) {
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().emailVisible(emailVisible).emailRequired(emailRequired);
+
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+    TenantDTO converted = tenantConverter.toDTO(entity, "de");
+
+    assertThat(converted.getSettings().getEmailVisible()).isEqualTo(emailVisible);
+    assertThat(converted.getSettings().getEmailRequired()).isEqualTo(emailRequired);
+  }
+
+  @Test
+  void toEntity_should_roundTripAddressAndDescription() {
+    // given
+    MultilingualTenantDTO tenantDTO = new MultilingualTenantTestDataBuilder().tenantDTO().build();
+    tenantDTO.setAddress("Musterstraße 1, 12345 Musterstadt");
+    tenantDTO.setDescription("Short description of the tenant.");
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then
+    assertThat(entity.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(entity.getDescription()).isEqualTo("Short description of the tenant.");
+
+    // and entity -> DTO conversions preserve the values
+    TenantDTO converted = tenantConverter.toDTO(entity, "de");
+    assertThat(converted.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(converted.getDescription()).isEqualTo("Short description of the tenant.");
+
+    MultilingualTenantDTO multilingualConverted = tenantConverter.toMultilingualDTO(entity);
+    assertThat(multilingualConverted.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(multilingualConverted.getDescription())
+        .isEqualTo("Short description of the tenant.");
+
+    AdminTenantDTO adminConverted = tenantConverter.toAdminTenantDTO(entity);
+    assertThat(adminConverted.getAddress()).isEqualTo("Musterstraße 1, 12345 Musterstadt");
+    assertThat(adminConverted.getDescription()).isEqualTo("Short description of the tenant.");
+  }
+
+  @Test
+  void toEntity_should_preserveServerManagedDpaFieldsOnTenantUpdate() {
+    // given
+    var activationDate = LocalDateTime.of(2026, 7, 19, 18, 24, 47);
+    var targetEntity =
+        TenantEntity.builder()
+            .id(84L)
+            .contentDataProcessingAgreement("{\"de\":\"Published DPA\"}")
+            .contentDataProcessingAgreementActivationDate(activationDate)
+            .build();
+    var tenantDTO = new MultilingualTenantTestDataBuilder().tenantDTO().build();
+
+    // when
+    TenantEntity converted = tenantConverter.toEntity(targetEntity, tenantDTO);
+
+    // then
+    assertThat(converted.getContentDataProcessingAgreement())
+        .isEqualTo("{\"de\":\"Published DPA\"}");
+    assertThat(converted.getContentDataProcessingAgreementActivationDate())
+        .isEqualTo(activationDate);
   }
 
   @Test
@@ -103,6 +176,45 @@ class TenantConverterTest {
         tenantDTO.getSettings(), restrictedTenantDTO.getSettings());
     Mockito.verify(templateRenderer).renderTemplate(Mockito.anyString(), Mockito.anyMap());
     assertThat(restrictedTenantDTO.getContent().getRenderedPrivacy()).isEqualTo("renderedPrivacy");
+  }
+
+  @Test
+  void toRestrictedTenantDTO_should_exposeRawLanguageMapsIncludingTranslationMeta()
+      throws TemplateDescriptionServiceException {
+    // given
+    var impressumJson =
+        "{\"de\":\"<h2 id=\\\"intro\\\">Impressum</h2>\",\"en\":\"<h2>Imprint</h2>\","
+            + "\"en__meta\":\"{\\\"mt\\\":true,\\\"src\\\":\\\"de\\\",\\\"at\\\":\\\"2026-07-04T10:00:00Z\\\"}\"}";
+    var privacyJson =
+        "{\"de\":\"<p>Datenschutz</p>\",\"en\":\"<p>Privacy</p>\","
+            + "\"en__meta\":\"{\\\"mt\\\":true,\\\"src\\\":\\\"de\\\",\\\"at\\\":\\\"2026-07-04T10:00:00Z\\\"}\"}";
+    var entity = new TenantEntity();
+    entity.setId(5L);
+    entity.setName("tenant");
+    entity.setContentImpressum(impressumJson);
+    entity.setContentPrivacy(privacyJson);
+    when(templateService.getMultilingualDataProtectionTemplate()).thenReturn(Map.of());
+
+    // when
+    RestrictedTenantDTO restrictedTenantDTO =
+        tenantConverter.toRestrictedTenantDTO(entity, TenantConverter.DE);
+
+    // then: resolved fields are unchanged
+    assertThat(restrictedTenantDTO.getContent().getImpressum())
+        .isEqualTo("<h2 id=\"intro\">Impressum</h2>");
+    assertThat(restrictedTenantDTO.getContent().getPrivacy()).isEqualTo("<p>Datenschutz</p>");
+
+    // and: the raw language maps incl. __meta keys are exposed as stored (no processing)
+    assertThat(restrictedTenantDTO.getContent().getImpressumLanguages())
+        .containsOnly(
+            Map.entry("de", "<h2 id=\"intro\">Impressum</h2>"),
+            Map.entry("en", "<h2>Imprint</h2>"),
+            Map.entry("en__meta", "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-07-04T10:00:00Z\"}"));
+    assertThat(restrictedTenantDTO.getContent().getPrivacyLanguages())
+        .containsOnly(
+            Map.entry("de", "<p>Datenschutz</p>"),
+            Map.entry("en", "<p>Privacy</p>"),
+            Map.entry("en__meta", "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-07-04T10:00:00Z\"}"));
   }
 
   @Test
@@ -224,6 +336,74 @@ class TenantConverterTest {
   }
 
   @Test
+  void toDTO_should_preserveEnforcedPermissionToggle() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .tenantAdminControls(
+            new TenantAdminControls()
+                .enforcedPermissionToggles(
+                    new TenantAdminAllowedPermissionToggles().videoCalls(true)));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(
+            converted
+                .getSettings()
+                .getTenantAdminControls()
+                .getEnforcedPermissionToggles()
+                .getVideoCalls())
+        .isTrue();
+  }
+
+  @Test
+  void toDTO_should_defaultMissingEnforcedPermissionToggleToFalse() {
+    // given - unlike allowed (defaults true), an unset enforced flag means "not enforced" = false
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .tenantAdminControls(
+            new TenantAdminControls()
+                .enforcedPermissionToggles(new TenantAdminAllowedPermissionToggles()));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(
+            converted
+                .getSettings()
+                .getTenantAdminControls()
+                .getEnforcedPermissionToggles()
+                .getVideoCalls())
+        .isFalse();
+  }
+
+  @Test
+  void toDTO_should_keepEnforcedTogglesNullWhenAbsent() {
+    // given - a legacy row / DTO without enforcedPermissionToggles stays null (nothing enforced)
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .tenantAdminControls(
+            new TenantAdminControls()
+                .allowedPermissionToggles(new TenantAdminAllowedPermissionToggles()));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(converted.getSettings().getTenantAdminControls().getEnforcedPermissionToggles())
+        .isNull();
+  }
+
+  @Test
   void toDTO_should_preserveSensitiveSettingsForNonPublicDtos() {
     // given
     MultilingualTenantDTO tenantDTO =
@@ -276,13 +456,23 @@ class TenantConverterTest {
         .isEqualTo(expected.getFeatureAppointmentsEnabled());
     assertThat(actual.getFeatureGroupChatV2Enabled())
         .isEqualTo(expected.getFeatureGroupChatV2Enabled());
+    assertThat(actual.getFeatureTeamDiscussionEnabled())
+        .isEqualTo(expected.getFeatureTeamDiscussionEnabled());
     assertThat(actual.getFeatureToolsEnabled()).isEqualTo(expected.getFeatureToolsEnabled());
-    assertThat(actual.getFeatureAttachmentUploadDisabled())
-        .isEqualTo(expected.getFeatureAttachmentUploadDisabled());
+    assertThat(actual.getFeatureMediaUploadEnabled())
+        .isEqualTo(expected.getFeatureMediaUploadEnabled());
+    assertThat(actual.getFeatureMediaUploadAnonymousChatsEnabled())
+        .isEqualTo(expected.getFeatureMediaUploadAnonymousChatsEnabled());
+    assertThat(actual.getFeatureMediaInlineDisplayEnabled())
+        .isEqualTo(expected.getFeatureMediaInlineDisplayEnabled());
+    assertThat(actual.getFeatureMediaAiScanEnabled())
+        .isEqualTo(expected.getFeatureMediaAiScanEnabled());
     assertThat(actual.getFeatureToolsOICDToken()).isEqualTo(expected.getFeatureToolsOICDToken());
     assertThat(actual.getActiveLanguages()).isEqualTo(expected.getActiveLanguages());
     assertThat(actual.getShowAskerProfile()).isEqualTo(expected.getShowAskerProfile());
     assertThat(actual.getIsVideoCallAllowed()).isEqualTo(expected.getIsVideoCallAllowed());
+    assertThat(actual.getEmailVisible()).isEqualTo(expected.getEmailVisible());
+    assertThat(actual.getEmailRequired()).isEqualTo(expected.getEmailRequired());
     assertThat(actual.getFeatureCentralDataProtectionTemplateEnabled())
         .isEqualTo(expected.getFeatureCentralDataProtectionTemplateEnabled());
     assertThat(actual.getTenantAdminControls()).isEqualTo(expected.getTenantAdminControls());
@@ -301,12 +491,22 @@ class TenantConverterTest {
         .isEqualTo(expected.getFeatureAppointmentsEnabled());
     assertThat(actual.getFeatureGroupChatV2Enabled())
         .isEqualTo(expected.getFeatureGroupChatV2Enabled());
+    assertThat(actual.getFeatureTeamDiscussionEnabled())
+        .isEqualTo(expected.getFeatureTeamDiscussionEnabled());
     assertThat(actual.getFeatureToolsEnabled()).isEqualTo(expected.getFeatureToolsEnabled());
-    assertThat(actual.getFeatureAttachmentUploadDisabled())
-        .isEqualTo(expected.getFeatureAttachmentUploadDisabled());
+    assertThat(actual.getFeatureMediaUploadEnabled())
+        .isEqualTo(expected.getFeatureMediaUploadEnabled());
+    assertThat(actual.getFeatureMediaUploadAnonymousChatsEnabled())
+        .isEqualTo(expected.getFeatureMediaUploadAnonymousChatsEnabled());
+    assertThat(actual.getFeatureMediaInlineDisplayEnabled())
+        .isEqualTo(expected.getFeatureMediaInlineDisplayEnabled());
+    assertThat(actual.getFeatureMediaAiScanEnabled())
+        .isEqualTo(expected.getFeatureMediaAiScanEnabled());
     assertThat(actual.getActiveLanguages()).isEqualTo(expected.getActiveLanguages());
     assertThat(actual.getShowAskerProfile()).isEqualTo(expected.getShowAskerProfile());
     assertThat(actual.getIsVideoCallAllowed()).isEqualTo(expected.getIsVideoCallAllowed());
+    assertThat(actual.getEmailVisible()).isEqualTo(expected.getEmailVisible());
+    assertThat(actual.getEmailRequired()).isEqualTo(expected.getEmailRequired());
     assertThat(actual.getFeatureCentralDataProtectionTemplateEnabled())
         .isEqualTo(expected.getFeatureCentralDataProtectionTemplateEnabled());
     assertThat(actual.getTenantAdminControls()).isEqualTo(expected.getTenantAdminControls());
@@ -330,6 +530,56 @@ class TenantConverterTest {
 
   private static String getGermanTranslation(Map<String, String> translations) {
     return translations.get("de");
+  }
+
+  @Test
+  void toDTO_should_applyPerFieldDefaults_When_storedSettingsJsonIsEmpty() {
+    // given — all keys absent from stored JSON
+    TenantEntity entity = TenantEntity.builder().settings("{}").build();
+
+    // when
+    Settings settings = tenantConverter.toDTO(entity, "de").getSettings();
+
+    // then — false-default fields (sample of 3)
+    assertThat(settings.getFeatureDemographicsEnabled()).isFalse();
+    assertThat(settings.getFeatureStatisticsEnabled()).isFalse();
+    assertThat(settings.getFeatureToolsEnabled()).isFalse();
+    assertThat(settings.getEmailVisible()).isFalse();
+    assertThat(settings.getEmailRequired()).isFalse();
+    // then — true-default fields (sample of 3)
+    assertThat(settings.getFeatureAudioCallsEnabled()).isTrue();
+    assertThat(settings.getFeatureAnonymousChatEnabled()).isTrue();
+    assertThat(settings.getFeatureCallsEnabled()).isTrue();
+  }
+
+  @Test
+  void toDTO_should_respectExplicitFalse_When_trueDefaultFieldIsSetToFalseInJson() {
+    // given — one true-default field explicitly false; all other keys absent
+    TenantEntity entity =
+        TenantEntity.builder().settings("{\"featureAudioCallsEnabled\":false}").build();
+
+    // when
+    Settings settings = tenantConverter.toDTO(entity, "de").getSettings();
+
+    // then
+    assertThat(settings.getFeatureAudioCallsEnabled()).isFalse();
+    assertThat(settings.getFeatureDemographicsEnabled()).isFalse();
+    assertThat(settings.getFeatureAnonymousChatEnabled()).isTrue();
+    assertThat(settings.getFeatureStatisticsEnabled()).isFalse();
+  }
+
+  @Test
+  void toDTO_should_notCrossContaminate_When_jsonContainsMisspelledFieldName() {
+    // given — typo must not satisfy .contains() for the correctly-spelled key
+    TenantEntity entity =
+        TenantEntity.builder().settings("{\"featureAudioCalls_Enabled\":false}").build();
+
+    // when
+    Settings settings = tenantConverter.toDTO(entity, "de").getSettings();
+
+    // then — correctly-spelled field keeps its true default; typo is ignored
+    assertThat(settings.getFeatureAudioCallsEnabled()).isTrue();
+    assertThat(settings.getFeatureDemographicsEnabled()).isFalse();
   }
 
   @Test
