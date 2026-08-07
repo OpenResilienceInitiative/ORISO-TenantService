@@ -156,6 +156,15 @@ public class MultilingualTenantTestDataBuilder {
    * The colour pair the Admin theme builder submits: {@code primaryColor} is the dark accent and
    * {@code accent} the light accent (ORISO-TenantService#154).
    */
+  /** Theming carrying a chosen login stage effect (#154 follow-up). */
+  public MultilingualTenantTestDataBuilder withThemingLoginEffect(
+      Theming.LoginEffectEnum loginEffect) {
+    Theming theming =
+        tenantMultilingualDTO.getTheming() == null ? theming() : tenantMultilingualDTO.getTheming();
+    tenantMultilingualDTO.setTheming(theming.loginEffect(loginEffect));
+    return this;
+  }
+
   public MultilingualTenantTestDataBuilder withThemingAccents(
       String accentDark, String accentLight, String signal) {
     tenantMultilingualDTO.setTheming(

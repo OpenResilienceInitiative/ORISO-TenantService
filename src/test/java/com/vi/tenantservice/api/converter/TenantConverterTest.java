@@ -15,6 +15,7 @@ import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -67,6 +68,53 @@ class TenantConverterTest {
     assertThat(converted.getSettings().getEmailVisible()).isTrue();
     assertThat(converted.getSettings().getEmailRequired()).isTrue();
     // content comparision is skipped, due to i18n feature, so the structure is different
+  }
+
+  @Test
+  void toEntity_should_roundTripTheLoginStageEffect() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder()
+            .tenantDTO()
+            .withTheming()
+            .withThemingLoginEffect(Theming.LoginEffectEnum.CRACKS)
+            .build();
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then — stored as the enum NAME, not an ordinal, and read back unchanged
+    assertThat(entity.getThemingLoginEffect()).isEqualTo("CRACKS");
+    assertThat(tenantConverter.toDTO(entity, "de").getTheming().getLoginEffect())
+        .isEqualTo(Theming.LoginEffectEnum.CRACKS);
+  }
+
+  @Test
+  void toEntity_should_keepAnUnsetLoginEffectNull() {
+    // given — a tenant that never configured an effect
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withTheming().build();
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then — null, not "NONE": a written NONE would be indistinguishable from
+    // an administrator having chosen it (same reasoning as the 0027 migration)
+    assertThat(entity.getThemingLoginEffect()).isNull();
+    assertThat(tenantConverter.toDTO(entity, "de").getTheming().getLoginEffect()).isNull();
+  }
+
+  @Test
+  void toDTO_should_fallBackToNoneForAnUnknownStoredLoginEffect() {
+    // given — a value written by a newer version, or a hand-edited row
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withTheming().build();
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+    entity.setThemingLoginEffect("KALEIDOSCOPE");
+
+    // then — the login screen must never break over decoration
+    assertThat(tenantConverter.toDTO(entity, "de").getTheming().getLoginEffect())
+        .isEqualTo(Theming.LoginEffectEnum.NONE);
   }
 
   @Test

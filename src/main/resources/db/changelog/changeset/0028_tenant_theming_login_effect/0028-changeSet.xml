@@ -1,0 +1,36 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Persist which decorative effect a tenant's login stage runs.
+
+      The value is one of NONE / LINES / CONNECTED_DOTS / CRACKS and is chosen in
+      Admin under Appearance. It is more than decoration for the frontend: it decides
+      which effect chunk a visitor downloads, so exactly one is ever fetched and NONE
+      fetches nothing at all.
+
+      Stored as the enum NAME in a varchar, not as an ordinal: the column stays
+      readable in a dump, and reordering the enum in code can never silently repoint
+      existing tenants at a different effect.
+
+      MIGRATION DECISION — deliberately NO backfill. Existing tenants get NULL, which
+      readers treat as NONE, i.e. exactly the login screen they have today. Writing
+      'NONE' into every row would be indistinguishable from an administrator having
+      chosen it, and NULL is the honest state "never configured". Following the same
+      reasoning as 0027.
+
+      The precondition marks the changeset ran where the column already exists, so it
+      is safe on fresh and on already-patched databases.
+    -->
+    <changeSet author="oriso" id="addThemingLoginEffect">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant" columnName="theming_login_effect"/>
+            </not>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0028_tenant_theming_login_effect/addThemingLoginEffect.sql" stripComments="true" />
+        <rollback>
+            <sql>ALTER TABLE `tenantservice`.`tenant` DROP COLUMN `theming_login_effect`;</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
