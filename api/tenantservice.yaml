@@ -1656,6 +1656,14 @@ components:
         featureAnonymousChatEnabled:
           type: boolean
           example: "true"
+        featureDisplayNameEditable:
+          type: boolean
+          example: "true"
+          description: "ORISO-Admin#602 switch 1. Whether an advice seeker may type their own Anzeigename (displayName), or may only re-roll the generated one. Never governs the Anmeldename (userName), which is immutable at every layer. Opt-out: defaults to true."
+        featureAskerEmailEnabled:
+          type: boolean
+          example: "true"
+          description: "ORISO-Admin#602 switch 2. Whether an advice seeker may leave an e-mail address at all. When false it must silence both the in-chat Erstantwort Baustein and the profile e-mail field. Opt-out: defaults to true."
         featureCallsEnabled:
           type: boolean
           example: "true"
