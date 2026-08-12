@@ -15,7 +15,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.1</version>
+        <version>4.0.7</version>
         <relativePath/>
     </parent>
 
@@ -23,15 +23,14 @@
         spring boot, basic code changes are already made and as new features arrive they will use
         the upper version -->
         <java.upper.version>21</java.upper.version>
-        <springboot.upper.version>4.0.1</springboot.upper.version>
+        <springboot.upper.version>4.0.7</springboot.upper.version>
         <spring.upper.version>6.2.0</spring.upper.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>21</java.version>
         <keycloak.version>17.0.0</keycloak.version>
         <swagger.version>3.0.0</swagger.version>
-        <h2.version>2.1.214</h2.version>
-        <spring-security.version>7.0.1</spring-security.version>
+        <h2.version>2.2.220</h2.version>
         <owasp.java.html.sanitizer>20211018.1</owasp.java.html.sanitizer>
         <liquibase.maven.plugin.version>4.23.2</liquibase.maven.plugin.version>
         <openapi.generator.maven.version>7.17.0</openapi.generator.maven.version>
@@ -39,12 +38,12 @@
         <jakarta.ws.rs-api.version>3.1.0</jakarta.ws.rs-api.version>
         <springfox.boot.starter.version>3.0.0</springfox.boot.starter.version>
         <lombok.version>1.18.38</lombok.version>
-        <commons-lang3.version>3.12.0</commons-lang3.version>
+        <commons-lang3.version>3.18.0</commons-lang3.version>
         <commons-collections4.version>4.4</commons-collections4.version>
         <awaitility.version>4.2.0</awaitility.version>
         <awaitility-proxy.version>3.1.6</awaitility-proxy.version>
         <easy-random-core.version>5.0.0</easy-random-core.version>
-        <assertj-core.version>3.23.1</assertj-core.version>
+        <assertj-core.version>3.27.7</assertj-core.version>
         <spring-security-oauth2-test-webmvc-addons.version>3.0.1</spring-security-oauth2-test-webmvc-addons.version>
         <liquibase-core.version>4.23.2</liquibase-core.version>
         <maven.compiler.source>21</maven.compiler.source>
@@ -58,17 +57,14 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-web</artifactId>
-            <version>${spring-security.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-config</artifactId>
-            <version>${spring-security.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-core</artifactId>
-            <version>${spring-security.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -315,12 +311,6 @@
             <version>${commons-collections4.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>com.github.jknack</groupId>
-            <artifactId>handlebars</artifactId>
-            <version>4.3.1</version>
-        </dependency>
-
         <!-- log dependencies -->
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -352,7 +342,6 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
-            <version>${spring-security.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>

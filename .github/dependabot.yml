@@ -1,0 +1,54 @@
+# Dependabot configuration.
+#
+# NOTE ON BRANCHES: `target-branch` only applies to VERSION updates. Dependabot
+# SECURITY updates always open against the repository default branch (`main`)
+# and cannot be retargeted from here. Since day-to-day work happens on
+# `pre-dev`, security PRs against `main` fix nothing that is actually deployed.
+# The real fix is to make `pre-dev` the default branch; until then security
+# fixes have to be applied to `pre-dev` by hand.
+version: 2
+updates:
+  - package-ecosystem: "maven"
+    directory: "/"
+    target-branch: "pre-dev"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      maven-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      maven-minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # Majors are upgraded deliberately, never by bot.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "pre-dev"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "chore(actions)"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    target-branch: "pre-dev"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "chore(docker)"
+    groups:
+      docker-base-images:
+        patterns: ["*"]
