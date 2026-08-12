@@ -29,11 +29,22 @@ jobs:
         java_version: '21'
 
     - name: Create and Publish Docker image
+      id: image
       uses: ./.github/actions/docker-build-push
       with:
         push_to_ghcr: true
         image_name: oriso-tenantservice
         github_token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Reject fixable high or critical image vulnerabilities
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.ORG }}/oriso-tenantservice@${{ steps.image.outputs.digest }}
+        format: table
+        exit-code: '1'
+        ignore-unfixed: true
+        vuln-type: os,library
+        severity: CRITICAL,HIGH
 
   # The former non-blocking `integration-tests` burn-in job was folded into the
   # blocking `build` job above: `maven-build` now runs `mvnw -B verify`, so the
