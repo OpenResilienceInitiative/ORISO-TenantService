@@ -32,6 +32,7 @@ import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -55,6 +56,8 @@ public class TenantConverter {
   private final @NonNull TemplateService templateService;
 
   private final @NonNull TemplateRenderer templateRenderer;
+
+  private final @NonNull SmtpPasswordEncryptionService smtpPasswordEncryptionService;
 
   public TenantEntity toEntity(MultilingualTenantDTO tenantDTO) {
     var builder =
@@ -691,7 +694,9 @@ public class TenantConverter {
         .port(smtpConfig.getPort())
         .secure(nullAsFalse(smtpConfig.getSecure()))
         .username(smtpConfig.getUsername())
-        .password(normalizeIncomingSmtpPassword(smtpConfig.getPassword()))
+        .password(
+            smtpPasswordEncryptionService.encrypt(
+                normalizeIncomingSmtpPassword(smtpConfig.getPassword())))
         .from(smtpConfig.getFrom())
         .emailThemeColor(smtpConfig.getEmailThemeColor())
         .build();

@@ -1,0 +1,59 @@
+package com.vi.tenantservice.api.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.vi.tenantservice.TenantServiceApplication;
+import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.TenantSmtpSettings;
+import com.vi.tenantservice.api.repository.TenantRepository;
+import com.vi.tenantservice.api.util.JsonConverter;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.jdbc.Sql;
+
+@SpringBootTest(classes = TenantServiceApplication.class)
+@TestPropertySource(properties = "spring.profiles.active=testing")
+@Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
+class SmtpPasswordEncryptionMigrationIT {
+
+  @Autowired private TenantRepository tenantRepository;
+  @Autowired private SmtpPasswordEncryptionService smtpPasswordEncryptionService;
+  @Autowired private SmtpPasswordEncryptionMigration migration;
+
+  @Test
+  void migrate_Should_encryptPlaintextPasswords_and_beIdempotent() {
+    // given: a tenant row with a legacy plaintext SMTP password
+    var tenant = tenantRepository.findById(1L).orElseThrow();
+    TenantSettings settings = JsonConverter.convertFromJson(tenant.getSettings());
+    settings.setSmtp(
+        TenantSmtpSettings.builder()
+            .enabled(true)
+            .host("smtp.example.org")
+            .username("smtp-user")
+            .password("legacy-plaintext-secret")
+            .build());
+    tenant.setSettings(JsonConverter.convertToJson(settings));
+    tenantRepository.save(tenant);
+
+    // when
+    migration.migrate();
+
+    // then
+    String storedPassword = storedSmtpPassword();
+    assertThat(smtpPasswordEncryptionService.isEncrypted(storedPassword)).isTrue();
+    assertThat(smtpPasswordEncryptionService.decrypt(storedPassword))
+        .isEqualTo("legacy-plaintext-secret");
+
+    // and: re-running changes nothing (no double encryption)
+    migration.migrate();
+    assertThat(storedSmtpPassword()).isEqualTo(storedPassword);
+  }
+
+  private String storedSmtpPassword() {
+    TenantSettings stored =
+        JsonConverter.convertFromJson(tenantRepository.findById(1L).orElseThrow().getSettings());
+    return stored.getSmtp().getPassword();
+  }
+}

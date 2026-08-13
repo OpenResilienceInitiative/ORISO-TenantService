@@ -15,6 +15,7 @@ import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,6 +40,11 @@ class TenantConverterTest {
   @Mock TemplateService templateService;
 
   @Mock TemplateRenderer templateRenderer;
+
+  // disabled (no secret): converter unit tests run on plaintext passthrough
+  @Spy
+  SmtpPasswordEncryptionService smtpPasswordEncryptionService =
+      new SmtpPasswordEncryptionService("");
 
   @Test
   void toEntity_should_convertToEntityAndBackToDTO() {
@@ -446,6 +453,23 @@ class TenantConverterTest {
     // then
     assertThat(converted.getSettings().getSmtp().getPassword()).isNull();
     assertThat(converted.getSettings().getSmtp().getPasswordSet()).isFalse();
+  }
+
+  @Test
+  void toEntity_should_encryptSmtpPassword_When_encryptionConfigured() {
+    // given
+    var encryptionService = new SmtpPasswordEncryptionService("unit-test-secret");
+    var encryptingConverter =
+        new TenantConverter(templateService, templateRenderer, encryptionService);
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).password("plain-secret"));
+
+    // when
+    TenantEntity entity = encryptingConverter.toEntity(tenantDTO);
+
+    // then
+    assertThat(entity.getSettings()).doesNotContain("plain-secret").contains("ENC:");
   }
 
   @Test
