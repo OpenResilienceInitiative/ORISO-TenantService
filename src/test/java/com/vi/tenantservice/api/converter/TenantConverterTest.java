@@ -404,7 +404,7 @@ class TenantConverterTest {
   }
 
   @Test
-  void toDTO_should_preserveSensitiveSettingsForNonPublicDtos() {
+  void toDTO_should_neverExposeSmtpPassword_butReportPasswordSet() {
     // given
     MultilingualTenantDTO tenantDTO =
         new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
@@ -429,7 +429,37 @@ class TenantConverterTest {
     assertThat(converted.getSettings().getFeatureToolsOICDToken()).isEqualTo("secret-oidc-token");
     assertThat(converted.getSettings().getSmtp()).isNotNull();
     assertThat(converted.getSettings().getSmtp().getUsername()).isEqualTo("smtp-user");
-    assertThat(converted.getSettings().getSmtp().getPassword()).isEqualTo("smtp-pass");
+    assertThat(converted.getSettings().getSmtp().getPassword()).isNull();
+    assertThat(converted.getSettings().getSmtp().getPasswordSet()).isTrue();
+  }
+
+  @Test
+  void toDTO_should_reportPasswordSetFalse_When_noSmtpPasswordStored() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).host("smtp.example.org"));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(converted.getSettings().getSmtp().getPassword()).isNull();
+    assertThat(converted.getSettings().getSmtp().getPasswordSet()).isFalse();
+  }
+
+  @Test
+  void toEntity_should_normalizeBlankOrMaskedSmtpPasswordToNull() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).password("********"));
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then
+    assertThat(entity.getSettings()).doesNotContain("********");
   }
 
   private static void assertContentIsProperlyConverted(

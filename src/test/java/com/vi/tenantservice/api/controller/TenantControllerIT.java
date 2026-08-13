@@ -92,6 +92,8 @@ class TenantControllerIT {
 
   @Autowired private WebApplicationContext context;
 
+  @Autowired private com.vi.tenantservice.api.repository.TenantRepository tenantRepository;
+
   @MockitoBean AuthorisationService authorisationService;
 
   @MockitoBean ApplicationSettingsService applicationSettingsService;
@@ -550,6 +552,112 @@ class TenantControllerIT {
         .andExpect(jsonPath("settings.featureGroupChatV2Enabled", is(true)))
         .andExpect(jsonPath("settings.featureMediaUploadEnabled", is(true)))
         .andExpect(jsonPath("settings.activeLanguages", is(Lists.newArrayList("de"))));
+  }
+
+  private org.springframework.test.web.servlet.ResultActions putTenant1AsTenantAdmin(
+      String jsonRequest) throws Exception {
+    when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+    when(consultingTypeService.getConsultingTypesByTenantId(1))
+        .thenReturn(
+            new com.vi.tenantservice.consultingtypeservice.generated.web.model
+                    .FullConsultingTypeResponseDTO()
+                .id(2));
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    return mockMvc.perform(
+        put(EXISTING_TENANT_VIA_ADMIN)
+            .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+            .contentType(APPLICATION_JSON)
+            .content(jsonRequest));
+  }
+
+  private String storedSettingsOfTenant1() {
+    return tenantRepository.findById(1L).orElseThrow().getSettings();
+  }
+
+  private String tenant1RequestWithSmtpPassword(String password) {
+    return multilingualTenantTestDataBuilder.tenantDTO().withSmtp(password).jsonify();
+  }
+
+  @Test
+  void updateTenant_Should_neverReturnSmtpPassword_And_exposePasswordSetFlag() throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpPassword("initial-secret"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtp.password").doesNotExist())
+        .andExpect(jsonPath("$.settings.smtp.passwordSet").value(true))
+        .andExpect(jsonPath("$.settings.smtp.username").value("smtp-user"));
+
+    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
+        .contains("initial-secret");
+
+    var builder = new AuthenticationMockBuilder();
+    mockMvc
+        .perform(
+            get(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtp.password").doesNotExist())
+        .andExpect(jsonPath("$.settings.smtp.passwordSet").value(true))
+        .andExpect(jsonPath("$.settings.smtp.username").value("smtp-user"));
+
+    mockMvc
+        .perform(
+            get(EXISTING_TENANT)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtp.password").doesNotExist())
+        .andExpect(jsonPath("$.settings.smtp.passwordSet").value(true));
+
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtp.password").doesNotExist())
+        .andExpect(jsonPath("$.settings.smtp.passwordSet").doesNotExist())
+        .andExpect(jsonPath("$.settings.smtp.username").doesNotExist());
+  }
+
+  @Test
+  void updateTenant_Should_preserveStoredSmtpPassword_When_incomingPasswordIsBlankOrMasked()
+      throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpPassword("initial-secret"))
+        .andExpect(status().isOk());
+
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withSmtp("")
+                .withSmtpHost("changed.example.org")
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtp.passwordSet").value(true));
+    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
+        .contains("initial-secret")
+        .contains("changed.example.org");
+
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpPassword("********")).andExpect(status().isOk());
+    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
+        .contains("initial-secret")
+        .doesNotContain("********");
+
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpPassword(null)).andExpect(status().isOk());
+    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
+        .contains("initial-secret");
+
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpPassword("rotated-secret"))
+        .andExpect(status().isOk());
+    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
+        .contains("rotated-secret")
+        .doesNotContain("initial-secret");
+  }
+
+  @Test
+  void updateTenant_Should_reportPasswordSetFalse_When_noPasswordStored() throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpPassword(null))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtp.password").doesNotExist())
+        .andExpect(jsonPath("$.settings.smtp.passwordSet").value(false));
   }
 
   @Test
