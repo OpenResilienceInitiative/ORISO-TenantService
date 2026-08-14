@@ -94,6 +94,10 @@ class TenantControllerIT {
 
   @Autowired private com.vi.tenantservice.api.repository.TenantRepository tenantRepository;
 
+  @Autowired
+  private com.vi.tenantservice.api.service.SmtpPasswordEncryptionService
+      smtpPasswordEncryptionService;
+
   @MockitoBean AuthorisationService authorisationService;
 
   @MockitoBean ApplicationSettingsService applicationSettingsService;
@@ -575,6 +579,12 @@ class TenantControllerIT {
     return tenantRepository.findById(1L).orElseThrow().getSettings();
   }
 
+  private String storedSmtpPasswordOfTenant1Decrypted() {
+    com.vi.tenantservice.api.model.TenantSettings stored =
+        com.vi.tenantservice.api.util.JsonConverter.convertFromJson(storedSettingsOfTenant1());
+    return smtpPasswordEncryptionService.decrypt(stored.getSmtp().getPassword());
+  }
+
   private String tenant1RequestWithSmtpPassword(String password) {
     return multilingualTenantTestDataBuilder.tenantDTO().withSmtp(password).jsonify();
   }
@@ -587,8 +597,12 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.settings.smtp.passwordSet").value(true))
         .andExpect(jsonPath("$.settings.smtp.username").value("smtp-user"));
 
+    // stored encrypted at rest (#183), never in plaintext
     org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
-        .contains("initial-secret");
+        .doesNotContain("initial-secret")
+        .contains("ENC:");
+    org.assertj.core.api.Assertions.assertThat(storedSmtpPasswordOfTenant1Decrypted())
+        .isEqualTo("initial-secret");
 
     var builder = new AuthenticationMockBuilder();
     mockMvc
@@ -632,24 +646,28 @@ class TenantControllerIT {
                 .jsonify())
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.settings.smtp.passwordSet").value(true));
+    org.assertj.core.api.Assertions.assertThat(storedSmtpPasswordOfTenant1Decrypted())
+        .isEqualTo("initial-secret");
     org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
-        .contains("initial-secret")
         .contains("changed.example.org");
 
     putTenant1AsTenantAdmin(tenant1RequestWithSmtpPassword("********")).andExpect(status().isOk());
+    org.assertj.core.api.Assertions.assertThat(storedSmtpPasswordOfTenant1Decrypted())
+        .isEqualTo("initial-secret");
     org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
-        .contains("initial-secret")
         .doesNotContain("********");
 
     putTenant1AsTenantAdmin(tenant1RequestWithSmtpPassword(null)).andExpect(status().isOk());
-    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
-        .contains("initial-secret");
+    org.assertj.core.api.Assertions.assertThat(storedSmtpPasswordOfTenant1Decrypted())
+        .isEqualTo("initial-secret");
 
     putTenant1AsTenantAdmin(tenant1RequestWithSmtpPassword("rotated-secret"))
         .andExpect(status().isOk());
+    org.assertj.core.api.Assertions.assertThat(storedSmtpPasswordOfTenant1Decrypted())
+        .isEqualTo("rotated-secret");
     org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
-        .contains("rotated-secret")
-        .doesNotContain("initial-secret");
+        .doesNotContain("initial-secret")
+        .doesNotContain("rotated-secret");
   }
 
   @Test
