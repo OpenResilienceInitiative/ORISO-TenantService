@@ -695,7 +695,7 @@ public class TenantConverter {
         .secure(nullAsFalse(smtpConfig.getSecure()))
         .username(smtpConfig.getUsername())
         .password(
-            smtpPasswordEncryptionService.encrypt(
+            smtpPasswordEncryptionService.encryptNewPassword(
                 normalizeIncomingSmtpPassword(smtpConfig.getPassword())))
         .from(smtpConfig.getFrom())
         .emailThemeColor(smtpConfig.getEmailThemeColor())

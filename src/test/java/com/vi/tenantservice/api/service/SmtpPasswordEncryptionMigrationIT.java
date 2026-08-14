@@ -51,6 +51,26 @@ class SmtpPasswordEncryptionMigrationIT {
     assertThat(storedSmtpPassword()).isEqualTo(storedPassword);
   }
 
+  @Test
+  void migrate_Should_reencryptReservedPrefixJunk_ThatIsNotRealCiphertext() {
+    // given: a row whose password abuses the ENC: prefix without being our ciphertext
+    var tenant = tenantRepository.findById(1L).orElseThrow();
+    TenantSettings settings = JsonConverter.convertFromJson(tenant.getSettings());
+    settings.setSmtp(
+        TenantSmtpSettings.builder().enabled(true).password("ENC:not-a-ciphertext").build());
+    tenant.setSettings(JsonConverter.convertToJson(settings));
+    tenantRepository.save(tenant);
+
+    // when
+    migration.migrate();
+
+    // then: it is treated as plaintext and properly encrypted
+    String storedPassword = storedSmtpPassword();
+    assertThat(smtpPasswordEncryptionService.isEncrypted(storedPassword)).isTrue();
+    assertThat(smtpPasswordEncryptionService.decrypt(storedPassword))
+        .isEqualTo("ENC:not-a-ciphertext");
+  }
+
   private String storedSmtpPassword() {
     TenantSettings stored =
         JsonConverter.convertFromJson(tenantRepository.findById(1L).orElseThrow().getSettings());

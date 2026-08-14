@@ -47,6 +47,22 @@ public class SmtpPasswordEncryptionService {
     if (StringUtils.isEmpty(plaintext) || secretKey == null || isEncrypted(plaintext)) {
       return plaintext;
     }
+    return doEncrypt(plaintext);
+  }
+
+  /**
+   * Encrypts a password supplied through the API. Unlike {@link #encrypt(String)}, the input is
+   * always treated as plaintext — even when it carries the reserved {@code ENC:} prefix — so a
+   * crafted value cannot bypass encryption and linger unencrypted in the settings JSON.
+   */
+  public String encryptNewPassword(String plaintext) {
+    if (StringUtils.isEmpty(plaintext) || secretKey == null) {
+      return plaintext;
+    }
+    return doEncrypt(plaintext);
+  }
+
+  private String doEncrypt(String plaintext) {
     try {
       byte[] iv = new byte[GCM_IV_LENGTH];
       new SecureRandom().nextBytes(iv);
@@ -84,8 +100,21 @@ public class SmtpPasswordEncryptionService {
     }
   }
 
+  /**
+   * True only for values that structurally are our ciphertext: {@code ENC:} prefix plus a Base64
+   * payload long enough to hold IV and tag. A bare prefix with junk behind it is NOT considered
+   * encrypted, so the migration re-encrypts it instead of skipping it.
+   */
   public boolean isEncrypted(String value) {
-    return value != null && value.startsWith(ENCRYPTED_PREFIX);
+    if (value == null || !value.startsWith(ENCRYPTED_PREFIX)) {
+      return false;
+    }
+    try {
+      byte[] payload = Base64.getDecoder().decode(value.substring(ENCRYPTED_PREFIX.length()));
+      return payload.length > GCM_IV_LENGTH;
+    } catch (IllegalArgumentException invalidBase64) {
+      return false;
+    }
   }
 
   private static SecretKey deriveKey(String encryptionSecret) {

@@ -22,10 +22,15 @@ class SmtpPasswordEncryptionServiceTest {
     var service = new SmtpPasswordEncryptionService(TEST_SECRET);
 
     String encrypted = service.encrypt("plain-pass");
+    String encryptedAgain = service.encrypt("plain-pass");
 
     assertThat(service.isEnabled()).isTrue();
     assertThat(encrypted).startsWith(SmtpPasswordEncryptionService.ENCRYPTED_PREFIX);
     assertThat(encrypted).isNotEqualTo("plain-pass");
+    // a fresh random IV per encryption must yield distinct ciphertext
+    assertThat(encryptedAgain).isNotEqualTo(encrypted);
+    assertThat(service.decrypt(encrypted)).isEqualTo("plain-pass");
+    assertThat(service.decrypt(encryptedAgain)).isEqualTo("plain-pass");
   }
 
   @Test
@@ -59,6 +64,36 @@ class SmtpPasswordEncryptionServiceTest {
     String encrypted = service.encrypt("plain-pass");
 
     assertThat(service.encrypt(encrypted)).isEqualTo(encrypted);
+  }
+
+  @Test
+  void isEncrypted_Should_RejectReservedPrefixWithoutValidPayload() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+
+    assertThat(service.isEncrypted("ENC:not-a-ciphertext")).isFalse();
+    assertThat(service.isEncrypted("ENC:")).isFalse();
+    assertThat(service.isEncrypted(service.encrypt("plain-pass"))).isTrue();
+  }
+
+  @Test
+  void encrypt_Should_EncryptReservedPrefixJunk_InsteadOfSkippingIt() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+
+    String encrypted = service.encrypt("ENC:not-a-ciphertext");
+
+    assertThat(service.isEncrypted(encrypted)).isTrue();
+    assertThat(service.decrypt(encrypted)).isEqualTo("ENC:not-a-ciphertext");
+  }
+
+  @Test
+  void encryptNewPassword_Should_TreatEvenValidLookingCiphertextAsPlaintext() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+    String ciphertextLookingInput = service.encrypt("some-other-secret");
+
+    String encrypted = service.encryptNewPassword(ciphertextLookingInput);
+
+    assertThat(encrypted).isNotEqualTo(ciphertextLookingInput);
+    assertThat(service.decrypt(encrypted)).isEqualTo(ciphertextLookingInput);
   }
 
   @Test
