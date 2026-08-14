@@ -2036,7 +2036,16 @@ components:
           example: "notifications@oriso.org"
         password:
           type: string
+          description:
+            "Write-only. Never returned in responses; a blank, absent or
+            \"********\" value on update keeps the stored password."
           example: "********"
+        passwordSet:
+          type: boolean
+          description:
+            "Read-only. True if an SMTP password is stored for this tenant.
+            Ignored on create/update."
+          example: true
         from:
           type: string
           example: "notifications@oriso.org"

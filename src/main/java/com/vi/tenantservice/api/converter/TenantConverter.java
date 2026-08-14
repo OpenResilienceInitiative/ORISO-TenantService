@@ -678,6 +678,9 @@ public class TenantConverter {
             nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()));
   }
 
+  /** Placeholder some clients send back instead of a real password; never a stored value. */
+  public static final String SMTP_PASSWORD_MASK = "********";
+
   private TenantSmtpSettings toTenantSmtpSettings(SmtpConfig smtpConfig) {
     if (smtpConfig == null) {
       return null;
@@ -688,23 +691,32 @@ public class TenantConverter {
         .port(smtpConfig.getPort())
         .secure(nullAsFalse(smtpConfig.getSecure()))
         .username(smtpConfig.getUsername())
-        .password(smtpConfig.getPassword())
+        .password(normalizeIncomingSmtpPassword(smtpConfig.getPassword()))
         .from(smtpConfig.getFrom())
         .emailThemeColor(smtpConfig.getEmailThemeColor())
         .build();
+  }
+
+  /** Blank or masked passwords mean "unchanged" (write-only contract, #182). */
+  private static String normalizeIncomingSmtpPassword(String password) {
+    if (password == null || password.isBlank() || SMTP_PASSWORD_MASK.equals(password)) {
+      return null;
+    }
+    return password;
   }
 
   private SmtpConfig toSmtpConfig(TenantSmtpSettings smtpSettings) {
     if (smtpSettings == null) {
       return null;
     }
+    // write-only contract (#182): the stored password never leaves the service
     return new SmtpConfig()
         .enabled(smtpSettings.isEnabled())
         .host(smtpSettings.getHost())
         .port(smtpSettings.getPort())
         .secure(smtpSettings.isSecure())
         .username(smtpSettings.getUsername())
-        .password(smtpSettings.getPassword())
+        .passwordSet(smtpSettings.getPassword() != null && !smtpSettings.getPassword().isBlank())
         .from(smtpSettings.getFrom())
         .emailThemeColor(smtpSettings.getEmailThemeColor());
   }

@@ -8,6 +8,7 @@ import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NoAgencyContextDTO;
 import com.vi.tenantservice.api.model.Settings;
+import com.vi.tenantservice.api.model.SmtpConfig;
 import com.vi.tenantservice.api.model.Theming;
 import java.util.HashMap;
 import java.util.List;
@@ -150,6 +151,32 @@ public class MultilingualTenantTestDataBuilder {
 
   public MultilingualTenantDTO build() {
     return tenantMultilingualDTO;
+  }
+
+  /** Adds a full SMTP block with the given password (may be null, blank or a mask). */
+  public MultilingualTenantTestDataBuilder withSmtp(String password) {
+    if (tenantMultilingualDTO.getSettings() == null) {
+      withSettings();
+    }
+    tenantMultilingualDTO
+        .getSettings()
+        .smtp(
+            new SmtpConfig()
+                .enabled(true)
+                .host("smtp.example.org")
+                .port(587)
+                .secure(false)
+                .username("smtp-user")
+                .password(password)
+                .from("notifications@example.org")
+                .emailThemeColor("#123456"));
+    return this;
+  }
+
+  /** Overrides the SMTP host after {@link #withSmtp(String)}. */
+  public MultilingualTenantTestDataBuilder withSmtpHost(String host) {
+    tenantMultilingualDTO.getSettings().getSmtp().setHost(host);
+    return this;
   }
 
   /**
