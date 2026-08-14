@@ -13,7 +13,10 @@
     <changeSet author="oriso" id="createPlatformDpiaMasterData">
         <preConditions onFail="MARK_RAN">
             <not>
-                <tableExists tableName="platform_dpia_master_data"/>
+                <and>
+                    <tableExists tableName="platform_dpia_master_data"/>
+                    <sequenceExists sequenceName="sequence_platform_dpia_master_data"/>
+                </and>
             </not>
         </preConditions>
         <sqlFile path="db/changelog/changeset/0028_platform_dpia_master_data/createPlatformDpiaMasterData.sql" stripComments="true" />

@@ -81,9 +81,26 @@ class PlatformDpiaMasterDataConverterTest {
     converter.applyDtoToEntity(new PlatformDpiaMasterDataDTO(), entity);
 
     assertThat(entity.getOperatorLegalName()).isNull();
+    assertThat(entity.getOperatorShortName()).isNull();
+    assertThat(entity.getOperatorAddress()).isNull();
+    assertThat(entity.getOperatorContactEmail()).isNull();
+    assertThat(entity.getOperatorContactPhone()).isNull();
+    assertThat(entity.getOperatorDpoName()).isNull();
+    assertThat(entity.getOperatorDepartment()).isNull();
+    assertThat(entity.getOperatorResponsiblePerson()).isNull();
     assertThat(entity.getSupervisoryLegalFramework()).isNull();
+    assertThat(entity.getSupervisoryAuthorityName()).isNull();
+    assertThat(entity.getSupervisoryAuthorityAddress()).isNull();
+    assertThat(entity.getSupervisoryAuthorityEmail()).isNull();
     assertThat(entity.getDocumentDate()).isNull();
+    assertThat(entity.getDocumentNextReviewDate()).isNull();
     assertThat(entity.getKeyFigureTenants()).isNull();
     assertThat(entity.getKeyFigureTenantsAsOf()).isNull();
+    assertThat(entity.getKeyFigureCounsellingCentres()).isNull();
+    assertThat(entity.getKeyFigureCounsellingCentresAsOf()).isNull();
+    assertThat(entity.getKeyFigureActiveCounsellors()).isNull();
+    assertThat(entity.getKeyFigureActiveCounsellorsAsOf()).isNull();
+    assertThat(entity.getKeyFigureRegisteredClients()).isNull();
+    assertThat(entity.getKeyFigureRegisteredClientsAsOf()).isNull();
   }
 }

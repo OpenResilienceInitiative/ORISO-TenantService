@@ -5,6 +5,7 @@ import com.vi.tenantservice.api.model.PlatformDpiaMasterDataDTO;
 import com.vi.tenantservice.api.model.PublicDpiaMasterDataDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.service.PlatformDpiaMasterDataService;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -57,12 +58,12 @@ public class PlatformDpiaMasterDataFacade {
   private Optional<RestrictedTenantDTO> resolveBrandingTenant() {
     try {
       return Optional.of(tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext());
-    } catch (RuntimeException exception) {
+    } catch (NoSuchElementException exception) {
       log.debug("No tenant context for DPIA branding, trying single-tenant fallback", exception);
     }
     try {
       return tenantServiceFacade.getSingleTenant();
-    } catch (RuntimeException exception) {
+    } catch (IllegalStateException exception) {
       log.debug("No single tenant either - serving DPIA master data without branding", exception);
       return Optional.empty();
     }
