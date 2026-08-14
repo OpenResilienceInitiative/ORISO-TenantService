@@ -1,0 +1,25 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Platform-level DPIA operator master data singleton (ORISO-Admin#735).
+
+      Typed columns on purpose: the tenant.settings JSON blob has already shown how an
+      untyped settings object accumulates secrets (plaintext SMTP password). This table
+      holds ONLY public operator master data for the living DPIA / legal document
+      renderers - no secrets may ever be added here. Singleton pattern mirrors
+      tenant_admin_controls (changeset 0013): one row, resolved via findTopByOrderByIdAsc.
+    -->
+    <changeSet author="oriso" id="createPlatformDpiaMasterData">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="platform_dpia_master_data"/>
+            </not>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0028_platform_dpia_master_data/createPlatformDpiaMasterData.sql" stripComments="true" />
+        <rollback>
+            <sql>DROP TABLE platform_dpia_master_data;</sql>
+            <sql>DROP SEQUENCE sequence_platform_dpia_master_data;</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
