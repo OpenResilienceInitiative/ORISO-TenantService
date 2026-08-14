@@ -71,6 +71,27 @@ class SmtpPasswordEncryptionMigrationIT {
         .isEqualTo("ENC:not-a-ciphertext");
   }
 
+  @Test
+  void migrate_Should_reencryptCounterfeitValidBase64Payload() {
+    // given: a legacy plaintext password that even carries valid Base64 behind the prefix,
+    // but was never encrypted by us (AES-GCM authentication fails)
+    String counterfeit = "ENC:" + java.util.Base64.getEncoder().encodeToString(new byte[28]);
+    var tenant = tenantRepository.findById(1L).orElseThrow();
+    TenantSettings settings = JsonConverter.convertFromJson(tenant.getSettings());
+    settings.setSmtp(TenantSmtpSettings.builder().enabled(true).password(counterfeit).build());
+    tenant.setSettings(JsonConverter.convertToJson(settings));
+    tenantRepository.save(tenant);
+
+    // when
+    migration.migrate();
+
+    // then: the migration does not skip it — it is encrypted and round-trips
+    String storedPassword = storedSmtpPassword();
+    assertThat(storedPassword).isNotEqualTo(counterfeit);
+    assertThat(smtpPasswordEncryptionService.isEncrypted(storedPassword)).isTrue();
+    assertThat(smtpPasswordEncryptionService.decrypt(storedPassword)).isEqualTo(counterfeit);
+  }
+
   private String storedSmtpPassword() {
     TenantSettings stored =
         JsonConverter.convertFromJson(tenantRepository.findById(1L).orElseThrow().getSettings());

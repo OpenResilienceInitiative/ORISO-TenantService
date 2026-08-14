@@ -76,6 +76,28 @@ class SmtpPasswordEncryptionServiceTest {
   }
 
   @Test
+  void isEncrypted_Should_RejectCounterfeitValidBase64Payload() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+    // structurally valid: ENC: prefix + Base64 of 28 bytes — but never encrypted by us,
+    // so the AES-GCM tag cannot authenticate under the configured key
+    String counterfeit = "ENC:" + java.util.Base64.getEncoder().encodeToString(new byte[28]);
+
+    assertThat(service.isEncrypted(counterfeit)).isFalse();
+
+    String encrypted = service.encrypt(counterfeit);
+    assertThat(service.isEncrypted(encrypted)).isTrue();
+    assertThat(service.decrypt(encrypted)).isEqualTo(counterfeit);
+  }
+
+  @Test
+  void isEncrypted_Should_RejectCiphertextOfAnotherKey() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+    var otherService = new SmtpPasswordEncryptionService("another-secret");
+
+    assertThat(service.isEncrypted(otherService.encrypt("plain-pass"))).isFalse();
+  }
+
+  @Test
   void encrypt_Should_EncryptReservedPrefixJunk_InsteadOfSkippingIt() {
     var service = new SmtpPasswordEncryptionService(TEST_SECRET);
 

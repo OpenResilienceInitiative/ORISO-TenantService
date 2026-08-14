@@ -82,39 +82,44 @@ public class SmtpPasswordEncryptionService {
   }
 
   public String decrypt(String value) {
-    if (StringUtils.isEmpty(value) || secretKey == null || !isEncrypted(value)) {
+    if (StringUtils.isEmpty(value) || secretKey == null || !value.startsWith(ENCRYPTED_PREFIX)) {
       return value;
     }
     try {
-      byte[] payload = Base64.getDecoder().decode(value.substring(ENCRYPTED_PREFIX.length()));
-      byte[] iv = new byte[GCM_IV_LENGTH];
-      byte[] ciphertext = new byte[payload.length - GCM_IV_LENGTH];
-      System.arraycopy(payload, 0, iv, 0, GCM_IV_LENGTH);
-      System.arraycopy(payload, GCM_IV_LENGTH, ciphertext, 0, ciphertext.length);
-
-      Cipher cipher = Cipher.getInstance(ALGORITHM);
-      cipher.init(Cipher.DECRYPT_MODE, secretKey, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
-      return new String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8);
+      return doDecrypt(value);
     } catch (Exception exception) {
       throw new IllegalStateException("Failed to decrypt SMTP password", exception);
     }
   }
 
   /**
-   * True only for values that structurally are our ciphertext: {@code ENC:} prefix plus a Base64
-   * payload long enough to hold IV and tag. A bare prefix with junk behind it is NOT considered
-   * encrypted, so the migration re-encrypts it instead of skipping it.
+   * True only for values that are OUR ciphertext: {@code ENC:} prefix plus a payload that
+   * authenticates under the configured key (AES-GCM tag check). A counterfeit value — even one
+   * carrying the prefix with structurally valid Base64 — fails authentication and is treated as
+   * plaintext, so the migration re-encrypts it instead of skipping it.
    */
   public boolean isEncrypted(String value) {
-    if (value == null || !value.startsWith(ENCRYPTED_PREFIX)) {
+    if (value == null || secretKey == null || !value.startsWith(ENCRYPTED_PREFIX)) {
       return false;
     }
     try {
-      byte[] payload = Base64.getDecoder().decode(value.substring(ENCRYPTED_PREFIX.length()));
-      return payload.length > GCM_IV_LENGTH;
-    } catch (IllegalArgumentException invalidBase64) {
+      doDecrypt(value);
+      return true;
+    } catch (Exception notOurCiphertext) {
       return false;
     }
+  }
+
+  private String doDecrypt(String value) throws Exception {
+    byte[] payload = Base64.getDecoder().decode(value.substring(ENCRYPTED_PREFIX.length()));
+    byte[] iv = new byte[GCM_IV_LENGTH];
+    byte[] ciphertext = new byte[payload.length - GCM_IV_LENGTH];
+    System.arraycopy(payload, 0, iv, 0, GCM_IV_LENGTH);
+    System.arraycopy(payload, GCM_IV_LENGTH, ciphertext, 0, ciphertext.length);
+
+    Cipher cipher = Cipher.getInstance(ALGORITHM);
+    cipher.init(Cipher.DECRYPT_MODE, secretKey, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
+    return new String(cipher.doFinal(ciphertext), StandardCharsets.UTF_8);
   }
 
   private static SecretKey deriveKey(String encryptionSecret) {
