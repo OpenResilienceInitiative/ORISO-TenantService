@@ -189,7 +189,21 @@ public class TenantConverter {
           .contentClaim(convertToJson(tenantDTO.getContent().getClaim()))
           .contentImpressum(convertToJson(tenantDTO.getContent().getImpressum()))
           .contentPrivacy(convertToJson(tenantDTO.getContent().getPrivacy()))
-          .contentTermsAndConditions(convertToJson(tenantDTO.getContent().getTermsAndConditions()));
+          .contentTermsAndConditions(convertToJson(tenantDTO.getContent().getTermsAndConditions()))
+          /* ORISO-Admin#601: the five Träger-authored Erstantwort Bausteine, stored
+          as the same language map the legal texts use so the existing
+          machine-translation-on-publish mechanism applies unchanged. */
+          .contentErstantwortGreeting(
+              convertToJson(tenantDTO.getContent().getErstantwortGreeting()))
+          .contentErstantwortWhoReadsAlong(
+              convertToJson(tenantDTO.getContent().getErstantwortWhoReadsAlong()))
+          .contentErstantwortEmergencyAddition(
+              convertToJson(tenantDTO.getContent().getErstantwortEmergencyAddition()))
+          .contentErstantwortFreeNotice(
+              convertToJson(tenantDTO.getContent().getErstantwortFreeNotice()))
+          .contentErstantwortClosing(convertToJson(tenantDTO.getContent().getErstantwortClosing()))
+          .erstantwortResponseDeadlineDays(
+              tenantDTO.getContent().getErstantwortResponseDeadlineDays());
     }
   }
 
@@ -876,6 +890,17 @@ public class TenantConverter {
         .claim(convertMapFromJson(tenant.getContentClaim()))
         .privacy(convertMapFromJson(tenant.getContentPrivacy()))
         .termsAndConditions(convertMapFromJson(tenant.getContentTermsAndConditions()))
+        /* ORISO-Admin#601: read back what the editor wrote. `convertMapFromJson`
+        yields null for an unset column, which is the point — the Admin form has
+        to be able to tell "never authored" from "authored empty", because only
+        the first falls through to the platform text. */
+        .erstantwortGreeting(convertMapFromJson(tenant.getContentErstantwortGreeting()))
+        .erstantwortWhoReadsAlong(convertMapFromJson(tenant.getContentErstantwortWhoReadsAlong()))
+        .erstantwortEmergencyAddition(
+            convertMapFromJson(tenant.getContentErstantwortEmergencyAddition()))
+        .erstantwortFreeNotice(convertMapFromJson(tenant.getContentErstantwortFreeNotice()))
+        .erstantwortClosing(convertMapFromJson(tenant.getContentErstantwortClosing()))
+        .erstantwortResponseDeadlineDays(tenant.getErstantwortResponseDeadlineDays())
         .dataProtectionContactTemplate(getMultilingualDataProtectionTemplate());
   }
 

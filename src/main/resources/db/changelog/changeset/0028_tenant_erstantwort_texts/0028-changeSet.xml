@@ -1,0 +1,48 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      The Träger-authored Erstantwort Bausteine and the Antwortfrist
+      (ORISO-Admin#601, ADR-018).
+
+      Five text columns, one per Baustein a Träger owns in its own voice: greeting,
+      who reads along, the emergency-numbers addition, the single free notice, and
+      the closing. Columns rather than a new table because these have exactly the
+      lifecycle of the existing content_impressum / content_privacy bodies, and the
+      machine-translation-on-publish mechanism is already wired to that shape.
+
+      EXACTLY ONE free notice, enforced by there being one column. ADR-018 §2 makes
+      it the single deliberate escape hatch; a collection would have made that a
+      validation rule somebody could later relax.
+
+      NO columns for the derived Bausteine (the deadline wording, "send us no
+      personal data", the modality note). Those are rendered from configuration, and
+      giving them a text field is precisely the failure ADR-018 §2 forbids: a typed
+      claim about the system can be false, a rendered one cannot.
+
+      MIGRATION DECISION — no backfill, all nullable. NULL means "this Träger never
+      authored anything", which is what the resolution chain
+      Fachbereich ?? Beratungsstelle ?? Träger ?? Plattform reads as "ask the level
+      below". Writing the platform default into every tenant would make an
+      unconfigured tenant indistinguishable from one that deliberately typed the
+      same words, and would freeze today's platform wording into every row.
+
+      erstantwort_response_deadline_days is likewise NOT defaulted to the platform's
+      2 Werktage. A tenant that never chose stays distinguishable from one that chose
+      2 — which matters the day the platform default changes.
+
+      TEXT (not VARCHAR) matches content_impressum: these are rich-text bodies from
+      the same editor stack and outgrew VARCHAR once already (changeset 0022).
+    -->
+    <changeSet author="oriso" id="addErstantwortTexts">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant" columnName="content_erstantwort_greeting"/>
+            </not>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0028_tenant_erstantwort_texts/addErstantwortTexts.sql" stripComments="true" />
+        <rollback>
+            <sql>ALTER TABLE `tenantservice`.`tenant` DROP COLUMN `content_erstantwort_greeting`, DROP COLUMN `content_erstantwort_who_reads_along`, DROP COLUMN `content_erstantwort_emergency_addition`, DROP COLUMN `content_erstantwort_free_notice`, DROP COLUMN `content_erstantwort_closing`, DROP COLUMN `erstantwort_response_deadline_days`;</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
