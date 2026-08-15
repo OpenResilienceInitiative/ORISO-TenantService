@@ -71,7 +71,7 @@ public class TenantDpaStatusService {
   public DpaStatusView getStatus(Long tenantId) {
     var currentVersion = resolveCurrentVersion(tenantId);
     var signedEntries = collectSignedEntries(tenantId);
-    var status = deriveStatus(currentVersion, signedEntries);
+    var status = applyForwardPending(tenantId, deriveStatus(currentVersion, signedEntries));
     var latestSigned = latestSignedEntry(signedEntries);
     return new DpaStatusView(
         tenantId,
@@ -80,6 +80,23 @@ public class TenantDpaStatusService {
         latestSigned == null ? null : latestSigned.version(),
         latestSigned == null ? null : latestSigned.signedAt(),
         latestSigned == null ? null : latestSigned.signedBy());
+  }
+
+  /**
+   * "Contract on hold" (ORISO-TenantService#179): a not-yet-validly-signed tenant with an unexpired
+   * outstanding sign link reads as {@code PENDING_FORWARDED} instead of plain {@code
+   * UNSIGNED}/{@code OUTDATED}, so the wizard, the legal gate and the invite progress board can
+   * distinguish "forwarded — awaiting signature" from "nobody acted yet". VALID, MISSING and
+   * INCONSISTENT are never masked.
+   */
+  private TenantDpaStatus applyForwardPending(Long tenantId, TenantDpaStatus derived) {
+    if (derived != TenantDpaStatus.UNSIGNED && derived != TenantDpaStatus.OUTDATED) {
+      return derived;
+    }
+    boolean outstanding =
+        signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
+            tenantId, DpaSignatureStatus.PENDING, LocalDateTime.now());
+    return outstanding ? TenantDpaStatus.PENDING_FORWARDED : derived;
   }
 
   /**
@@ -192,6 +209,20 @@ public class TenantDpaStatusService {
           tenantId,
           version);
     }
+    invalidateOutstandingSignInvites(tenantId);
+  }
+
+  /**
+   * ORISO-TenantService#179: the moment ANY signature is recorded — in-app or during onboarding —
+   * every outstanding sign link of the tenant is invalidated. Runs in its own transaction because
+   * {@link #sign} is deliberately non-transactional; idempotent (an absorbed concurrent duplicate
+   * invalidates the same already-empty set again).
+   */
+  private void invalidateOutstandingSignInvites(Long tenantId) {
+    var invalidateTransaction = new TransactionTemplate(transactionManager);
+    invalidateTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    invalidateTransaction.executeWithoutResult(
+        tx -> signatureRepository.invalidateOutstandingByTenantId(tenantId));
   }
 
   /**

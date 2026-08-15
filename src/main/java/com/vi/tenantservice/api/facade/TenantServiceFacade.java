@@ -33,6 +33,7 @@ import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
@@ -115,6 +116,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantResolverService tenantResolverService;
 
   private final @NonNull TenantDpaStatusService tenantDpaStatusService;
+
+  private final @NonNull TenantDpaService tenantDpaService;
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
@@ -355,6 +358,9 @@ public class TenantServiceFacade {
             .findTenantById(id)
             .orElseThrow(() -> new TenantNotFoundException("Tenant with id " + id + " not found"));
 
+    // App-level replacement for the DB cascade dropped in changeset 0028 (#179): the tenant's
+    // DPA signature rows (incl. any outstanding sign links) go with the tenant.
+    tenantDpaService.deleteSignaturesForTenant(id);
     tenantService.delete(tenant);
   }
 
