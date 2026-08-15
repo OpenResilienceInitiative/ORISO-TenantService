@@ -40,6 +40,12 @@ public class TenantDpaService {
   /** Signature source of every token-based sign link (the forwarded path of the agreement). */
   public static final String SOURCE_FORWARDED_EXTERNAL = "FORWARDED_EXTERNAL";
 
+  /**
+   * Placeholder organisation name for a sign link issued before the tenant registration finished.
+   * Same wording the DPA forward e-mail uses, so the signer sees one consistent phrasing.
+   */
+  static final String UNREGISTERED_TENANT_NAME = "Ihrer Organisation";
+
   private final TenantDpaSignatureRepository signatureRepository;
   private final TenantDpaVersionRepository versionRepository;
   private final TenantRepository tenantRepository;
@@ -188,13 +194,17 @@ public class TenantDpaService {
 
   /**
    * A sign link created from the public onboarding wizard is bound to a RESERVED tenant id whose
-   * tenant row does not exist yet (ORISO-TenantService#179): the preview then carries no tenant
-   * name. A pending row whose tenant neither exists nor is reserved is treated as an invalid token
-   * — fail closed, nothing about internal state leaks.
+   * tenant row does not exist yet (ORISO-TenantService#179). The organisation has no stored name
+   * until the registration completes, so the preview carries the same neutral placeholder the
+   * forward e-mail already uses — {@code tenantName} stays a non-null part of the contract, and
+   * showing the real organisation on the signing page is tracked in ORISO-Frontend#879.
+   *
+   * <p>A pending row whose tenant neither exists nor is reserved is treated as an invalid token —
+   * fail closed, nothing about internal state leaks.
    */
   private String tenantNameFallbackForReservedTenant(Long tenantId) {
     if (tenantIdReservationRepository.existsById(tenantId)) {
-      return null;
+      return UNREGISTERED_TENANT_NAME;
     }
     throw new InvalidDpaSignTokenException("Tenant for sign token was not found");
   }

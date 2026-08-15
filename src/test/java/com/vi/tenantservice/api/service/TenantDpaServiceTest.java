@@ -260,9 +260,10 @@ class TenantDpaServiceTest {
     // when
     var preview = tenantDpaService.getSignPreview(rawToken);
 
-    // then: the link works BEFORE the registration completes; only the name is not known yet
+    // then: the link works BEFORE the registration completes; the organisation has no stored name
+    // yet, so the contract-required tenantName carries the neutral placeholder (never null)
     assertThat(preview.tenantId()).isEqualTo(42L);
-    assertThat(preview.tenantName()).isNull();
+    assertThat(preview.tenantName()).isEqualTo("Ihrer Organisation");
     assertThat(preview.content()).contains("Operator AVV");
   }
 

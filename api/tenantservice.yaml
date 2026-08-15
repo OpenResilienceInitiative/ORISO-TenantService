@@ -1231,15 +1231,17 @@ components:
     DpaSignPreviewDTO:
       type: object
       required:
+        - tenantName
         - dpaVersion
         - content
         - expiresAt
       properties:
         tenantName:
           type: string
-          description: 'Name of the tenant the signature belongs to. Null while the sign link
-            was created from the public onboarding context and the tenant registration has not
-            completed yet (the link is bound to a reserved tenant id).'
+          description: 'Name of the tenant the signature belongs to. A sign link created from
+            the public onboarding context is bound to a reserved tenant id whose tenant row does
+            not exist yet; until the registration completes this carries the same neutral
+            placeholder the forward e-mail uses. Never null - the field stays required.'
         dpaVersion:
           type: string
         content:
