@@ -599,7 +599,7 @@ class TenantDpaStatusServiceTest {
   // --- contract on hold + link invalidation (ORISO-TenantService#179) ----------------------
 
   @Test
-  void getStatus_Should_returnPendingForwarded_When_unsignedButALiveSignLinkIsOutstanding() {
+  void getStatus_Should_reportForwardPending_When_unsignedButALiveSignLinkIsOutstanding() {
     givenTenantWithEmbeddedVersion(VERSION_2);
     givenNoSignatures();
     when(signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
@@ -610,11 +610,13 @@ class TenantDpaStatusServiceTest {
 
     var status = service.getStatus(TENANT_ID);
 
-    assertThat(status.status()).isEqualTo(TenantDpaStatus.PENDING_FORWARDED);
+    // the signature status is unchanged for existing consumers; the waiting state is additive
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
+    assertThat(status.forwardPending()).isTrue();
   }
 
   @Test
-  void getStatus_Should_stayUnsigned_When_theOnlyOutstandingLinkExpired() {
+  void getStatus_Should_notReportForwardPending_When_theOnlyOutstandingLinkExpired() {
     givenTenantWithEmbeddedVersion(VERSION_2);
     givenNoSignatures();
     when(signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
@@ -626,11 +628,13 @@ class TenantDpaStatusServiceTest {
     var status = service.getStatus(TENANT_ID);
 
     assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
+    assertThat(status.forwardPending()).isFalse();
   }
 
   @Test
-  void getStatus_Should_neverMaskValid_When_aStaleLinkIsStillOutstanding() {
-    // a VALID tenant stays VALID even if (against the invalidation rule) a link survived
+  void getStatus_Should_neverReportForwardPending_When_theTenantIsValid() {
+    // a VALID tenant never reads as waiting, even if (against the invalidation rule) a link
+    // survived — and the ledger is not even queried
     givenTenantWithEmbeddedVersion(VERSION_2);
     when(adminSignatureRepository.findByTenantIdOrderBySignedAtDescIdDesc(TENANT_ID))
         .thenReturn(List.of(adminSignature(VERSION_2)));
@@ -640,6 +644,7 @@ class TenantDpaStatusServiceTest {
     var status = service.getStatus(TENANT_ID);
 
     assertThat(status.status()).isEqualTo(TenantDpaStatus.VALID);
+    assertThat(status.forwardPending()).isFalse();
     verify(signatureRepository, never())
         .existsByTenantIdAndStatusAndTokenExpiresAtAfter(any(), any(), any());
   }

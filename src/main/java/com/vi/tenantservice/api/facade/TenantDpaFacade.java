@@ -174,7 +174,7 @@ public class TenantDpaFacade {
     return new DpaGateStatusDTO()
         .dpaPublished(status.currentVersion() != null)
         .dpaSigned(status.status() == TenantDpaStatus.VALID)
-        .dpaForwardPending(status.status() == TenantDpaStatus.PENDING_FORWARDED);
+        .dpaForwardPending(status.forwardPending());
   }
 
   /**
@@ -230,7 +230,8 @@ public class TenantDpaFacade {
         .currentDpaVersion(view.currentVersion() == null ? null : view.currentVersion().toString())
         .signedDpaVersion(view.signedVersion() == null ? null : view.signedVersion().toString())
         .signedAt(view.signedAt() == null ? null : view.signedAt().toString())
-        .signedBy(view.signedBy());
+        .signedBy(view.signedBy())
+        .forwardPending(view.forwardPending());
   }
 
   /**

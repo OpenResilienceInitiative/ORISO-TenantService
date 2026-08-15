@@ -41,14 +41,23 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RequiredArgsConstructor
 public class TenantDpaStatusService {
 
-  /** Authoritative DPA state of a tenant plus the facts it was derived from. */
+  /**
+   * Authoritative DPA state of a tenant plus the facts it was derived from.
+   *
+   * <p>{@code forwardPending} is the orthogonal "contract on hold" fact (ORISO-TenantService#179):
+   * the tenant is not validly signed AND at least one unexpired sign link is outstanding, i.e. the
+   * agreement was forwarded and is awaiting the authorised signer. It is deliberately a separate
+   * flag rather than a status value, so consumers keep receiving the UNSIGNED/OUTDATED they already
+   * handle and can opt into the waiting state.
+   */
   public record DpaStatusView(
       Long tenantId,
       TenantDpaStatus status,
       LocalDateTime currentVersion,
       LocalDateTime signedVersion,
       LocalDateTime signedAt,
-      String signedBy) {}
+      String signedBy,
+      boolean forwardPending) {}
 
   /** The submitted sign form: structured signer fields plus the verbatim JSON snapshot. */
   public record AdminSignatureForm(
@@ -71,7 +80,7 @@ public class TenantDpaStatusService {
   public DpaStatusView getStatus(Long tenantId) {
     var currentVersion = resolveCurrentVersion(tenantId);
     var signedEntries = collectSignedEntries(tenantId);
-    var status = applyForwardPending(tenantId, deriveStatus(currentVersion, signedEntries));
+    var status = deriveStatus(currentVersion, signedEntries);
     var latestSigned = latestSignedEntry(signedEntries);
     return new DpaStatusView(
         tenantId,
@@ -79,24 +88,23 @@ public class TenantDpaStatusService {
         currentVersion,
         latestSigned == null ? null : latestSigned.version(),
         latestSigned == null ? null : latestSigned.signedAt(),
-        latestSigned == null ? null : latestSigned.signedBy());
+        latestSigned == null ? null : latestSigned.signedBy(),
+        isForwardPending(tenantId, status));
   }
 
   /**
    * "Contract on hold" (ORISO-TenantService#179): a not-yet-validly-signed tenant with an unexpired
-   * outstanding sign link reads as {@code PENDING_FORWARDED} instead of plain {@code
-   * UNSIGNED}/{@code OUTDATED}, so the wizard, the legal gate and the invite progress board can
-   * distinguish "forwarded — awaiting signature" from "nobody acted yet". VALID, MISSING and
-   * INCONSISTENT are never masked.
+   * outstanding sign link is waiting for the authorised signer, which the wizard, the legal gate
+   * and the invite progress board need to tell apart from "nobody acted yet". A VALID, MISSING or
+   * INCONSISTENT tenant is never reported as waiting, and the ledger is only queried when the
+   * answer can be true — the common signed case costs no extra read.
    */
-  private TenantDpaStatus applyForwardPending(Long tenantId, TenantDpaStatus derived) {
+  private boolean isForwardPending(Long tenantId, TenantDpaStatus derived) {
     if (derived != TenantDpaStatus.UNSIGNED && derived != TenantDpaStatus.OUTDATED) {
-      return derived;
+      return false;
     }
-    boolean outstanding =
-        signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
-            tenantId, DpaSignatureStatus.PENDING, LocalDateTime.now());
-    return outstanding ? TenantDpaStatus.PENDING_FORWARDED : derived;
+    return signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
+        tenantId, DpaSignatureStatus.PENDING, LocalDateTime.now());
   }
 
   /**

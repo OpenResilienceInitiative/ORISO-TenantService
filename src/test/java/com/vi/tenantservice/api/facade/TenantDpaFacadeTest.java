@@ -136,10 +136,15 @@ class TenantDpaFacadeTest {
   }
 
   private void givenStatus(Long tenantId, TenantDpaStatus status, LocalDateTime currentVersion) {
+    givenStatus(tenantId, status, currentVersion, false);
+  }
+
+  private void givenStatus(
+      Long tenantId, TenantDpaStatus status, LocalDateTime currentVersion, boolean forwardPending) {
     when(tenantDpaStatusService.getStatus(tenantId))
         .thenReturn(
             new TenantDpaStatusService.DpaStatusView(
-                tenantId, status, currentVersion, null, null, null));
+                tenantId, status, currentVersion, null, null, null, forwardPending));
   }
 
   @Test
@@ -298,13 +303,27 @@ class TenantDpaFacadeTest {
 
   @Test
   void getGateStatus_Should_reportForwardPending_When_contractIsOnHold() {
-    givenStatus(5L, TenantDpaStatus.PENDING_FORWARDED, LocalDateTime.of(2026, 7, 19, 20, 0));
+    // the signature status stays the UNSIGNED existing consumers already handle; the waiting
+    // state travels as the additive flag (#179)
+    givenStatus(5L, TenantDpaStatus.UNSIGNED, LocalDateTime.of(2026, 7, 19, 20, 0), true);
 
     var status = tenantDpaFacade.getGateStatus(5L);
 
     assertThat(status.getDpaPublished()).isTrue();
     assertThat(status.getDpaSigned()).isFalse();
     assertThat(status.getDpaForwardPending()).isTrue();
+  }
+
+  @Test
+  void getDpaStatus_Should_exposeForwardPending_OnTheStatusDto() {
+    givenStatus(5L, TenantDpaStatus.UNSIGNED, LocalDateTime.of(2026, 7, 19, 20, 0), true);
+    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
+
+    var status = tenantDpaFacade.getDpaStatus(5L);
+
+    assertThat(status.getStatus())
+        .isEqualTo(com.vi.tenantservice.api.model.DpaStatusDTO.StatusEnum.UNSIGNED);
+    assertThat(status.getForwardPending()).isTrue();
   }
 
   @Test

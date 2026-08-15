@@ -1274,12 +1274,18 @@ components:
         status:
           type: string
           description: MISSING = no DPA ever published and nothing signed, UNSIGNED = published
-            but never signed, PENDING_FORWARDED = not signed (or only an older version is
-            signed) but an unexpired sign link is outstanding - the contract is "on hold"
-            awaiting the authorised signer, OUTDATED = only an older version is signed, VALID =
-            the current version is signed, INCONSISTENT = stored signature data contradicts the
-            publish history
-          enum: [ MISSING, UNSIGNED, PENDING_FORWARDED, OUTDATED, VALID, INCONSISTENT ]
+            but never signed, OUTDATED = only an older version is signed, VALID = the current
+            version is signed, INCONSISTENT = stored signature data contradicts the publish
+            history. The "forwarded, awaiting signature" case is NOT a status value - it is the
+            orthogonal forwardPending flag below, so existing consumers keep receiving the
+            values they already handle.
+          enum: [ MISSING, UNSIGNED, OUTDATED, VALID, INCONSISTENT ]
+        forwardPending:
+          type: boolean
+          description: 'True while the tenant is not validly signed AND at least one unexpired
+            sign link is outstanding - the contract is "on hold" awaiting the authorised signer.
+            Never true for VALID, MISSING or INCONSISTENT.'
+          example: false
         currentDpaVersion:
           type: string
           description: Activation timestamp of the currently published DPA version, if any
