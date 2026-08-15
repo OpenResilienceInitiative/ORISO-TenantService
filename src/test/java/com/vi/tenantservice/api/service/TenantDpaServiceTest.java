@@ -33,16 +33,25 @@ class TenantDpaServiceTest {
   @Mock private TenantDpaVersionRepository versionRepository;
   @Mock private TenantRepository tenantRepository;
 
+  @Mock
+  private com.vi.tenantservice.api.repository.TenantIdReservationRepository
+      tenantIdReservationRepository;
+
+  private GoverningDpaResolver governingDpaResolver;
   private TenantDpaService tenantDpaService;
 
   @BeforeEach
   void setUp() {
     // the governing-document resolver runs for real over the mocked repositories: the preview must
     // resolve the exact snapshot the invite was issued for (#569)
-    var governingDpaResolver = new GoverningDpaResolver(tenantRepository, versionRepository);
+    governingDpaResolver = new GoverningDpaResolver(tenantRepository, versionRepository);
     tenantDpaService =
         new TenantDpaService(
-            signatureRepository, versionRepository, tenantRepository, governingDpaResolver);
+            signatureRepository,
+            versionRepository,
+            tenantRepository,
+            tenantIdReservationRepository,
+            governingDpaResolver);
   }
 
   @Test
@@ -140,7 +149,7 @@ class TenantDpaServiceTest {
         .thenAnswer(invocation -> invocation.getArgument(0));
 
     // when
-    var rawToken = tenantDpaService.createSignInvite(7L, version, Duration.ofDays(14));
+    var rawToken = tenantDpaService.createSignInvite(7L, version, Duration.ofDays(14), null);
 
     // then
     assertThat(rawToken).isNotBlank();
@@ -153,6 +162,26 @@ class TenantDpaServiceTest {
     // the raw token is never stored — only its SHA-256 hash
     assertThat(saved.getTokenHash()).isEqualTo(DpaSignToken.hash(rawToken)).isNotEqualTo(rawToken);
     assertThat(saved.getTokenExpiresAt()).isAfter(LocalDateTime.now());
+    // pre-account wizard forward: no forwarder account, but the source is stamped at creation
+    assertThat(saved.getForwardedByUserId()).isNull();
+    assertThat(saved.getSource()).isEqualTo(TenantDpaService.SOURCE_FORWARDED_EXTERNAL);
+  }
+
+  @Test
+  void createSignInvite_Should_stampForwardingAdmin_When_createdAuthenticated() {
+    // given
+    when(signatureRepository.save(any(TenantDpaSignatureEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    // when
+    tenantDpaService.createSignInvite(
+        7L, LocalDateTime.now(), Duration.ofDays(14), "tenant-admin-1");
+
+    // then
+    var captor = ArgumentCaptor.forClass(TenantDpaSignatureEntity.class);
+    verify(signatureRepository).save(captor.capture());
+    assertThat(captor.getValue().getForwardedByUserId()).isEqualTo("tenant-admin-1");
+    assertThat(captor.getValue().getSource()).isEqualTo(TenantDpaService.SOURCE_FORWARDED_EXTERNAL);
   }
 
   @Test
@@ -192,7 +221,81 @@ class TenantDpaServiceTest {
     assertThat(preview.content()).contains("Vertragstext");
     assertThat(preview.expiresAt()).isEqualTo(pending.getTokenExpiresAt());
     verify(signatureRepository, org.mockito.Mockito.never())
-        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void getSignPreview_Should_fallBackToReservation_When_tenantNotRegisteredYet() {
+    // given a sign link created from the public onboarding wizard: the tenant id is only RESERVED
+    // and the governing operator DPA fallback is active (tenant 1)
+    org.springframework.test.util.ReflectionTestUtils.setField(
+        governingDpaResolver, "operatorTenantId", 1L);
+    var rawToken = "reserved-preview-token";
+    var version = LocalDateTime.of(2026, 7, 20, 12, 30);
+    var pending =
+        TenantDpaSignatureEntity.builder()
+            .tenantId(42L)
+            .dpaVersion(version)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash(DpaSignToken.hash(rawToken))
+            .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+            .build();
+    when(signatureRepository.findByTokenHashAndStatus(
+            DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
+        .thenReturn(Optional.of(pending));
+    // own history empty -> the resolver falls back to the operator snapshot (tenant 1)
+    when(versionRepository.findFirstByTenantIdAndActivationDate(42L, version))
+        .thenReturn(Optional.empty());
+    when(versionRepository.findFirstByTenantIdAndActivationDate(1L, version))
+        .thenReturn(
+            Optional.of(
+                TenantDpaVersionEntity.builder()
+                    .tenantId(1L)
+                    .activationDate(version)
+                    .content("{\"de\":\"<p>Operator AVV</p>\"}")
+                    .build()));
+    when(tenantRepository.findById(42L)).thenReturn(Optional.empty());
+    when(tenantIdReservationRepository.existsById(42L)).thenReturn(true);
+
+    // when
+    var preview = tenantDpaService.getSignPreview(rawToken);
+
+    // then: the link works BEFORE the registration completes; only the name is not known yet
+    assertThat(preview.tenantId()).isEqualTo(42L);
+    assertThat(preview.tenantName()).isNull();
+    assertThat(preview.content()).contains("Operator AVV");
+  }
+
+  @Test
+  void getSignPreview_Should_failClosed_When_tenantNeitherExistsNorReserved() {
+    // given
+    var rawToken = "orphan-preview-token";
+    var version = LocalDateTime.of(2026, 7, 20, 12, 30);
+    when(signatureRepository.findByTokenHashAndStatus(
+            DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
+        .thenReturn(
+            Optional.of(
+                TenantDpaSignatureEntity.builder()
+                    .tenantId(42L)
+                    .dpaVersion(version)
+                    .status(DpaSignatureStatus.PENDING)
+                    .tokenHash(DpaSignToken.hash(rawToken))
+                    .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+                    .build()));
+    when(versionRepository.findFirstByTenantIdAndActivationDate(42L, version))
+        .thenReturn(
+            Optional.of(
+                TenantDpaVersionEntity.builder()
+                    .tenantId(42L)
+                    .activationDate(version)
+                    .content("{}")
+                    .build()));
+    when(tenantRepository.findById(42L)).thenReturn(Optional.empty());
+    when(tenantIdReservationRepository.existsById(42L)).thenReturn(false);
+
+    // when / then
+    assertThatThrownBy(() -> tenantDpaService.getSignPreview(rawToken))
+        .isInstanceOf(InvalidDpaSignTokenException.class);
   }
 
   @Test
@@ -216,12 +319,14 @@ class TenantDpaServiceTest {
 
   @Test
   void confirmSignature_Should_markSigned_andConsumeToken_When_tokenValid() {
-    // given
+    // given a link an authenticated admin forwarded: identity was stamped at creation
     var rawToken = "raw-token-value";
     var pending =
         TenantDpaSignatureEntity.builder()
             .tenantId(7L)
             .status(DpaSignatureStatus.PENDING)
+            .forwardedByUserId("tenant-admin-1")
+            .source(TenantDpaService.SOURCE_FORWARDED_EXTERNAL)
             .tokenHash(DpaSignToken.hash(rawToken))
             .tokenExpiresAt(LocalDateTime.now().plusDays(1))
             .build();
@@ -234,8 +339,6 @@ class TenantDpaServiceTest {
             eq("Geschäftsführerin"),
             eq("erika@example.org"),
             eq("Caritas Beispiel"),
-            eq("tenant-admin-1"),
-            eq("PUBLIC_SIGN_LINK"),
             eq(false),
             eq("de"),
             any(LocalDateTime.class)))
@@ -249,41 +352,57 @@ class TenantDpaServiceTest {
             "Geschäftsführerin",
             "erika@example.org",
             "Caritas Beispiel",
-            "tenant-admin-1",
-            "PUBLIC_SIGN_LINK",
             false,
             "de");
 
     // then
     verify(signatureRepository)
         .consumeSignToken(
-            any(),
-            any(),
-            any(),
-            any(),
-            any(),
-            any(),
-            any(),
-            any(),
-            any(),
-            any(LocalDateTime.class));
+            any(), any(), any(), any(), any(), any(), any(), any(LocalDateTime.class));
+    // any successful signature kills every other outstanding link of the tenant (#179)
+    verify(signatureRepository).invalidateOutstandingByTenantId(7L);
     assertThat(result.getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
     assertThat(result.getSignerName()).isEqualTo("Erika M");
     assertThat(result.getSignerEmail()).isEqualTo("erika@example.org");
     assertThat(result.getSignerOrganisation()).isEqualTo("Caritas Beispiel");
+    // the stamped forwarder identity survives; the request cannot override it
     assertThat(result.getForwardedByUserId()).isEqualTo("tenant-admin-1");
-    assertThat(result.getSource()).isEqualTo("PUBLIC_SIGN_LINK");
+    assertThat(result.getSource()).isEqualTo(TenantDpaService.SOURCE_FORWARDED_EXTERNAL);
     assertThat(result.getSignedAt()).isNotNull();
     assertThat(result.getTokenHash()).isNull(); // consumed -> single use
+  }
+
+  @Test
+  void confirmSignature_Should_normalizeLegacyRowsToForwardedExternal() {
+    // given a legacy PENDING row created before source stamping existed
+    var rawToken = "legacy-token";
+    var pending =
+        TenantDpaSignatureEntity.builder()
+            .tenantId(7L)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash(DpaSignToken.hash(rawToken))
+            .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+            .build();
+    when(signatureRepository.findByTokenHashAndStatus(
+            DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
+        .thenReturn(Optional.of(pending));
+    when(signatureRepository.consumeSignToken(
+            any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(1);
+
+    // when
+    var result = tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de");
+
+    // then: a token-based signature is by definition the forwarded path
+    assertThat(result.getSource()).isEqualTo(TenantDpaService.SOURCE_FORWARDED_EXTERNAL);
+    assertThat(result.getForwardedByUserId()).isNull();
   }
 
   @Test
   void confirmSignature_Should_throw_When_tokenNullOrBlank() {
     // when / then
     assertThatThrownBy(
-            () ->
-                tenantDpaService.confirmSignature(
-                    " ", "n", "p", null, null, null, null, false, "de"))
+            () -> tenantDpaService.confirmSignature(" ", "n", "p", null, null, false, "de"))
         .isInstanceOf(InvalidDpaSignTokenException.class);
     verifyNoInteractions(signatureRepository);
   }
@@ -302,14 +421,12 @@ class TenantDpaServiceTest {
             DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
         .thenReturn(Optional.of(pending));
     when(signatureRepository.consumeSignToken(
-            any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
+            any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(0);
 
     // when / then
     assertThatThrownBy(
-            () ->
-                tenantDpaService.confirmSignature(
-                    rawToken, "n", "p", null, null, null, null, false, "de"))
+            () -> tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de"))
         .isInstanceOf(InvalidDpaSignTokenException.class);
   }
 
@@ -320,9 +437,7 @@ class TenantDpaServiceTest {
 
     // when / then
     assertThatThrownBy(
-            () ->
-                tenantDpaService.confirmSignature(
-                    "bad", "n", "p", null, null, null, null, false, "de"))
+            () -> tenantDpaService.confirmSignature("bad", "n", "p", null, null, false, "de"))
         .isInstanceOf(InvalidDpaSignTokenException.class);
   }
 
@@ -342,10 +457,28 @@ class TenantDpaServiceTest {
 
     // when / then
     assertThatThrownBy(
-            () ->
-                tenantDpaService.confirmSignature(
-                    rawToken, "n", "p", null, null, null, null, false, "de"))
+            () -> tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de"))
         .isInstanceOf(InvalidDpaSignTokenException.class);
+  }
+
+  @Test
+  void hasOutstandingSignInvite_Should_delegateToUnexpiredPendingPredicate() {
+    // given
+    when(signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
+            eq(7L), eq(DpaSignatureStatus.PENDING), any(LocalDateTime.class)))
+        .thenReturn(true);
+
+    // when / then
+    assertThat(tenantDpaService.hasOutstandingSignInvite(7L)).isTrue();
+  }
+
+  @Test
+  void invalidateOutstandingSignInvites_Should_delegateToBulkInvalidation() {
+    // when
+    tenantDpaService.invalidateOutstandingSignInvites(7L);
+
+    // then
+    verify(signatureRepository).invalidateOutstandingByTenantId(7L);
   }
 
   private TenantDpaSignatureEntity signature(LocalDateTime version) {

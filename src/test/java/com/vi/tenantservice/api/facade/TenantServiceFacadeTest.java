@@ -121,6 +121,8 @@ class TenantServiceFacadeTest {
 
   @Mock private TenantDpaStatusService tenantDpaStatusService;
 
+  @Mock private com.vi.tenantservice.api.service.TenantDpaService tenantDpaService;
+
   @Mock
   private TenantFacadeDependentSettingsOverrideService tenantFacadeDependentSettingsOverrideService;
 

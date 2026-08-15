@@ -42,6 +42,11 @@ class TenantDpaFacadeTest {
   @Mock private GoverningDpaResolver governingDpaResolver;
   @Mock private TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   @Mock private TenantService tenantService;
+
+  @Mock
+  private com.vi.tenantservice.api.repository.TenantIdReservationRepository
+      tenantIdReservationRepository;
+
   @Mock private InputSanitizer inputSanitizer;
   @Mock private AuthorisationService authorisationService;
   @InjectMocks private TenantDpaFacade tenantDpaFacade;
@@ -143,7 +148,9 @@ class TenantDpaFacadeTest {
     var version = LocalDateTime.of(2026, 7, 19, 20, 0);
     when(governingDpaResolver.resolve(5L))
         .thenReturn(new GoverningDpaResolver.GoverningDpa(5L, version));
-    when(tenantDpaService.createSignInvite(eq(5L), eq(version), any())).thenReturn("RAWTOKEN");
+    when(authorisationService.getUserId()).thenReturn("tenant-admin-1");
+    when(tenantDpaService.createSignInvite(eq(5L), eq(version), any(), eq("tenant-admin-1")))
+        .thenReturn("RAWTOKEN");
 
     // when
     var result = tenantDpaFacade.createSignInvite(5L);
@@ -153,6 +160,8 @@ class TenantDpaFacadeTest {
     assertThat(result.getToken()).isEqualTo("RAWTOKEN");
     assertThat(result.getSignLink()).endsWith("/dpa-sign/RAWTOKEN");
     assertThat(result.getExpiresAt()).isNotBlank();
+    // the authenticated forwarder is stamped on the invite (#179)
+    verify(tenantDpaService).createSignInvite(eq(5L), eq(version), any(), eq("tenant-admin-1"));
   }
 
   @Test
@@ -163,7 +172,7 @@ class TenantDpaFacadeTest {
     // when / then
     assertThatThrownBy(() -> tenantDpaFacade.createSignInvite(5L))
         .isInstanceOf(DpaNotPublishedException.class);
-    verify(tenantDpaService, never()).createSignInvite(any(), any(), any());
+    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any());
   }
 
   /**
@@ -176,13 +185,126 @@ class TenantDpaFacadeTest {
     var operatorVersion = LocalDateTime.of(2026, 7, 19, 20, 0);
     when(governingDpaResolver.resolve(5L))
         .thenReturn(new GoverningDpaResolver.GoverningDpa(1L, operatorVersion));
-    when(tenantDpaService.createSignInvite(eq(5L), eq(operatorVersion), any()))
+    when(tenantDpaService.createSignInvite(eq(5L), eq(operatorVersion), any(), any()))
         .thenReturn("RAWTOKEN");
 
     var result = tenantDpaFacade.createSignInvite(5L);
 
     assertThat(result.getToken()).isEqualTo("RAWTOKEN");
-    verify(tenantDpaService).createSignInvite(eq(5L), eq(operatorVersion), any());
+    verify(tenantDpaService).createSignInvite(eq(5L), eq(operatorVersion), any(), any());
+  }
+
+  // --- public forward from the onboarding context (#179) ---
+
+  private static com.vi.tenantservice.api.model.PublicDpaForwardRequestDTO forwardRequest() {
+    return new com.vi.tenantservice.api.model.PublicDpaForwardRequestDTO()
+        .reservedTenantId(42L)
+        .tenantIdReservationToken("reservation-token");
+  }
+
+  private void givenReservation(long tenantId, String token) {
+    when(tenantIdReservationRepository.findById(tenantId))
+        .thenReturn(
+            Optional.of(
+                com.vi.tenantservice.api.model.TenantIdReservationEntity.builder()
+                    .tenantId(tenantId)
+                    .token(token)
+                    .build()));
+  }
+
+  @Test
+  void
+      createPublicForwardSignInvite_Should_bindOperatorVersionToReservedTenant_BeforeRegistration() {
+    // given a valid reservation whose tenant does not exist yet
+    givenReservation(42L, "reservation-token");
+    when(tenantService.findTenantById(42L)).thenReturn(Optional.empty());
+    var operatorVersion = LocalDateTime.of(2026, 7, 19, 20, 0);
+    when(governingDpaResolver.resolveForUnregisteredTenant())
+        .thenReturn(new GoverningDpaResolver.GoverningDpa(1L, operatorVersion));
+    when(tenantDpaService.createSignInvite(eq(42L), eq(operatorVersion), any(), eq(null)))
+        .thenReturn("RAWTOKEN");
+
+    // when
+    var result = tenantDpaFacade.createPublicForwardSignInvite(forwardRequest());
+
+    // then: bound to the RESERVED tenant id, no forwarder account, no session assertion
+    assertThat(result.getSignLink()).endsWith("/dpa-sign/RAWTOKEN");
+    verify(tenantDpaService).createSignInvite(eq(42L), eq(operatorVersion), any(), eq(null));
+    verifyNoInteractions(tenantFacadeAuthorisationService);
+  }
+
+  @Test
+  void createPublicForwardSignInvite_Should_useGoverningResolution_When_tenantAlreadyExists() {
+    // given the registration already completed (reservation consumed, tenant row present)
+    givenReservation(42L, "reservation-token");
+    when(tenantService.findTenantById(42L)).thenReturn(Optional.of(new TenantEntity()));
+    var version = LocalDateTime.of(2026, 7, 19, 20, 0);
+    when(governingDpaResolver.resolve(42L))
+        .thenReturn(new GoverningDpaResolver.GoverningDpa(1L, version));
+    when(tenantDpaService.createSignInvite(eq(42L), eq(version), any(), eq(null)))
+        .thenReturn("RAWTOKEN");
+
+    // when
+    var result = tenantDpaFacade.createPublicForwardSignInvite(forwardRequest());
+
+    // then
+    assertThat(result.getToken()).isEqualTo("RAWTOKEN");
+  }
+
+  @Test
+  void createPublicForwardSignInvite_Should_failClosed_When_reservationUnknown() {
+    // given
+    when(tenantIdReservationRepository.findById(42L)).thenReturn(Optional.empty());
+
+    // when / then
+    assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
+        .isInstanceOf(com.vi.tenantservice.api.service.InvalidDpaSignTokenException.class);
+    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any());
+  }
+
+  @Test
+  void createPublicForwardSignInvite_Should_failClosed_When_reservationTokenMismatches() {
+    // given
+    givenReservation(42L, "the-real-token");
+
+    // when / then
+    assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
+        .isInstanceOf(com.vi.tenantservice.api.service.InvalidDpaSignTokenException.class);
+    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any());
+  }
+
+  @Test
+  void createPublicForwardSignInvite_Should_throw_When_nothingIsPublishedToSign() {
+    // given
+    givenReservation(42L, "reservation-token");
+    when(tenantService.findTenantById(42L)).thenReturn(Optional.empty());
+    when(governingDpaResolver.resolveForUnregisteredTenant()).thenReturn(null);
+
+    // when / then
+    assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
+        .isInstanceOf(DpaNotPublishedException.class);
+  }
+
+  @Test
+  void createPublicForwardSignInvite_Should_rejectIncompleteRequests() {
+    assertThatThrownBy(
+            () ->
+                tenantDpaFacade.createPublicForwardSignInvite(
+                    new com.vi.tenantservice.api.model.PublicDpaForwardRequestDTO()
+                        .reservedTenantId(42L)))
+        .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+    verifyNoInteractions(tenantIdReservationRepository);
+  }
+
+  @Test
+  void getGateStatus_Should_reportForwardPending_When_contractIsOnHold() {
+    givenStatus(5L, TenantDpaStatus.PENDING_FORWARDED, LocalDateTime.of(2026, 7, 19, 20, 0));
+
+    var status = tenantDpaFacade.getGateStatus(5L);
+
+    assertThat(status.getDpaPublished()).isTrue();
+    assertThat(status.getDpaSigned()).isFalse();
+    assertThat(status.getDpaForwardPending()).isTrue();
   }
 
   @Test

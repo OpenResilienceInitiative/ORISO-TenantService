@@ -125,13 +125,15 @@ class TenantDpaSignatureRepositoryTest {
 
   @Test
   void consumeSignToken_Should_signExactlyOnce_andRejectReuse() {
-    // given a PENDING row carrying a token
+    // given a PENDING row carrying a token and the forwarder identity stamped at creation (#179)
     var now = LocalDateTime.now();
     var pending =
         signatureRepository.saveAndFlush(
             TenantDpaSignatureEntity.builder()
                 .tenantId(3L)
                 .status(DpaSignatureStatus.PENDING)
+                .forwardedByUserId("admin-1")
+                .source("FORWARDED_EXTERNAL")
                 .tokenHash("HASH")
                 .tokenExpiresAt(now.plusDays(1))
                 .createDate(now)
@@ -140,29 +142,11 @@ class TenantDpaSignatureRepositoryTest {
     // when the first consume wins
     int first =
         signatureRepository.consumeSignToken(
-            "HASH",
-            "Erika",
-            "GF",
-            "e@example.org",
-            "Caritas",
-            "admin-1",
-            "PUBLIC_SIGN_LINK",
-            false,
-            "de",
-            now);
+            "HASH", "Erika", "GF", "e@example.org", "Caritas", false, "de", now);
     // and a second consume of the same token affects nothing (single-use)
     int second =
         signatureRepository.consumeSignToken(
-            "HASH",
-            "Mallory",
-            "X",
-            "m@example.org",
-            "Bad Org",
-            "admin-2",
-            "PUBLIC_SIGN_LINK",
-            true,
-            "en",
-            now);
+            "HASH", "Mallory", "X", "m@example.org", "Bad Org", true, "en", now);
     signatureRepository.flush();
 
     // then
@@ -173,11 +157,110 @@ class TenantDpaSignatureRepositoryTest {
     assertThat(reloaded.getSignerName()).isEqualTo("Erika"); // not overwritten by the 2nd attempt
     assertThat(reloaded.getSignerEmail()).isEqualTo("e@example.org");
     assertThat(reloaded.getSignerOrganisation()).isEqualTo("Caritas");
+    // the stamped forwarder identity survives the consume untouched (#179)
     assertThat(reloaded.getForwardedByUserId()).isEqualTo("admin-1");
-    assertThat(reloaded.getSource()).isEqualTo("PUBLIC_SIGN_LINK");
+    assertThat(reloaded.getSource()).isEqualTo("FORWARDED_EXTERNAL");
     assertThat(reloaded.getTokenHash()).isNull();
     assertThat(signatureRepository.findByTokenHashAndStatus("HASH", DpaSignatureStatus.PENDING))
         .isEmpty();
+  }
+
+  @Test
+  void invalidateOutstandingByTenantId_Should_killOnlyPendingRowsOfThatTenant() {
+    // given: two outstanding links for tenant 4, a signed row for tenant 4, a link for tenant 5
+    var now = LocalDateTime.now();
+    var outstanding1 = pendingLink(4L, "HASH-A", now);
+    var outstanding2 = pendingLink(4L, "HASH-B", now);
+    var signedRow =
+        signatureRepository.save(
+            TenantDpaSignatureEntity.builder()
+                .tenantId(4L)
+                .status(DpaSignatureStatus.SIGNED)
+                .createDate(now)
+                .build());
+    var otherTenantLink = pendingLink(5L, "HASH-C", now);
+    signatureRepository.flush();
+
+    // when
+    int invalidated = signatureRepository.invalidateOutstandingByTenantId(4L);
+    signatureRepository.flush();
+
+    // then
+    assertThat(invalidated).isEqualTo(2);
+    assertThat(signatureRepository.findById(outstanding1.getId()).orElseThrow().getStatus())
+        .isEqualTo(DpaSignatureStatus.INVALIDATED);
+    assertThat(signatureRepository.findById(outstanding2.getId()).orElseThrow().getTokenHash())
+        .isNull();
+    assertThat(signatureRepository.findById(signedRow.getId()).orElseThrow().getStatus())
+        .isEqualTo(DpaSignatureStatus.SIGNED);
+    assertThat(signatureRepository.findById(otherTenantLink.getId()).orElseThrow().getStatus())
+        .isEqualTo(DpaSignatureStatus.PENDING);
+    // an invalidated link no longer resolves as PENDING -> public endpoints answer 410
+    assertThat(signatureRepository.findByTokenHashAndStatus("HASH-A", DpaSignatureStatus.PENDING))
+        .isEmpty();
+  }
+
+  @Test
+  void existsByTenantIdAndStatusAndTokenExpiresAtAfter_Should_seeOnlyUnexpiredPendingLinks() {
+    // given one expired and one live link for tenant 6
+    var now = LocalDateTime.now();
+    signatureRepository.save(
+        TenantDpaSignatureEntity.builder()
+            .tenantId(6L)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash("HASH-EXPIRED")
+            .tokenExpiresAt(now.minusMinutes(1))
+            .createDate(now)
+            .build());
+    signatureRepository.flush();
+
+    assertThat(
+            signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
+                6L, DpaSignatureStatus.PENDING, now))
+        .isFalse();
+
+    pendingLink(6L, "HASH-LIVE", now);
+    signatureRepository.flush();
+
+    assertThat(
+            signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
+                6L, DpaSignatureStatus.PENDING, now))
+        .isTrue();
+  }
+
+  @Test
+  void deleteByTenantId_Should_removeAllRowsOfTheTenant() {
+    // given
+    var now = LocalDateTime.now();
+    pendingLink(7L, "HASH-D", now);
+    signatureRepository.save(
+        TenantDpaSignatureEntity.builder()
+            .tenantId(7L)
+            .status(DpaSignatureStatus.SIGNED)
+            .createDate(now)
+            .build());
+    pendingLink(8L, "HASH-E", now);
+    signatureRepository.flush();
+
+    // when
+    long removed = signatureRepository.deleteByTenantId(7L);
+    signatureRepository.flush();
+
+    // then
+    assertThat(removed).isEqualTo(2);
+    assertThat(signatureRepository.findByTenantId(7L)).isEmpty();
+    assertThat(signatureRepository.findByTenantId(8L)).hasSize(1);
+  }
+
+  private TenantDpaSignatureEntity pendingLink(Long tenantId, String tokenHash, LocalDateTime now) {
+    return signatureRepository.save(
+        TenantDpaSignatureEntity.builder()
+            .tenantId(tenantId)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash(tokenHash)
+            .tokenExpiresAt(now.plusDays(1))
+            .createDate(now)
+            .build());
   }
 
   @Test

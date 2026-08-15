@@ -595,4 +595,99 @@ class TenantDpaStatusServiceTest {
     verify(adminSignatureRepository).save(captor.capture());
     assertThat(captor.getValue().getDpaVersion()).isEqualTo(VERSION_2);
   }
+
+  // --- contract on hold + link invalidation (ORISO-TenantService#179) ----------------------
+
+  @Test
+  void getStatus_Should_returnPendingForwarded_When_unsignedButALiveSignLinkIsOutstanding() {
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+    when(signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
+            org.mockito.ArgumentMatchers.eq(TENANT_ID),
+            org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
+            any(LocalDateTime.class)))
+        .thenReturn(true);
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.PENDING_FORWARDED);
+  }
+
+  @Test
+  void getStatus_Should_stayUnsigned_When_theOnlyOutstandingLinkExpired() {
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+    when(signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
+            org.mockito.ArgumentMatchers.eq(TENANT_ID),
+            org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
+            any(LocalDateTime.class)))
+        .thenReturn(false);
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
+  }
+
+  @Test
+  void getStatus_Should_neverMaskValid_When_aStaleLinkIsStillOutstanding() {
+    // a VALID tenant stays VALID even if (against the invalidation rule) a link survived
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    when(adminSignatureRepository.findByTenantIdOrderBySignedAtDescIdDesc(TENANT_ID))
+        .thenReturn(List.of(adminSignature(VERSION_2)));
+    when(signatureRepository.findByTenantIdAndStatus(TENANT_ID, DpaSignatureStatus.SIGNED))
+        .thenReturn(List.of());
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.VALID);
+    verify(signatureRepository, never())
+        .existsByTenantIdAndStatusAndTokenExpiresAtAfter(any(), any(), any());
+  }
+
+  @Test
+  void sign_Should_invalidateEveryOutstandingSignLink_When_theSignatureIsRecorded() {
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+
+    service.sign(
+        TENANT_ID,
+        "admin-user-id",
+        "tenantadmin",
+        new TenantDpaStatusService.AdminSignatureForm("A", null, null, null, "de", "{}"));
+
+    verify(signatureRepository).invalidateOutstandingByTenantId(TENANT_ID);
+  }
+
+  @Test
+  void signOnboarding_Should_invalidateEveryOutstandingSignLink_When_theAcceptanceIsRecorded() {
+    givenOperatorDpa(VERSION_2);
+    givenTenantWithoutOwnDpa();
+    givenNoSignatures();
+
+    service.signOnboarding(
+        TENANT_ID,
+        "onboarded-admin-id",
+        "toni",
+        null,
+        new TenantDpaStatusService.AdminSignatureForm("Toni", null, null, null, null, "{}"));
+
+    verify(signatureRepository).invalidateOutstandingByTenantId(TENANT_ID);
+  }
+
+  @Test
+  void sign_Should_notInvalidateAnything_When_tenantIsAlreadyValid() {
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    when(adminSignatureRepository.findByTenantIdOrderBySignedAtDescIdDesc(TENANT_ID))
+        .thenReturn(List.of(adminSignature(VERSION_2)));
+    when(signatureRepository.findByTenantIdAndStatus(TENANT_ID, DpaSignatureStatus.SIGNED))
+        .thenReturn(List.of());
+
+    service.sign(
+        TENANT_ID,
+        "admin-user-id",
+        "tenantadmin",
+        new TenantDpaStatusService.AdminSignatureForm("A", null, null, null, "de", "{}"));
+
+    verify(signatureRepository, never()).invalidateOutstandingByTenantId(any());
+  }
 }
