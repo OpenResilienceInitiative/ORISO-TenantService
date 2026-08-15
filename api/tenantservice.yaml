@@ -777,6 +777,44 @@ paths:
           description: GONE - token unknown, already used, or expired
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenant/public/dpa/forward:
+    summary: 'Create a DPA sign link from the public tenant onboarding context'
+    description: 'Forward path for the tenant onboarding wizard (ORISO-TenantService#179): an
+      administrator who is not authorised to sign can create a single-use sign link BEFORE the
+      registration completes. The call is authorised by the onboarding context itself - the
+      tenant-ID reservation pair (reserved tenant id + reservation token) issued for the invite -
+      instead of a user session. The resulting PENDING signature is bound to the reserved tenant
+      id, so the signature lands on the tenant once it exists; the link works immediately, before
+      and after the registration finishes. The signed version is the operator DPA governing a
+      tenant without an own published DPA.'
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Creates a single-use DPA sign link for a reserved tenant [Authorization: no-auth,
+        tenant-ID reservation token]'
+      operationId: createPublicDpaForwardInvite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicDpaForwardRequestDTO'
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaSignInviteDTO'
+        400:
+          description: BAD REQUEST - invalid/incomplete request or body object
+        409:
+          description: CONFLICT - no data processing agreement is published to sign yet
+        410:
+          description: GONE - unknown reservation, reservation token mismatch, or the
+            reservation was released; no information about the reservation state is leaked
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}/dpa/signatures:
     summary: 'Confirmed DPA signatures of a tenant (audit list)'
     get:
@@ -1172,16 +1210,36 @@ components:
           type: string
         expiresAt:
           type: string
+    PublicDpaForwardRequestDTO:
+      type: object
+      required:
+        - reservedTenantId
+        - tenantIdReservationToken
+      description: 'Onboarding-context credential for the public DPA forward: the reservation
+        pair the tenant-admin onboarding invite carries (TenantIdReservationDTO). The raw
+        reservation token is validated against the authoritative tenant-ID ledger and never
+        persisted or logged by this endpoint.'
+      properties:
+        reservedTenantId:
+          type: integer
+          format: int64
+          example: 42
+        tenantIdReservationToken:
+          type: string
+          maxLength: 36
+          example: "a81bc81b-dead-4e5d-abff-90865d1e13b1"
     DpaSignPreviewDTO:
       type: object
       required:
-        - tenantName
         - dpaVersion
         - content
         - expiresAt
       properties:
         tenantName:
           type: string
+          description: 'Name of the tenant the signature belongs to. Null while the sign link
+            was created from the public onboarding context and the tenant registration has not
+            completed yet (the link is bound to a reserved tenant id).'
         dpaVersion:
           type: string
         content:
@@ -1196,6 +1254,11 @@ components:
           type: boolean
         dpaSigned:
           type: boolean
+        dpaForwardPending:
+          type: boolean
+          description: 'True while the governing DPA version is not signed but at least one
+            unexpired sign link is outstanding for the tenant - the contract is "on hold"
+            awaiting the authorised signer (status PENDING_FORWARDED).'
     DpaStatusDTO:
       type: object
       required:
@@ -1209,10 +1272,12 @@ components:
         status:
           type: string
           description: MISSING = no DPA ever published and nothing signed, UNSIGNED = published
-            but never signed, OUTDATED = only an older version is signed, VALID = the current
-            version is signed, INCONSISTENT = stored signature data contradicts the publish
-            history
-          enum: [ MISSING, UNSIGNED, OUTDATED, VALID, INCONSISTENT ]
+            but never signed, PENDING_FORWARDED = not signed (or only an older version is
+            signed) but an unexpired sign link is outstanding - the contract is "on hold"
+            awaiting the authorised signer, OUTDATED = only an older version is signed, VALID =
+            the current version is signed, INCONSISTENT = stored signature data contradicts the
+            publish history
+          enum: [ MISSING, UNSIGNED, PENDING_FORWARDED, OUTDATED, VALID, INCONSISTENT ]
         currentDpaVersion:
           type: string
           description: Activation timestamp of the currently published DPA version, if any
@@ -1291,10 +1356,18 @@ components:
           type: string
           maxLength: 64
           example: "tenant-admin-1"
+          deprecated: true
+          description: 'Ignored since ORISO-TenantService#179: the forwarder identity is stamped
+            server-side when the sign link is created and can no longer be supplied by the
+            signing client.'
         source:
           type: string
           maxLength: 64
-          example: "PUBLIC_SIGN_LINK"
+          example: "FORWARDED_EXTERNAL"
+          deprecated: true
+          description: 'Ignored since ORISO-TenantService#179: the signature source is stamped
+            server-side when the sign link is created and can no longer be supplied by the
+            signing client.'
         signerIsMember:
           type: boolean
           example: false
@@ -1314,6 +1387,10 @@ components:
         status:
           type: string
           example: "SIGNED"
+        dpaVersion:
+          type: string
+          description: Activation timestamp identifying the signed DPA version
+          example: "2026-07-01T12:00:00"
         signerName:
           type: string
         signerPosition:

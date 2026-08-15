@@ -15,6 +15,7 @@ import com.vi.tenantservice.api.model.DpaStatusDTO;
 import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NextFreeTenantIdDTO;
+import com.vi.tenantservice.api.model.PublicDpaForwardRequestDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
@@ -29,6 +30,7 @@ import com.vi.tenantservice.api.model.TranslationErrorDTO;
 import com.vi.tenantservice.api.model.TranslationRequestDTO;
 import com.vi.tenantservice.api.model.TranslationResponseDTO;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
+import com.vi.tenantservice.api.service.DpaSignedNoticeHintService;
 import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
 import com.vi.tenantservice.api.service.MediaSizeLimitExceededException;
 import com.vi.tenantservice.api.service.TenantDpaService;
@@ -79,6 +81,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   private final @NonNull TenantDtoMapper tenantDtoMapper;
   private final @NonNull TenantDpaService tenantDpaService;
   private final @NonNull TenantDpaFacade tenantDpaFacade;
+  private final @NonNull DpaSignedNoticeHintService dpaSignedNoticeHintService;
   private final @NonNull TranslationFacade translationFacade;
   private final @NonNull TenantMediaService tenantMediaService;
   private final @NonNull TenantIdAllocationService tenantIdAllocationService;
@@ -109,6 +112,8 @@ public class TenantController implements TenantApi, TenantadminApi {
     if (!Boolean.TRUE.equals(request.getAccepted())) {
       return ResponseEntity.badRequest().build();
     }
+    // forwardedByUserId/source from the request are deliberately ignored (#179): the forwarder
+    // identity was stamped when the sign link was created and is not client-assignable.
     var signature =
         tenantDpaService.confirmSignature(
             token,
@@ -116,14 +121,17 @@ public class TenantController implements TenantApi, TenantadminApi {
             request.getSignerPosition(),
             request.getSignerEmail(),
             request.getSignerOrganisation(),
-            request.getForwardedByUserId(),
-            request.getSource(),
             Boolean.TRUE.equals(request.getSignerIsMember()),
             request.getLanguage());
+    // Fire-and-forget: tells the UserService a forwarded signature landed so it can notify the
+    // forwarding administrator (ORISO-UserService#1005). Never fails the confirm.
+    dpaSignedNoticeHintService.notifySignatureRecorded(signature.getTenantId());
     var dto =
         new DpaSignatureDTO()
             .tenantId(signature.getTenantId())
             .status(signature.getStatus() == null ? null : signature.getStatus().name())
+            .dpaVersion(
+                signature.getDpaVersion() == null ? null : signature.getDpaVersion().toString())
             .signerName(signature.getSignerName())
             .signerPosition(signature.getSignerPosition())
             .signerEmail(signature.getSignerEmail())
@@ -132,6 +140,17 @@ public class TenantController implements TenantApi, TenantadminApi {
             .source(signature.getSource())
             .signedAt(signature.getSignedAt() == null ? null : signature.getSignedAt().toString());
     return ResponseEntity.ok(dto);
+  }
+
+  /**
+   * Public creation of a DPA sign link from the tenant onboarding wizard (#179). No session — the
+   * request is authorised by the invite's tenant-ID reservation pair, validated fail-closed by the
+   * facade (410 on anything that does not match the ledger).
+   */
+  @Override
+  public ResponseEntity<DpaSignInviteDTO> createPublicDpaForwardInvite(
+      @Valid PublicDpaForwardRequestDTO request) {
+    return ResponseEntity.ok(tenantDpaFacade.createPublicForwardSignInvite(request));
   }
 
   @ExceptionHandler(InvalidDpaSignTokenException.class)
