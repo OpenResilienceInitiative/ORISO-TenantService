@@ -1,11 +1,14 @@
 package com.vi.tenantservice.api.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.converter.TenantConverter;
+import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
@@ -23,6 +26,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class TenantAdminControlsServiceTest {
@@ -104,8 +108,30 @@ class TenantAdminControlsServiceTest {
 
     ArgumentCaptor<TenantAdminControlsEntity> captor =
         ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
-    verify(tenantAdminControlsRepository).save(captor.capture());
+    verify(tenantAdminControlsRepository).saveAndFlush(captor.capture());
     assertThat(captor.getValue().getControls()).contains("groupChat");
+  }
+
+  @Test
+  void updateControls_Should_loadExistingRowOnceAndRejectAStaleWriter() {
+    TenantAdminControlsEntity existing =
+        TenantAdminControlsEntity.builder()
+            .id(1L)
+            .version(3L)
+            .controls("{\"permissionsPageEnabled\":true}")
+            .build();
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc()).thenReturn(Optional.of(existing));
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantAdminControlsRepository.saveAndFlush(existing))
+        .thenThrow(new OptimisticLockingFailureException("stale platform settings"));
+
+    assertThatThrownBy(() -> tenantAdminControlsService.updateControls(request))
+        .isInstanceOf(SettingsUpdateConflictException.class)
+        .hasMessageContaining("changed while saving");
+
+    verify(tenantAdminControlsRepository, times(1)).findTopByOrderByIdAsc();
   }
 
   // --- machine-translation provider API keys (stored in the same controls JSON blob) ---
@@ -119,7 +145,7 @@ class TenantAdminControlsServiceTest {
   private String capturedSavedControls() {
     ArgumentCaptor<TenantAdminControlsEntity> captor =
         ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
-    verify(tenantAdminControlsRepository).save(captor.capture());
+    verify(tenantAdminControlsRepository).saveAndFlush(captor.capture());
     return captor.getValue().getControls();
   }
 

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
 import com.vi.tenantservice.api.model.PermissionPolicyMode;
@@ -27,6 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class TenantPermissionPolicyServiceTest {
@@ -80,7 +82,7 @@ class TenantPermissionPolicyServiceTest {
 
     org.mockito.ArgumentCaptor<TenantPermissionPolicyEntity> saved =
         org.mockito.ArgumentCaptor.forClass(TenantPermissionPolicyEntity.class);
-    org.mockito.Mockito.verify(repository).save(saved.capture());
+    org.mockito.Mockito.verify(repository).saveAndFlush(saved.capture());
     assertThat(saved.getValue().getTenantId()).isEqualTo(42L);
     assertThat(saved.getValue().getPolicies()).contains("featureVideoCallsEnabled");
   }
@@ -102,7 +104,7 @@ class TenantPermissionPolicyServiceTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("featureVideoCallsEnabled");
 
-    verify(repository, never()).save(any());
+    verify(repository, never()).saveAndFlush(any());
   }
 
   @Test
@@ -121,8 +123,36 @@ class TenantPermissionPolicyServiceTest {
 
     org.mockito.ArgumentCaptor<TenantPermissionPolicyEntity> saved =
         org.mockito.ArgumentCaptor.forClass(TenantPermissionPolicyEntity.class);
-    verify(repository).save(saved.capture());
+    verify(repository).saveAndFlush(saved.capture());
     assertThat(saved.getValue().getPolicies()).isEqualTo("{}");
+  }
+
+  @Test
+  void save_shouldRejectAStaleTenantPolicyWriter() {
+    TenantPermissionPolicyEntity existing =
+        TenantPermissionPolicyEntity.builder()
+            .id(7L)
+            .tenantId(42L)
+            .version(4L)
+            .policies("{}")
+            .build();
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        "featureVideoCallsEnabled",
+                        new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED))));
+    when(repository.findByTenantId(42L)).thenReturn(Optional.of(existing));
+    when(repository.saveAndFlush(existing))
+        .thenThrow(new OptimisticLockingFailureException("stale tenant policy"));
+
+    assertThatThrownBy(
+            () ->
+                service.saveOverrides(
+                    42L, Map.of("featureVideoCallsEnabled", new PolicyValue<>(false, SUGGESTED))))
+        .isInstanceOf(SettingsUpdateConflictException.class)
+        .hasMessageContaining("changed while saving");
   }
 
   @Test

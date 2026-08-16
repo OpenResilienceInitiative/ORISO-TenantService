@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.CaseHandoverPolicies;
 import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
@@ -27,7 +28,10 @@ import java.util.Objects;
 import java.util.Set;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -76,10 +80,12 @@ public class TenantPermissionPolicyService {
     return Map.copyOf(resolved);
   }
 
+  @Transactional
   public void saveOverrides(Long tenantId, Map<String, PolicyValue<Boolean>> overrides) {
     saveOverrides(tenantId, overrides, null);
   }
 
+  @Transactional
   public void saveOverrides(
       Long tenantId,
       Map<String, PolicyValue<Boolean>> overrides,
@@ -103,7 +109,11 @@ public class TenantPermissionPolicyService {
       entity.setCaseHandoverPolicies(serializeCaseHandover(writableCaseHandoverOverrides));
     }
     entity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));
-    repository.save(entity);
+    try {
+      repository.saveAndFlush(entity);
+    } catch (OptimisticLockingFailureException | DataIntegrityViolationException exception) {
+      throw new SettingsUpdateConflictException(exception);
+    }
   }
 
   public CaseHandoverPolicies getResolvedCaseHandoverPolicies(Long tenantId) {

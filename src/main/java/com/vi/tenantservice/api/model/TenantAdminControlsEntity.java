@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -29,6 +30,10 @@ public class TenantAdminControlsEntity {
   @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "tenant_admin_controls_id_seq")
   @Column(name = "id", updatable = false, nullable = false)
   private Long id;
+
+  @Version
+  @Column(name = "version", nullable = false)
+  private Long version;
 
   // LONGTEXT in Liquibase; the length also keeps Hibernate's H2 test schema migration-safe.
   @Column(name = "controls", nullable = false, length = 65535)

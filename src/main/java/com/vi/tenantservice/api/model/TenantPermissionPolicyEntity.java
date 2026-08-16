@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -28,6 +29,10 @@ public class TenantPermissionPolicyEntity {
       sequenceName = "SEQUENCE_TENANT_PERMISSION_POLICY")
   @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "tenant_permission_policy_id_seq")
   private Long id;
+
+  @Version
+  @Column(name = "version", nullable = false)
+  private Long version;
 
   @Column(name = "tenant_id", nullable = false, unique = true)
   private Long tenantId;

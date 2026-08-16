@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
 import com.vi.tenantservice.api.converter.TenantConverter;
+import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminControls;
@@ -21,7 +22,10 @@ import java.util.Optional;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -34,10 +38,15 @@ public class TenantAdminControlsService {
     return tenantConverter.toTenantAdminControls(getControlsSettings());
   }
 
+  @Transactional
   public TenantAdminControls updateControls(TenantAdminControls tenantAdminControls) {
+    Optional<TenantAdminControlsEntity> existingEntity = findExistingControls();
     TenantAdminControlsSettings controlsSettings =
         tenantConverter.toTenantAdminControlsSettings(tenantAdminControls);
-    TenantAdminControlsSettings existingSettings = getControlsSettings();
+    TenantAdminControlsSettings existingSettings =
+        existingEntity
+            .map(entity -> parseControlsSettings(entity.getControls()))
+            .orElseGet(this::createDefaultControlsSettings);
     if (existingSettings != null) {
       if (controlsSettings.getPermissionPolicies() == null
           || controlsSettings.getPermissionPolicies().isEmpty()) {
@@ -50,7 +59,8 @@ public class TenantAdminControlsService {
       controlsSettings.setTranslationApiKeys(existingSettings.getTranslationApiKeys());
     }
     hydrateCanonicalPolicies(controlsSettings);
-    saveControlsSettings(controlsSettings);
+    saveControlsSettings(
+        controlsSettings, existingEntity.orElseGet(TenantAdminControlsEntity::new));
     return tenantConverter.toTenantAdminControls(controlsSettings);
   }
 
@@ -66,18 +76,21 @@ public class TenantAdminControlsService {
   }
 
   /** Stores the machine-translation API key for a provider in the platform-global controls. */
+  @Transactional
   public void setTranslationApiKey(String provider, String apiKey) {
-    TenantAdminControlsSettings controlsSettings = getControlsSettings();
-    if (controlsSettings == null) {
-      controlsSettings = new TenantAdminControlsSettings();
-    }
+    Optional<TenantAdminControlsEntity> existingEntity = findExistingControls();
+    TenantAdminControlsSettings controlsSettings =
+        existingEntity
+            .map(entity -> parseControlsSettings(entity.getControls()))
+            .orElseGet(this::createDefaultControlsSettings);
     Map<String, String> keys = new HashMap<>();
     if (controlsSettings.getTranslationApiKeys() != null) {
       keys.putAll(controlsSettings.getTranslationApiKeys());
     }
     keys.put(provider, apiKey);
     controlsSettings.setTranslationApiKeys(keys);
-    saveControlsSettings(controlsSettings);
+    saveControlsSettings(
+        controlsSettings, existingEntity.orElseGet(TenantAdminControlsEntity::new));
   }
 
   public void stripTenantAdminControlsFromTenantDto(MultilingualTenantDTO tenantDTO) {
@@ -113,12 +126,15 @@ public class TenantAdminControlsService {
         .orElseGet(this::createDefaultControlsSettings);
   }
 
-  private void saveControlsSettings(TenantAdminControlsSettings controlsSettings) {
-    TenantAdminControlsEntity entity =
-        findExistingControls().orElseGet(TenantAdminControlsEntity::new);
+  private void saveControlsSettings(
+      TenantAdminControlsSettings controlsSettings, TenantAdminControlsEntity entity) {
     entity.setControls(serializeControlsSettings(controlsSettings));
     entity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));
-    tenantAdminControlsRepository.save(entity);
+    try {
+      tenantAdminControlsRepository.saveAndFlush(entity);
+    } catch (OptimisticLockingFailureException | DataIntegrityViolationException exception) {
+      throw new SettingsUpdateConflictException(exception);
+    }
   }
 
   private Optional<TenantAdminControlsEntity> findExistingControls() {
