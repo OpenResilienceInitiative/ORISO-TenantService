@@ -53,4 +53,5 @@
   <include file="db/changelog/changeset/0026_fix_dpa_admin_sequence_name_case/0026-changeSet.xml"/>
   <include file="db/changelog/changeset/0027_tenant_theming_accent_and_signal/0027-changeSet.xml"/>
   <include file="db/changelog/changeset/0028_platform_dpia_master_data/0028-changeSet.xml"/>
+  <include file="db/changelog/changeset/0029_tenant_theming_login_effect/0029-changeSet.xml"/>
 </databaseChangeLog>

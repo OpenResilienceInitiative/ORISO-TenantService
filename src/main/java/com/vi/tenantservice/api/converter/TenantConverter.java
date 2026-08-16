@@ -210,7 +210,12 @@ public class TenantConverter {
           .themingPrimaryColor(tenantDTO.getTheming().getPrimaryColor())
           .themingSecondaryColor(tenantDTO.getTheming().getSecondaryColor())
           .themingAccent(tenantDTO.getTheming().getAccent())
-          .themingSignal(tenantDTO.getTheming().getSignal());
+          .themingSignal(tenantDTO.getTheming().getSignal())
+          // Stored as the enum name; null stays null and reads back as NONE.
+          .themingLoginEffect(
+              tenantDTO.getTheming().getLoginEffect() == null
+                  ? null
+                  : tenantDTO.getTheming().getLoginEffect().getValue());
     }
   }
 
@@ -780,7 +785,29 @@ public class TenantConverter {
         .primaryColor(tenant.getThemingPrimaryColor())
         .secondaryColor(tenant.getThemingSecondaryColor())
         .accent(tenant.getThemingAccent())
-        .signal(tenant.getThemingSignal());
+        .signal(tenant.getThemingSignal())
+        .loginEffect(toLoginEffect(tenant.getThemingLoginEffect()));
+  }
+
+  /**
+   * A stored value that no longer maps to a known effect must not break the login screen: an
+   * unknown or absent name reads as NONE, which is the plain stage.
+   *
+   * <p>Absent means NONE <em>to a reader</em> only. The column stays NULL, because "never
+   * configured" and "an administrator chose the plain stage" are different facts and changeset 0029
+   * deliberately does not backfill. Returning null here leaked that distinction into the API, where
+   * it is not a meaningful answer to "which effect does this tenant run".
+   */
+  private Theming.LoginEffectEnum toLoginEffect(String stored) {
+    if (stored == null) {
+      return Theming.LoginEffectEnum.NONE;
+    }
+    try {
+      return Theming.LoginEffectEnum.fromValue(stored);
+    } catch (IllegalArgumentException e) {
+      log.warn("Unknown theming.loginEffect '{}' stored; falling back to NONE", stored);
+      return Theming.LoginEffectEnum.NONE;
+    }
   }
 
   private Content toContentDTO(TenantRestrictedData tenant, String lang) {

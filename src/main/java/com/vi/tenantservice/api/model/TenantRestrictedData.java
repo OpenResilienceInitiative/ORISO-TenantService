@@ -24,6 +24,8 @@ public interface TenantRestrictedData {
 
   String getThemingSignal();
 
+  String getThemingLoginEffect();
+
   String getContentImpressum();
 
   String getContentClaim();
