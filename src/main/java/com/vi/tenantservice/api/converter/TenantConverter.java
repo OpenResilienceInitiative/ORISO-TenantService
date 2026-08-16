@@ -11,12 +11,14 @@ import static com.vi.tenantservice.api.util.JsonConverter.convertToJson;
 import com.google.common.collect.Maps;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.Content;
 import com.vi.tenantservice.api.model.DataProtectionContactTemplateDTO;
 import com.vi.tenantservice.api.model.Licensing;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NoAgencyContextDTO;
+import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.SmtpConfig;
@@ -32,6 +34,7 @@ import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
 import com.vi.tenantservice.api.service.TemplateRenderer;
@@ -365,6 +368,8 @@ public class TenantConverter {
                 tenantAdminControls.getAllowedPermissionToggles()))
         .enforcedPermissionToggles(
             toEnforcedPermissionTogglesSettings(tenantAdminControls.getEnforcedPermissionToggles()))
+        .permissionPolicies(toPermissionPolicySettings(tenantAdminControls.getPermissionPolicies()))
+        .caseHandoverPolicies(tenantAdminControls.getCaseHandoverPolicies())
         .build();
   }
 
@@ -449,8 +454,41 @@ public class TenantConverter {
             toTenantAdminAllowedPermissionToggles(
                 tenantAdminControlsSettings.getAllowedPermissionToggles()))
         .enforcedPermissionToggles(
-            toEnforcedPermissionToggles(
-                tenantAdminControlsSettings.getEnforcedPermissionToggles()));
+            toEnforcedPermissionToggles(tenantAdminControlsSettings.getEnforcedPermissionToggles()))
+        .permissionPolicies(
+            toBooleanPermissionPolicies(tenantAdminControlsSettings.getPermissionPolicies()))
+        .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies());
+  }
+
+  private Map<String, PolicyValue<Boolean>> toPermissionPolicySettings(
+      Map<String, BooleanPermissionPolicy> permissionPolicies) {
+    if (permissionPolicies == null) {
+      return null;
+    }
+    return permissionPolicies.entrySet().stream()
+        .collect(
+            java.util.stream.Collectors.toUnmodifiableMap(
+                Map.Entry::getKey,
+                entry ->
+                    new PolicyValue<>(
+                        entry.getValue().getValue(),
+                        com.vi.tenantservice.api.policy.PermissionPolicyMode.valueOf(
+                            entry.getValue().getMode().name()))));
+  }
+
+  private Map<String, BooleanPermissionPolicy> toBooleanPermissionPolicies(
+      Map<String, PolicyValue<Boolean>> permissionPolicies) {
+    if (permissionPolicies == null) {
+      return null;
+    }
+    return permissionPolicies.entrySet().stream()
+        .collect(
+            java.util.stream.Collectors.toUnmodifiableMap(
+                Map.Entry::getKey,
+                entry ->
+                    new BooleanPermissionPolicy(
+                        entry.getValue().value(),
+                        PermissionPolicyMode.valueOf(entry.getValue().mode().name()))));
   }
 
   private TenantAdminAllowedPermissionToggles toTenantAdminAllowedPermissionToggles(

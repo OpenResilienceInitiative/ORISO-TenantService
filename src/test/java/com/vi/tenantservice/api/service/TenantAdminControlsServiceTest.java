@@ -14,6 +14,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.policy.PermissionPolicyMode;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -176,5 +177,24 @@ class TenantAdminControlsServiceTest {
     tenantAdminControlsService.updateControls(request);
 
     assertThat(capturedSavedControls()).contains("\"openrouter\":\"sk-or-key\"");
+  }
+
+  @Test
+  void getControls_shouldDualReadLegacyMapsAsCanonicalPolicies() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"allowedPermissionToggles\":{\"videoCalls\":false},"
+            + "\"enforcedPermissionToggles\":{\"supervision\":true}}");
+    when(tenantConverter.toTenantAdminControls(any())).thenReturn(new TenantAdminControls());
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> settings =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(settings.capture());
+    assertThat(settings.getValue().getPermissionPolicies().get("featureVideoCallsEnabled").value())
+        .isFalse();
+    assertThat(settings.getValue().getPermissionPolicies().get("featureSupervisionEnabled").mode())
+        .isEqualTo(PermissionPolicyMode.ENFORCED);
   }
 }

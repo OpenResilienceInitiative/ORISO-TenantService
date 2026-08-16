@@ -10,6 +10,8 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
+import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
@@ -35,6 +37,7 @@ public class TenantAdminControlsService {
   public TenantAdminControls updateControls(TenantAdminControls tenantAdminControls) {
     TenantAdminControlsSettings controlsSettings =
         tenantConverter.toTenantAdminControlsSettings(tenantAdminControls);
+    hydrateCanonicalPolicies(controlsSettings);
     // the DTO never carries the translation API keys - preserve the stored ones
     TenantAdminControlsSettings existingSettings = getControlsSettings();
     if (existingSettings != null) {
@@ -122,7 +125,11 @@ public class TenantAdminControlsService {
     try {
       TenantAdminControlsSettings settings =
           new ObjectMapper().readValue(controlsJson, TenantAdminControlsSettings.class);
-      return settings != null ? settings : createDefaultControlsSettings();
+      if (settings == null) {
+        return createDefaultControlsSettings();
+      }
+      hydrateCanonicalPolicies(settings);
+      return settings;
     } catch (JsonProcessingException exception) {
       throw new RuntimeJsonMappingException(exception.getMessage());
     }
@@ -137,6 +144,23 @@ public class TenantAdminControlsService {
   }
 
   private TenantAdminControlsSettings createDefaultControlsSettings() {
-    return tenantConverter.toTenantAdminControlsSettings(new TenantAdminControls());
+    TenantAdminControlsSettings settings =
+        tenantConverter.toTenantAdminControlsSettings(new TenantAdminControls());
+    hydrateCanonicalPolicies(settings);
+    return settings;
+  }
+
+  private void hydrateCanonicalPolicies(TenantAdminControlsSettings settings) {
+    if (settings == null) {
+      return;
+    }
+    if (settings.getPermissionPolicies() == null || settings.getPermissionPolicies().isEmpty()) {
+      settings.setPermissionPolicies(
+          LegacyPermissionPolicyMapper.fromLegacyMaps(
+              settings.getAllowedPermissionToggles(), settings.getEnforcedPermissionToggles()));
+    }
+    if (settings.getCaseHandoverPolicies() == null) {
+      settings.setCaseHandoverPolicies(CaseHandoverPolicyDefaults.create());
+    }
   }
 }

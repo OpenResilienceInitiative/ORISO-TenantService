@@ -14,25 +14,29 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "tenant_admin_controls")
+@Table(name = "tenant_permission_policy")
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class TenantAdminControlsEntity {
+public class TenantPermissionPolicyEntity {
 
   @Id
   @SequenceGenerator(
-      name = "tenant_admin_controls_id_seq",
+      name = "tenant_permission_policy_id_seq",
       allocationSize = 1,
-      sequenceName = "SEQUENCE_TENANT_ADMIN_CONTROLS")
-  @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "tenant_admin_controls_id_seq")
-  @Column(name = "id", updatable = false, nullable = false)
+      sequenceName = "SEQUENCE_TENANT_PERMISSION_POLICY")
+  @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "tenant_permission_policy_id_seq")
   private Long id;
 
-  // LONGTEXT in Liquibase; the length also keeps Hibernate's H2 test schema migration-safe.
-  @Column(name = "controls", nullable = false, length = 65535)
-  private String controls;
+  @Column(name = "tenant_id", nullable = false, unique = true)
+  private Long tenantId;
+
+  @Column(name = "policies", nullable = false, columnDefinition = "TEXT")
+  private String policies;
+
+  @Column(name = "case_handover_policies", columnDefinition = "TEXT")
+  private String caseHandoverPolicies;
 
   @Column(name = "update_date", nullable = false)
   private LocalDateTime updateDate;
