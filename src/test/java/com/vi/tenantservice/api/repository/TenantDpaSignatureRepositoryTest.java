@@ -268,6 +268,43 @@ class TenantDpaSignatureRepositoryTest {
   }
 
   @Test
+  void outstandingCount_Should_beScopedToTheReservationThatMintedTheLinks() {
+    // tenant 11 was reserved once (A), released, then reserved again (B). A's links are already
+    // unusable, so they must not count against B's budget.
+    var now = LocalDateTime.now();
+    var hashA = "HASH-RESERVATION-A";
+    var hashB = "HASH-RESERVATION-B";
+    signatureRepository.save(boundPendingLink(11L, "L1", hashA, now));
+    signatureRepository.save(boundPendingLink(11L, "L2", hashA, now));
+    signatureRepository.save(boundPendingLink(11L, "L3", hashB, now));
+    signatureRepository.flush();
+
+    assertThat(
+            signatureRepository
+                .countByTenantIdAndReservationTokenHashAndStatusAndTokenExpiresAtAfter(
+                    11L, hashB, DpaSignatureStatus.PENDING, now))
+        .isEqualTo(1);
+    assertThat(
+            signatureRepository
+                .countByTenantIdAndReservationTokenHashAndStatusAndTokenExpiresAtAfter(
+                    11L, hashA, DpaSignatureStatus.PENDING, now))
+        .isEqualTo(2);
+  }
+
+  private TenantDpaSignatureEntity boundPendingLink(
+      Long tenantId, String tokenHash, String reservationTokenHash, LocalDateTime now) {
+    return TenantDpaSignatureEntity.builder()
+        .tenantId(tenantId)
+        .dpaVersion(VERSION)
+        .status(DpaSignatureStatus.PENDING)
+        .tokenHash(tokenHash)
+        .reservationTokenHash(reservationTokenHash)
+        .tokenExpiresAt(now.plusDays(1))
+        .createDate(now)
+        .build();
+  }
+
+  @Test
   void deleteByTenantId_Should_removeAllRowsOfTheTenant() {
     // given
     var now = LocalDateTime.now();

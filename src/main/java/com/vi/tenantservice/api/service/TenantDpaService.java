@@ -182,10 +182,19 @@ public class TenantDpaService {
     return rawToken;
   }
 
-  /** Outstanding, unexpired links of a tenant — the throttle input for the public forward. */
-  public long countOutstandingSignInvites(Long tenantId) {
-    return signatureRepository.countByTenantIdAndStatusAndTokenExpiresAtAfter(
-        tenantId, DpaSignatureStatus.PENDING, LocalDateTime.now());
+  /**
+   * Outstanding, unexpired links minted from the given reservation — the throttle input for the
+   * public forward. Counting per RESERVATION rather than per tenant id matters once links are
+   * bound: after a release and a fresh reservation of the same id, the previous links are already
+   * unusable, so charging them to the new onboarding would 429 its very first forward.
+   */
+  public long countOutstandingSignInvites(Long tenantId, String reservationToken) {
+    return signatureRepository
+        .countByTenantIdAndReservationTokenHashAndStatusAndTokenExpiresAtAfter(
+            tenantId,
+            DpaSignToken.hash(reservationToken),
+            DpaSignatureStatus.PENDING,
+            LocalDateTime.now());
   }
 
   /**

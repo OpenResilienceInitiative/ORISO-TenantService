@@ -35,9 +35,15 @@ public interface TenantDpaSignatureRepository
   /** App-level replacement for the dropped DB cascade: removes all rows of a deleted tenant. */
   long deleteByTenantId(Long tenantId);
 
-  /** Outstanding, unexpired links of a tenant — throttle input for the public forward endpoint. */
-  long countByTenantIdAndStatusAndTokenExpiresAtAfter(
-      Long tenantId, DpaSignatureStatus status, LocalDateTime now);
+  /**
+   * Outstanding, unexpired links minted from ONE specific reservation — throttle input for the
+   * public forward endpoint. Scoped by the reservation hash, not merely by tenant id: an id that
+   * was released and reserved again keeps its number, and the previous reservation's links are
+   * already dead (their binding no longer matches), so counting them would spend the new
+   * onboarding's budget on links nobody can use.
+   */
+  long countByTenantIdAndReservationTokenHashAndStatusAndTokenExpiresAtAfter(
+      Long tenantId, String reservationTokenHash, DpaSignatureStatus status, LocalDateTime now);
 
   /**
    * Atomically consumes a PENDING sign token: flips it to SIGNED, records the signer, and clears

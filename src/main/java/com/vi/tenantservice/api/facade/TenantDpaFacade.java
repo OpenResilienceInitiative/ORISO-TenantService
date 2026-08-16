@@ -121,6 +121,7 @@ public class TenantDpaFacade {
    *     is no longer open (410)
    * @throws DpaNotPublishedException nothing is published to sign (409)
    */
+  @Transactional
   public DpaSignInviteDTO createPublicForwardSignInvite(PublicDpaForwardRequestDTO request) {
     if (request == null
         || request.getReservedTenantId() == null
@@ -132,7 +133,7 @@ public class TenantDpaFacade {
     var tenantId = request.getReservedTenantId();
     var reservation =
         tenantIdReservationRepository
-            .findById(tenantId)
+            .findByTenantIdForUpdate(tenantId)
             .orElseThrow(() -> new InvalidDpaSignTokenException("Unknown tenant-ID reservation"));
     if (!constantTimeEquals(reservation.getToken(), request.getTenantIdReservationToken())) {
       throw new InvalidDpaSignTokenException("Tenant-ID reservation token mismatch");
@@ -153,7 +154,9 @@ public class TenantDpaFacade {
     // Capping instead of replacing is deliberate: the product rule is that every issued link keeps
     // working until a signature lands, so an admin who forwarded to two people does not silently
     // break the first one.
-    if (tenantDpaService.countOutstandingSignInvites(tenantId) >= MAX_OUTSTANDING_INVITES) {
+    if (tenantDpaService.countOutstandingSignInvites(
+            tenantId, request.getTenantIdReservationToken())
+        >= MAX_OUTSTANDING_INVITES) {
       throw new ResponseStatusException(
           HttpStatus.TOO_MANY_REQUESTS,
           "Too many outstanding sign links for this onboarding; wait for one to be used or to"

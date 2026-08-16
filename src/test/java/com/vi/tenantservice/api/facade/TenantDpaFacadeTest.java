@@ -217,7 +217,7 @@ class TenantDpaFacadeTest {
       long tenantId,
       String token,
       com.vi.tenantservice.api.model.TenantIdReservationStatus status) {
-    when(tenantIdReservationRepository.findById(tenantId))
+    when(tenantIdReservationRepository.findByTenantIdForUpdate(tenantId))
         .thenReturn(
             Optional.of(
                 com.vi.tenantservice.api.model.TenantIdReservationEntity.builder()
@@ -252,7 +252,7 @@ class TenantDpaFacadeTest {
   @Test
   void createPublicForwardSignInvite_Should_failClosed_When_reservationUnknown() {
     // given
-    when(tenantIdReservationRepository.findById(42L)).thenReturn(Optional.empty());
+    when(tenantIdReservationRepository.findByTenantIdForUpdate(42L)).thenReturn(Optional.empty());
 
     // when / then
     assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
@@ -292,13 +292,31 @@ class TenantDpaFacadeTest {
     // signature rows) without limit. Existing links are capped, never replaced — the product rule
     // is that every issued link keeps working until a signature lands.
     givenReservation(42L, "reservation-token");
-    when(tenantDpaService.countOutstandingSignInvites(42L))
+    when(tenantDpaService.countOutstandingSignInvites(42L, "reservation-token"))
         .thenReturn((long) TenantDpaFacade.MAX_OUTSTANDING_INVITES);
 
     assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
         .isInstanceOf(ResponseStatusException.class)
         .hasMessageContaining("429");
     verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void createPublicForwardSignInvite_Should_countOnlyLinksOfThePresentedReservation() {
+    // an id released and reserved again keeps its number; the previous reservation's links are
+    // already dead (binding mismatch), so they must not spend the new onboarding's budget
+    givenReservation(42L, "reservation-token");
+    var operatorVersion = LocalDateTime.of(2026, 7, 19, 20, 0);
+    when(governingDpaResolver.resolveForUnregisteredTenant())
+        .thenReturn(new GoverningDpaResolver.GoverningDpa(1L, operatorVersion));
+    when(tenantDpaService.createSignInvite(
+            eq(42L), eq(operatorVersion), any(), eq(null), eq("reservation-token")))
+        .thenReturn("RAWTOKEN");
+
+    tenantDpaFacade.createPublicForwardSignInvite(forwardRequest());
+
+    // the budget question is asked about THIS reservation, never about the tenant id alone
+    verify(tenantDpaService).countOutstandingSignInvites(42L, "reservation-token");
   }
 
   @Test
