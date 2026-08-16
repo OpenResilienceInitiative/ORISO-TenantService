@@ -32,6 +32,7 @@ import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -55,6 +56,8 @@ public class TenantConverter {
   private final @NonNull TemplateService templateService;
 
   private final @NonNull TemplateRenderer templateRenderer;
+
+  private final @NonNull SmtpPasswordEncryptionService smtpPasswordEncryptionService;
 
   public TenantEntity toEntity(MultilingualTenantDTO tenantDTO) {
     var builder =
@@ -683,6 +686,9 @@ public class TenantConverter {
             nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()));
   }
 
+  /** Placeholder some clients send back instead of a real password; never a stored value. */
+  public static final String SMTP_PASSWORD_MASK = "********";
+
   private TenantSmtpSettings toTenantSmtpSettings(SmtpConfig smtpConfig) {
     if (smtpConfig == null) {
       return null;
@@ -693,23 +699,34 @@ public class TenantConverter {
         .port(smtpConfig.getPort())
         .secure(nullAsFalse(smtpConfig.getSecure()))
         .username(smtpConfig.getUsername())
-        .password(smtpConfig.getPassword())
+        .password(
+            smtpPasswordEncryptionService.encryptNewPassword(
+                normalizeIncomingSmtpPassword(smtpConfig.getPassword())))
         .from(smtpConfig.getFrom())
         .emailThemeColor(smtpConfig.getEmailThemeColor())
         .build();
+  }
+
+  /** Blank or masked passwords mean "unchanged" (write-only contract, #182). */
+  private static String normalizeIncomingSmtpPassword(String password) {
+    if (password == null || password.isBlank() || SMTP_PASSWORD_MASK.equals(password)) {
+      return null;
+    }
+    return password;
   }
 
   private SmtpConfig toSmtpConfig(TenantSmtpSettings smtpSettings) {
     if (smtpSettings == null) {
       return null;
     }
+    // write-only contract (#182): the stored password never leaves the service
     return new SmtpConfig()
         .enabled(smtpSettings.isEnabled())
         .host(smtpSettings.getHost())
         .port(smtpSettings.getPort())
         .secure(smtpSettings.isSecure())
         .username(smtpSettings.getUsername())
-        .password(smtpSettings.getPassword())
+        .passwordSet(smtpSettings.getPassword() != null && !smtpSettings.getPassword().isBlank())
         .from(smtpSettings.getFrom())
         .emailThemeColor(smtpSettings.getEmailThemeColor());
   }
@@ -775,10 +792,15 @@ public class TenantConverter {
   /**
    * A stored value that no longer maps to a known effect must not break the login screen: an
    * unknown or absent name reads as NONE, which is the plain stage.
+   *
+   * <p>Absent means NONE <em>to a reader</em> only. The column stays NULL, because "never
+   * configured" and "an administrator chose the plain stage" are different facts and changeset 0029
+   * deliberately does not backfill. Returning null here leaked that distinction into the API, where
+   * it is not a meaningful answer to "which effect does this tenant run".
    */
   private Theming.LoginEffectEnum toLoginEffect(String stored) {
     if (stored == null) {
-      return null;
+      return Theming.LoginEffectEnum.NONE;
     }
     try {
       return Theming.LoginEffectEnum.fromValue(stored);

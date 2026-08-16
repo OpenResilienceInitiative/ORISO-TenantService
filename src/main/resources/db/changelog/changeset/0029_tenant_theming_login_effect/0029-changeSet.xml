@@ -28,7 +28,7 @@
                 <columnExists tableName="tenant" columnName="theming_login_effect"/>
             </not>
         </preConditions>
-        <sqlFile path="db/changelog/changeset/0028_tenant_theming_login_effect/addThemingLoginEffect.sql" stripComments="true" />
+        <sqlFile path="db/changelog/changeset/0029_tenant_theming_login_effect/addThemingLoginEffect.sql" stripComments="true" />
         <rollback>
             <sql>ALTER TABLE `tenantservice`.`tenant` DROP COLUMN `theming_login_effect`;</sql>
         </rollback>

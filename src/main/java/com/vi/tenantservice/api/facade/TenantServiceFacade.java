@@ -1,5 +1,6 @@
 package com.vi.tenantservice.api.facade;
 
+import static com.vi.tenantservice.api.util.JsonConverter.convertFromJson;
 import static com.vi.tenantservice.api.util.JsonConverter.convertToJson;
 import static java.util.Objects.nonNull;
 import static org.apache.commons.collections4.ListUtils.emptyIfNull;
@@ -29,6 +30,7 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
+import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
@@ -478,12 +480,39 @@ public class TenantServiceFacade {
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
         sanitizedTenantDTO, existingTenantEntity);
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
+    // toEntity mutates existingTenantEntity, so capture the stored settings first
+    var existingSettingsJson = existingTenantEntity.getSettings();
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
+    preserveStoredSmtpPassword(existingSettingsJson, updatedEntity);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     updatedEntity = tenantService.update(updatedEntity);
     updateExtendedSettingsAsConsultingType(sanitizedTenantDTO, existingTenantEntity.getId());
     log.info("Tenant with id {} updated", existingTenantEntity.getId());
     return getConvertedAndEnrichedTenant(updatedEntity);
+  }
+
+  /**
+   * The API is write-only for the SMTP password (#182): clients send it blank, absent or masked
+   * when it should stay unchanged, so the stored value must survive the settings full-replace.
+   */
+  private void preserveStoredSmtpPassword(String existingSettingsJson, TenantEntity updatedEntity) {
+    if (existingSettingsJson == null || updatedEntity.getSettings() == null) {
+      return;
+    }
+    TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
+    if (updatedSettings.getSmtp() == null
+        || nonNull(updatedSettings.getSmtp().getPassword())
+            && !updatedSettings.getSmtp().getPassword().isBlank()) {
+      return;
+    }
+    TenantSettings existingSettings = convertFromJson(existingSettingsJson);
+    if (existingSettings.getSmtp() == null
+        || existingSettings.getSmtp().getPassword() == null
+        || existingSettings.getSmtp().getPassword().isBlank()) {
+      return;
+    }
+    updatedSettings.getSmtp().setPassword(existingSettings.getSmtp().getPassword());
+    updatedEntity.setSettings(convertToJson(updatedSettings));
   }
 
   private void setContentActivationDates(TenantEntity entity, MultilingualTenantDTO tenantDTO) {

@@ -816,7 +816,10 @@ class TenantServiceFacadeTest {
     ReflectionTestUtils.setField(
         tenantServiceFacade,
         "tenantConverter",
-        new TenantConverter(new TemplateService(), templateRenderer));
+        new TenantConverter(
+            new TemplateService(),
+            templateRenderer,
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
 
     Optional<TenantRestrictedData> defaultTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
     Optional<TenantRestrictedData> accessTokenTenantData =
