@@ -73,6 +73,14 @@ public class TenantEntity implements TenantData {
   @Column(name = "theming_signal")
   private String themingSignal;
 
+  /**
+   * Which decorative effect the login stage runs; {@code null} means never configured and is read
+   * as NONE. Stored as the enum name rather than an ordinal so the column stays readable and
+   * reordering the enum cannot silently repoint existing tenants.
+   */
+  @Column(name = "theming_login_effect", length = 32)
+  private String themingLoginEffect;
+
   @Column(name = "content_impressum")
   private String contentImpressum;
 

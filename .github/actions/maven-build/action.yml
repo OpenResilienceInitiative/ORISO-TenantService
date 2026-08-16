@@ -59,6 +59,50 @@ runs:
           sys.exit(1)
       PY
 
+  # jacoco:report is bound to the `test` phase behind surefire, so a green suite has
+  # already written the report and this step has nothing to do. Only a red suite halts
+  # the build before the goal, and only then is it invoked directly against the
+  # execution data the prepare-agent JVM left behind.
+  #
+  # That direct invocation is best-effort: run from the command line the goal resolves
+  # the plugin's reporting dependencies, which the lifecycle-bound execution never needs
+  # and which do not reliably resolve from a restored runner cache. Coverage is a
+  # diagnostic, so failing to produce it must never fail the build.
+  - name: Generate coverage report
+    if: ${{ always() }}
+    shell: bash
+    run: |
+      if [ -f target/site/jacoco/jacoco.csv ]; then
+        echo "Coverage report already written during the test phase."
+      elif [ -f target/jacoco.exec ]; then
+        ./mvnw -B jacoco:report \
+          || echo "Standalone jacoco:report failed; coverage is unavailable for this run."
+      else
+        echo "No target/jacoco.exec: the run did not reach the test phase."
+      fi
+
+  - name: Report coverage
+    if: ${{ always() }}
+    shell: bash
+    run: |
+      set -o pipefail
+      {
+        echo "### Coverage"
+        echo
+        python3 scripts/ci/coverage-summary.py
+      } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # The summary carries totals and a per-package breakdown. Per-class and per-line
+  # detail lives in the HTML report, which is too large to inline.
+  - name: Upload coverage report
+    if: ${{ always() }}
+    uses: actions/upload-artifact@v4
+    with:
+      name: jacoco-coverage-report
+      path: target/site/jacoco
+      if-no-files-found: ignore
+      retention-days: 14
+
   - name: Package Java application
     shell: bash
     run: ./mvnw -B package -DskipTests

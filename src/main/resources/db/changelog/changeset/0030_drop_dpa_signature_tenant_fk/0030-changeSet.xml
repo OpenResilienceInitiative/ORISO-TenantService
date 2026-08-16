@@ -11,7 +11,7 @@
         <preConditions onFail="MARK_RAN">
             <foreignKeyConstraintExists foreignKeyName="fk_tenant_dpa_signature_tenant" foreignKeyTableName="tenant_dpa_signature"/>
         </preConditions>
-        <sqlFile path="db/changelog/changeset/0029_drop_dpa_signature_tenant_fk/dropDpaSignatureTenantFk.sql" stripComments="true" />
+        <sqlFile path="db/changelog/changeset/0030_drop_dpa_signature_tenant_fk/dropDpaSignatureTenantFk.sql" stripComments="true" />
         <rollback>
             <sql>
                 DELETE FROM `tenantservice`.`tenant_dpa_signature`

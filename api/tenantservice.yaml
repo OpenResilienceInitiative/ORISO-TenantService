@@ -1716,6 +1716,17 @@ components:
         secondaryColor:
           type: string
           example: "#FFFFFF"
+        loginEffect:
+          type: string
+          enum: [NONE, LINES, CONNECTED_DOTS, CRACKS]
+          example: "CRACKS"
+          description: >-
+            Which decorative effect the tenant's login stage runs. `NONE` (the default,
+            and what an unset value means) keeps the plain stage with its cursor light
+            cone. The other three are mutually exclusive looks; the frontend loads the
+            code for exactly the one named here and never the others, so this field also
+            decides what a visitor downloads. Desktop only — the stage is not rendered on
+            small viewports, so no effect code is fetched there regardless of this value.
         signal:
           type: string
           example: "#D93025"

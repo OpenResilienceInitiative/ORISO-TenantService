@@ -12,7 +12,7 @@
                 <columnExists tableName="tenant_dpa_signature" columnName="reservation_token_hash"/>
             </not>
         </preConditions>
-        <sqlFile path="db/changelog/changeset/0030_dpa_signature_reservation_binding/addDpaSignatureReservationBinding.sql" stripComments="true" />
+        <sqlFile path="db/changelog/changeset/0031_dpa_signature_reservation_binding/addDpaSignatureReservationBinding.sql" stripComments="true" />
         <rollback>
             <sql>ALTER TABLE `tenantservice`.`tenant_dpa_signature` DROP COLUMN reservation_token_hash;</sql>
         </rollback>

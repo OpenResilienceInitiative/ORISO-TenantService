@@ -664,6 +664,40 @@
                     </annotationProcessorPaths>
                 </configuration>
             </plugin>
+            <!-- Coverage for the CI run summary. `report` is bound to the `test` phase so
+                 it runs behind the surefire `unit-tests` execution. CI runs `mvnw verify`,
+                 so the integration-test execution appends to the same exec file after the
+                 report has already been written — the reported figure is therefore the
+                 unit-suite floor, not the whole picture. Generated and inner classes are
+                 excluded: they inflate the denominator without being anything a test could
+                 meaningfully reach. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.10</version>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*generated*/**</exclude>
+                        <exclude>**/org/openapitools/**</exclude>
+                        <exclude>**/*$*</exclude>
+                    </excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
