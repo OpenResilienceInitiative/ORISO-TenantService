@@ -902,6 +902,72 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void findTenantBySubdomain_Should_NotOverride_When_ResolvedTenantIsTheTechnicalTenantSentinel() {
+    // given: a platform admin's token carries tenantId 0 -- this service's own sentinel for
+    // "platform scope, no tenant". It has no row in the tenant table, so treating it as an
+    // override made every authenticated platform admin fail (#199).
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    ReflectionTestUtils.setField(
+        tenantServiceFacade,
+        "tenantConverter",
+        new TenantConverter(
+            new TemplateService(),
+            templateRenderer,
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+
+    Optional<TenantRestrictedData> mainTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(mainTenant);
+    when(tenantResolverService.tryResolveForNonAuthUsers()).thenReturn(Optional.of(0L));
+    when(translationService.getCurrentLanguageContext()).thenReturn("de");
+
+    // when
+    Optional<RestrictedTenantDTO> tenantDTO =
+        tenantServiceFacade.findTenantBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME, null);
+
+    // then: the subdomain's own public data comes back, and the override path is not entered
+    assertThat(tenantDTO).isPresent();
+    assertThat(tenantDTO.get().getContent().getPrivacy()).contains("content1");
+    verify(tenantService, never()).findRestrictedTenantDataById(0L);
+    verifyNoInteractions(singleDomainTenantOverrideService);
+  }
+
+  @Test
+  void
+      getRestrictedTenantDataDeterminingTenantContext_Should_NotOverride_When_ResolvedTenantIsTheTechnicalTenantSentinel() {
+    // given: same sentinel hazard as findTenantBySubdomain, on the tenant-context path (#199).
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    ReflectionTestUtils.setField(
+        tenantServiceFacade,
+        "tenantConverter",
+        new TenantConverter(
+            new TemplateService(),
+            templateRenderer,
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+
+    var settings =
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+            .ApplicationSettingsDTO();
+    settings.setMainTenantSubdomainForSingleDomainMultitenancy(
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO()
+            .value(SINGLE_DOMAIN_SUBDOMAIN_NAME));
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(settings);
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(getTenantWithPrivacy("{\"de\":\"content1\"}"));
+    when(tenantResolverService.tryResolve()).thenReturn(Optional.of(0L));
+    when(translationService.getCurrentLanguageContext()).thenReturn("de");
+
+    // when
+    RestrictedTenantDTO tenantDTO =
+        tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext();
+
+    // then
+    assertThat(tenantDTO.getContent().getPrivacy()).contains("content1");
+    verify(tenantService, never()).findRestrictedTenantDataById(0L);
+    verifyNoInteractions(singleDomainTenantOverrideService);
+  }
+
+  @Test
   void findTenantBySubdomain_Should_ReturnEmpty_When_MainTenantIsNotFoundInSingleDomainMode() {
     // given
     ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
