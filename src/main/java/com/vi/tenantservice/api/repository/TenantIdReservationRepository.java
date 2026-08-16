@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.repository;
 import com.vi.tenantservice.api.model.TenantIdReservationEntity;
 import com.vi.tenantservice.api.model.TenantIdReservationStatus;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -10,6 +11,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 /** Persistence for the authoritative tenant ID allocation ledger (TEN-INV-U1). */
@@ -24,8 +26,13 @@ public interface TenantIdReservationRepository
    * concurrent link creation for one onboarding: the reservation row is the natural per-onboarding
    * mutex (it already has to be read to authorise the call), so locking it makes the
    * count-then-insert of the outstanding-link cap atomic without inventing a second lock table.
+   *
+   * <p>The lock wait is bounded: a stuck holder would otherwise block forwards for the database
+   * default (50s on MariaDB) with an HTTP thread waiting on it. On timeout the caller answers
+   * "retry shortly" instead of a generic 500.
    */
   @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
   @Query("SELECT r FROM TenantIdReservationEntity r WHERE r.tenantId = :tenantId")
   Optional<TenantIdReservationEntity> findByTenantIdForUpdate(@Param("tenantId") Long tenantId);
 

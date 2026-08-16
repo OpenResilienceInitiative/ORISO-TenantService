@@ -287,6 +287,19 @@ class TenantDpaFacadeTest {
   }
 
   @Test
+  void createPublicForwardSignInvite_Should_answerRetry_When_theReservationRowIsLocked() {
+    // a concurrent forward for the same onboarding holds the row; the caller must get a retryable
+    // answer rather than a generic 500 once the bounded lock wait elapses
+    when(tenantIdReservationRepository.findByTenantIdForUpdate(42L))
+        .thenThrow(new org.springframework.dao.CannotAcquireLockException("lock wait timeout"));
+
+    assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
+        .isInstanceOf(ResponseStatusException.class)
+        .hasMessageContaining("429");
+    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any(), any());
+  }
+
+  @Test
   void createPublicForwardSignInvite_Should_throttle_When_tooManyLinksAreAlreadyOutstanding() {
     // the endpoint needs no session, so a leaked onboarding token could otherwise mint links (and
     // signature rows) without limit. Existing links are capped, never replaced — the product rule

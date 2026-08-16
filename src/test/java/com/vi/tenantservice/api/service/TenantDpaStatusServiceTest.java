@@ -628,16 +628,53 @@ class TenantDpaStatusServiceTest {
 
   // --- contract on hold + link invalidation (ORISO-TenantService#179) ----------------------
 
+  private static TenantDpaSignatureEntity pendingLink(String reservationTokenHash) {
+    return TenantDpaSignatureEntity.builder()
+        .tenantId(TENANT_ID)
+        .dpaVersion(VERSION_2)
+        .status(DpaSignatureStatus.PENDING)
+        .reservationTokenHash(reservationTokenHash)
+        .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+        .build();
+  }
+
   @Test
-  void getStatus_Should_reportForwardPending_When_unsignedButALiveSignLinkIsOutstanding() {
+  void getStatus_Should_notReportForwardPending_ForALinkOfAPreviousOccupantOfTheId() {
+    // reservation A left a live PENDING link; the id was released and re-reserved as B. A's link
+    // can no longer be confirmed, so claiming B is "awaiting a signer" would be a lying status.
     givenTenantWithEmbeddedVersion(VERSION_2);
     givenNoSignatures();
-    when(signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+    when(signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
             org.mockito.ArgumentMatchers.eq(TENANT_ID),
             org.mockito.ArgumentMatchers.eq(VERSION_2),
             org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
             any(LocalDateTime.class)))
-        .thenReturn(true);
+        .thenReturn(List.of(pendingLink(DpaSignToken.hash("reservation-token-A"))));
+    when(tenantIdReservationRepository.findById(TENANT_ID))
+        .thenReturn(
+            Optional.of(
+                com.vi.tenantservice.api.model.TenantIdReservationEntity.builder()
+                    .tenantId(TENANT_ID)
+                    .token("reservation-token-B")
+                    .status(com.vi.tenantservice.api.model.TenantIdReservationStatus.RESERVED)
+                    .build()));
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
+    assertThat(status.forwardPending()).isFalse();
+  }
+
+  @Test
+  void getStatus_Should_reportForwardPending_When_unsignedButALiveSignLinkIsOutstanding() {
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+    when(signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+            org.mockito.ArgumentMatchers.eq(TENANT_ID),
+            org.mockito.ArgumentMatchers.eq(VERSION_2),
+            org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
+            any(LocalDateTime.class)))
+        .thenReturn(List.of(pendingLink(null)));
 
     var status = service.getStatus(TENANT_ID);
 
@@ -650,12 +687,12 @@ class TenantDpaStatusServiceTest {
   void getStatus_Should_notReportForwardPending_When_theOnlyOutstandingLinkExpired() {
     givenTenantWithEmbeddedVersion(VERSION_2);
     givenNoSignatures();
-    when(signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+    when(signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
             org.mockito.ArgumentMatchers.eq(TENANT_ID),
             org.mockito.ArgumentMatchers.eq(VERSION_2),
             org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
             any(LocalDateTime.class)))
-        .thenReturn(false);
+        .thenReturn(List.of());
 
     var status = service.getStatus(TENANT_ID);
 
@@ -678,7 +715,7 @@ class TenantDpaStatusServiceTest {
     assertThat(status.status()).isEqualTo(TenantDpaStatus.VALID);
     assertThat(status.forwardPending()).isFalse();
     verify(signatureRepository, never())
-        .existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(any(), any(), any(), any());
+        .findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(any(), any(), any(), any());
   }
 
   @Test

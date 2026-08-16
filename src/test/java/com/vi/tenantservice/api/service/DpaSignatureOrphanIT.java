@@ -137,8 +137,10 @@ class DpaSignatureOrphanIT {
                         "Organisation A",
                         false,
                         "de");
-                  } catch (RuntimeException expectedWhenTheGuardWins) {
-                    // either outcome is acceptable; the invariant is checked below
+                  } catch (InvalidDpaSignTokenException expectedWhenTheGuardWins) {
+                    // ONLY the guard rejecting the token is an acceptable alternative outcome; any
+                    // other failure means the confirmation never reached the signature write, and
+                    // the UNSIGNED assertion below would then pass for the wrong reason
                   }
                   return null;
                 });

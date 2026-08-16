@@ -234,17 +234,17 @@ class TenantDpaSignatureRepositoryTest {
     signatureRepository.flush();
 
     assertThat(
-            signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
                 6L, VERSION, DpaSignatureStatus.PENDING, now))
-        .isFalse();
+        .isEmpty();
 
     pendingLink(6L, "HASH-LIVE", now);
     signatureRepository.flush();
 
     assertThat(
-            signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
                 6L, VERSION, DpaSignatureStatus.PENDING, now))
-        .isTrue();
+        .hasSize(1);
   }
 
   @Test
@@ -258,13 +258,13 @@ class TenantDpaSignatureRepositoryTest {
     // the stale link can only ever produce an OUTDATED signature, so the CURRENT contract is not
     // "awaiting a signer" because of it
     assertThat(
-            signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
                 10L, VERSION, DpaSignatureStatus.PENDING, now))
-        .isFalse();
+        .isEmpty();
     assertThat(
-            signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
                 10L, supersededVersion, DpaSignatureStatus.PENDING, now))
-        .isTrue();
+        .hasSize(1);
   }
 
   @Test

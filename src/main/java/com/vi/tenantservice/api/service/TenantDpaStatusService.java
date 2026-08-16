@@ -111,8 +111,15 @@ public class TenantDpaStatusService {
     if (currentVersion == null) {
       return false;
     }
-    return signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
-        tenantId, currentVersion, DpaSignatureStatus.PENDING, LocalDateTime.now());
+    // Ownership applies here too: a live link from a PREVIOUS occupant of this tenant ID can no
+    // longer be confirmed (the confirm path checks the binding), so reporting it as "awaiting a
+    // signer" would be a status that lies to the wizard and the legal gate.
+    return !dpaSignatureOwnership
+        .filterCurrentOccupant(
+            tenantId,
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                tenantId, currentVersion, DpaSignatureStatus.PENDING, LocalDateTime.now()))
+        .isEmpty();
   }
 
   /**

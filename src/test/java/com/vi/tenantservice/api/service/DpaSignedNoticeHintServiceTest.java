@@ -60,7 +60,8 @@ class DpaSignedNoticeHintServiceTest {
   }
 
   @Test
-  void notifySignatureRecorded_Should_notFailTheConfirmation_When_theNoticePoolIsSaturated() {
+  void notifySignatureRecorded_Should_notFailTheConfirmation_When_theNoticePoolIsSaturated()
+      throws InterruptedException {
     // given a pool whose only worker is blocked and whose single queue slot is taken
     executor = saturableExecutor();
     release = new CountDownLatch(1);
@@ -75,7 +76,11 @@ class DpaSignedNoticeHintServiceTest {
     var service = new DpaSignedNoticeHintService(restTemplate, executor, USER_SERVICE_URL);
 
     service.notifySignatureRecorded(1L); // occupies the worker
-    assertThatCode(() -> started.await(5, TimeUnit.SECONDS)).doesNotThrowAnyException();
+    // await() RETURNS false on timeout rather than throwing, so this must be asserted: without it
+    // the queue might never have been filled and the rejection below never exercised
+    assertThat(started.await(5, TimeUnit.SECONDS))
+        .as("the first hint must actually reach the worker and block it")
+        .isTrue();
     service.notifySignatureRecorded(2L); // fills the queue
 
     // when the pool has nothing left to give, the hint must be shed silently — the signer's
@@ -115,7 +120,7 @@ class DpaSignedNoticeHintServiceTest {
   }
 
   @Test
-  void notifySignatureRecorded_Should_swallowTransportFailures() {
+  void notifySignatureRecorded_Should_swallowTransportFailures() throws InterruptedException {
     executor = saturableExecutor();
     var delivered = new CountDownLatch(1);
     when(restTemplate.postForLocation(anyString(), any()))
@@ -129,7 +134,8 @@ class DpaSignedNoticeHintServiceTest {
 
     service.notifySignatureRecorded(7L);
 
-    assertThatCode(() -> delivered.await(5, TimeUnit.SECONDS)).doesNotThrowAnyException();
-    assertThat(delivered.getCount()).isZero();
+    assertThat(delivered.await(5, TimeUnit.SECONDS))
+        .as("the hint must actually have been dispatched before its failure is swallowed")
+        .isTrue();
   }
 }

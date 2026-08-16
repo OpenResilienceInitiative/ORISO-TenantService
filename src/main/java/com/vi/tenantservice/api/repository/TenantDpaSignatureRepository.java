@@ -29,7 +29,7 @@ public interface TenantDpaSignatureRepository
    * minted for a superseded version can only ever produce an OUTDATED signature, so reporting the
    * CURRENT contract as "awaiting a signer" because of it would mislead the wizard and the gate.
    */
-  boolean existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+  List<TenantDpaSignatureEntity> findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
       Long tenantId, LocalDateTime dpaVersion, DpaSignatureStatus status, LocalDateTime now);
 
   /** App-level replacement for the dropped DB cascade: removes all rows of a deleted tenant. */

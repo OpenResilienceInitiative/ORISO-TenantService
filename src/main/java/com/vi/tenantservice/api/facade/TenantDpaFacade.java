@@ -11,6 +11,7 @@ import com.vi.tenantservice.api.model.PublicDpaForwardRequestDTO;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.model.TenantDpaStatus;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
+import com.vi.tenantservice.api.model.TenantIdReservationEntity;
 import com.vi.tenantservice.api.model.TenantIdReservationStatus;
 import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
@@ -35,6 +36,7 @@ import java.util.Objects;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -131,10 +133,19 @@ public class TenantDpaFacade {
           HttpStatus.BAD_REQUEST, "reservedTenantId and tenantIdReservationToken are required");
     }
     var tenantId = request.getReservedTenantId();
-    var reservation =
-        tenantIdReservationRepository
-            .findByTenantIdForUpdate(tenantId)
-            .orElseThrow(() -> new InvalidDpaSignTokenException("Unknown tenant-ID reservation"));
+    TenantIdReservationEntity reservation;
+    try {
+      reservation =
+          tenantIdReservationRepository
+              .findByTenantIdForUpdate(tenantId)
+              .orElseThrow(() -> new InvalidDpaSignTokenException("Unknown tenant-ID reservation"));
+    } catch (PessimisticLockingFailureException contention) {
+      // another forward for this onboarding holds the row; "retry shortly" is the honest answer,
+      // not a 500 — same status the cap uses, since both mean "come back in a moment"
+      throw new ResponseStatusException(
+          HttpStatus.TOO_MANY_REQUESTS,
+          "Another sign link for this onboarding is being created; please retry");
+    }
     if (!constantTimeEquals(reservation.getToken(), request.getTenantIdReservationToken())) {
       throw new InvalidDpaSignTokenException("Tenant-ID reservation token mismatch");
     }
