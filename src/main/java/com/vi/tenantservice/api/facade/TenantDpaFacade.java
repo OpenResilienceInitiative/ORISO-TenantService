@@ -53,6 +53,13 @@ public class TenantDpaFacade {
 
   private static final Duration INVITE_TTL = Duration.ofDays(14);
 
+  /**
+   * How many unexpired sign links one onboarding may have outstanding at once. The public forward
+   * needs no session, so this is what stops a leaked onboarding token from minting links (and
+   * signature rows) without limit; a real forward needs one or two.
+   */
+  static final int MAX_OUTSTANDING_INVITES = 5;
+
   private final @NonNull TenantDpaService tenantDpaService;
   private final @NonNull TenantDpaStatusService tenantDpaStatusService;
   private final @NonNull GoverningDpaResolver governingDpaResolver;
@@ -141,6 +148,17 @@ public class TenantDpaFacade {
       throw new InvalidDpaSignTokenException(
           "Tenant-ID reservation is no longer open for onboarding");
     }
+    // Anyone holding the onboarding token can call this, and every call mints a link that stays
+    // valid for 14 days, so the endpoint is throttled by how many links are already outstanding.
+    // Capping instead of replacing is deliberate: the product rule is that every issued link keeps
+    // working until a signature lands, so an admin who forwarded to two people does not silently
+    // break the first one.
+    if (tenantDpaService.countOutstandingSignInvites(tenantId) >= MAX_OUTSTANDING_INVITES) {
+      throw new ResponseStatusException(
+          HttpStatus.TOO_MANY_REQUESTS,
+          "Too many outstanding sign links for this onboarding; wait for one to be used or to"
+              + " expire");
+    }
     // A RESERVED id has no tenant row yet by definition, so the governing document is the
     // operator's — the same one the regular resolution returns the moment registration completes.
     var governing = governingDpaResolver.resolveForUnregisteredTenant();
@@ -149,7 +167,8 @@ public class TenantDpaFacade {
           "No data processing agreement is published for reserved tenant " + tenantId + " yet");
     }
     var rawToken =
-        tenantDpaService.createSignInvite(tenantId, governing.version(), INVITE_TTL, null);
+        tenantDpaService.createSignInvite(
+            tenantId, governing.version(), INVITE_TTL, null, request.getTenantIdReservationToken());
     return new DpaSignInviteDTO()
         .token(rawToken)
         .signLink(buildSignLink(rawToken))

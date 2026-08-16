@@ -35,6 +35,10 @@ public interface TenantDpaSignatureRepository
   /** App-level replacement for the dropped DB cascade: removes all rows of a deleted tenant. */
   long deleteByTenantId(Long tenantId);
 
+  /** Outstanding, unexpired links of a tenant — throttle input for the public forward endpoint. */
+  long countByTenantIdAndStatusAndTokenExpiresAtAfter(
+      Long tenantId, DpaSignatureStatus status, LocalDateTime now);
+
   /**
    * Atomically consumes a PENDING sign token: flips it to SIGNED, records the signer, and clears
    * the token — all in one conditional UPDATE. Only the row that is still PENDING is affected, so

@@ -54,4 +54,5 @@
   <include file="db/changelog/changeset/0027_tenant_theming_accent_and_signal/0027-changeSet.xml"/>
   <include file="db/changelog/changeset/0028_platform_dpia_master_data/0028-changeSet.xml"/>
   <include file="db/changelog/changeset/0029_drop_dpa_signature_tenant_fk/0029-changeSet.xml"/>
+  <include file="db/changelog/changeset/0030_dpa_signature_reservation_binding/0030-changeSet.xml"/>
 </databaseChangeLog>

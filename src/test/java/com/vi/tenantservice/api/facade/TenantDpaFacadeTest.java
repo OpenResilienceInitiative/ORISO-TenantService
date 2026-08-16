@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -34,6 +33,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.server.ResponseStatusException;
 
 @ExtendWith(MockitoExtension.class)
 class TenantDpaFacadeTest {
@@ -178,7 +178,7 @@ class TenantDpaFacadeTest {
     // when / then
     assertThatThrownBy(() -> tenantDpaFacade.createSignInvite(5L))
         .isInstanceOf(DpaNotPublishedException.class);
-    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any());
+    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any(), any());
   }
 
   /**
@@ -235,7 +235,8 @@ class TenantDpaFacadeTest {
     var operatorVersion = LocalDateTime.of(2026, 7, 19, 20, 0);
     when(governingDpaResolver.resolveForUnregisteredTenant())
         .thenReturn(new GoverningDpaResolver.GoverningDpa(1L, operatorVersion));
-    when(tenantDpaService.createSignInvite(eq(42L), eq(operatorVersion), any(), eq(null)))
+    when(tenantDpaService.createSignInvite(
+            eq(42L), eq(operatorVersion), any(), eq(null), eq("reservation-token")))
         .thenReturn("RAWTOKEN");
 
     // when
@@ -243,7 +244,8 @@ class TenantDpaFacadeTest {
 
     // then: bound to the RESERVED tenant id, no forwarder account, no session assertion
     assertThat(result.getSignLink()).endsWith("/dpa-sign/RAWTOKEN");
-    verify(tenantDpaService).createSignInvite(eq(42L), eq(operatorVersion), any(), eq(null));
+    verify(tenantDpaService)
+        .createSignInvite(eq(42L), eq(operatorVersion), any(), eq(null), eq("reservation-token"));
     verifyNoInteractions(tenantFacadeAuthorisationService);
   }
 
@@ -255,7 +257,7 @@ class TenantDpaFacadeTest {
     // when / then
     assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
         .isInstanceOf(com.vi.tenantservice.api.service.InvalidDpaSignTokenException.class);
-    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any());
+    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any(), any());
   }
 
   @Test
@@ -266,7 +268,7 @@ class TenantDpaFacadeTest {
     // when / then
     assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
         .isInstanceOf(com.vi.tenantservice.api.service.InvalidDpaSignTokenException.class);
-    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any());
+    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any(), any());
   }
 
   @Test
@@ -281,22 +283,22 @@ class TenantDpaFacadeTest {
 
     assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
         .isInstanceOf(com.vi.tenantservice.api.service.InvalidDpaSignTokenException.class);
-    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any());
+    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any(), any());
   }
 
   @Test
-  void createPublicForwardSignInvite_Should_failClosed_When_theTenantWasDeleted() {
-    // deleting a tenant leaves its ASSIGNED ledger row (with the original token) behind; the old
-    // onboarding token must not be able to recreate sign links or signer PII afterwards
-    givenReservation(
-        42L,
-        "reservation-token",
-        com.vi.tenantservice.api.model.TenantIdReservationStatus.ASSIGNED);
-    lenient().when(tenantService.findTenantById(42L)).thenReturn(Optional.empty());
+  void createPublicForwardSignInvite_Should_throttle_When_tooManyLinksAreAlreadyOutstanding() {
+    // the endpoint needs no session, so a leaked onboarding token could otherwise mint links (and
+    // signature rows) without limit. Existing links are capped, never replaced — the product rule
+    // is that every issued link keeps working until a signature lands.
+    givenReservation(42L, "reservation-token");
+    when(tenantDpaService.countOutstandingSignInvites(42L))
+        .thenReturn((long) TenantDpaFacade.MAX_OUTSTANDING_INVITES);
 
     assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
-        .isInstanceOf(com.vi.tenantservice.api.service.InvalidDpaSignTokenException.class);
-    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any());
+        .isInstanceOf(ResponseStatusException.class)
+        .hasMessageContaining("429");
+    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any(), any());
   }
 
   @Test

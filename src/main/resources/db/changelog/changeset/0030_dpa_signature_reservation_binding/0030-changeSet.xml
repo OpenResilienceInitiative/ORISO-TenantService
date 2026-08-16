@@ -1,0 +1,20 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      ORISO-TenantService#179: a public onboarding sign link belongs to the RESERVATION that
+      minted it, not to the tenant-ID slot. Releasing and re-reserving the same ID within the
+      link's 14-day validity would otherwise resurrect the old link for a different organisation.
+    -->
+    <changeSet author="oriso" id="addDpaSignatureReservationBinding">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant_dpa_signature" columnName="reservation_token_hash"/>
+            </not>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0030_dpa_signature_reservation_binding/addDpaSignatureReservationBinding.sql" stripComments="true" />
+        <rollback>
+            <sql>ALTER TABLE `tenantservice`.`tenant_dpa_signature` DROP COLUMN reservation_token_hash;</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -874,8 +874,12 @@ paths:
         409:
           description: CONFLICT - no data processing agreement is published to sign yet
         410:
-          description: GONE - unknown reservation, reservation token mismatch, or the
-            reservation was released; no information about the reservation state is leaked
+          description: GONE - unknown reservation, reservation token mismatch, a reservation
+            already consumed by registration, or a released one; no information about the
+            reservation state is leaked
+        429:
+          description: TOO MANY REQUESTS - too many unexpired sign links are already outstanding
+            for this onboarding; existing links stay valid, so wait for one to be used or expire
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}/dpa/signatures:

@@ -8,6 +8,8 @@ import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
 import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import com.vi.tenantservice.api.repository.TenantRepository;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -146,6 +148,22 @@ public class TenantDpaService {
    */
   public String createSignInvite(
       Long tenantId, LocalDateTime dpaVersion, Duration ttl, String forwardedByUserId) {
+    return createSignInvite(tenantId, dpaVersion, ttl, forwardedByUserId, null);
+  }
+
+  /**
+   * Same, for the PUBLIC onboarding forward: the raw tenant-ID reservation token that authorised
+   * the call is hashed and stored with the link, binding it to that specific RESERVATION. A tenant
+   * ID released and reserved again keeps its number but gets a new token, so the old link stops
+   * resolving rather than recording a signature for the next holder of the ID (#179). Only the hash
+   * is persisted.
+   */
+  public String createSignInvite(
+      Long tenantId,
+      LocalDateTime dpaVersion,
+      Duration ttl,
+      String forwardedByUserId,
+      String reservationToken) {
     var rawToken = DpaSignToken.generate();
     var now = LocalDateTime.now();
     signatureRepository.save(
@@ -156,10 +174,18 @@ public class TenantDpaService {
             .forwardedByUserId(forwardedByUserId)
             .source(SOURCE_FORWARDED_EXTERNAL)
             .tokenHash(DpaSignToken.hash(rawToken))
+            .reservationTokenHash(
+                reservationToken == null ? null : DpaSignToken.hash(reservationToken))
             .tokenExpiresAt(now.plus(ttl))
             .createDate(now)
             .build());
     return rawToken;
+  }
+
+  /** Outstanding, unexpired links of a tenant — the throttle input for the public forward. */
+  public long countOutstandingSignInvites(Long tenantId) {
+    return signatureRepository.countByTenantIdAndStatusAndTokenExpiresAtAfter(
+        tenantId, DpaSignatureStatus.PENDING, LocalDateTime.now());
   }
 
   /**
@@ -180,7 +206,7 @@ public class TenantDpaService {
                 () ->
                     new InvalidDpaSignTokenException(
                         "Published DPA version for sign token was not found"));
-    var tenantName = requireLiveTenantContext(pending.getTenantId());
+    var tenantName = requireLiveTenantContext(pending);
     return new DpaSignPreview(
         pending.getTenantId(),
         tenantName,
@@ -207,20 +233,39 @@ public class TenantDpaService {
    * still-PENDING signature row survives, and confirming it would write signer PII (and, after an
    * id reuse, a signature that makes an unrelated new tenant look VALID).
    */
-  private String requireLiveTenantContext(Long tenantId) {
+  private String requireLiveTenantContext(TenantDpaSignatureEntity pending) {
+    var tenantId = pending.getTenantId();
+    var reservation = tenantIdReservationRepository.findById(tenantId);
+    if (pending.getReservationTokenHash() != null) {
+      // Link minted from the public onboarding forward: it belongs to THAT reservation, not to the
+      // tenant-ID slot. The ledger keeps the same token when registration consumes the reservation
+      // (RESERVED -> ASSIGNED), so a legitimate link keeps working across registration; a release
+      // plus a fresh reservation of the same id mints a NEW token, so the old link dies here
+      // instead of recording a signature for whoever holds the id next.
+      var currentHash = reservation.map(row -> DpaSignToken.hash(row.getToken())).orElse(null);
+      if (currentHash == null
+          || !constantTimeEquals(currentHash, pending.getReservationTokenHash())) {
+        throw new InvalidDpaSignTokenException(
+            "Sign token no longer matches the reservation it was issued for");
+      }
+    }
     var tenant = tenantRepository.findById(tenantId);
     if (tenant.isPresent()) {
       return tenant.get().getName();
     }
     boolean stillReserved =
-        tenantIdReservationRepository
-            .findById(tenantId)
+        reservation
             .filter(row -> row.getStatus() == TenantIdReservationStatus.RESERVED)
             .isPresent();
     if (stillReserved) {
       return UNREGISTERED_TENANT_NAME;
     }
     throw new InvalidDpaSignTokenException("Tenant for sign token no longer exists");
+  }
+
+  private static boolean constantTimeEquals(String left, String right) {
+    return MessageDigest.isEqual(
+        left.getBytes(StandardCharsets.UTF_8), right.getBytes(StandardCharsets.UTF_8));
   }
 
   /**
@@ -248,7 +293,7 @@ public class TenantDpaService {
     // still-RESERVED onboarding id). Without this, a released reservation or a deleted tenant
     // would leave a confirmable orphan behind — the tenant foreign key that used to prevent that
     // was dropped so links could be minted for reserved ids (#179).
-    requireLiveTenantContext(pending.getTenantId());
+    requireLiveTenantContext(pending);
     var tokenHash = DpaSignToken.hash(rawToken);
     var now = LocalDateTime.now();
     // Atomic single-use: only the still-PENDING row is updated, so a concurrent double-submit

@@ -261,7 +261,7 @@ class TenantDpaServiceTest {
             Optional.of(
                 com.vi.tenantservice.api.model.TenantIdReservationEntity.builder()
                     .tenantId(42L)
-                    .token("t")
+                    .token("reservation-token")
                     .status(TenantIdReservationStatus.RESERVED)
                     .build()));
 
@@ -461,13 +461,17 @@ class TenantDpaServiceTest {
             Optional.of(
                 com.vi.tenantservice.api.model.TenantIdReservationEntity.builder()
                     .tenantId(42L)
-                    .token("t")
+                    .token("reservation-token")
                     .status(TenantIdReservationStatus.ASSIGNED)
                     .build()));
 
     assertThatThrownBy(
             () -> tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de"))
         .isInstanceOf(InvalidDpaSignTokenException.class);
+    // the guard must reject BEFORE the token is consumed — an unstubbed consume returns 0, so
+    // without this the test would pass even if the link had been burned
+    verify(signatureRepository, org.mockito.Mockito.never())
+        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any());
   }
 
   @Test
@@ -490,7 +494,7 @@ class TenantDpaServiceTest {
             Optional.of(
                 com.vi.tenantservice.api.model.TenantIdReservationEntity.builder()
                     .tenantId(42L)
-                    .token("t")
+                    .token("reservation-token")
                     .status(TenantIdReservationStatus.RESERVED)
                     .build()));
     when(signatureRepository.consumeSignToken(
@@ -535,6 +539,103 @@ class TenantDpaServiceTest {
             any(),
             eq(TenantDpaService.SOURCE_FORWARDED_EXTERNAL),
             any(LocalDateTime.class));
+  }
+
+  @Test
+  void confirmSignature_Should_failClosed_When_theIdWasReleasedAndReservedAgain() {
+    // reservation A mints a link; the id is released and reserved again by an unrelated
+    // organisation B, which keeps the number but gets a NEW token. A's link must not survive: it
+    // would otherwise record a signature that makes B's future tenant look VALID (#179).
+    var rawToken = "resurrected-link-token";
+    when(signatureRepository.findByTokenHashAndStatus(
+            DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
+        .thenReturn(
+            Optional.of(
+                TenantDpaSignatureEntity.builder()
+                    .tenantId(42L)
+                    .status(DpaSignatureStatus.PENDING)
+                    .tokenHash(DpaSignToken.hash(rawToken))
+                    .reservationTokenHash(DpaSignToken.hash("reservation-token-A"))
+                    .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+                    .build()));
+    when(tenantIdReservationRepository.findById(42L))
+        .thenReturn(
+            Optional.of(
+                com.vi.tenantservice.api.model.TenantIdReservationEntity.builder()
+                    .tenantId(42L)
+                    .token("reservation-token-B")
+                    .status(TenantIdReservationStatus.RESERVED)
+                    .build()));
+
+    assertThatThrownBy(
+            () -> tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de"))
+        .isInstanceOf(InvalidDpaSignTokenException.class);
+    verify(signatureRepository, org.mockito.Mockito.never())
+        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void confirmSignature_Should_stillWork_AfterRegistrationConsumedTheSameReservation() {
+    // consuming a reservation flips RESERVED -> ASSIGNED but keeps the token, so a legitimate
+    // link minted before registration must keep working afterwards — that is the point of the
+    // forward, and the binding check must not break it
+    var rawToken = "survives-registration-token";
+    when(signatureRepository.findByTokenHashAndStatus(
+            DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
+        .thenReturn(
+            Optional.of(
+                TenantDpaSignatureEntity.builder()
+                    .tenantId(42L)
+                    .status(DpaSignatureStatus.PENDING)
+                    .tokenHash(DpaSignToken.hash(rawToken))
+                    .reservationTokenHash(DpaSignToken.hash("reservation-token"))
+                    .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+                    .build()));
+    when(tenantIdReservationRepository.findById(42L))
+        .thenReturn(
+            Optional.of(
+                com.vi.tenantservice.api.model.TenantIdReservationEntity.builder()
+                    .tenantId(42L)
+                    .token("reservation-token")
+                    .status(TenantIdReservationStatus.ASSIGNED)
+                    .build()));
+    when(tenantRepository.findById(42L))
+        .thenReturn(Optional.of(TenantEntity.builder().id(42L).name("Träger Nord").build()));
+    when(signatureRepository.consumeSignToken(
+            any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(1);
+
+    var result = tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de");
+
+    assertThat(result.getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
+  }
+
+  @Test
+  void createSignInvite_Should_bindThePublicLinkToItsReservationByHash() {
+    when(signatureRepository.save(any(TenantDpaSignatureEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    tenantDpaService.createSignInvite(
+        42L, LocalDateTime.now(), Duration.ofDays(14), null, "reservation-token");
+
+    var captor = ArgumentCaptor.forClass(TenantDpaSignatureEntity.class);
+    verify(signatureRepository).save(captor.capture());
+    // only the hash is persisted, never the reservation token itself
+    assertThat(captor.getValue().getReservationTokenHash())
+        .isEqualTo(DpaSignToken.hash("reservation-token"))
+        .isNotEqualTo("reservation-token");
+  }
+
+  @Test
+  void createSignInvite_Should_leaveTheBindingEmpty_ForAuthenticatedAdminInvites() {
+    when(signatureRepository.save(any(TenantDpaSignatureEntity.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    tenantDpaService.createSignInvite(42L, LocalDateTime.now(), Duration.ofDays(14), "admin-1");
+
+    var captor = ArgumentCaptor.forClass(TenantDpaSignatureEntity.class);
+    verify(signatureRepository).save(captor.capture());
+    assertThat(captor.getValue().getReservationTokenHash()).isNull();
   }
 
   @Test
