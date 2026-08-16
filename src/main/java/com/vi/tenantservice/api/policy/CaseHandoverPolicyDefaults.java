@@ -28,13 +28,13 @@ public final class CaseHandoverPolicyDefaults {
                 true,
                 Set.of("CLIENT"),
                 templates(
-                    "Du hast dem zeitlich begrenzten Teamzugriff zugestimmt. {{newAdvisor}} kann diese Sitzung für {{duration}} mitlesen. Deine bisherige Berater:in bleibt für dich zuständig.",
-                    "You agreed to time-limited team access. {{newAdvisor}} can read this session for {{duration}}. Your current counsellor remains responsible for you.",
-                    "Vous avez accepté l’accès temporaire de l’équipe. {{newAdvisor}} peut consulter cette session pendant {{duration}}. Votre conseiller·ère habituel·le reste responsable de votre accompagnement.",
-                    "Вы согласились на временный доступ команды. {{newAdvisor}} может просматривать эту консультацию в течение {{duration}}. Ваш текущий консультант по-прежнему отвечает за ваше консультирование.",
-                    "Süreli ekip erişimini onayladınız. {{newAdvisor}} bu oturumu {{duration}} boyunca okuyabilir. Mevcut danışmanınız sizden sorumlu olmaya devam eder.",
-                    "Ви погодилися на обмежений у часі доступ команди. {{newAdvisor}} може читати цю сесію протягом {{duration}}. Ваш поточний консультант залишається відповідальним за вас.",
-                    "ንግዜኡ ዝተወሰነ ናይ ጋንታ ተበጻሕነት ተሰማሚዕኩም። {{newAdvisor}} ነዚ ክፍለ ግዜ ን{{duration}} ከንብቦ ይኽእል። እቲ ሕጂ ዘሎ ኣማኻሪኹም ብሓላፍነት ይቕጽል።"))
+                    "Du hast einem zeitlich begrenzten Einblick zugestimmt. {{newAdvisor}} kann diese Sitzung für {{duration}} mitlesen. Deine bisherige Berater:in bleibt für dich zuständig.",
+                    "You agreed to a time-limited review. {{newAdvisor}} can read this session for {{duration}}. Your current counsellor remains responsible for you.",
+                    "Vous avez accepté une consultation temporaire. {{newAdvisor}} peut consulter cette session pendant {{duration}}. Votre conseiller·ère habituel·le reste responsable de votre accompagnement.",
+                    "Вы согласились на временный просмотр консультации. {{newAdvisor}} может просматривать её в течение {{duration}}. Ваш текущий консультант по-прежнему отвечает за ваше консультирование.",
+                    "Süreli incelemeyi onayladınız. {{newAdvisor}} bu oturumu {{duration}} boyunca okuyabilir. Mevcut danışmanınız sizden sorumlu olmaya devam eder.",
+                    "Ви погодилися на тимчасовий перегляд консультації. {{newAdvisor}} може читати цю сесію протягом {{duration}}. Ваш поточний консультант залишається відповідальним за вас.",
+                    "ንግዜኡ ዝተወሰነ ምርኣይ ተሰማሚዕኩም። {{newAdvisor}} ነዚ ክፍለ ግዜ ን{{duration}} ከንብቦ ይኽእል። እቲ ሕጂ ዘሎ ኣማኻሪኹም ብሓላፍነት ይቕጽል።"))
             .maxAccessDurationMinutes(
                 new IntegerPermissionPolicy(
                     CaseHandoverDurationPolicy.DEFAULT_MINUTES, PermissionPolicyMode.SUGGESTED)));

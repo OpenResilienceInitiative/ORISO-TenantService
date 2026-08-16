@@ -69,8 +69,7 @@ public enum PermissionFeature {
       "featureMediaAiScanSupervisionChatsEnabled", "mediaAiScanSupervisionChats"),
   ASKER_DISPLAY_NAME("featureDisplayNameEditable", null),
   ASKER_EMAIL("featureAskerEmailEnabled", null),
-  CASE_HANDOVER("caseHandoverEnabled", null),
-  CASE_HANDOVER_TEAM_ACCESS_OPT_OUT("caseHandoverTeamAccessOptOut", null);
+  CASE_HANDOVER("caseHandoverEnabled", null);
 
   private static final Map<String, PermissionFeature> BY_API_KEY =
       Arrays.stream(values())

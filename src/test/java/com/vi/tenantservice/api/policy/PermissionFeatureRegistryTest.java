@@ -38,6 +38,6 @@ class PermissionFeatureRegistryTest {
     assertThat(PermissionFeature.byApiKey("featureDisplayNameEditable")).isPresent();
     assertThat(PermissionFeature.byApiKey("featureAskerEmailEnabled")).isPresent();
     assertThat(PermissionFeature.byApiKey("caseHandoverEnabled")).isPresent();
-    assertThat(PermissionFeature.byApiKey("caseHandoverTeamAccessOptOut")).isPresent();
+    assertThat(PermissionFeature.byApiKey("caseHandoverTeamAccessOptOut")).isEmpty();
   }
 }

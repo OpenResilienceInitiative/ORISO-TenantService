@@ -29,10 +29,6 @@ public final class LegacyPermissionPolicyMapper {
     Map<String, PolicyValue<Boolean>> policies = new LinkedHashMap<>();
 
     for (PermissionFeature feature : PermissionFeature.values()) {
-      if (feature == PermissionFeature.CASE_HANDOVER_TEAM_ACCESS_OPT_OUT) {
-        policies.put(feature.apiKey(), new PolicyValue<>(true, PermissionPolicyMode.ENFORCED));
-        continue;
-      }
       String legacyKey = feature.legacyToggleKey();
       Boolean legacyAllowed = legacyKey == null ? null : allowedValues.get(legacyKey);
       Boolean legacyEnforced = legacyKey == null ? null : enforcedValues.get(legacyKey);

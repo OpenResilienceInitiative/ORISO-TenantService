@@ -29,7 +29,7 @@ class LegacyPermissionPolicyMapperTest {
     assertThat(policies)
         .containsEntry("featureSupervisionEnabled", new PolicyValue<>(true, ENFORCED))
         .containsEntry("featureVideoCallsEnabled", new PolicyValue<>(false, ENFORCED))
-        .containsEntry("caseHandoverTeamAccessOptOut", new PolicyValue<>(true, ENFORCED));
+        .doesNotContainKey("caseHandoverTeamAccessOptOut");
   }
 
   @ParameterizedTest
