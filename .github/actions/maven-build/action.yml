@@ -75,8 +75,13 @@ runs:
       if [ -f target/site/jacoco/jacoco.csv ]; then
         echo "Coverage report already written during the test phase."
       elif [ -f target/jacoco.exec ]; then
-        ./mvnw -B jacoco:report \
-          || echo "Standalone jacoco:report failed; coverage is unavailable for this run."
+        # Bounded, because `|| echo` only catches a nonzero exit — not a hang.
+        # This goal resolves the plugin's reporting dependencies from the
+        # network and no job here sets timeout-minutes, so a stalled resolve
+        # would sit until GitHub's 6h default. `timeout` exits 124 on expiry,
+        # which the same `||` already handles.
+        timeout --signal=TERM 5m ./mvnw -B jacoco:report \
+          || echo "Standalone jacoco:report failed or timed out; coverage is unavailable for this run."
       else
         echo "No target/jacoco.exec: the run did not reach the test phase."
       fi

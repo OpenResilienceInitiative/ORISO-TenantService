@@ -99,6 +99,59 @@ class CoverageSummaryTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("| Branches | 0 | 0 | **100.00%** |", result.stdout)
 
+    def test_renders_a_per_class_table_with_fully_qualified_names(self):
+        """The PR contract is a per-class table, not only per-package.
+
+        Names are qualified because JaCoCo repeats short class names across
+        packages; a bare `Config` would be ambiguous and unlookupable.
+        """
+        result = self.run_summary(
+            [
+                row("de.example.one", "Config", line_covered=1, line_missed=9),
+                row("de.example.two", "Config", line_covered=9, line_missed=1),
+            ]
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Per-class breakdown (least covered first)", result.stdout)
+        self.assertIn("| `de.example.one.Config` |", result.stdout)
+        self.assertIn("| `de.example.two.Config` |", result.stdout)
+
+    def test_orders_classes_least_covered_first_then_largest(self):
+        """A 0% one-liner must not outrank a 0% service class.
+
+        Percentage alone would surface the trivial file first, inverting what a
+        reader should open.
+        """
+        result = self.run_summary(
+            [
+                row("de.example", "Tiny", line_covered=0, line_missed=2),
+                row("de.example", "Huge", line_covered=0, line_missed=300),
+                row("de.example", "Covered", line_covered=10, line_missed=0),
+            ]
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        classes = result.stdout.split("Per-class breakdown")[1]
+        huge = classes.index("`de.example.Huge`")
+        tiny = classes.index("`de.example.Tiny`")
+        covered = classes.index("`de.example.Covered`")
+        self.assertLess(huge, tiny, "the larger 0% class must lead")
+        self.assertLess(tiny, covered, "uncovered classes must precede covered ones")
+
+    def test_names_the_rows_it_omits_when_the_table_is_capped(self):
+        """A table that silently stops reads as though it were complete."""
+        rows = [
+            row("de.example", f"Clazz{index:05d}", line_covered=1, line_missed=0)
+            for index in range(2100)
+        ]
+
+        result = self.run_summary(rows)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("better-covered rows omitted", result.stdout)
+        self.assertIn("100 better-covered rows omitted", result.stdout)
+
     def test_explains_a_missing_report_without_failing_the_step(self):
         """A build that fails before the report goal leaves no CSV behind."""
         result = self.run_summary(None)
@@ -139,6 +192,19 @@ class CoverageSummaryTest(unittest.TestCase):
 
         guard = action.index("target/site/jacoco/jacoco.csv")
         self.assertLess(guard, invocation, "an existing report must short-circuit the invocation")
+
+    def test_standalone_report_generation_is_time_bounded(self):
+        """`|| echo` catches a nonzero exit, not a hang.
+
+        The goal resolves reporting dependencies over the network and no job sets
+        timeout-minutes, so an unbounded stall would run to GitHub's 6h default
+        and take the failed-test report and the status gate down with it.
+        """
+        action = MAVEN_BUILD_ACTION.read_text()
+
+        invocation = action.index("./mvnw -B jacoco:report")
+        preceding = action[max(0, invocation - 120) : invocation]
+        self.assertIn("timeout", preceding, "the standalone goal must be time-bounded")
 
     def test_does_not_suppress_test_failures_in_maven(self):
         """testFailureIgnore would hide a red suite from every consumer of the build."""
