@@ -72,6 +72,7 @@ public class TenantDpaStatusService {
 
   private final TenantDpaAdminSignatureRepository adminSignatureRepository;
   private final TenantDpaSignatureRepository signatureRepository;
+  private final DpaSignatureOwnership dpaSignatureOwnership;
   private final GoverningDpaResolver governingDpaResolver;
   private final PlatformTransactionManager transactionManager;
 
@@ -267,8 +268,13 @@ public class TenantDpaStatusService {
                         row.getSignerName() != null
                             ? row.getSignerName()
                             : row.getSignerUsername())));
-    signatureRepository
-        .findByTenantIdAndStatus(tenantId, DpaSignatureStatus.SIGNED)
+    // Only the current occupant's signatures count: a tenant ID is a reusable slot, and an
+    // orphan left behind by a released reservation must never make the next organisation on that
+    // ID look signed (#179).
+    dpaSignatureOwnership
+        .filterCurrentOccupant(
+            tenantId,
+            signatureRepository.findByTenantIdAndStatus(tenantId, DpaSignatureStatus.SIGNED))
         .forEach(
             row ->
                 entries.add(

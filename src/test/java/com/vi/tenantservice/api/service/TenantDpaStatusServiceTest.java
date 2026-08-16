@@ -48,6 +48,10 @@ class TenantDpaStatusServiceTest {
   @Mock private TenantRepository tenantRepository;
   @Mock private PlatformTransactionManager transactionManager;
 
+  @Mock
+  private com.vi.tenantservice.api.repository.TenantIdReservationRepository
+      tenantIdReservationRepository;
+
   /**
    * The governing-document resolver runs for real over the mocked repositories: the version a
    * tenant is measured against and the document it can read and sign must come from the same logic
@@ -65,6 +69,7 @@ class TenantDpaStatusServiceTest {
         new TenantDpaStatusService(
             adminSignatureRepository,
             signatureRepository,
+            new DpaSignatureOwnership(tenantIdReservationRepository),
             governingDpaResolver,
             transactionManager);
   }

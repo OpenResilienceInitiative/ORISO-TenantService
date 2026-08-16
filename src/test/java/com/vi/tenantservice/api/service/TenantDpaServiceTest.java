@@ -52,6 +52,7 @@ class TenantDpaServiceTest {
             versionRepository,
             tenantRepository,
             tenantIdReservationRepository,
+            new DpaSignatureOwnership(tenantIdReservationRepository),
             governingDpaResolver);
   }
 

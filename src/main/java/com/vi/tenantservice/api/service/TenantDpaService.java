@@ -53,6 +53,7 @@ public class TenantDpaService {
   private final TenantDpaVersionRepository versionRepository;
   private final TenantRepository tenantRepository;
   private final TenantIdReservationRepository tenantIdReservationRepository;
+  private final DpaSignatureOwnership dpaSignatureOwnership;
   private final GoverningDpaResolver governingDpaResolver;
 
   /** Persists a SIGNED confirmation of the given DPA version for a tenant. */
@@ -112,13 +113,22 @@ public class TenantDpaService {
     if (dpaVersion == null) {
       return false;
     }
-    return signatureRepository.findByTenantIdAndStatus(tenantId, DpaSignatureStatus.SIGNED).stream()
+    return dpaSignatureOwnership
+        .filterCurrentOccupant(
+            tenantId,
+            signatureRepository.findByTenantIdAndStatus(tenantId, DpaSignatureStatus.SIGNED))
+        .stream()
         .anyMatch(signature -> dpaVersion.equals(signature.getDpaVersion()));
   }
 
-  /** All confirmations for a tenant (for the platform-admin list of confirmed AVVs). */
+  /**
+   * All confirmations for a tenant (for the platform-admin list of confirmed AVVs). Filtered to the
+   * current occupant of the tenant ID: an orphan from a previous occupant of the same ID would
+   * otherwise expose THAT organisation's signer PII to this tenant's admins (#179).
+   */
   public List<TenantDpaSignatureEntity> getSignatures(Long tenantId) {
-    return signatureRepository.findByTenantId(tenantId);
+    return dpaSignatureOwnership.filterCurrentOccupant(
+        tenantId, signatureRepository.findByTenantId(tenantId));
   }
 
   /** Appends a published-version snapshot (called on every publish) for the "look back" history. */
