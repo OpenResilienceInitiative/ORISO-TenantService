@@ -26,6 +26,7 @@ import com.vi.tenantservice.api.model.TenantIdAvailabilityDTO;
 import com.vi.tenantservice.api.model.TenantIdReservationDTO;
 import com.vi.tenantservice.api.model.TenantIdReservationRequestDTO;
 import com.vi.tenantservice.api.model.TenantMediaResponseDTO;
+import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeyUpdateDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeysDTO;
@@ -257,6 +258,20 @@ public class TenantController implements TenantApi, TenantadminApi {
       @Valid TenantAdminControls tenantAdminControls) {
     return new ResponseEntity<>(
         tenantServiceFacade.updateTenantAdminControls(tenantAdminControls), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  public ResponseEntity<TenantPermissionPolicies> getTenantPermissionPolicies(@NotNull Long id) {
+    return ResponseEntity.ok(tenantServiceFacade.getTenantPermissionPolicies(id));
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<TenantPermissionPolicies> updateTenantPermissionPolicies(
+      @NotNull Long id, @Valid TenantPermissionPolicies tenantPermissionPolicies) {
+    return ResponseEntity.ok(
+        tenantServiceFacade.updateTenantPermissionPolicies(id, tenantPermissionPolicies));
   }
 
   @Override

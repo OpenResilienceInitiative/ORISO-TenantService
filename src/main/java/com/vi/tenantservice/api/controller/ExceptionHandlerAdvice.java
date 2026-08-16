@@ -1,5 +1,6 @@
 package com.vi.tenantservice.api.controller;
 
+import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
@@ -36,6 +37,12 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
   @ResponseStatus(HttpStatus.CONFLICT)
   protected void handleTenantIdAllocationConflict(TenantIdAllocationConflictException e) {
     logger.info("Returning HTTP 409 Conflict for tenant ID allocation: " + e.getMessage());
+  }
+
+  @ExceptionHandler(value = {SettingsUpdateConflictException.class})
+  @ResponseStatus(HttpStatus.CONFLICT)
+  protected void handleSettingsUpdateConflict(SettingsUpdateConflictException e) {
+    logger.info("Returning HTTP 409 Conflict for concurrent settings update: " + e.getMessage());
   }
 
   @ExceptionHandler(value = {TenantAuthorisationException.class})

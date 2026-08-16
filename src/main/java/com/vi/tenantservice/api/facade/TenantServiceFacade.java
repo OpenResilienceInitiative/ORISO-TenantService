@@ -19,6 +19,7 @@ import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
@@ -29,6 +30,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
@@ -37,6 +39,7 @@ import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
+import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -111,6 +114,8 @@ public class TenantServiceFacade {
       tenantFacadeDependentSettingsOverrideService;
 
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
+
+  private final @NonNull TenantPermissionPolicyService tenantPermissionPolicyService;
 
   private final @NonNull EffectivePermissionSettingsApplier effectivePermissionSettingsApplier;
 
@@ -575,6 +580,54 @@ public class TenantServiceFacade {
     return tenantAdminControlsService.updateControls(tenantAdminControls);
   }
 
+  public TenantPermissionPolicies getTenantPermissionPolicies(Long tenantId) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    return toTenantPermissionPolicies(
+        tenantId,
+        tenantPermissionPolicyService.getResolvedPolicies(tenantId),
+        tenantPermissionPolicyService.getResolvedCaseHandoverPolicies(tenantId));
+  }
+
+  public TenantPermissionPolicies updateTenantPermissionPolicies(
+      Long tenantId, TenantPermissionPolicies request) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    if (request == null || !tenantId.equals(request.getTenantId())) {
+      throw new BadRequestException("Path tenant id must match request tenant id");
+    }
+    tenantPermissionPolicyService.saveOverrides(
+        tenantId,
+        request.getPolicies().entrySet().stream()
+            .collect(
+                java.util.stream.Collectors.toUnmodifiableMap(
+                    Map.Entry::getKey,
+                    entry ->
+                        new com.vi.tenantservice.api.policy.PolicyValue<>(
+                            entry.getValue().getValue(),
+                            com.vi.tenantservice.api.policy.PermissionPolicyMode.valueOf(
+                                entry.getValue().getMode().name())))),
+        request.getCaseHandoverPolicies());
+    return getTenantPermissionPolicies(tenantId);
+  }
+
+  private TenantPermissionPolicies toTenantPermissionPolicies(
+      Long tenantId,
+      Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> policies,
+      com.vi.tenantservice.api.model.CaseHandoverPolicies caseHandoverPolicies) {
+    return new TenantPermissionPolicies(
+            tenantId,
+            policies.entrySet().stream()
+                .collect(
+                    java.util.stream.Collectors.toUnmodifiableMap(
+                        Map.Entry::getKey,
+                        entry ->
+                            new BooleanPermissionPolicy(
+                                    entry.getValue().value(),
+                                    com.vi.tenantservice.api.model.PermissionPolicyMode.valueOf(
+                                        entry.getValue().mode().name()))
+                                .inherited(entry.getValue().inherited()))))
+        .caseHandoverPolicies(caseHandoverPolicies);
+  }
+
   private void assertSuperAdmin() {
     if (!tenantFacadeAuthorisationService.isSuperAdmin()) {
       throw new AccessDeniedException("Only super admin can manage platform tenant admin controls");
@@ -647,10 +700,20 @@ public class TenantServiceFacade {
 
   public List<RestrictedTenantDTO> findRestrictedTenantsByIds(Set<Long> ids) {
     String lang = translationService.getCurrentLanguageContext();
-    TenantAdminControls controls = tenantAdminControlsService.getControls();
-    return tenantService.findRestrictedTenantDataByIds(ids).stream()
-        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
-        .map(tenant -> withEffectivePermissions(tenant, controls))
+    List<RestrictedTenantDTO> tenants =
+        tenantService.findRestrictedTenantDataByIds(ids).stream()
+            .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
+            .toList();
+    Set<Long> resolvedTenantIds =
+        tenants.stream()
+            .map(RestrictedTenantDTO::getId)
+            .collect(java.util.stream.Collectors.toSet());
+    Map<Long, Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>>>
+        policiesByTenant = tenantPermissionPolicyService.getResolvedPolicies(resolvedTenantIds);
+    return tenants.stream()
+        .map(
+            dto ->
+                withEffectivePermissions(dto, policiesByTenant.getOrDefault(dto.getId(), Map.of())))
         .toList();
   }
 
@@ -660,13 +723,29 @@ public class TenantServiceFacade {
    * controls themselves. See ADR-013 P4.
    */
   private RestrictedTenantDTO withEffectivePermissions(RestrictedTenantDTO dto) {
-    return withEffectivePermissions(dto, tenantAdminControlsService.getControls());
+    return dto == null
+        ? null
+        : withEffectivePermissions(
+            dto, tenantPermissionPolicyService.getResolvedPolicies(dto.getId()));
   }
 
   private RestrictedTenantDTO withEffectivePermissions(
-      RestrictedTenantDTO dto, TenantAdminControls controls) {
+      RestrictedTenantDTO dto,
+      Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies) {
     if (dto != null) {
-      effectivePermissionSettingsApplier.applyTo(dto.getSettings(), controls);
+      Map<String, BooleanPermissionPolicy> policies =
+          resolvedPolicies.entrySet().stream()
+              .collect(
+                  java.util.stream.Collectors.toUnmodifiableMap(
+                      Map.Entry::getKey,
+                      entry ->
+                          new BooleanPermissionPolicy(
+                                  entry.getValue().value(),
+                                  com.vi.tenantservice.api.model.PermissionPolicyMode.valueOf(
+                                      entry.getValue().mode().name()))
+                              .inherited(entry.getValue().inherited())));
+      dto.setPermissionPolicies(policies);
+      effectivePermissionSettingsApplier.applyPolicies(dto.getSettings(), policies);
     }
     return dto;
   }
