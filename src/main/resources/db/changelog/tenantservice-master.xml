@@ -56,7 +56,6 @@
   <include file="db/changelog/changeset/0029_tenant_theming_login_effect/0029-changeSet.xml"/>
   <include file="db/changelog/changeset/0030_drop_dpa_signature_tenant_fk/0030-changeSet.xml"/>
   <include file="db/changelog/changeset/0031_dpa_signature_reservation_binding/0031-changeSet.xml"/>
-  <include
   <include file="db/changelog/changeset/0030_tenant_permission_policies/0030-changeSet.xml"/>
   <include file="db/changelog/changeset/0031_settings_optimistic_lock/0031-changeSet.xml"/>
 </databaseChangeLog>
