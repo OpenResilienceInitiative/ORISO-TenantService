@@ -680,10 +680,21 @@ public class TenantServiceFacade {
                 tenantConverter.toRestrictedTenantDTO(tenantBySubdomain.get(), lang)));
   }
 
+  /**
+   * Resolves the tenant the caller wants applied as an override, if any.
+   *
+   * <p>Id {@code 0} is this service's own sentinel for "platform scope, no tenant" ({@link
+   * #TECHNICAL_TENANT_ID}): it is guarded against deletion, excluded from every tenant listing, and
+   * has no row in the tenant table. A platform admin's token carries it in the {@code tenantId}
+   * claim, which the cookie resolver reads back verbatim. Letting it through here made the
+   * single-domain override path look up a tenant that cannot exist, so every authenticated platform
+   * admin got an error instead of the subdomain's public tenant data (#199).
+   */
   private Optional<Long> resolveFromRequestOrCookie(Long optionalTenantIdOverride) {
-    return optionalTenantIdOverride != null
-        ? Optional.of(optionalTenantIdOverride)
-        : tenantResolverService.tryResolveForNonAuthUsers();
+    return (optionalTenantIdOverride != null
+            ? Optional.of(optionalTenantIdOverride)
+            : tenantResolverService.tryResolveForNonAuthUsers())
+        .filter(tenantId -> tenantId != TECHNICAL_TENANT_ID);
   }
 
   public RestrictedTenantDTO getRestrictedTenantDataDeterminingTenantContext() {
@@ -704,6 +715,14 @@ public class TenantServiceFacade {
     var mainTenant =
         tenantService.findRestrictedTenantDataBySubdomain(mainTenantSubdomain).orElseThrow();
     Long actualTenantId = tenantResolverService.tryResolve().orElseThrow();
+    if (actualTenantId == TECHNICAL_TENANT_ID) {
+      // Same sentinel hazard as resolveFromRequestOrCookie (#199): a caller in platform scope has
+      // no tenant to override with, and id 0 has no row, so orElseThrow would fail here instead of
+      // answering. The main tenant's own data is the correct answer for that caller.
+      return withEffectivePermissions(
+          tenantConverter.toRestrictedTenantDTO(
+              mainTenant, translationService.getCurrentLanguageContext()));
+    }
     TenantRestrictedData actualTenant =
         tenantService.findRestrictedTenantDataById(actualTenantId).orElseThrow();
     return withEffectivePermissions(
