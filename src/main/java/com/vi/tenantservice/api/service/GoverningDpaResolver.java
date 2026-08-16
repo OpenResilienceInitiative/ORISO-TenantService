@@ -69,15 +69,7 @@ public class GoverningDpaResolver {
     if (!operatorFallbackApplies(tenantId)) {
       return null;
     }
-    var operatorVersion =
-        tenantRepository
-            .findById(operatorTenantId)
-            .map(
-                entity ->
-                    publishedVersionOf(
-                        operatorTenantId, entity.getContentDataProcessingAgreementActivationDate()))
-            .orElse(null);
-    return operatorVersion == null ? null : new GoverningDpa(operatorTenantId, operatorVersion);
+    return resolveOperatorDpa();
   }
 
   /**
@@ -91,6 +83,11 @@ public class GoverningDpaResolver {
     if (operatorTenantId <= 0) {
       return null;
     }
+    return resolveOperatorDpa();
+  }
+
+  /** The governing operator document, or {@code null} when the operator published nothing. */
+  private GoverningDpa resolveOperatorDpa() {
     var operatorVersion =
         tenantRepository
             .findById(operatorTenantId)

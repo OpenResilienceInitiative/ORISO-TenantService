@@ -35,6 +35,8 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 @DataJpaTest
 class TenantDpaSignatureRepositoryTest {
 
+  private static final LocalDateTime VERSION = LocalDateTime.of(2026, 7, 1, 12, 0);
+
   @Autowired private TenantDpaSignatureRepository signatureRepository;
   @Autowired private TenantRepository tenantRepository;
 
@@ -142,11 +144,27 @@ class TenantDpaSignatureRepositoryTest {
     // when the first consume wins
     int first =
         signatureRepository.consumeSignToken(
-            "HASH", "Erika", "GF", "e@example.org", "Caritas", false, "de", now);
+            "HASH",
+            "Erika",
+            "GF",
+            "e@example.org",
+            "Caritas",
+            false,
+            "de",
+            "FORWARDED_EXTERNAL",
+            now);
     // and a second consume of the same token affects nothing (single-use)
     int second =
         signatureRepository.consumeSignToken(
-            "HASH", "Mallory", "X", "m@example.org", "Bad Org", true, "en", now);
+            "HASH",
+            "Mallory",
+            "X",
+            "m@example.org",
+            "Bad Org",
+            true,
+            "en",
+            "FORWARDED_EXTERNAL",
+            now);
     signatureRepository.flush();
 
     // then
@@ -201,12 +219,13 @@ class TenantDpaSignatureRepositoryTest {
   }
 
   @Test
-  void existsByTenantIdAndStatusAndTokenExpiresAtAfter_Should_seeOnlyUnexpiredPendingLinks() {
+  void outstandingLinkPredicate_Should_seeOnlyUnexpiredPendingLinks() {
     // given one expired and one live link for tenant 6
     var now = LocalDateTime.now();
     signatureRepository.save(
         TenantDpaSignatureEntity.builder()
             .tenantId(6L)
+            .dpaVersion(VERSION)
             .status(DpaSignatureStatus.PENDING)
             .tokenHash("HASH-EXPIRED")
             .tokenExpiresAt(now.minusMinutes(1))
@@ -215,16 +234,36 @@ class TenantDpaSignatureRepositoryTest {
     signatureRepository.flush();
 
     assertThat(
-            signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
-                6L, DpaSignatureStatus.PENDING, now))
+            signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                6L, VERSION, DpaSignatureStatus.PENDING, now))
         .isFalse();
 
     pendingLink(6L, "HASH-LIVE", now);
     signatureRepository.flush();
 
     assertThat(
-            signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
-                6L, DpaSignatureStatus.PENDING, now))
+            signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                6L, VERSION, DpaSignatureStatus.PENDING, now))
+        .isTrue();
+  }
+
+  @Test
+  void outstandingLinkPredicate_Should_ignoreLinksForASupersededVersion() {
+    // given a live link minted for the PREVIOUS version, then a republish (#179)
+    var now = LocalDateTime.now();
+    var supersededVersion = VERSION.minusDays(10);
+    pendingLink(10L, "HASH-OLD-VERSION", supersededVersion, now);
+    signatureRepository.flush();
+
+    // the stale link can only ever produce an OUTDATED signature, so the CURRENT contract is not
+    // "awaiting a signer" because of it
+    assertThat(
+            signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                10L, VERSION, DpaSignatureStatus.PENDING, now))
+        .isFalse();
+    assertThat(
+            signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                10L, supersededVersion, DpaSignatureStatus.PENDING, now))
         .isTrue();
   }
 
@@ -253,9 +292,15 @@ class TenantDpaSignatureRepositoryTest {
   }
 
   private TenantDpaSignatureEntity pendingLink(Long tenantId, String tokenHash, LocalDateTime now) {
+    return pendingLink(tenantId, tokenHash, VERSION, now);
+  }
+
+  private TenantDpaSignatureEntity pendingLink(
+      Long tenantId, String tokenHash, LocalDateTime dpaVersion, LocalDateTime now) {
     return signatureRepository.save(
         TenantDpaSignatureEntity.builder()
             .tenantId(tenantId)
+            .dpaVersion(dpaVersion)
             .status(DpaSignatureStatus.PENDING)
             .tokenHash(tokenHash)
             .tokenExpiresAt(now.plusDays(1))

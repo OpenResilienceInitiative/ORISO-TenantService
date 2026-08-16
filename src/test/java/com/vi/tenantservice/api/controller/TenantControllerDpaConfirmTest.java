@@ -47,6 +47,8 @@ class TenantControllerDpaConfirmTest {
   @Mock com.vi.tenantservice.api.service.TenantMediaService tenantMediaService;
   @Mock com.vi.tenantservice.api.service.TenantIdAllocationService tenantIdAllocationService;
 
+  @Mock com.vi.tenantservice.api.facade.PlatformDpiaMasterDataFacade platformDpiaMasterDataFacade;
+
   @InjectMocks private TenantController controller;
 
   @Test

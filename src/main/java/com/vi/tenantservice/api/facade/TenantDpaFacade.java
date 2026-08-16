@@ -11,6 +11,7 @@ import com.vi.tenantservice.api.model.PublicDpaForwardRequestDTO;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.model.TenantDpaStatus;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
+import com.vi.tenantservice.api.model.TenantIdReservationStatus;
 import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.GoverningDpaResolver;
@@ -96,18 +97,21 @@ public class TenantDpaFacade {
   /**
    * Creates a single-use DPA sign link from the PUBLIC tenant onboarding context
    * (ORISO-TenantService#179). No session exists — the caller is authorised by the tenant-ID
-   * reservation pair its onboarding invite carries: the reservation must exist and the presented
-   * token must match the ledger row (constant-time compare). Every failure mode answers the same
-   * "invalid" state via {@link InvalidDpaSignTokenException} (410), so nothing about the
-   * reservation ledger leaks.
+   * reservation pair its onboarding invite carries: the reservation must exist, the presented token
+   * must match the ledger row (constant-time compare), and the reservation must still be RESERVED,
+   * i.e. the onboarding it belongs to is still open. Every failure mode answers the same "invalid"
+   * state via {@link InvalidDpaSignTokenException} (410), so nothing about the reservation ledger
+   * leaks.
    *
    * <p>The PENDING signature row is bound to the RESERVED tenant id: the link works immediately —
    * before and after the registration completes — and the signature lands on the tenant the moment
-   * it exists. The version signed is the governing document: the operator DPA while the tenant is
-   * not registered yet (a reserved tenant cannot have authored one), the regular governing
-   * resolution once it exists. {@code forwardedByUserId} stays null — there is no account yet.
+   * it exists. Note the asymmetry: an already-minted link keeps working across registration (that
+   * is the whole point of the forward), but MINTING is limited to the open onboarding window;
+   * afterwards the authenticated admin endpoint owns it. {@code forwardedByUserId} stays null —
+   * there is no account yet.
    *
-   * @throws InvalidDpaSignTokenException unknown reservation or token mismatch (410)
+   * @throws InvalidDpaSignTokenException unknown reservation, token mismatch, or a reservation that
+   *     is no longer open (410)
    * @throws DpaNotPublishedException nothing is published to sign (409)
    */
   public DpaSignInviteDTO createPublicForwardSignInvite(PublicDpaForwardRequestDTO request) {
@@ -126,10 +130,20 @@ public class TenantDpaFacade {
     if (!constantTimeEquals(reservation.getToken(), request.getTenantIdReservationToken())) {
       throw new InvalidDpaSignTokenException("Tenant-ID reservation token mismatch");
     }
-    var governing =
-        tenantService.findTenantById(tenantId).isPresent()
-            ? governingDpaResolver.resolve(tenantId)
-            : governingDpaResolver.resolveForUnregisteredTenant();
+    // The reservation pair is a credential for the OPEN onboarding only. Registration consumes the
+    // reservation by flipping the ledger row to ASSIGNED while keeping the same token, and a
+    // tenant deletion leaves that ASSIGNED row behind — so without this check the onboarding token
+    // would keep minting sign links (and re-creating signer PII) for the whole life of the id, and
+    // even after the tenant it belonged to was deleted. Once the tenant exists, forwarding is the
+    // authenticated admin's endpoint. The answer is the same opaque one an unknown reservation
+    // gets, so nothing about the ledger's state leaks.
+    if (reservation.getStatus() != TenantIdReservationStatus.RESERVED) {
+      throw new InvalidDpaSignTokenException(
+          "Tenant-ID reservation is no longer open for onboarding");
+    }
+    // A RESERVED id has no tenant row yet by definition, so the governing document is the
+    // operator's — the same one the regular resolution returns the moment registration completes.
+    var governing = governingDpaResolver.resolveForUnregisteredTenant();
     if (governing == null) {
       throw new DpaNotPublishedException(
           "No data processing agreement is published for reserved tenant " + tenantId + " yet");

@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.service;
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
+import com.vi.tenantservice.api.model.TenantIdReservationStatus;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
 import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
@@ -179,11 +180,7 @@ public class TenantDpaService {
                 () ->
                     new InvalidDpaSignTokenException(
                         "Published DPA version for sign token was not found"));
-    var tenantName =
-        tenantRepository
-            .findById(pending.getTenantId())
-            .map(tenant -> tenant.getName())
-            .orElseGet(() -> tenantNameFallbackForReservedTenant(pending.getTenantId()));
+    var tenantName = requireLiveTenantContext(pending.getTenantId());
     return new DpaSignPreview(
         pending.getTenantId(),
         tenantName,
@@ -193,20 +190,37 @@ public class TenantDpaService {
   }
 
   /**
-   * A sign link created from the public onboarding wizard is bound to a RESERVED tenant id whose
-   * tenant row does not exist yet (ORISO-TenantService#179). The organisation has no stored name
-   * until the registration completes, so the preview carries the same neutral placeholder the
-   * forward e-mail already uses — {@code tenantName} stays a non-null part of the contract, and
-   * showing the real organisation on the signing page is tracked in ORISO-Frontend#879.
+   * Asserts the signature still has a live tenant context and returns the name to display. A sign
+   * link is only honoured while its target actually exists (ORISO-TenantService#179):
    *
-   * <p>A pending row whose tenant neither exists nor is reserved is treated as an invalid token —
-   * fail closed, nothing about internal state leaks.
+   * <ul>
+   *   <li>the tenant row exists — the normal case once the registration completed;
+   *   <li>no tenant yet, but the onboarding reservation is still RESERVED — the pre-account wizard
+   *       case. The organisation has no stored name until registration completes, so the neutral
+   *       placeholder the forward e-mail already uses stands in ({@code tenantName} is a non-null
+   *       part of the contract; showing the real organisation is ORISO-Frontend#879).
+   * </ul>
+   *
+   * <p>Everything else fails closed with the same "invalid token" answer, which is what stops a
+   * link outliving its target now that the tenant foreign key is gone: a RELEASED reservation
+   * deletes the ledger row, and a DELETED tenant leaves an ASSIGNED row behind — in both cases the
+   * still-PENDING signature row survives, and confirming it would write signer PII (and, after an
+   * id reuse, a signature that makes an unrelated new tenant look VALID).
    */
-  private String tenantNameFallbackForReservedTenant(Long tenantId) {
-    if (tenantIdReservationRepository.existsById(tenantId)) {
+  private String requireLiveTenantContext(Long tenantId) {
+    var tenant = tenantRepository.findById(tenantId);
+    if (tenant.isPresent()) {
+      return tenant.get().getName();
+    }
+    boolean stillReserved =
+        tenantIdReservationRepository
+            .findById(tenantId)
+            .filter(row -> row.getStatus() == TenantIdReservationStatus.RESERVED)
+            .isPresent();
+    if (stillReserved) {
       return UNREGISTERED_TENANT_NAME;
     }
-    throw new InvalidDpaSignTokenException("Tenant for sign token was not found");
+    throw new InvalidDpaSignTokenException("Tenant for sign token no longer exists");
   }
 
   /**
@@ -230,6 +244,11 @@ public class TenantDpaService {
       boolean signerIsMember,
       String language) {
     var pending = requireValidPendingSignature(rawToken);
+    // The token alone is not enough: the tenant it points at must still be live (existing, or a
+    // still-RESERVED onboarding id). Without this, a released reservation or a deleted tenant
+    // would leave a confirmable orphan behind — the tenant foreign key that used to prevent that
+    // was dropped so links could be minted for reserved ids (#179).
+    requireLiveTenantContext(pending.getTenantId());
     var tokenHash = DpaSignToken.hash(rawToken);
     var now = LocalDateTime.now();
     // Atomic single-use: only the still-PENDING row is updated, so a concurrent double-submit
@@ -243,6 +262,7 @@ public class TenantDpaService {
             signerOrganisation,
             signerIsMember,
             language,
+            SOURCE_FORWARDED_EXTERNAL,
             now);
     if (consumed == 0) {
       throw new InvalidDpaSignTokenException("Sign token has already been used");
@@ -264,15 +284,6 @@ public class TenantDpaService {
     pending.setSignedAt(now);
     pending.setTokenHash(null);
     return pending;
-  }
-
-  /**
-   * Whether an unexpired sign link is still outstanding for the tenant — the "contract on hold"
-   * predicate behind {@code PENDING_FORWARDED} (ORISO-TenantService#179).
-   */
-  public boolean hasOutstandingSignInvite(Long tenantId) {
-    return signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
-        tenantId, DpaSignatureStatus.PENDING, LocalDateTime.now());
   }
 
   /**

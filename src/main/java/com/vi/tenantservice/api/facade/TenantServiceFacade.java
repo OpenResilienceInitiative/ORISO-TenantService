@@ -70,6 +70,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort.Direction;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -346,6 +347,13 @@ public class TenantServiceFacade {
     return updateWithSanitizedInput(id, sanitizedTenantDTO);
   }
 
+  /**
+   * Deletes the tenant together with its DPA signature evidence. Transactional on purpose: the
+   * database cascade that used to tie the two together was dropped so sign links could be minted
+   * for a still-reserved id (#179), so this boundary is now the only thing preventing a half
+   * deletion — a surviving tenant whose append-only signature evidence is already gone.
+   */
+  @Transactional
   public void deleteTenant(Long id) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
 

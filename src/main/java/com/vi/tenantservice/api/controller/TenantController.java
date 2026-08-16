@@ -1,5 +1,6 @@
 package com.vi.tenantservice.api.controller;
 
+import com.vi.tenantservice.api.facade.PlatformDpiaMasterDataFacade;
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
@@ -15,7 +16,9 @@ import com.vi.tenantservice.api.model.DpaStatusDTO;
 import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NextFreeTenantIdDTO;
+import com.vi.tenantservice.api.model.PlatformDpiaMasterDataDTO;
 import com.vi.tenantservice.api.model.PublicDpaForwardRequestDTO;
+import com.vi.tenantservice.api.model.PublicDpiaMasterDataDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
@@ -85,6 +88,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   private final @NonNull TranslationFacade translationFacade;
   private final @NonNull TenantMediaService tenantMediaService;
   private final @NonNull TenantIdAllocationService tenantIdAllocationService;
+  private final @NonNull PlatformDpiaMasterDataFacade platformDpiaMasterDataFacade;
 
   /**
    * Public read-only preview of the exact DPA version referenced by a valid sign token. Merely
@@ -453,6 +457,25 @@ public class TenantController implements TenantApi, TenantadminApi {
   public ResponseEntity<RestrictedTenantDTO> getRestrictedTenantData() {
     var tenantData = tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext();
     return new ResponseEntity<>(tenantData, HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<PlatformDpiaMasterDataDTO> getPlatformDpiaMasterData() {
+    return new ResponseEntity<>(platformDpiaMasterDataFacade.getMasterData(), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<PlatformDpiaMasterDataDTO> updatePlatformDpiaMasterData(
+      @Valid PlatformDpiaMasterDataDTO platformDpiaMasterDataDTO) {
+    return new ResponseEntity<>(
+        platformDpiaMasterDataFacade.updateMasterData(platformDpiaMasterDataDTO), HttpStatus.OK);
+  }
+
+  @Override
+  public ResponseEntity<PublicDpiaMasterDataDTO> getPublicDpiaMasterData() {
+    return new ResponseEntity<>(platformDpiaMasterDataFacade.getPublicMasterData(), HttpStatus.OK);
   }
 
   @Override

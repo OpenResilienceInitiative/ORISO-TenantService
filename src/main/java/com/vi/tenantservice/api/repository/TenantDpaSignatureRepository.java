@@ -23,9 +23,14 @@ public interface TenantDpaSignatureRepository
   /** Retention purge: removes signatures of a given status created before the cutoff. */
   long deleteByStatusAndCreateDateBefore(DpaSignatureStatus status, LocalDateTime cutoff);
 
-  /** Whether an unexpired sign link is still outstanding for the tenant (PENDING_FORWARDED). */
-  boolean existsByTenantIdAndStatusAndTokenExpiresAtAfter(
-      Long tenantId, DpaSignatureStatus status, LocalDateTime now);
+  /**
+   * Whether an unexpired sign link for exactly this DPA version is still outstanding — the
+   * "contract on hold" predicate. The version is part of the question on purpose (#179): a link
+   * minted for a superseded version can only ever produce an OUTDATED signature, so reporting the
+   * CURRENT contract as "awaiting a signer" because of it would mislead the wizard and the gate.
+   */
+  boolean existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+      Long tenantId, LocalDateTime dpaVersion, DpaSignatureStatus status, LocalDateTime now);
 
   /** App-level replacement for the dropped DB cascade: removes all rows of a deleted tenant. */
   long deleteByTenantId(Long tenantId);
@@ -36,17 +41,20 @@ public interface TenantDpaSignatureRepository
    * under a concurrent double-submit exactly one caller wins (rows affected = 1) and the rest get
    * 0. This is what makes "single-use" hold under concurrency (the read-then-write path cannot).
    *
-   * <p>{@code forwardedByUserId} and {@code source} are deliberately NOT part of the update
-   * (ORISO-TenantService#179): they are stamped when the sign link is created and must not be
-   * overridable by the signing client.
+   * <p>{@code forwardedByUserId} is deliberately NOT part of the update (ORISO-TenantService#179):
+   * it is stamped when the sign link is created and must not be overridable by the signing client.
+   * {@code source} is likewise never taken from the client — it is only defaulted here for links
+   * minted before source stamping existed, so the persisted column matches what the API returns (a
+   * legacy row would otherwise stay null in the database and be missed by every later reader).
    */
-  @Modifying(clearAutomatically = true)
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
       "update TenantDpaSignatureEntity s set "
           + "s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.SIGNED, "
           + "s.signerName = :signerName, s.signerPosition = :signerPosition, "
           + "s.signerEmail = :signerEmail, s.signerOrganisation = :signerOrganisation, "
           + "s.signerIsMember = :signerIsMember, s.language = :language, "
+          + "s.source = coalesce(s.source, :defaultSource), "
           + "s.signedAt = :now, s.tokenHash = null "
           + "where s.tokenHash = :tokenHash "
           + "and s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.PENDING")
@@ -58,6 +66,7 @@ public interface TenantDpaSignatureRepository
       @Param("signerOrganisation") String signerOrganisation,
       @Param("signerIsMember") Boolean signerIsMember,
       @Param("language") String language,
+      @Param("defaultSource") String defaultSource,
       @Param("now") LocalDateTime now);
 
   /**
@@ -65,7 +74,9 @@ public interface TenantDpaSignatureRepository
    * signature is recorded, all still-PENDING rows flip to INVALIDATED and lose their token, so
    * every outstanding link resolves to the defined "no longer valid" state.
    */
-  @Modifying(clearAutomatically = true)
+  // flushAutomatically matters: this runs in the same transaction as the signature insert, and a
+  // bulk update that only cleared the persistence context would discard the not-yet-flushed row.
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
       "update TenantDpaSignatureEntity s set "
           + "s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.INVALIDATED, "

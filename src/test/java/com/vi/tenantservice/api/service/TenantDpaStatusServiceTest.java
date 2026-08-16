@@ -349,6 +349,9 @@ class TenantDpaStatusServiceTest {
     givenNoSignatures();
     when(adminSignatureRepository.save(any()))
         .thenThrow(new DataIntegrityViolationException("duplicate tenant/version"));
+    // the winner's row is there — that, not the exception type, is what makes this race benign
+    when(adminSignatureRepository.existsByTenantIdAndDpaVersion(TENANT_ID, VERSION_2))
+        .thenReturn(true);
 
     var status =
         service.sign(
@@ -596,14 +599,37 @@ class TenantDpaStatusServiceTest {
     assertThat(captor.getValue().getDpaVersion()).isEqualTo(VERSION_2);
   }
 
+  @Test
+  void sign_Should_rethrow_When_thePersistenceFailureIsNotADuplicate() {
+    // a non-duplicate integrity failure means NOTHING was recorded; reporting it as a signature
+    // (and invalidating the tenant's live sign links) would destroy usable links for nothing
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+    when(adminSignatureRepository.save(any()))
+        .thenThrow(new DataIntegrityViolationException("some other constraint"));
+    when(adminSignatureRepository.existsByTenantIdAndDpaVersion(TENANT_ID, VERSION_2))
+        .thenReturn(false);
+
+    assertThatThrownBy(
+            () ->
+                service.sign(
+                    TENANT_ID,
+                    "admin-user-id",
+                    "tenantadmin",
+                    new TenantDpaStatusService.AdminSignatureForm(
+                        "A", null, null, null, "de", "{}")))
+        .isInstanceOf(DataIntegrityViolationException.class);
+  }
+
   // --- contract on hold + link invalidation (ORISO-TenantService#179) ----------------------
 
   @Test
   void getStatus_Should_reportForwardPending_When_unsignedButALiveSignLinkIsOutstanding() {
     givenTenantWithEmbeddedVersion(VERSION_2);
     givenNoSignatures();
-    when(signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
+    when(signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
             org.mockito.ArgumentMatchers.eq(TENANT_ID),
+            org.mockito.ArgumentMatchers.eq(VERSION_2),
             org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
             any(LocalDateTime.class)))
         .thenReturn(true);
@@ -619,8 +645,9 @@ class TenantDpaStatusServiceTest {
   void getStatus_Should_notReportForwardPending_When_theOnlyOutstandingLinkExpired() {
     givenTenantWithEmbeddedVersion(VERSION_2);
     givenNoSignatures();
-    when(signatureRepository.existsByTenantIdAndStatusAndTokenExpiresAtAfter(
+    when(signatureRepository.existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
             org.mockito.ArgumentMatchers.eq(TENANT_ID),
+            org.mockito.ArgumentMatchers.eq(VERSION_2),
             org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
             any(LocalDateTime.class)))
         .thenReturn(false);
@@ -646,7 +673,7 @@ class TenantDpaStatusServiceTest {
     assertThat(status.status()).isEqualTo(TenantDpaStatus.VALID);
     assertThat(status.forwardPending()).isFalse();
     verify(signatureRepository, never())
-        .existsByTenantIdAndStatusAndTokenExpiresAtAfter(any(), any(), any());
+        .existsByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(any(), any(), any(), any());
   }
 
   @Test
