@@ -32,6 +32,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -294,8 +295,10 @@ class TenantDpaFacadeTest {
         .thenThrow(new org.springframework.dao.CannotAcquireLockException("lock wait timeout"));
 
     assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
-        .isInstanceOf(ResponseStatusException.class)
-        .hasMessageContaining("429");
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            exception ->
+                assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
     verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any(), any());
   }
 
@@ -309,8 +312,10 @@ class TenantDpaFacadeTest {
         .thenReturn((long) TenantDpaFacade.MAX_OUTSTANDING_INVITES);
 
     assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
-        .isInstanceOf(ResponseStatusException.class)
-        .hasMessageContaining("429");
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            exception ->
+                assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
     verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any(), any());
   }
 
@@ -351,7 +356,9 @@ class TenantDpaFacadeTest {
                 tenantDpaFacade.createPublicForwardSignInvite(
                     new com.vi.tenantservice.api.model.PublicDpaForwardRequestDTO()
                         .reservedTenantId(42L)))
-        .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
     verifyNoInteractions(tenantIdReservationRepository);
   }
 

@@ -667,6 +667,37 @@ class TenantDpaStatusServiceTest {
 
   @Test
   void getStatus_Should_reportForwardPending_When_unsignedButALiveSignLinkIsOutstanding() {
+    // the link is BOUND to the reservation that currently holds the id, so this exercises the
+    // ownership check in its allow direction — with an unbound link the filter short-circuits and
+    // a defect rejecting every bound link would still pass here
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+    when(signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+            org.mockito.ArgumentMatchers.eq(TENANT_ID),
+            org.mockito.ArgumentMatchers.eq(VERSION_2),
+            org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
+            any(LocalDateTime.class)))
+        .thenReturn(List.of(pendingLink(DpaSignToken.hash("reservation-token"))));
+    when(tenantIdReservationRepository.findById(TENANT_ID))
+        .thenReturn(
+            Optional.of(
+                com.vi.tenantservice.api.model.TenantIdReservationEntity.builder()
+                    .tenantId(TENANT_ID)
+                    .token("reservation-token")
+                    .status(com.vi.tenantservice.api.model.TenantIdReservationStatus.RESERVED)
+                    .build()));
+
+    var status = service.getStatus(TENANT_ID);
+
+    // the signature status is unchanged for existing consumers; the waiting state is additive
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
+    assertThat(status.forwardPending()).isTrue();
+  }
+
+  @Test
+  void getStatus_Should_reportForwardPending_ForAnAdminCreatedLinkWithoutABinding() {
+    // the other allow direction: an authenticated admin's invite carries no binding and is
+    // qualified by the tenant row itself
     givenTenantWithEmbeddedVersion(VERSION_2);
     givenNoSignatures();
     when(signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
@@ -676,11 +707,7 @@ class TenantDpaStatusServiceTest {
             any(LocalDateTime.class)))
         .thenReturn(List.of(pendingLink(null)));
 
-    var status = service.getStatus(TENANT_ID);
-
-    // the signature status is unchanged for existing consumers; the waiting state is additive
-    assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
-    assertThat(status.forwardPending()).isTrue();
+    assertThat(service.getStatus(TENANT_ID).forwardPending()).isTrue();
   }
 
   @Test
