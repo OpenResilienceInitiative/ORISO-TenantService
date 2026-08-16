@@ -310,6 +310,7 @@ class TenantDpaFacadeTest {
     // when / then
     assertThatThrownBy(() -> tenantDpaFacade.createPublicForwardSignInvite(forwardRequest()))
         .isInstanceOf(DpaNotPublishedException.class);
+    verify(tenantDpaService, never()).createSignInvite(any(), any(), any(), any(), any());
   }
 
   @Test
