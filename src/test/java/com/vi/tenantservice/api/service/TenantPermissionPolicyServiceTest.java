@@ -3,6 +3,10 @@ package com.vi.tenantservice.api.service;
 import static com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED;
 import static com.vi.tenantservice.api.policy.PermissionPolicyMode.SUGGESTED;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -17,6 +21,7 @@ import com.vi.tenantservice.api.policy.ResolvedPolicyValue;
 import com.vi.tenantservice.api.repository.TenantPermissionPolicyRepository;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -61,6 +66,13 @@ class TenantPermissionPolicyServiceTest {
 
   @Test
   void save_shouldRemainTenantScoped() {
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        "featureVideoCallsEnabled",
+                        new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED))));
     when(repository.findByTenantId(42L)).thenReturn(Optional.empty());
 
     service.saveOverrides(
@@ -71,6 +83,73 @@ class TenantPermissionPolicyServiceTest {
     org.mockito.Mockito.verify(repository).save(saved.capture());
     assertThat(saved.getValue().getTenantId()).isEqualTo(42L);
     assertThat(saved.getValue().getPolicies()).contains("featureVideoCallsEnabled");
+  }
+
+  @Test
+  void save_shouldRejectAChangedValueUnderAnEnforcedParentBeforePersistence() {
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        "featureVideoCallsEnabled",
+                        new BooleanPermissionPolicy(true, PermissionPolicyMode.ENFORCED))));
+
+    assertThatThrownBy(
+            () ->
+                service.saveOverrides(
+                    42L, Map.of("featureVideoCallsEnabled", new PolicyValue<>(false, SUGGESTED))))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("featureVideoCallsEnabled");
+
+    verify(repository, never()).save(any());
+  }
+
+  @Test
+  void save_shouldDiscardAnUnchangedReadOnlyEchoUnderAnEnforcedParent() {
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        "featureSupervisionEnabled",
+                        new BooleanPermissionPolicy(true, PermissionPolicyMode.ENFORCED))));
+    when(repository.findByTenantId(42L)).thenReturn(Optional.empty());
+
+    service.saveOverrides(
+        42L, Map.of("featureSupervisionEnabled", new PolicyValue<>(true, ENFORCED)));
+
+    org.mockito.ArgumentCaptor<TenantPermissionPolicyEntity> saved =
+        org.mockito.ArgumentCaptor.forClass(TenantPermissionPolicyEntity.class);
+    verify(repository).save(saved.capture());
+    assertThat(saved.getValue().getPolicies()).isEqualTo("{}");
+  }
+
+  @Test
+  void resolveMany_shouldLoadPlatformAndTenantOverridesInBulk() {
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        "featureVideoCallsEnabled",
+                        new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED))));
+    when(repository.findByTenantIdIn(Set.of(1L, 2L)))
+        .thenReturn(
+            java.util.List.of(
+                TenantPermissionPolicyEntity.builder()
+                    .tenantId(1L)
+                    .policies(
+                        "{\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}")
+                    .build()));
+
+    var resolved = service.getResolvedPolicies(Set.of(1L, 2L));
+
+    assertThat(resolved.get(1L).get("featureVideoCallsEnabled").value()).isFalse();
+    assertThat(resolved.get(2L).get("featureVideoCallsEnabled").value()).isTrue();
+    verify(repository).findByTenantIdIn(Set.of(1L, 2L));
+    verify(repository, never()).findByTenantId(any());
+    verify(platformControls).getControls();
   }
 
   @Test

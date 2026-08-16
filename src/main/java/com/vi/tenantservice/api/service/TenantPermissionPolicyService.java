@@ -3,7 +3,6 @@ package com.vi.tenantservice.api.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.CaseHandoverPolicies;
 import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
@@ -11,6 +10,7 @@ import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
 import com.vi.tenantservice.api.model.MultilingualTextPermissionPolicy;
 import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.StringListPermissionPolicy;
+import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantPermissionPolicyEntity;
 import com.vi.tenantservice.api.policy.CaseHandoverDurationPolicy;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,31 @@ public class TenantPermissionPolicyService {
         toDomain(platformControls.getControls().getPermissionPolicies());
     Map<String, PolicyValue<Boolean>> overrides =
         repository.findByTenantId(tenantId).map(this::deserialize).orElse(Map.of());
+    return resolvePolicies(inherited, overrides);
+  }
+
+  public Map<Long, Map<String, ResolvedPolicyValue<Boolean>>> getResolvedPolicies(
+      Set<Long> tenantIds) {
+    if (tenantIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, PolicyValue<Boolean>> inherited =
+        toDomain(platformControls.getControls().getPermissionPolicies());
+    Map<Long, Map<String, PolicyValue<Boolean>>> overridesByTenant = new LinkedHashMap<>();
+    repository
+        .findByTenantIdIn(tenantIds)
+        .forEach(entity -> overridesByTenant.put(entity.getTenantId(), deserialize(entity)));
+    Map<Long, Map<String, ResolvedPolicyValue<Boolean>>> resolvedByTenant = new LinkedHashMap<>();
+    tenantIds.forEach(
+        tenantId ->
+            resolvedByTenant.put(
+                tenantId,
+                resolvePolicies(inherited, overridesByTenant.getOrDefault(tenantId, Map.of()))));
+    return Map.copyOf(resolvedByTenant);
+  }
+
+  private Map<String, ResolvedPolicyValue<Boolean>> resolvePolicies(
+      Map<String, PolicyValue<Boolean>> inherited, Map<String, PolicyValue<Boolean>> overrides) {
     Map<String, ResolvedPolicyValue<Boolean>> resolved = new LinkedHashMap<>();
     inherited.forEach(
         (feature, parent) ->
@@ -60,12 +86,21 @@ public class TenantPermissionPolicyService {
       CaseHandoverPolicies caseHandoverOverrides) {
     overrides.keySet().forEach(this::assertKnownFeature);
     validateCaseHandoverOverrides(caseHandoverOverrides);
+    TenantAdminControls platform = platformControls.getControls();
+    Map<String, PolicyValue<Boolean>> writableOverrides =
+        sanitizeBooleanOverrides(toDomain(platform.getPermissionPolicies()), overrides);
+    CaseHandoverPolicies parentCaseHandover = platform.getCaseHandoverPolicies();
+    if (parentCaseHandover == null) {
+      parentCaseHandover = CaseHandoverPolicyDefaults.create();
+    }
+    CaseHandoverPolicies writableCaseHandoverOverrides =
+        sanitizeCaseHandoverOverrides(parentCaseHandover, caseHandoverOverrides);
     TenantPermissionPolicyEntity entity =
         repository.findByTenantId(tenantId).orElseGet(TenantPermissionPolicyEntity::new);
     entity.setTenantId(tenantId);
-    entity.setPolicies(serialize(overrides));
+    entity.setPolicies(serialize(writableOverrides));
     if (caseHandoverOverrides != null) {
-      entity.setCaseHandoverPolicies(serializeCaseHandover(caseHandoverOverrides));
+      entity.setCaseHandoverPolicies(serializeCaseHandover(writableCaseHandoverOverrides));
     }
     entity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));
     repository.save(entity);
@@ -116,7 +151,7 @@ public class TenantPermissionPolicyService {
       return objectMapper.readValue(
           entity.getPolicies(), new TypeReference<Map<String, PolicyValue<Boolean>>>() {});
     } catch (JsonProcessingException exception) {
-      throw new RuntimeJsonMappingException(exception.getMessage());
+      throw mappingFailure("deserialize permission policies", exception);
     }
   }
 
@@ -124,7 +159,7 @@ public class TenantPermissionPolicyService {
     try {
       return objectMapper.writeValueAsString(policies);
     } catch (JsonProcessingException exception) {
-      throw new RuntimeJsonMappingException(exception.getMessage());
+      throw mappingFailure("serialize permission policies", exception);
     }
   }
 
@@ -132,7 +167,7 @@ public class TenantPermissionPolicyService {
     try {
       return objectMapper.readValue(policies, CaseHandoverPolicies.class);
     } catch (JsonProcessingException exception) {
-      throw new RuntimeJsonMappingException(exception.getMessage());
+      throw mappingFailure("deserialize Case Handover policies", exception);
     }
   }
 
@@ -140,7 +175,115 @@ public class TenantPermissionPolicyService {
     try {
       return objectMapper.writeValueAsString(policies);
     } catch (JsonProcessingException exception) {
-      throw new RuntimeJsonMappingException(exception.getMessage());
+      throw mappingFailure("serialize Case Handover policies", exception);
+    }
+  }
+
+  private IllegalStateException mappingFailure(
+      String operation, JsonProcessingException exception) {
+    return new IllegalStateException("Could not " + operation, exception);
+  }
+
+  private Map<String, PolicyValue<Boolean>> sanitizeBooleanOverrides(
+      Map<String, PolicyValue<Boolean>> inherited, Map<String, PolicyValue<Boolean>> overrides) {
+    Map<String, PolicyValue<Boolean>> writable = new LinkedHashMap<>();
+    overrides.forEach(
+        (feature, local) -> {
+          PolicyValue<Boolean> parent = inherited.get(feature);
+          if (parent == null
+              || parent.mode() != com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED) {
+            writable.put(feature, local);
+          } else {
+            assertEnforcedEcho(parent, local, feature);
+          }
+        });
+    return Map.copyOf(writable);
+  }
+
+  private CaseHandoverPolicies sanitizeCaseHandoverOverrides(
+      CaseHandoverPolicies parent, CaseHandoverPolicies local) {
+    if (local == null) {
+      return null;
+    }
+    Map<String, CaseHandoverReasonPolicy> writableReasons = new LinkedHashMap<>();
+    local
+        .getReasons()
+        .forEach(
+            (code, localReason) -> {
+              CaseHandoverReasonPolicy parentReason = parent.getReasons().get(code);
+              writableReasons.put(
+                  code,
+                  new CaseHandoverReasonPolicy(
+                          localReason.getCode(),
+                          sanitizePolicy(
+                              parentReason.getLabels(), localReason.getLabels(), code + ".labels"),
+                          sanitizePolicy(
+                              parentReason.getEnabled(),
+                              localReason.getEnabled(),
+                              code + ".enabled"),
+                          sanitizePolicy(
+                              parentReason.getAccessAllowed(),
+                              localReason.getAccessAllowed(),
+                              code + ".accessAllowed"),
+                          sanitizePolicy(
+                              parentReason.getClientConsentRequired(),
+                              localReason.getClientConsentRequired(),
+                              code + ".clientConsentRequired"),
+                          sanitizePolicy(
+                              parentReason.getApprovalRoles(),
+                              localReason.getApprovalRoles(),
+                              code + ".approvalRoles"),
+                          sanitizePolicy(
+                              parentReason.getClientNotificationTemplates(),
+                              localReason.getClientNotificationTemplates(),
+                              code + ".clientNotificationTemplates"))
+                      .maxAccessDurationMinutes(
+                          sanitizePolicy(
+                              parentReason.getMaxAccessDurationMinutes(),
+                              localReason.getMaxAccessDurationMinutes(),
+                              code + ".maxAccessDurationMinutes")));
+            });
+    return new CaseHandoverPolicies(Map.copyOf(writableReasons));
+  }
+
+  private BooleanPermissionPolicy sanitizePolicy(
+      BooleanPermissionPolicy parent, BooleanPermissionPolicy local, String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private IntegerPermissionPolicy sanitizePolicy(
+      IntegerPermissionPolicy parent, IntegerPermissionPolicy local, String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private StringListPermissionPolicy sanitizePolicy(
+      StringListPermissionPolicy parent, StringListPermissionPolicy local, String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private MultilingualTextPermissionPolicy sanitizePolicy(
+      MultilingualTextPermissionPolicy parent,
+      MultilingualTextPermissionPolicy local,
+      String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private <T, P> P sanitizePolicy(
+      P parent, P local, String field, java.util.function.Function<P, PolicyValue<T>> converter) {
+    if (parent == null || local == null) {
+      return local;
+    }
+    PolicyValue<T> parentPolicy = converter.apply(parent);
+    if (parentPolicy.mode() != com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED) {
+      return local;
+    }
+    assertEnforcedEcho(parentPolicy, converter.apply(local), field);
+    return null;
+  }
+
+  private <T> void assertEnforcedEcho(PolicyValue<T> parent, PolicyValue<T> local, String field) {
+    if (!Objects.equals(parent, local)) {
+      throw new IllegalArgumentException("Cannot override enforced policy: " + field);
     }
   }
 

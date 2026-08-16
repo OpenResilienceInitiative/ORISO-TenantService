@@ -686,9 +686,20 @@ public class TenantServiceFacade {
 
   public List<RestrictedTenantDTO> findRestrictedTenantsByIds(Set<Long> ids) {
     String lang = translationService.getCurrentLanguageContext();
-    return tenantService.findRestrictedTenantDataByIds(ids).stream()
-        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
-        .map(this::withEffectivePermissions)
+    List<RestrictedTenantDTO> tenants =
+        tenantService.findRestrictedTenantDataByIds(ids).stream()
+            .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
+            .toList();
+    Set<Long> resolvedTenantIds =
+        tenants.stream()
+            .map(RestrictedTenantDTO::getId)
+            .collect(java.util.stream.Collectors.toSet());
+    Map<Long, Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>>>
+        policiesByTenant = tenantPermissionPolicyService.getResolvedPolicies(resolvedTenantIds);
+    return tenants.stream()
+        .map(
+            dto ->
+                withEffectivePermissions(dto, policiesByTenant.getOrDefault(dto.getId(), Map.of())))
         .toList();
   }
 
@@ -698,9 +709,18 @@ public class TenantServiceFacade {
    * controls themselves. See ADR-013 P4.
    */
   private RestrictedTenantDTO withEffectivePermissions(RestrictedTenantDTO dto) {
+    return dto == null
+        ? null
+        : withEffectivePermissions(
+            dto, tenantPermissionPolicyService.getResolvedPolicies(dto.getId()));
+  }
+
+  private RestrictedTenantDTO withEffectivePermissions(
+      RestrictedTenantDTO dto,
+      Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies) {
     if (dto != null) {
       Map<String, BooleanPermissionPolicy> policies =
-          tenantPermissionPolicyService.getResolvedPolicies(dto.getId()).entrySet().stream()
+          resolvedPolicies.entrySet().stream()
               .collect(
                   java.util.stream.Collectors.toUnmodifiableMap(
                       Map.Entry::getKey,

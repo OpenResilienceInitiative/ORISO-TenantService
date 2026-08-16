@@ -19,6 +19,22 @@ class PermissionPolicyResolverTest {
     assertThat(PermissionPolicyResolver.resolve(policy, null)).isEqualTo(policy);
   }
 
+  @org.junit.jupiter.api.Test
+  void resolve_shouldKeepAnEnforcedParentInsteadOfTheLocalOverride() {
+    var parent = new PolicyValue<>(true, ENFORCED);
+    var local = new PolicyValue<>(false, SUGGESTED);
+
+    assertThat(PermissionPolicyResolver.resolve(parent, local)).isEqualTo(parent);
+  }
+
+  @org.junit.jupiter.api.Test
+  void resolve_shouldUseTheLocalOverrideForASuggestedParent() {
+    var parent = new PolicyValue<>(true, SUGGESTED);
+    var local = new PolicyValue<>(false, ENFORCED);
+
+    assertThat(PermissionPolicyResolver.resolve(parent, local)).isEqualTo(local);
+  }
+
   private static Stream<Arguments> fourBooleanPolicyStates() {
     return Stream.of(
         Arguments.of(true, ENFORCED),

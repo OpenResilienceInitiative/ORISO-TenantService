@@ -180,6 +180,25 @@ class TenantAdminControlsServiceTest {
   }
 
   @Test
+  void updateControls_Should_preserveCanonicalPoliciesOmittedByAPartialRequest() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"permissionPolicies\":{\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}},"
+            + "\"caseHandoverPolicies\":{\"reasons\":{}}}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    assertThat(capturedSavedControls())
+        .contains("\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"")
+        .contains("\"caseHandoverPolicies\":{\"reasons\":{}}");
+  }
+
+  @Test
   void getControls_shouldDualReadLegacyMapsAsCanonicalPolicies() {
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,"

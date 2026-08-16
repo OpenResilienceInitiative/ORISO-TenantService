@@ -50,6 +50,8 @@ class LegacyPermissionPolicyMapperTest {
         Arguments.of(false, null, true, new PolicyValue<>(false, ENFORCED)),
         Arguments.of(true, false, true, new PolicyValue<>(true, SUGGESTED)),
         Arguments.of(true, false, false, new PolicyValue<>(false, SUGGESTED)),
+        Arguments.of(null, true, false, new PolicyValue<>(true, ENFORCED)),
+        Arguments.of(null, false, false, new PolicyValue<>(false, SUGGESTED)),
         Arguments.of(null, null, true, new PolicyValue<>(true, SUGGESTED)),
         Arguments.of(null, null, false, new PolicyValue<>(false, SUGGESTED)));
   }

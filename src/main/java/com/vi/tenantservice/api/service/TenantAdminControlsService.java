@@ -37,12 +37,19 @@ public class TenantAdminControlsService {
   public TenantAdminControls updateControls(TenantAdminControls tenantAdminControls) {
     TenantAdminControlsSettings controlsSettings =
         tenantConverter.toTenantAdminControlsSettings(tenantAdminControls);
-    hydrateCanonicalPolicies(controlsSettings);
-    // the DTO never carries the translation API keys - preserve the stored ones
     TenantAdminControlsSettings existingSettings = getControlsSettings();
     if (existingSettings != null) {
+      if (controlsSettings.getPermissionPolicies() == null
+          || controlsSettings.getPermissionPolicies().isEmpty()) {
+        controlsSettings.setPermissionPolicies(existingSettings.getPermissionPolicies());
+      }
+      if (controlsSettings.getCaseHandoverPolicies() == null) {
+        controlsSettings.setCaseHandoverPolicies(existingSettings.getCaseHandoverPolicies());
+      }
+      // the DTO never carries the translation API keys - preserve the stored ones
       controlsSettings.setTranslationApiKeys(existingSettings.getTranslationApiKeys());
     }
+    hydrateCanonicalPolicies(controlsSettings);
     saveControlsSettings(controlsSettings);
     return tenantConverter.toTenantAdminControls(controlsSettings);
   }

@@ -34,7 +34,17 @@ class PermissionPolicyOpenApiContractTest {
                 .map(PermissionFeature::apiKey)
                 .toArray(String[]::new));
     assertThat((List<String>) booleanPolicy.get("required")).containsExactly("value", "mode");
-    assertThat((Map<String, Object>) booleanPolicy.get("properties")).containsKey("inherited");
+    for (String schemaName :
+        List.of(
+            "BooleanPermissionPolicy",
+            "IntegerPermissionPolicy",
+            "StringListPermissionPolicy",
+            "MultilingualTextPermissionPolicy")) {
+      var policySchema = (Map<String, Object>) schemas.get(schemaName);
+      var properties = (Map<String, Object>) policySchema.get("properties");
+      var inherited = (Map<String, Object>) properties.get("inherited");
+      assertThat(inherited).as(schemaName + ".inherited").containsEntry("readOnly", true);
+    }
     assertThat(controlProperties).containsKey("permissionPolicies");
     assertThat(controlProperties).containsKey("caseHandoverPolicies");
     assertThat(schemas)

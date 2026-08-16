@@ -34,6 +34,7 @@ import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
@@ -65,6 +66,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -151,8 +153,23 @@ class TenantServiceFacadeTest {
 
     tenantServiceFacade.getTenantPermissionPolicies(42L);
 
-    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(42L);
-    verify(tenantPermissionPolicyService).getResolvedPolicies(42L);
+    InOrder order =
+        Mockito.inOrder(tenantFacadeAuthorisationService, tenantPermissionPolicyService);
+    order.verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(42L);
+    order.verify(tenantPermissionPolicyService).getResolvedPolicies(42L);
+  }
+
+  @Test
+  void updateTenantPermissionPolicies_shouldAuthorizeBeforeWriting() {
+    var request = new TenantPermissionPolicies(42L, Map.of());
+    when(tenantPermissionPolicyService.getResolvedPolicies(42L)).thenReturn(Map.of());
+
+    tenantServiceFacade.updateTenantPermissionPolicies(42L, request);
+
+    InOrder order =
+        Mockito.inOrder(tenantFacadeAuthorisationService, tenantPermissionPolicyService);
+    order.verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(42L);
+    order.verify(tenantPermissionPolicyService).saveOverrides(42L, Map.of(), null);
   }
 
   @Test
@@ -807,7 +824,7 @@ class TenantServiceFacadeTest {
   }
 
   @Test
-  void findRestrictedTenantsByIds_ShouldResolveEachTenantIndependently() {
+  void findRestrictedTenantsByIds_ShouldResolveAllTenantsInOneBulkLookup() {
     var firstTenant = mock(TenantRestrictedData.class);
     var secondTenant = mock(TenantRestrictedData.class);
     var firstDto = new RestrictedTenantDTO().id(1L).settings(new Settings());
@@ -817,14 +834,14 @@ class TenantServiceFacadeTest {
     when(translationService.getCurrentLanguageContext()).thenReturn(DE);
     when(converter.toRestrictedTenantDTO(firstTenant, DE)).thenReturn(firstDto);
     when(converter.toRestrictedTenantDTO(secondTenant, DE)).thenReturn(secondDto);
-    when(tenantPermissionPolicyService.getResolvedPolicies(1L)).thenReturn(Map.of());
-    when(tenantPermissionPolicyService.getResolvedPolicies(2L)).thenReturn(Map.of());
+    when(tenantPermissionPolicyService.getResolvedPolicies(Set.of(1L, 2L)))
+        .thenReturn(Map.of(1L, Map.of(), 2L, Map.of()));
 
     var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
 
     assertThat(result).containsExactly(firstDto, secondDto);
-    verify(tenantPermissionPolicyService).getResolvedPolicies(1L);
-    verify(tenantPermissionPolicyService).getResolvedPolicies(2L);
+    verify(tenantPermissionPolicyService).getResolvedPolicies(Set.of(1L, 2L));
+    verify(tenantPermissionPolicyService, never()).getResolvedPolicies(anyLong());
   }
 
   @Test
