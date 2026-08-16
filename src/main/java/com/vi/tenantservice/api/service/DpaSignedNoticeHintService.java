@@ -2,7 +2,6 @@ package com.vi.tenantservice.api.service;
 
 import com.vi.tenantservice.api.config.AsyncConfig;
 import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,11 +49,18 @@ public class DpaSignedNoticeHintService {
     }
     try {
       noticeExecutor.execute(() -> postHint(tenantId));
-    } catch (RejectedExecutionException exception) {
+    } catch (RuntimeException exception) {
+      // Deliberately every RuntimeException, not just RejectedExecutionException. A saturated pool
+      // does raise a rejection (Spring's TaskRejectedException extends it), but that is not the
+      // only way submission fails: an executor shut down during a deployment throws
+      // IllegalStateException instead. The caller has already committed the signature, so ANY
+      // failure here must be shed — turning a legally successful confirmation into a 500 would
+      // send the signer to a retry that then answers 410, the token being consumed.
       log.warn(
-          "DPA signed-notice hint for tenant {} was shed (notice queue full): the signature is"
-              + " recorded; the notice will not be sent automatically",
-          tenantId);
+          "DPA signed-notice hint for tenant {} was shed ({}): the signature is recorded; the"
+              + " notice will not be sent automatically",
+          tenantId,
+          exception.getClass().getSimpleName());
     }
   }
 
