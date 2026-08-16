@@ -159,6 +159,48 @@ paths:
           description: FORBIDDEN - only super admin can update platform controls
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/dpia:
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Gets platform-level DPIA operator master data [Authorization: Super admin]'
+      operationId: getPlatformDpiaMasterData
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformDpiaMasterDataDTO'
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - only super admin can access platform DPIA master data
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+    put:
+      tags:
+        - tenant-controller
+      summary: 'Updates platform-level DPIA operator master data [Authorization: Super admin]'
+      operationId: updatePlatformDpiaMasterData
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/PlatformDpiaMasterDataDTO'
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformDpiaMasterDataDTO'
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - only super admin can update platform DPIA master data
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/translation/keys:
     get:
       tags:
@@ -719,6 +761,27 @@ paths:
           description: Not found
         400:
           description: BAD REQUEST - invalid/incomplete request or body object
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenant/public/dpia:
+    summary: 'Public DPIA operator master data and document branding source'
+    description: >-
+      Read-only, unauthenticated master data for the living DPIA / legal document renderers.
+      Exposes ONLY the platform operator master data plus the existing public branding
+      (logo/appearance) of the resolved tenant context — never secrets, SMTP configuration
+      or tokens.
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Gets public DPIA operator master data [Authorization: no-auth]'
+      operationId: getPublicDpiaMasterData
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicDpiaMasterDataDTO'
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenant/public/dpa/confirm/{token}:
@@ -1564,6 +1627,17 @@ components:
         secondaryColor:
           type: string
           example: "#FFFFFF"
+        loginEffect:
+          type: string
+          enum: [NONE, LINES, CONNECTED_DOTS, CRACKS]
+          example: "CRACKS"
+          description: >-
+            Which decorative effect the tenant's login stage runs. `NONE` (the default,
+            and what an unset value means) keeps the plain stage with its cursor light
+            cone. The other three are mutually exclusive looks; the frontend loads the
+            code for exactly the one named here and never the others, so this field also
+            decides what a visitor downloads. Desktop only — the stage is not rendered on
+            small viewports, so no effect code is fetched there regardless of this value.
         signal:
           type: string
           example: "#D93025"
@@ -1905,6 +1979,143 @@ components:
           description: "Whether the email field, when shown, must be filled in."
         tenantAdminControls:
           $ref: '#/components/schemas/TenantAdminControls'
+
+    # DPIA operator master data (ORISO-Admin#735). Platform-level singleton maintained by
+    # the platform super admin; consumed publicly by the living-DPIA/legal document
+    # renderers. Public consumers additionally get the resolved tenant branding
+    # (PublicDpiaMasterDataDTO). Deliberately NO secrets and NO free-form maps here:
+    # every field is typed so nothing secret can ride along unnoticed.
+    PlatformDpiaMasterDataDTO:
+      type: object
+      properties:
+        operator:
+          $ref: '#/components/schemas/DpiaOperatorDTO'
+        supervisoryAuthority:
+          $ref: '#/components/schemas/DpiaSupervisoryAuthorityDTO'
+        document:
+          $ref: '#/components/schemas/DpiaDocumentMetadataDTO'
+        keyFigures:
+          $ref: '#/components/schemas/DpiaKeyFiguresDTO'
+
+    DpiaOperatorDTO:
+      type: object
+      properties:
+        legalName:
+          type: string
+          maxLength: 255
+          example: "Deutscher Caritasverband e. V."
+        shortName:
+          type: string
+          maxLength: 255
+          example: "DCV"
+        address:
+          type: string
+          maxLength: 512
+          example: "Karlstrasse 40, 79104 Freiburg"
+        contactEmail:
+          type: string
+          maxLength: 255
+          example: "datenschutz@example.org"
+        contactPhone:
+          type: string
+          maxLength: 64
+          example: "+49 761 200-0"
+        dpoName:
+          type: string
+          maxLength: 255
+          description: 'Name or organisation of the data protection officer.'
+        department:
+          type: string
+          maxLength: 255
+          description: 'Department responsible for the processing activity.'
+        responsiblePerson:
+          type: string
+          maxLength: 255
+          description: 'Person responsible for the processing activity.'
+
+    DpiaSupervisoryAuthorityDTO:
+      type: object
+      properties:
+        legalFramework:
+          type: string
+          enum: [KDG, GDPR]
+          description: >-
+            Compliance preset the supervisory authority follows: KDG (diocesan data
+            protection officer) or GDPR (state data protection authority). Switches
+            all norm citations in the rendered documents.
+        name:
+          type: string
+          maxLength: 255
+        address:
+          type: string
+          maxLength: 512
+        email:
+          type: string
+          maxLength: 255
+
+    DpiaDocumentMetadataDTO:
+      type: object
+      properties:
+        documentDate:
+          type: string
+          format: date
+          description: 'Date of the current document version.'
+        nextReviewDate:
+          type: string
+          format: date
+          description: 'Date the document is due for its next review.'
+
+    DpiaKeyFiguresDTO:
+      type: object
+      description: >-
+        Manually maintained platform key figures (count + as-of date each).
+        Automatic fill from platform statistics is a follow-up.
+      properties:
+        tenants:
+          $ref: '#/components/schemas/DpiaKeyFigureDTO'
+        counsellingCentres:
+          $ref: '#/components/schemas/DpiaKeyFigureDTO'
+        activeCounsellors:
+          $ref: '#/components/schemas/DpiaKeyFigureDTO'
+        registeredClients:
+          $ref: '#/components/schemas/DpiaKeyFigureDTO'
+
+    DpiaKeyFigureDTO:
+      type: object
+      properties:
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+        asOfDate:
+          type: string
+          format: date
+
+    PublicDpiaMasterDataDTO:
+      type: object
+      properties:
+        operator:
+          $ref: '#/components/schemas/DpiaOperatorDTO'
+        supervisoryAuthority:
+          $ref: '#/components/schemas/DpiaSupervisoryAuthorityDTO'
+        document:
+          $ref: '#/components/schemas/DpiaDocumentMetadataDTO'
+        keyFigures:
+          $ref: '#/components/schemas/DpiaKeyFiguresDTO'
+        branding:
+          $ref: '#/components/schemas/DpiaBrandingDTO'
+
+    DpiaBrandingDTO:
+      type: object
+      description: >-
+        Document branding source: reuses the existing public tenant appearance
+        (logo upload + appearance tokens) of the resolved tenant context.
+        Absent when no tenant context could be resolved.
+      properties:
+        tenantName:
+          type: string
+        theming:
+          $ref: '#/components/schemas/Theming'
 
     TenantAdminControls:
       type: object
