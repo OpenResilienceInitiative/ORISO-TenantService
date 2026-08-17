@@ -567,6 +567,16 @@
                     <excludedGroups>SkipOnCI</excludedGroups>
                 </configuration>
                 <executions>
+                    <!-- Surefire's built-in `default-test` execution is disabled here. Left
+                         enabled it inherits the plugin-level configuration together with
+                         surefire's default includes, selects the same `*Test` classes as
+                         `unit-tests` below, and runs the entire unit suite a second time on
+                         every build. The two named executions below own the unit/IT split
+                         explicitly, each with its own `<includes>`. -->
+                    <execution>
+                        <id>default-test</id>
+                        <phase>none</phase>
+                    </execution>
                     <execution>
                         <id>unit-tests</id>
                         <phase>test</phase>
