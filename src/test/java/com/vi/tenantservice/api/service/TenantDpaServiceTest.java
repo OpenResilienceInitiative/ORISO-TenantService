@@ -240,6 +240,9 @@ class TenantDpaServiceTest {
             .dpaVersion(version)
             .status(DpaSignatureStatus.PENDING)
             .tokenHash(DpaSignToken.hash(rawToken))
+            // a public forward link ALWAYS carries its binding; without it this fixture would
+            // take the unbound path and never exercise the reservation check it exists to prove
+            .reservationTokenHash(DpaSignToken.hash("reservation-token"))
             .tokenExpiresAt(LocalDateTime.now().plusDays(1))
             .build();
     when(signatureRepository.findByTokenHashAndStatus(
@@ -487,6 +490,9 @@ class TenantDpaServiceTest {
                     .tenantId(42L)
                     .status(DpaSignatureStatus.PENDING)
                     .tokenHash(DpaSignToken.hash(rawToken))
+                    // bound, like every real public forward link — an empty hash here would skip
+                    // the binding check instead of proving it accepts the active reservation
+                    .reservationTokenHash(DpaSignToken.hash("reservation-token"))
                     .tokenExpiresAt(LocalDateTime.now().plusDays(1))
                     .build()));
     when(tenantRepository.findById(42L)).thenReturn(Optional.empty());
@@ -637,6 +643,37 @@ class TenantDpaServiceTest {
     var captor = ArgumentCaptor.forClass(TenantDpaSignatureEntity.class);
     verify(signatureRepository).save(captor.capture());
     assertThat(captor.getValue().getReservationTokenHash()).isNull();
+  }
+
+  @Test
+  void confirmSignature_Should_lockEveryOutstandingLinkBeforeConsuming() {
+    // Deadlock avoidance: the whole set is taken in a stable order BEFORE the consume, so two
+    // confirmations for one tenant cannot each hold what the other needs. Ordering is the
+    // assertion — locking after the consume would leave the cycle intact.
+    var rawToken = "ordering-token";
+    var pending =
+        TenantDpaSignatureEntity.builder()
+            .tenantId(7L)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash(DpaSignToken.hash(rawToken))
+            .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+            .build();
+    when(signatureRepository.findByTokenHashAndStatus(
+            DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
+        .thenReturn(Optional.of(pending));
+    givenExistingTenant(7L);
+    when(signatureRepository.consumeSignToken(
+            any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(1);
+
+    tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de");
+
+    var inOrder = org.mockito.Mockito.inOrder(signatureRepository);
+    inOrder.verify(signatureRepository).lockOutstandingByTenantId(7L);
+    inOrder
+        .verify(signatureRepository)
+        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    inOrder.verify(signatureRepository).invalidateOutstandingByTenantId(7L);
   }
 
   @Test

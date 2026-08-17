@@ -313,6 +313,13 @@ public class TenantDpaService {
     // would leave a confirmable orphan behind — the tenant foreign key that used to prevent that
     // was dropped so links could be minted for reserved ids (#179).
     requireLiveTenantContext(pending);
+    // Take ALL of the tenant's outstanding links in a stable order before touching any of them.
+    // Consuming one row and then invalidating the rest means two confirmations with distinct
+    // tokens for one tenant each hold what the other needs, and InnoDB resolves that by rolling
+    // one back — reporting a committed, legally valid signature to its signer as a 500. Ordering
+    // the acquisition removes the cycle: the second confirmation waits, then finds its own row no
+    // longer PENDING and gets the defined "already used" answer (410).
+    signatureRepository.lockOutstandingByTenantId(pending.getTenantId());
     var tokenHash = DpaSignToken.hash(rawToken);
     var now = LocalDateTime.now();
     // Atomic single-use: only the still-PENDING row is updated, so a concurrent double-submit
@@ -363,7 +370,7 @@ public class TenantDpaService {
   /**
    * Removes every signature row of a deleted tenant — the application-level replacement for the
    * database cascade that had to go when sign links for still-unregistered (reserved) tenants were
-   * introduced (#179, changeset 0028).
+   * introduced (#179, changeset 0030).
    */
   @Transactional
   public void deleteSignaturesForTenant(Long tenantId) {

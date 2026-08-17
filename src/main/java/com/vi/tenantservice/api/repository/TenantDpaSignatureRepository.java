@@ -2,12 +2,16 @@ package com.vi.tenantservice.api.repository;
 
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 public interface TenantDpaSignatureRepository
@@ -78,6 +82,30 @@ public interface TenantDpaSignatureRepository
       @Param("language") String language,
       @Param("defaultSource") String defaultSource,
       @Param("now") LocalDateTime now);
+
+  /**
+   * Locks every outstanding sign link of the tenant, in ascending id order, before a confirmation
+   * touches any of them.
+   *
+   * <p>Deadlock avoidance, not throttling. {@code confirmSignature} locks its own row via {@link
+   * #consumeSignToken} and then calls {@link #invalidateOutstandingByTenantId}, which needs every
+   * OTHER pending row of the tenant. Two confirmations with distinct tokens for the same tenant
+   * therefore each hold what the other wants, and InnoDB breaks the cycle by rolling one back —
+   * turning a committed, legally valid signature into an HTTP 500 for its signer.
+   *
+   * <p>Taking the whole set up front in a stable order removes the cycle instead of retrying around
+   * it: both transactions request the same rows in the same sequence, so the second simply waits,
+   * then finds its own row no longer PENDING and answers the defined 410. A retry would have
+   * papered over the lock ordering while leaving it intact.
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
+  @Query(
+      "select s from TenantDpaSignatureEntity s "
+          + "where s.tenantId = :tenantId "
+          + "and s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.PENDING "
+          + "order by s.id")
+  List<TenantDpaSignatureEntity> lockOutstandingByTenantId(@Param("tenantId") Long tenantId);
 
   /**
    * Invalidates every outstanding sign link of the tenant (ORISO-TenantService#179): the moment any
