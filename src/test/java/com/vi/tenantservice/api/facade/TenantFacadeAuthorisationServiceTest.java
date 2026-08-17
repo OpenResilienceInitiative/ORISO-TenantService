@@ -12,10 +12,13 @@ import com.vi.tenantservice.api.authorisation.Authority;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.model.Licensing;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
+import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
+import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantSetting;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.config.security.AuthorisationService;
@@ -38,6 +41,8 @@ class TenantFacadeAuthorisationServiceTest {
   @Mock TenantFacadeChangeDetectionService tenantFacadeChangeDetectionService;
 
   @Mock ApplicationSettingsService applicationSettingsService;
+
+  @Mock TenantAdminControlsService tenantAdminControlsService;
 
   @Test
   void
@@ -266,5 +271,122 @@ class TenantFacadeAuthorisationServiceTest {
           tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
               tenantDTO, tenantEntity);
         });
+  }
+
+  // --- Appearance permission (TenantService#174) ------------------------------------------
+  // The platform admin can take branding away from Träger admins. Until now that switch only
+  // greyed out the admin panel's card, so the same change still went through over the API.
+
+  private void givenSingleTenantAdmin() {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
+        .thenReturn(false);
+  }
+
+  private void givenAppearanceToggle(Boolean appearance) {
+    when(tenantAdminControlsService.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .allowedPermissionToggles(
+                    new TenantAdminAllowedPermissionToggles().appearance(appearance)));
+  }
+
+  private TenantEntity tenantWithLogo(String logo) {
+    return TenantEntity.builder()
+        .id(ID)
+        .settings(JsonConverter.convertToJson(new TenantSettings()))
+        .themingLogo(logo)
+        .build();
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_RejectBrandingChange_When_AppearanceToggleIsOffForTenantAdmin() {
+    // given
+    TenantEntity existing = tenantWithLogo("old-logo");
+    MultilingualTenantDTO changed =
+        new MultilingualTenantDTO().theming(new Theming().logo("new-logo"));
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(false);
+
+    // when / then
+    assertThrows(
+        TenantAuthorisationException.class,
+        () ->
+            tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+                changed, existing));
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_AllowUnrelatedSave_When_AppearanceToggleIsOffButBrandingIsUnchanged() {
+    // The admin panel submits whole tenant payloads, so every other card's save carries the
+    // theming block too. Rejecting on its mere presence would lock a restricted Träger admin
+    // out of settings that have nothing to do with branding.
+    // given
+    TenantEntity existing = tenantWithLogo("same-logo");
+    MultilingualTenantDTO unchanged =
+        new MultilingualTenantDTO().theming(new Theming().logo("same-logo"));
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(false);
+
+    // when
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        unchanged, existing);
+
+    // then no exception
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_AllowBrandingChange_When_AppearanceToggleIsOn() {
+    // given
+    TenantEntity existing = tenantWithLogo("old-logo");
+    MultilingualTenantDTO changed =
+        new MultilingualTenantDTO().theming(new Theming().logo("new-logo"));
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(true);
+
+    // when
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        changed, existing);
+
+    // then no exception
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_AllowBrandingChange_When_ToggleIsAbsent() {
+    // Legacy rows carry no controls at all. An absent toggle must keep meaning "allowed",
+    // otherwise every existing Träger is silently locked out of its own branding.
+    // given
+    TenantEntity existing = tenantWithLogo("old-logo");
+    MultilingualTenantDTO changed =
+        new MultilingualTenantDTO().theming(new Theming().logo("new-logo"));
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(null);
+
+    // when
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        changed, existing);
+
+    // then no exception
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_AllowBrandingChange_When_UserIsSuperAdmin() {
+    // given
+    TenantEntity existing = tenantWithLogo("old-logo");
+    MultilingualTenantDTO changed =
+        new MultilingualTenantDTO().theming(new Theming().logo("new-logo"));
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
+        .thenReturn(true);
+
+    // when
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        changed, existing);
+
+    // then no exception - the controls are never consulted for a super admin
+    verify(tenantAdminControlsService, org.mockito.Mockito.never()).getControls();
   }
 }
