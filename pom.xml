@@ -563,7 +563,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <skipTests>false</skipTests>
                     <excludedGroups>SkipOnCI</excludedGroups>
                 </configuration>
                 <executions>
@@ -584,7 +583,6 @@
                             <goal>test</goal>
                         </goals>
                         <configuration>
-                            <skipTests>false</skipTests>
                             <includes>
                                 <include>**/*Test.java</include>
                             </includes>
@@ -597,7 +595,6 @@
                             <goal>test</goal>
                         </goals>
                         <configuration>
-                            <skipTests>false</skipTests>
                             <includes>
                                 <include>**/*IT.*</include>
                             </includes>
