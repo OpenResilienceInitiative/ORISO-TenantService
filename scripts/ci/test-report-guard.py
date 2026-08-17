@@ -13,13 +13,10 @@ green. `LiquibaseSchemaDriftIT` sat skipped in every run on that basis (#203).
 The same blindness defeated the zero-test check, which can never fire while a
 fully disabled suite reports its skipped methods in `tests`.
 
-So executions are counted as `tests - skipped`, and a skipped test fails the
-build unless it is declared in the allowlist with a reason. An empty or absent
-allowlist is therefore strict zero tolerance; a declared skip stays visible in
-the step summary rather than disappearing into a green check.
-
-Declaring an exemption is deliberately more work than deleting one. The failure
-mode of #203 was not that a skip was tolerated, it was that nobody could see it.
+So executions are counted as `tests - skipped`, and every skipped test fails the
+build. A required gate has no skip exemption: a test either runs, is repaired,
+or is removed from the required suite explicitly rather than producing a green
+report that overstates what was executed.
 """
 
 import argparse
@@ -28,9 +25,6 @@ from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
 
-
-REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_ALLOWLIST = REPOSITORY_ROOT / ".github" / "allowed-skipped-tests.txt"
 
 REPORT_GLOBS = (
     "**/target/surefire-reports/TEST-*.xml",
@@ -93,47 +87,7 @@ def collect(root: Path) -> Suite:
     return suite
 
 
-def load_allowlist(path: Path) -> tuple[dict[str, str], list[str]]:
-    """Parses `<pattern> # <reason>` lines into {pattern: reason} plus complaints.
-
-    A pattern never contains whitespace, so the first space separates it from
-    the reason. That keeps the `#` of a `Class#method` pattern out of the way of
-    the `#` that introduces the reason.
-    """
-    entries: dict[str, str] = {}
-    complaints: list[str] = []
-
-    if not path.is_file():
-        return entries, complaints
-
-    for number, line in enumerate(path.read_text().splitlines(), start=1):
-        text = line.strip()
-        if not text or text.startswith("#"):
-            continue
-
-        pattern, _, remainder = text.partition(" ")
-        reason = remainder.strip().lstrip("#").strip()
-        if not reason:
-            complaints.append(
-                f"{path}:{number}: `{pattern}` is declared without a reason. "
-                "Write `<pattern> # <why it is skipped, and the issue tracking it>`."
-            )
-            continue
-
-        entries[pattern] = reason
-
-    return entries, complaints
-
-
-def match(case: Case, patterns: dict[str, str]) -> str | None:
-    """A bare class name covers the whole class; `Class#method` covers one method."""
-    for pattern in (case.identifier, case.class_name):
-        if pattern in patterns:
-            return pattern
-    return None
-
-
-def render(suite: Suite, declared: list[tuple[Case, str]], undeclared: list[Case]) -> list[str]:
+def render(suite: Suite) -> list[str]:
     lines = [
         "| Metric | Count |",
         "| --- | ---: |",
@@ -145,30 +99,12 @@ def render(suite: Suite, declared: list[tuple[Case, str]], undeclared: list[Case
         f"across {suite.reports:,} report(s).",
     ]
 
-    # Undeclared skips are the failure, so they stay in the open. Declared ones
-    # are folded away: the point of the summary is that they remain visible at
-    # all, not that they crowd out the run they were allowed in.
-    if undeclared:
+    if suite.skipped:
         lines.extend(["", "| Test | Status | Reason |", "| --- | --- | --- |"])
         lines.extend(
-            f"| `{case.identifier}` | undeclared | {case.message} |" for case in undeclared
+            f"| `{case.identifier}` | forbidden skip | {case.message} |"
+            for case in suite.skipped
         )
-
-    if declared:
-        lines.extend(
-            [
-                "",
-                "<details>",
-                f"<summary>Declared skips ({len(declared)})</summary>",
-                "",
-                "| Test | Status | Declared because |",
-                "| --- | --- | --- |",
-            ]
-        )
-        lines.extend(
-            f"| `{case.identifier}` | declared | {reason} |" for case, reason in declared
-        )
-        lines.extend(["", "</details>"])
 
     return lines
 
@@ -181,35 +117,17 @@ def main() -> int:
         default=Path("."),
         help="directory to search for test reports (default: the working directory)",
     )
-    parser.add_argument(
-        "--allowlist",
-        type=Path,
-        default=DEFAULT_ALLOWLIST,
-        help="declared-skip allowlist (default: .github/allowed-skipped-tests.txt)",
-    )
     arguments = parser.parse_args()
 
     suite = collect(arguments.root)
     if not suite.reports:
         return fail(["Zero test reports found — tests were silently skipped or never ran."])
 
-    patterns, complaints = load_allowlist(arguments.allowlist)
-
-    declared: list[tuple[Case, str]] = []
-    undeclared: list[Case] = []
-    used: set[str] = set()
-    for case in suite.skipped:
-        if (pattern := match(case, patterns)) is None:
-            undeclared.append(case)
-        else:
-            used.add(pattern)
-            declared.append((case, patterns[pattern]))
-
-    summary = render(suite, declared, undeclared)
-    problems: list[str] = list(complaints)
+    summary = render(suite)
+    problems: list[str] = []
 
     # Ordered by how much they matter: nothing ran at all, then a red test, then
-    # a skip nobody declared.
+    # any skip in the required suite.
     if suite.executed == 0:
         problems.append(
             f"Test reports contain zero executed tests ({suite.skipped_count} skipped)."
@@ -219,30 +137,11 @@ def main() -> int:
         problems.append(f"{len(suite.broken)} test(s) failed or errored:")
         problems.extend(f"  - {case.identifier}: {case.message}" for case in suite.broken)
 
-    if undeclared:
+    if suite.skipped:
         problems.append(
-            f"{len(undeclared)} test(s) were skipped without being declared in "
-            f"{arguments.allowlist}:"
+            f"{len(suite.skipped)} test(s) were skipped; this gate requires zero skips:"
         )
-        problems.extend(f"  - {case.identifier}: {case.message}" for case in undeclared)
-        problems.append(
-            "Either make them run, or declare them as "
-            "`<pattern> # <why, and the issue tracking it>`."
-        )
-
-    # A pattern that no longer matches anything cannot hide a skip, so warn
-    # rather than fail: breaking the branch over a rotten line would punish
-    # exactly the change that removed the skip.
-    if stale := sorted(set(patterns) - used):
-        summary.extend(
-            [
-                "",
-                "⚠️ Stale allowlist entries (they match no skipped test): "
-                f"{', '.join(f'`{pattern}`' for pattern in stale)}. Delete them from "
-                f"{arguments.allowlist}.",
-            ]
-        )
-        print(f"::warning::Stale skip allowlist entries: {', '.join(stale)}", file=sys.stderr)
+        problems.extend(f"  - {case.identifier}: {case.message}" for case in suite.skipped)
 
     print("\n".join(summary))
     print()

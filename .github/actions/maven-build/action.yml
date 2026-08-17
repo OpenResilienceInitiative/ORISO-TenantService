@@ -20,8 +20,7 @@ runs:
   # Runs BOTH surefire executions: `unit-tests` (test phase, **/*Test) and
   # `integration-tests` (integration-test phase, **/*IT.*), then hands the
   # reports to the guard, which fails the build on a failure, an error, no
-  # reports at all, nothing actually executed, or a skip that is not declared
-  # in .github/allowed-skipped-tests.txt.
+  # reports at all, nothing actually executed, or any skipped test.
   #
   # The guard lives in scripts/ci/ rather than inline here because the version
   # that lived inline counted skipped tests as executed and nothing could catch

@@ -10,7 +10,6 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 GUARD = ROOT / "scripts/ci/test-report-guard.py"
 MAVEN_BUILD_ACTION = ROOT / ".github/actions/maven-build/action.yml"
-ALLOWLIST = ROOT / ".github/allowed-skipped-tests.txt"
 
 
 def report(
@@ -56,7 +55,7 @@ def report(
 
 
 class TestReportGuardTest(unittest.TestCase):
-    def run_guard(self, reports: dict[str, str] | None, allowlist: str | None = None):
+    def run_guard(self, reports: dict[str, str] | None):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             if reports is not None:
@@ -65,17 +64,16 @@ class TestReportGuardTest(unittest.TestCase):
                 for class_name, body in reports.items():
                     (directory / f"TEST-{class_name}.xml").write_text(body)
 
-            command = [sys.executable, str(GUARD), "--root", str(root)]
-            if allowlist is not None:
-                path = root / "allowed-skipped-tests.txt"
-                path.write_text(allowlist)
-                command += ["--allowlist", str(path)]
-
-            return subprocess.run(command, check=False, capture_output=True, text=True)
+            return subprocess.run(
+                [sys.executable, str(GUARD), "--root", str(root)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
 
     # --- the defect this guard exists to catch -------------------------------
 
-    def test_fails_on_a_skipped_test_that_is_not_declared(self):
+    def test_fails_on_a_fully_skipped_class_even_when_other_tests_execute(self):
         """The whole point: `tests="4" skipped="4"` used to read as four executions."""
         result = self.run_guard(
             {
@@ -95,94 +93,33 @@ class TestReportGuardTest(unittest.TestCase):
             {
                 "com.example.DriftIT": report("com.example.DriftIT", skipped=("a", "b")),
                 "com.example.RealTest": report("com.example.RealTest", passed=("x", "y", "z")),
-            },
-            allowlist="com.example.DriftIT # tracked in #203\n",
+            }
         )
 
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("| Executed | 3 |", result.stdout)
         self.assertIn("| Skipped | 2 |", result.stdout)
 
     def test_fails_when_every_reported_test_was_skipped(self):
-        """A suite that ran nothing proves nothing, however well declared the skips are."""
+        """A suite that ran nothing proves nothing."""
         result = self.run_guard(
-            {"com.example.DriftIT": report("com.example.DriftIT", skipped=("a", "b"))},
-            allowlist="com.example.DriftIT # tracked in #203\n",
+            {"com.example.DriftIT": report("com.example.DriftIT", skipped=("a", "b"))}
         )
 
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("zero executed tests", result.stdout)
 
-    # --- allowlist semantics -------------------------------------------------
-
-    def test_allows_a_declared_class_and_shows_its_reason(self):
+    def test_fails_when_other_tests_executed_but_one_was_skipped(self):
         result = self.run_guard(
             {
                 "com.example.DriftIT": report("com.example.DriftIT", skipped=("a",)),
                 "com.example.RealTest": report("com.example.RealTest", passed=("x",)),
-            },
-            allowlist="com.example.DriftIT # needs a real MariaDB, see #203\n",
+            }
         )
 
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("needs a real MariaDB, see #203", result.stdout)
-
-    def test_a_declared_method_does_not_cover_its_siblings(self):
-        result = self.run_guard(
-            {
-                "com.example.DriftIT": report("com.example.DriftIT", skipped=("a", "b")),
-                "com.example.RealTest": report("com.example.RealTest", passed=("x",)),
-            },
-            allowlist="com.example.DriftIT#a # only this one is known\n",
-        )
-
-        self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("com.example.DriftIT#b", result.stdout)
-        self.assertNotIn("`com.example.DriftIT#a` | undeclared", result.stdout)
-
-    def test_rejects_a_declared_entry_that_carries_no_reason(self):
-        """An undocumented exemption is the state this guard exists to end."""
-        result = self.run_guard(
-            {"com.example.RealTest": report("com.example.RealTest", passed=("x",))},
-            allowlist="com.example.DriftIT\n",
-        )
-
-        self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("reason", result.stdout)
-
-    def test_reports_a_stale_entry_without_failing_the_build(self):
-        """A rotten entry cannot hide anything; failing here would only break the branch."""
-        result = self.run_guard(
-            {"com.example.RealTest": report("com.example.RealTest", passed=("x",))},
-            allowlist="com.example.Gone # deleted long ago\n",
-        )
-
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("stale", result.stdout.lower())
-        self.assertIn("com.example.Gone", result.stdout)
-
-    def test_ignores_comments_and_blank_lines(self):
-        result = self.run_guard(
-            {
-                "com.example.DriftIT": report("com.example.DriftIT", skipped=("a",)),
-                "com.example.RealTest": report("com.example.RealTest", passed=("x",)),
-            },
-            allowlist="# a heading\n\n   \ncom.example.DriftIT # tracked\n",
-        )
-
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def test_a_missing_allowlist_means_zero_tolerance(self):
-        result = self.run_guard(
-            {
-                "com.example.DriftIT": report("com.example.DriftIT", skipped=("a",)),
-                "com.example.RealTest": report("com.example.RealTest", passed=("x",)),
-            },
-            allowlist=None,
-        )
-
-        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("com.example.DriftIT#a", result.stdout)
+        self.assertIn("requires zero skips", result.stdout)
 
     # --- the checks that already existed must survive the extraction ---------
 
@@ -240,27 +177,12 @@ class TestReportGuardTest(unittest.TestCase):
         self.assertIn("scripts/ci/test-report-guard.py", action)
         self.assertNotIn("continue-on-error:", action)
 
-    def test_the_checked_in_allowlist_is_accepted_by_the_guard(self):
-        """A malformed entry must break the CI contract job, not the next Maven build."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            directory = root / "target" / "surefire-reports"
-            directory.mkdir(parents=True)
-            (directory / "TEST-com.example.RealTest.xml").write_text(
-                report("com.example.RealTest", passed=("x",))
-            )
+    def test_the_gate_has_no_skip_allowlist_bypass(self):
+        action = MAVEN_BUILD_ACTION.read_text()
+        guard = GUARD.read_text()
 
-            result = subprocess.run(
-                [sys.executable, str(GUARD), "--root", str(root), "--allowlist", str(ALLOWLIST)],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-
-        # Entries are expected to be stale against this synthetic report; the
-        # assertion is that none of them is rejected as malformed.
-        self.assertNotIn("without a reason", result.stdout)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("allowed-skipped-tests", action)
+        self.assertNotIn("--allowlist", guard)
 
 
 if __name__ == "__main__":
