@@ -240,6 +240,9 @@ class TenantDpaServiceTest {
             .dpaVersion(version)
             .status(DpaSignatureStatus.PENDING)
             .tokenHash(DpaSignToken.hash(rawToken))
+            // a public forward link ALWAYS carries its binding; without it this fixture would
+            // take the unbound path and never exercise the reservation check it exists to prove
+            .reservationTokenHash(DpaSignToken.hash("reservation-token"))
             .tokenExpiresAt(LocalDateTime.now().plusDays(1))
             .build();
     when(signatureRepository.findByTokenHashAndStatus(
@@ -487,6 +490,9 @@ class TenantDpaServiceTest {
                     .tenantId(42L)
                     .status(DpaSignatureStatus.PENDING)
                     .tokenHash(DpaSignToken.hash(rawToken))
+                    // bound, like every real public forward link — an empty hash here would skip
+                    // the binding check instead of proving it accepts the active reservation
+                    .reservationTokenHash(DpaSignToken.hash("reservation-token"))
                     .tokenExpiresAt(LocalDateTime.now().plusDays(1))
                     .build()));
     when(tenantRepository.findById(42L)).thenReturn(Optional.empty());

@@ -624,6 +624,9 @@ class TenantDpaStatusServiceTest {
                     new TenantDpaStatusService.AdminSignatureForm(
                         "A", null, null, null, "de", "{}")))
         .isInstanceOf(DataIntegrityViolationException.class);
+    // the point of re-throwing: nothing was recorded, so the tenant's live sign links must still
+    // be usable. Without this the test would pass even if the failure had destroyed them.
+    verify(signatureRepository, never()).invalidateOutstandingByTenantId(any());
   }
 
   // --- contract on hold + link invalidation (ORISO-TenantService#179) ----------------------
