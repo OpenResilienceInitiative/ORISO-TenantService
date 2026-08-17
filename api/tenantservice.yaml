@@ -1807,6 +1807,54 @@ components:
           type: string
           example: "Llorem ipsum..."
           maxLength: 40
+        erstantwortGreeting:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            ORISO-Admin#601 / ADR-018. Träger-authored Erstantwort Baustein, stored as the
+            same `<lang>` → HTML map the legal texts use, including the `<lang>__meta`
+            machine-translation metadata keys. Absent means this Träger authored nothing and
+            the resolution chain falls through to the platform text — which is not the same
+            as an empty string, and must not be normalised into one.
+        erstantwortWhoReadsAlong:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Who reads along. Träger-authored and mandatory by decision, because the Träger is
+            the controller and ORISO the processor — the platform must not derive a claim about
+            who has access to a counselling room.
+        erstantwortEmergencyAddition:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Träger addition to the platform emergency numbers. An addition, never a replacement:
+            the platform numbers carry no toggle at all (ADR-018 §6).
+        erstantwortFreeNotice:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            The single "Freier Hinweis" (ADR-018 §2) — the one Baustein the catalogue does not
+            anticipate. Exactly one exists, enforced by the schema rather than by a rule.
+        erstantwortClosing:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Träger-authored closing.
+        erstantwortResponseDeadlineDays:
+          type: integer
+          example: 2
+          minimum: 1
+          maximum: 30
+          description: >-
+            The Antwortfrist in working days, as a NUMBER and never as prose (ADR-018), so the
+            promise is one value comparable against what actually happened. Absent means the
+            Träger never chose one and the platform default (2) applies — deliberately
+            distinguishable from a Träger that chose 2.
         privacy:
           type: string
           example: "Llorem ipsum..."
@@ -2597,6 +2645,47 @@ components:
           type: object
           additionalProperties:
             type: string
+        erstantwortGreeting:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            ORISO-Admin#601 / ADR-018. Träger-authored Erstantwort Baustein as a `<lang>` → HTML
+            map, the same shape the legal texts use, so machine translation on publish applies
+            unchanged. Absent means the Träger authored nothing and the resolution chain falls
+            through to the platform text — not the same as an empty string.
+        erstantwortWhoReadsAlong:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Mandatory by decision: the Träger is the controller and ORISO the processor, so the
+            platform must not derive a claim about who can read a counselling room.
+        erstantwortEmergencyAddition:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Addition to the platform emergency numbers, never a replacement — those carry no
+            toggle at all (ADR-018 §6).
+        erstantwortFreeNotice:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            The single "Freier Hinweis" (ADR-018 §2). Exactly one, enforced by the schema.
+        erstantwortClosing:
+          type: object
+          additionalProperties:
+            type: string
+        erstantwortResponseDeadlineDays:
+          type: integer
+          example: 2
+          minimum: 1
+          maximum: 30
+          description: >-
+            The Antwortfrist in working days — a NUMBER, never prose (ADR-018). Absent means the
+            platform default (2) applies, deliberately distinguishable from a Träger that chose 2.
         claim:
           type: object
           additionalProperties:
