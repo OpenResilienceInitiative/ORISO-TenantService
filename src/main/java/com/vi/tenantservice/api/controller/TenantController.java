@@ -59,6 +59,7 @@ import java.util.Set;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -155,6 +156,25 @@ public class TenantController implements TenantApi, TenantadminApi {
   public ResponseEntity<DpaSignInviteDTO> createPublicDpaForwardInvite(
       @Valid PublicDpaForwardRequestDTO request) {
     return ResponseEntity.ok(tenantDpaFacade.createPublicForwardSignInvite(request));
+  }
+
+  /**
+   * Lock contention on the confirm path (#179). The confirmation takes every outstanding link of
+   * the tenant before consuming one, so a concurrent confirmation for the same tenant makes the
+   * second wait; if that wait times out, nothing was written and the caller should simply retry.
+   *
+   * <p>503 rather than the mint path's 429: 429 says "you are asking too often", which is a
+   * statement about the caller and is what the mint path's link cap genuinely means. Here the
+   * caller did nothing wrong and has no budget to stay within — the server was briefly busy with
+   * another signer. 503 with Retry-After is the honest description, and it keeps the two situations
+   * distinguishable in logs and to the client. What matters most is that it is neither a 500 (the
+   * signer has committed nothing and there is no fault to report) nor a 410 (the token is still
+   * perfectly valid).
+   */
+  @ExceptionHandler(PessimisticLockingFailureException.class)
+  ResponseEntity<Void> handleSignLockContention(PessimisticLockingFailureException e) {
+    log.info("DPA confirmation contended for the same tenant; asking the caller to retry");
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", "2").build();
   }
 
   @ExceptionHandler(InvalidDpaSignTokenException.class)

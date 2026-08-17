@@ -650,6 +650,13 @@ class TenantDpaServiceTest {
     // Deadlock avoidance: the whole set is taken in a stable order BEFORE the consume, so two
     // confirmations for one tenant cannot each hold what the other needs. Ordering is the
     // assertion — locking after the consume would leave the cycle intact.
+    //
+    // SCOPE, deliberately narrow: this pins the call SEQUENCE only. It says nothing about
+    // PESSIMISTIC_WRITE actually being applied, about the ascending order of the returned rows, or
+    // about two confirmations really racing — none of which can be shown here, and none of which
+    // an H2 (MODE=MySQL) integration run could show either, since it has no InnoDB locking. It is
+    // kept as a refactor guard: it goes red the moment someone moves the lock after the consume.
+    // The behavioural proof lives in DpaConfirmLockOrderingMariaDbIT, gated on a real MariaDB.
     var rawToken = "ordering-token";
     var pending =
         TenantDpaSignatureEntity.builder()
