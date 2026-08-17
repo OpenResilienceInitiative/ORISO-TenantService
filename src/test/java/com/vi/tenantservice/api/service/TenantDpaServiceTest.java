@@ -640,6 +640,37 @@ class TenantDpaServiceTest {
   }
 
   @Test
+  void confirmSignature_Should_lockEveryOutstandingLinkBeforeConsuming() {
+    // Deadlock avoidance: the whole set is taken in a stable order BEFORE the consume, so two
+    // confirmations for one tenant cannot each hold what the other needs. Ordering is the
+    // assertion — locking after the consume would leave the cycle intact.
+    var rawToken = "ordering-token";
+    var pending =
+        TenantDpaSignatureEntity.builder()
+            .tenantId(7L)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash(DpaSignToken.hash(rawToken))
+            .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+            .build();
+    when(signatureRepository.findByTokenHashAndStatus(
+            DpaSignToken.hash(rawToken), DpaSignatureStatus.PENDING))
+        .thenReturn(Optional.of(pending));
+    givenExistingTenant(7L);
+    when(signatureRepository.consumeSignToken(
+            any(), any(), any(), any(), any(), any(), any(), any(), any()))
+        .thenReturn(1);
+
+    tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de");
+
+    var inOrder = org.mockito.Mockito.inOrder(signatureRepository);
+    inOrder.verify(signatureRepository).lockOutstandingByTenantId(7L);
+    inOrder
+        .verify(signatureRepository)
+        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any());
+    inOrder.verify(signatureRepository).invalidateOutstandingByTenantId(7L);
+  }
+
+  @Test
   void confirmSignature_Should_throw_When_tokenNullOrBlank() {
     // when / then
     assertThatThrownBy(

@@ -366,7 +366,7 @@ public class TenantServiceFacade {
             .findTenantById(id)
             .orElseThrow(() -> new TenantNotFoundException("Tenant with id " + id + " not found"));
 
-    // App-level replacement for the DB cascade dropped in changeset 0028 (#179): the tenant's
+    // App-level replacement for the DB cascade dropped in changeset 0030 (#179): the tenant's
     // DPA signature rows (incl. any outstanding sign links) go with the tenant.
     tenantDpaService.deleteSignaturesForTenant(id);
     tenantService.delete(tenant);
