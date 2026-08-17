@@ -1,11 +1,11 @@
 package com.vi.tenantservice.api.controller;
 
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import jakarta.validation.ConstraintViolationException;
-import jakarta.ws.rs.BadRequestException;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -50,9 +50,9 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
     logger.warn("Returning HTTP 400 Bad Request for IllegalStateException", e);
   }
 
-  @ExceptionHandler(value = {BadRequestException.class})
+  @ExceptionHandler(value = {TenantBadRequestException.class})
   @ResponseStatus(HttpStatus.BAD_REQUEST)
-  public void handle(BadRequestException e) {
+  public void handle(TenantBadRequestException e) {
     logger.warn("Returning HTTP 400 Bad Request", e);
   }
 

@@ -12,6 +12,7 @@ import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
 import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
@@ -47,7 +48,6 @@ import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
-import jakarta.ws.rs.BadRequestException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -138,7 +138,7 @@ public class TenantServiceFacade {
       performRollback(createdTenant, reservationToken);
       log.error(
           "Error while creating consulting types for tenant with id {}", createdTenant.getId(), ex);
-      throw new BadRequestException(
+      throw new TenantBadRequestException(
           "Error while creating consulting types for tenant with id " + createdTenant.getId());
     }
     recordOnboardingDpaAcceptance(
@@ -169,7 +169,7 @@ public class TenantServiceFacade {
       if (!Boolean.TRUE.equals(acceptance.getAccepted())
           || isBlank(acceptance.getSignerUserId())
           || isBlank(acceptance.getSignerName())) {
-        throw new BadRequestException(
+        throw new TenantBadRequestException(
             "onboardingDpaAcceptance requires accepted=true, signerUserId and signerName");
       }
       tenantDpaStatusService.signOnboarding(
@@ -224,7 +224,7 @@ public class TenantServiceFacade {
    */
   private static String bounded(String value, int maxLength, String field) {
     if (value != null && value.length() > maxLength) {
-      throw new BadRequestException(
+      throw new TenantBadRequestException(
           "onboardingDpaAcceptance." + field + " exceeds " + maxLength + " characters");
     }
     return value;
@@ -237,7 +237,8 @@ public class TenantServiceFacade {
     try {
       return LocalDateTime.parse(dpaVersion.trim());
     } catch (DateTimeParseException ex) {
-      throw new BadRequestException("onboardingDpaAcceptance.dpaVersion is not a valid timestamp");
+      throw new TenantBadRequestException(
+          "onboardingDpaAcceptance.dpaVersion is not a valid timestamp");
     }
   }
 
@@ -347,7 +348,7 @@ public class TenantServiceFacade {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
 
     if (id == TECHNICAL_TENANT_ID) {
-      throw new BadRequestException("Technical tenant cannot be deleted.");
+      throw new TenantBadRequestException("Technical tenant cannot be deleted.");
     }
 
     TenantEntity tenant =
@@ -721,7 +722,7 @@ public class TenantServiceFacade {
     Optional<TenantRestrictedData> tenantToOverridePrivacy =
         tenantService.findRestrictedTenantDataById(resolvedTenantId);
     if (tenantToOverridePrivacy.isEmpty()) {
-      throw new BadRequestException("Tenant not found for id " + resolvedTenantId);
+      throw new TenantBadRequestException("Tenant not found for id " + resolvedTenantId);
     }
     return Optional.of(
         withEffectivePermissions(
