@@ -47,7 +47,7 @@ class LiquibaseSchemaDriftIT {
    * live outside the chart repository, so this pin is deliberate and needs re-checking when the
    * cluster's MariaDB moves.
    */
-  private static final String MARIADB_IMAGE = "mariadb:10.11";
+  private static final String MARIADB_IMAGE = "mariadb:10.11.18";
 
   private static MariaDBContainer<?> mariadb;
 
