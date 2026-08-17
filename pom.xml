@@ -402,6 +402,20 @@
             <version>3.3.1</version>
             <scope>test</scope>
         </dependency>
+        <!-- Throwaway MariaDB for LiquibaseSchemaDriftIT: the rest of the suite runs on
+             H2 MODE=MySQL with spring.liquibase.enabled=false, so without a real MariaDB
+             container nothing in CI ever executes the changelog. Version managed by
+             spring-boot-dependencies. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-mariadb</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
@@ -562,9 +576,12 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <!-- No <excludedGroups> here on purpose: an exclude-by-tag switch is a
+                     ready-made way to hide a test from the gate, which is exactly the
+                     failure this IT's env-var gate caused. Tests are quarantined by
+                     deletion or by fixing them, not by tagging them out of CI. -->
                 <configuration>
                     <skipTests>false</skipTests>
-                    <excludedGroups>SkipOnCI</excludedGroups>
                 </configuration>
                 <executions>
                     <execution>
