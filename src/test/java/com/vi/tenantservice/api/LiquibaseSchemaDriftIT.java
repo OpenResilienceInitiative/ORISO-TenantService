@@ -23,10 +23,6 @@ import org.testcontainers.containers.MariaDBContainer;
  * {@code MODE=MySQL}, which cannot show drift against the engine we deploy. It therefore starts its
  * own container rather than being gated on an environment variable: a gate that nobody sets makes
  * the test report as <em>skipped</em>, and a skip is silent (ORISO-TenantService#208).
- *
- * <p>To debug against an already-migrated database instead, set {@code LIQUIBASE_IT_DB_URL} (plus
- * optionally {@code LIQUIBASE_IT_DB_USERNAME} / {@code LIQUIBASE_IT_DB_PASSWORD}); no container is
- * started then.
  */
 @SpringBootTest(classes = TenantServiceApplication.class)
 @TestPropertySource(
@@ -53,13 +49,6 @@ class LiquibaseSchemaDriftIT {
 
   @DynamicPropertySource
   static void datasource(DynamicPropertyRegistry registry) {
-    var overrideUrl = System.getenv("LIQUIBASE_IT_DB_URL");
-    if (overrideUrl != null && !overrideUrl.isBlank()) {
-      registry.add("spring.datasource.url", () -> overrideUrl);
-      registry.add("spring.datasource.username", () -> envOrDefault("LIQUIBASE_IT_DB_USERNAME"));
-      registry.add("spring.datasource.password", () -> envOrDefault("LIQUIBASE_IT_DB_PASSWORD"));
-      return;
-    }
     // Singleton container: started once for this class and reaped by Testcontainers' Ryuk, so the
     // suite pays one container start regardless of how many tests below run.
     if (mariadb == null) {
@@ -69,11 +58,6 @@ class LiquibaseSchemaDriftIT {
     registry.add("spring.datasource.url", mariadb::getJdbcUrl);
     registry.add("spring.datasource.username", mariadb::getUsername);
     registry.add("spring.datasource.password", mariadb::getPassword);
-  }
-
-  private static String envOrDefault(String name) {
-    var value = System.getenv(name);
-    return value == null || value.isBlank() ? "root" : value;
   }
 
   @Autowired private JdbcTemplate jdbcTemplate;
