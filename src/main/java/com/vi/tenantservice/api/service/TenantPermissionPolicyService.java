@@ -5,8 +5,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
 import com.vi.tenantservice.api.model.CaseHandoverPolicies;
 import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
+import com.vi.tenantservice.api.model.ConsentPermissionPolicy;
 import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
 import com.vi.tenantservice.api.model.MultilingualTextPermissionPolicy;
 import com.vi.tenantservice.api.model.PermissionPolicyMode;
@@ -236,9 +238,9 @@ public class TenantPermissionPolicyService {
                               localReason.getAccessAllowed(),
                               code + ".accessAllowed"),
                           sanitizePolicy(
-                              parentReason.getClientConsentRequired(),
-                              localReason.getClientConsentRequired(),
-                              code + ".clientConsentRequired"),
+                              effectiveConsent(parentReason),
+                              effectiveConsent(localReason),
+                              code + ".clientConsent"),
                           sanitizePolicy(
                               parentReason.getApprovalRoles(),
                               localReason.getApprovalRoles(),
@@ -247,6 +249,7 @@ public class TenantPermissionPolicyService {
                               parentReason.getClientNotificationTemplates(),
                               localReason.getClientNotificationTemplates(),
                               code + ".clientNotificationTemplates"))
+                      .clientConsentRequired(legacyConsentMirror(effectiveConsent(localReason)))
                       .maxAccessDurationMinutes(
                           sanitizePolicy(
                               parentReason.getMaxAccessDurationMinutes(),
@@ -263,6 +266,11 @@ public class TenantPermissionPolicyService {
 
   private IntegerPermissionPolicy sanitizePolicy(
       IntegerPermissionPolicy parent, IntegerPermissionPolicy local, String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private ConsentPermissionPolicy sanitizePolicy(
+      ConsentPermissionPolicy parent, ConsentPermissionPolicy local, String field) {
     return sanitizePolicy(parent, local, field, this::toDomain);
   }
 
@@ -305,14 +313,17 @@ public class TenantPermissionPolicyService {
             resolveBoolean(parent.getEnabled(), local == null ? null : local.getEnabled()),
             resolveBoolean(
                 parent.getAccessAllowed(), local == null ? null : local.getAccessAllowed()),
-            resolveBoolean(
-                parent.getClientConsentRequired(),
-                local == null ? null : local.getClientConsentRequired()),
+            resolveConsent(
+                effectiveConsent(parent), local == null ? null : effectiveConsent(local)),
             resolveStringList(
                 parent.getApprovalRoles(), local == null ? null : local.getApprovalRoles()),
             resolveMultilingual(
                 parent.getClientNotificationTemplates(),
                 local == null ? null : local.getClientNotificationTemplates()))
+        .clientConsentRequired(
+            legacyConsentMirror(
+                resolveConsent(
+                    effectiveConsent(parent), local == null ? null : effectiveConsent(local))))
         .maxAccessDurationMinutes(
             parent.getMaxAccessDurationMinutes() == null
                 ? null
@@ -326,6 +337,15 @@ public class TenantPermissionPolicyService {
     ResolvedPolicyValue<Boolean> resolved =
         PermissionPolicyResolver.resolveWithOrigin(toDomain(parent), toDomain(local));
     return new BooleanPermissionPolicy(
+            resolved.value(), PermissionPolicyMode.valueOf(resolved.mode().name()))
+        .inherited(resolved.inherited());
+  }
+
+  private ConsentPermissionPolicy resolveConsent(
+      ConsentPermissionPolicy parent, ConsentPermissionPolicy local) {
+    ResolvedPolicyValue<CaseHandoverConsentValue> resolved =
+        PermissionPolicyResolver.resolveWithOrigin(toDomain(parent), toDomain(local));
+    return new ConsentPermissionPolicy(
             resolved.value(), PermissionPolicyMode.valueOf(resolved.mode().name()))
         .inherited(resolved.inherited());
   }
@@ -369,6 +389,10 @@ public class TenantPermissionPolicyService {
     return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
   }
 
+  private PolicyValue<CaseHandoverConsentValue> toDomain(ConsentPermissionPolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
+  }
+
   private PolicyValue<Integer> toDomain(IntegerPermissionPolicy policy) {
     return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
   }
@@ -397,6 +421,15 @@ public class TenantPermissionPolicyService {
       if (!entry.getKey().equals(reason.getCode().getValue())) {
         throw new IllegalArgumentException("Case Handover reason key must match its code");
       }
+      ConsentPermissionPolicy consent = effectiveConsent(reason);
+      if (consent == null) {
+        throw new IllegalArgumentException("Case Handover client consent must not be null");
+      }
+      if (consent.getValue() == CaseHandoverConsentValue.NONE
+          && consent.getMode() == PermissionPolicyMode.ENFORCED) {
+        throw new IllegalArgumentException(
+            "Case Handover NONE consent is a recommendation, not an enforced state");
+      }
       if (CaseHandoverPolicyDefaults.ADVICE_NEEDED.equals(entry.getKey())) {
         IntegerPermissionPolicy duration = reason.getMaxAccessDurationMinutes();
         CaseHandoverDurationPolicy.validateAdviceNeeded(
@@ -408,6 +441,40 @@ public class TenantPermissionPolicyService {
                 : reason.getMaxAccessDurationMinutes().getValue());
       }
     }
+  }
+
+  private ConsentPermissionPolicy effectiveConsent(CaseHandoverReasonPolicy reason) {
+    if (reason == null) {
+      return null;
+    }
+    BooleanPermissionPolicy legacy = reason.getClientConsentRequired();
+    if (legacy != null
+        && Boolean.TRUE.equals(legacy.getValue())
+        && legacy.getMode() == PermissionPolicyMode.ENFORCED) {
+      return new ConsentPermissionPolicy(CaseHandoverConsentValue.OPT_IN, legacy.getMode())
+          .inherited(legacy.getInherited());
+    }
+    if (reason.getClientConsent() != null) {
+      return reason.getClientConsent();
+    }
+    if (legacy == null) {
+      return null;
+    }
+    return new ConsentPermissionPolicy(
+            Boolean.TRUE.equals(legacy.getValue())
+                ? CaseHandoverConsentValue.OPT_IN
+                : CaseHandoverConsentValue.NONE,
+            legacy.getMode())
+        .inherited(legacy.getInherited());
+  }
+
+  private BooleanPermissionPolicy legacyConsentMirror(ConsentPermissionPolicy consent) {
+    if (consent == null) {
+      return null;
+    }
+    return new BooleanPermissionPolicy(
+            consent.getValue() == CaseHandoverConsentValue.OPT_IN, consent.getMode())
+        .inherited(consent.getInherited());
   }
 
   private void assertKnownFeature(String feature) {

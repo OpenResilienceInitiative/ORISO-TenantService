@@ -24,6 +24,8 @@ class PermissionPolicyOpenApiContractTest {
     var mode = (Map<String, Object>) schemas.get("PermissionPolicyMode");
     var featureKey = (Map<String, Object>) schemas.get("PermissionFeatureKey");
     var booleanPolicy = (Map<String, Object>) schemas.get("BooleanPermissionPolicy");
+    var consentValue = (Map<String, Object>) schemas.get("CaseHandoverConsentValue");
+    var consentPolicy = (Map<String, Object>) schemas.get("ConsentPermissionPolicy");
     var controls = (Map<String, Object>) schemas.get("TenantAdminControls");
     var controlProperties = (Map<String, Object>) controls.get("properties");
 
@@ -34,9 +36,13 @@ class PermissionPolicyOpenApiContractTest {
                 .map(PermissionFeature::apiKey)
                 .toArray(String[]::new));
     assertThat((List<String>) booleanPolicy.get("required")).containsExactly("value", "mode");
+    assertThat((List<String>) consentValue.get("enum"))
+        .containsExactly("OPT_IN", "OPT_OUT", "NONE");
+    assertThat((List<String>) consentPolicy.get("required")).containsExactly("value", "mode");
     for (String schemaName :
         List.of(
             "BooleanPermissionPolicy",
+            "ConsentPermissionPolicy",
             "IntegerPermissionPolicy",
             "StringListPermissionPolicy",
             "MultilingualTextPermissionPolicy")) {
@@ -54,6 +60,13 @@ class PermissionPolicyOpenApiContractTest {
             "MultilingualTextPermissionPolicy",
             "CaseHandoverReasonPolicy",
             "CaseHandoverPolicies");
+    var reasonPolicy = (Map<String, Object>) schemas.get("CaseHandoverReasonPolicy");
+    var reasonRequired = (List<String>) reasonPolicy.get("required");
+    var reasonProperties = (Map<String, Object>) reasonPolicy.get("properties");
+    assertThat(reasonRequired).contains("clientConsent");
+    assertThat(reasonRequired).doesNotContain("clientConsentRequired");
+    assertThat((Map<String, Object>) reasonProperties.get("clientConsentRequired"))
+        .containsEntry("deprecated", true);
     var duration = (Map<String, Object>) schemas.get("IntegerPermissionPolicy");
     var durationValue =
         (Map<String, Object>) ((Map<String, Object>) duration.get("properties")).get("value");

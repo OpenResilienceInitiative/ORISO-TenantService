@@ -2208,6 +2208,25 @@ components:
           type: boolean
           readOnly: true
 
+    CaseHandoverConsentValue:
+      type: string
+      enum:
+        - OPT_IN
+        - OPT_OUT
+        - NONE
+
+    ConsentPermissionPolicy:
+      type: object
+      required: [value, mode]
+      properties:
+        value:
+          $ref: '#/components/schemas/CaseHandoverConsentValue'
+        mode:
+          $ref: '#/components/schemas/PermissionPolicyMode'
+        inherited:
+          type: boolean
+          readOnly: true
+
     CaseHandoverReasonPolicy:
       type: object
       required:
@@ -2215,7 +2234,7 @@ components:
         - labels
         - enabled
         - accessAllowed
-        - clientConsentRequired
+        - clientConsent
         - approvalRoles
         - clientNotificationTemplates
       properties:
@@ -2233,8 +2252,12 @@ components:
           $ref: '#/components/schemas/BooleanPermissionPolicy'
         accessAllowed:
           $ref: '#/components/schemas/BooleanPermissionPolicy'
+        clientConsent:
+          $ref: '#/components/schemas/ConsentPermissionPolicy'
         clientConsentRequired:
           $ref: '#/components/schemas/BooleanPermissionPolicy'
+          deprecated: true
+          description: Transitional mirror. OPT_IN maps to true; OPT_OUT and NONE map to false.
         approvalRoles:
           $ref: '#/components/schemas/StringListPermissionPolicy'
         clientNotificationTemplates:

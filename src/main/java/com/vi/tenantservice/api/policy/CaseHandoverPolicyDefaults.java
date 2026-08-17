@@ -1,8 +1,10 @@
 package com.vi.tenantservice.api.policy;
 
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
 import com.vi.tenantservice.api.model.CaseHandoverPolicies;
 import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
+import com.vi.tenantservice.api.model.ConsentPermissionPolicy;
 import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
 import com.vi.tenantservice.api.model.MultilingualTextPermissionPolicy;
 import com.vi.tenantservice.api.model.PermissionPolicyMode;
@@ -25,7 +27,7 @@ public final class CaseHandoverPolicyDefaults {
         reason(
                 CaseHandoverReasonPolicy.CodeEnum.COUNSELLOR_ASKED_FOR_ADVICE,
                 Map.of("de", "Rat benötigt", "en", "Advice needed"),
-                true,
+                CaseHandoverConsentValue.OPT_IN,
                 Set.of("CLIENT"),
                 templates(
                     "Du hast einem zeitlich begrenzten Einblick zugestimmt. {{newAdvisor}} kann diese Sitzung für {{duration}} mitlesen. Deine bisherige Berater:in bleibt für dich zuständig.",
@@ -42,8 +44,8 @@ public final class CaseHandoverPolicyDefaults {
         "COUNSELLOR_ON_HOLIDAY",
         reason(
             CaseHandoverReasonPolicy.CodeEnum.COUNSELLOR_ON_HOLIDAY,
-            Map.of("de", "Freistellung", "en", "Leave"),
-            false,
+            Map.of("de", "Geplant verhindert", "en", "Planned absence"),
+            CaseHandoverConsentValue.NONE,
             Set.of(),
             templates(
                 "Während der Abwesenheit übernimmt {{newAdvisor}} deine Beratung.",
@@ -54,26 +56,11 @@ public final class CaseHandoverPolicyDefaults {
                 "Під час відсутності вашого консультанта ваше консультування продовжить {{newAdvisor}}.",
                 "ኣማኻሪኹም ኣብ ዘየለሉ ግዜ፣ {{newAdvisor}} ምኽርኹም ይቕጽል።")));
     reasons.put(
-        "OTHER_EMERGENCY",
-        reason(
-            CaseHandoverReasonPolicy.CodeEnum.OTHER_EMERGENCY,
-            Map.of("de", "Anderer Notfall", "en", "Other emergency"),
-            false,
-            Set.of(),
-            templates(
-                "Aus einem dringenden Grund hat {{newAdvisor}} deinen Fall übernommen.",
-                "For an urgent reason, {{newAdvisor}} has taken over your case.",
-                "Pour une raison urgente, {{newAdvisor}} a repris votre dossier.",
-                "По неотложной причине {{newAdvisor}} принял(а) ваше дело.",
-                "Acil bir nedenden dolayı vakanızı {{newAdvisor}} devraldı.",
-                "З невідкладної причини вашу справу перейняв(-ла) {{newAdvisor}}.",
-                "ብህጹጽ ምኽንያት፣ {{newAdvisor}} ጉዳይኩም ተረኪቡ።")));
-    reasons.put(
         "COUNSELLOR_IS_ILL",
         reason(
             CaseHandoverReasonPolicy.CodeEnum.COUNSELLOR_IS_ILL,
-            Map.of("de", "Ausfall", "en", "Absence"),
-            false,
+            Map.of("de", "Ungeplant verhindert", "en", "Unplanned absence"),
+            CaseHandoverConsentValue.NONE,
             Set.of(),
             templates(
                 "Wegen eines Ausfalls hat {{newAdvisor}} deinen Fall übernommen.",
@@ -88,7 +75,7 @@ public final class CaseHandoverPolicyDefaults {
         reason(
             CaseHandoverReasonPolicy.CodeEnum.COUNSELLOR_LEFT,
             Map.of("de", "Beratungsstelle verlassen", "en", "Counsellor left"),
-            false,
+            CaseHandoverConsentValue.NONE,
             Set.of(),
             templates(
                 "{{newAdvisor}} führt deine Beratung ab jetzt weiter.",
@@ -104,21 +91,26 @@ public final class CaseHandoverPolicyDefaults {
   private static CaseHandoverReasonPolicy reason(
       CaseHandoverReasonPolicy.CodeEnum code,
       Map<String, String> labels,
-      boolean clientConsentRequired,
+      CaseHandoverConsentValue clientConsent,
       Set<String> approvalRoles,
       Map<String, String> templates) {
     return new CaseHandoverReasonPolicy(
-        code,
-        multilingual(labels),
-        bool(true),
-        bool(true),
-        bool(clientConsentRequired),
-        new StringListPermissionPolicy(approvalRoles, PermissionPolicyMode.SUGGESTED),
-        multilingual(templates));
+            code,
+            multilingual(labels),
+            bool(true),
+            bool(true),
+            consent(clientConsent),
+            new StringListPermissionPolicy(approvalRoles, PermissionPolicyMode.SUGGESTED),
+            multilingual(templates))
+        .clientConsentRequired(bool(clientConsent == CaseHandoverConsentValue.OPT_IN));
   }
 
   private static BooleanPermissionPolicy bool(boolean value) {
     return new BooleanPermissionPolicy(value, PermissionPolicyMode.SUGGESTED);
+  }
+
+  private static ConsentPermissionPolicy consent(CaseHandoverConsentValue value) {
+    return new ConsentPermissionPolicy(value, PermissionPolicyMode.SUGGESTED);
   }
 
   private static MultilingualTextPermissionPolicy multilingual(Map<String, String> value) {
