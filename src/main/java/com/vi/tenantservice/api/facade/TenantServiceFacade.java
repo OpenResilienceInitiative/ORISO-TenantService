@@ -593,7 +593,7 @@ public class TenantServiceFacade {
       Long tenantId, TenantPermissionPolicies request) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
     if (request == null || !tenantId.equals(request.getTenantId())) {
-      throw new BadRequestException("Path tenant id must match request tenant id");
+      throw new TenantBadRequestException("Path tenant id must match request tenant id");
     }
     tenantPermissionPolicyService.saveOverrides(
         tenantId,
