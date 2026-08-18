@@ -18,6 +18,8 @@ import com.google.common.collect.Maps;
 import com.vi.tenantservice.api.authorisation.Authority.AuthorityValue;
 import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
 import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
+import com.vi.tenantservice.api.converter.EffectiveThemingApplier;
+import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
@@ -32,10 +34,13 @@ import com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO;
 import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
+import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
+import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
+import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -138,6 +143,12 @@ class TenantServiceFacadeTest {
   @Spy
   private EffectivePermissionSettingsApplier effectivePermissionSettingsApplier =
       new EffectivePermissionSettingsApplier();
+
+  @Spy private EffectiveThemingApplier effectiveThemingApplier = new EffectiveThemingApplier();
+
+  @Spy
+  private InheritedBrandingEchoStripper inheritedBrandingEchoStripper =
+      new InheritedBrandingEchoStripper();
 
   @Mock private SingleDomainTenantOverrideService singleDomainTenantOverrideService;
   @Mock private TenantIdAllocationService tenantIdAllocationService;
@@ -928,7 +939,10 @@ class TenantServiceFacadeTest {
     // then: the subdomain's own public data comes back, and the override path is not entered
     assertThat(tenantDTO).isPresent();
     assertThat(tenantDTO.get().getContent().getPrivacy()).contains("content1");
-    verify(tenantService, never()).findRestrictedTenantDataById(0L);
+    // Tenant 0 is read once more here, by the platform-branding lookup added in #214. That read
+    // is null-safe (map/orElse, never orElseThrow), so it cannot bring back the #199 crash this
+    // test guards against, and it is not the override path. The invariant is that the override
+    // collaborator is never reached -- which the next line asserts directly.
     verifyNoInteractions(singleDomainTenantOverrideService);
   }
 
@@ -963,7 +977,10 @@ class TenantServiceFacadeTest {
 
     // then
     assertThat(tenantDTO.getContent().getPrivacy()).contains("content1");
-    verify(tenantService, never()).findRestrictedTenantDataById(0L);
+    // Tenant 0 is read once more here, by the platform-branding lookup added in #214. That read
+    // is null-safe (map/orElse, never orElseThrow), so it cannot bring back the #199 crash this
+    // test guards against, and it is not the override path. The invariant is that the override
+    // collaborator is never reached -- which the next line asserts directly.
     verifyNoInteractions(singleDomainTenantOverrideService);
   }
 
@@ -1007,5 +1024,93 @@ class TenantServiceFacadeTest {
     defaultTenantEntity.setContentPrivacy(contentPrivacy);
     Optional<TenantRestrictedData> defaultTenant = Optional.of(defaultTenantEntity);
     return defaultTenant;
+  }
+
+  /**
+   * The half-merge detector. The demo line contributed the resolved permission policies, the
+   * pre-dev line contributed platform branding inheritance (#214), and this bootstrap payload owes
+   * the counselling app both. Either half alone still passes its own side's tests, so this asserts
+   * the combination.
+   */
+  @Test
+  void findRestrictedTenantById_shouldApplyPoliciesAndControlsAndInheritedTheming() {
+    var entity = mock(TenantRestrictedData.class);
+    var platformEntity = mock(TenantRestrictedData.class);
+    var dto =
+        new RestrictedTenantDTO(42L, "Tenant")
+            .settings(new Settings())
+            .theming(new Theming().primaryColor("#111111"));
+    var platformDto =
+        new RestrictedTenantDTO(0L, "Platform")
+            .theming(new Theming().primaryColor("#000000").favicon("platform-favicon"));
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(tenantService.findRestrictedTenantDataById(42L)).thenReturn(Optional.of(entity));
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.of(platformEntity));
+    when(converter.toRestrictedTenantDTO(entity, DE)).thenReturn(dto);
+    when(converter.toRestrictedTenantDTO(platformEntity, DE)).thenReturn(platformDto);
+    when(tenantAdminControlsService.getControls()).thenReturn(new TenantAdminControls());
+    when(tenantPermissionPolicyService.getResolvedPolicies(42L))
+        .thenReturn(
+            Map.of(
+                "featureVideoCallsEnabled",
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    false, com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED, true)));
+
+    var result = tenantServiceFacade.findRestrictedTenantById(42L);
+
+    assertThat(result).isPresent();
+    assertThat(dto.getPermissionPolicies())
+        .containsEntry(
+            "featureVideoCallsEnabled",
+            new BooleanPermissionPolicy(false, PermissionPolicyMode.ENFORCED).inherited(true));
+    assertThat(dto.getSettings().getFeatureVideoCallsEnabled()).isFalse();
+    assertThat(dto.getTheming().getPrimaryColor()).isEqualTo("#111111");
+    assertThat(dto.getTheming().getFavicon()).isEqualTo("platform-favicon");
+  }
+
+  /**
+   * Pins the precedence between the two governance mechanisms that both write the same feature
+   * flag. Platform controls are applied after the tenant policies, so a platform prohibition stays
+   * authoritative. The reverse order would let a tenant admin re-enable a feature the platform
+   * forbids.
+   */
+  @Test
+  void findRestrictedTenantById_shouldLetAPlatformProhibitionOutrankATenantEnforcedPolicy() {
+    var dto =
+        publicTenantWithEnforcedVideoCallPolicy(
+            true,
+            new TenantAdminControls()
+                .allowedPermissionToggles(
+                    new TenantAdminAllowedPermissionToggles().videoCalls(false)));
+
+    assertThat(dto.getSettings().getFeatureVideoCallsEnabled()).isFalse();
+  }
+
+  /** The mirror of the rule above: where the platform is neutral, the tenant policy stands. */
+  @Test
+  void findRestrictedTenantById_shouldKeepTheTenantEnforcedPolicyWhenThePlatformIsNeutral() {
+    var dto = publicTenantWithEnforcedVideoCallPolicy(true, new TenantAdminControls());
+
+    assertThat(dto.getSettings().getFeatureVideoCallsEnabled()).isTrue();
+  }
+
+  private RestrictedTenantDTO publicTenantWithEnforcedVideoCallPolicy(
+      boolean policyValue, TenantAdminControls controls) {
+    var entity = mock(TenantRestrictedData.class);
+    var dto = new RestrictedTenantDTO(42L, "Tenant").settings(new Settings());
+    when(tenantService.findRestrictedTenantDataById(42L)).thenReturn(Optional.of(entity));
+    when(converter.toRestrictedTenantDTO(entity, null)).thenReturn(dto);
+    when(tenantAdminControlsService.getControls()).thenReturn(controls);
+    when(tenantPermissionPolicyService.getResolvedPolicies(42L))
+        .thenReturn(
+            Map.of(
+                "featureVideoCallsEnabled",
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    policyValue,
+                    com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED,
+                    false)));
+
+    tenantServiceFacade.findRestrictedTenantById(42L);
+    return dto;
   }
 }

@@ -10,6 +10,8 @@ import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.Authority.AuthorityValue;
 import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
 import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
+import com.vi.tenantservice.api.converter.EffectiveThemingApplier;
+import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
 import com.vi.tenantservice.api.exception.TenantBadRequestException;
@@ -34,6 +36,7 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantDpaService;
@@ -118,6 +121,10 @@ public class TenantServiceFacade {
   private final @NonNull TenantPermissionPolicyService tenantPermissionPolicyService;
 
   private final @NonNull EffectivePermissionSettingsApplier effectivePermissionSettingsApplier;
+
+  private final @NonNull EffectiveThemingApplier effectiveThemingApplier;
+
+  private final @NonNull InheritedBrandingEchoStripper inheritedBrandingEchoStripper;
 
   private final @NonNull TenantResolverService tenantResolverService;
 
@@ -500,6 +507,14 @@ public class TenantServiceFacade {
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
         sanitizedTenantDTO, existingTenantEntity);
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
+    if (existingTenantEntity.getId() != TECHNICAL_TENANT_ID) {
+      tenantService
+          .findTenantById((long) TECHNICAL_TENANT_ID)
+          .ifPresent(
+              platform ->
+                  inheritedBrandingEchoStripper.strip(
+                      sanitizedTenantDTO.getTheming(), existingTenantEntity, platform));
+    }
     // toEntity mutates existingTenantEntity, so capture the stored settings first
     var existingSettingsJson = existingTenantEntity.getSettings();
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
@@ -701,6 +716,8 @@ public class TenantServiceFacade {
 
   public List<RestrictedTenantDTO> findRestrictedTenantsByIds(Set<Long> ids) {
     String lang = translationService.getCurrentLanguageContext();
+    TenantAdminControls controls = tenantAdminControlsService.getControls();
+    Theming platformTheming = getPlatformTheming(lang);
     List<RestrictedTenantDTO> tenants =
         tenantService.findRestrictedTenantDataByIds(ids).stream()
             .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
@@ -714,7 +731,11 @@ public class TenantServiceFacade {
     return tenants.stream()
         .map(
             dto ->
-                withEffectivePermissions(dto, policiesByTenant.getOrDefault(dto.getId(), Map.of())))
+                withEffectiveSettings(
+                    dto,
+                    controls,
+                    platformTheming,
+                    policiesByTenant.getOrDefault(dto.getId(), Map.of())))
         .toList();
   }
 
@@ -724,14 +745,32 @@ public class TenantServiceFacade {
    * controls themselves. See ADR-013 P4.
    */
   private RestrictedTenantDTO withEffectivePermissions(RestrictedTenantDTO dto) {
-    return dto == null
-        ? null
-        : withEffectivePermissions(
-            dto, tenantPermissionPolicyService.getResolvedPolicies(dto.getId()));
+    if (dto == null) {
+      return null;
+    }
+    String lang = translationService.getCurrentLanguageContext();
+    return withEffectiveSettings(
+        dto,
+        tenantAdminControlsService.getControls(),
+        getPlatformTheming(lang),
+        tenantPermissionPolicyService.getResolvedPolicies(dto.getId()));
   }
 
-  private RestrictedTenantDTO withEffectivePermissions(
+  /**
+   * Applies every platform-level effect the public tenant payload owes the counselling app:
+   * resolved permission policies, the platform admin controls, and inherited platform branding.
+   *
+   * <p>Order matters. Policies are applied first and controls last. {@code applyTo} only writes
+   * where the platform is non-neutral (allowed==false forces off, enforced==true forces on) and
+   * leaves every other flag untouched, so applying it last keeps a platform prohibition
+   * authoritative over a per-tenant ENFORCED policy, while a neutral platform still lets the tenant
+   * policy stand. The reverse order would let a tenant policy re-enable a feature the platform
+   * forbids.
+   */
+  private RestrictedTenantDTO withEffectiveSettings(
       RestrictedTenantDTO dto,
+      TenantAdminControls controls,
+      Theming platformTheming,
       Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies) {
     if (dto != null) {
       Map<String, BooleanPermissionPolicy> policies =
@@ -747,8 +786,23 @@ public class TenantServiceFacade {
                               .inherited(entry.getValue().inherited())));
       dto.setPermissionPolicies(policies);
       effectivePermissionSettingsApplier.applyPolicies(dto.getSettings(), policies);
+      effectivePermissionSettingsApplier.applyTo(dto.getSettings(), controls);
+      if (dto.getId() == null || dto.getId() != TECHNICAL_TENANT_ID) {
+        dto.setTheming(effectiveThemingApplier.effective(dto.getTheming(), platformTheming));
+      }
     }
     return dto;
+  }
+
+  private Theming getPlatformTheming(String lang) {
+    return tenantService
+        .findRestrictedTenantDataById((long) TECHNICAL_TENANT_ID)
+        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
+        .orElse(null);
+  }
+
+  public Optional<RestrictedTenantDTO> getPlatformTenant() {
+    return findRestrictedTenantById((long) TECHNICAL_TENANT_ID);
   }
 
   public List<BasicTenantLicensingDTO> getAllTenants() {

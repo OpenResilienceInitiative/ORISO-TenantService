@@ -4,37 +4,30 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.vi.tenantservice.TenantServiceApplication;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
+import org.testcontainers.containers.MariaDBContainer;
 
 /**
  * Permanent schema-drift guard (Liquibase Re-Enablement Plan 2026-07-04, package L1).
  *
- * <p>Boots the application against a real (fresh or already-migrated) MariaDB: Liquibase applies
- * the single master changelog, then Hibernate runs {@code ddl-auto=validate} against the JPA entity
- * model. If the changelog and the entity model ever drift apart, the context fails to start and
- * this test goes red.
+ * <p>Boots the application against a real MariaDB: Liquibase applies the single master changelog,
+ * then Hibernate runs {@code ddl-auto=validate} against the JPA entity model. If the changelog and
+ * the entity model ever drift apart, the context fails to start and this test goes red.
  *
- * <p>The test is disabled unless {@code LIQUIBASE_IT_DB_URL} is set, so the default CI build is
- * unaffected. Run it locally with e.g.:
- *
- * <pre>
- * docker run -d --name l1-tenant-mariadb -p 3311:3306 \
- *   -e MARIADB_ROOT_PASSWORD=root -e MARIADB_DATABASE=tenantservice mariadb:11.0.6
- * LIQUIBASE_IT_DB_URL='jdbc:mariadb://localhost:3311/tenantservice' \
- *   ./mvnw surefire:test -Dtest=LiquibaseSchemaDriftIT
- * </pre>
+ * <p>This is the only test in the service that sees a real database — everything else runs on H2
+ * {@code MODE=MySQL}, which cannot show drift against the engine we deploy. It therefore starts its
+ * own container rather than being gated on an environment variable: a gate that nobody sets makes
+ * the test report as <em>skipped</em>, and a skip is silent (ORISO-TenantService#208).
  */
 @SpringBootTest(classes = TenantServiceApplication.class)
 @TestPropertySource(
     properties = {
       "spring.profiles.active=testing",
-      "spring.datasource.url=${LIQUIBASE_IT_DB_URL}",
-      "spring.datasource.username=${LIQUIBASE_IT_DB_USERNAME:root}",
-      "spring.datasource.password=${LIQUIBASE_IT_DB_PASSWORD:root}",
       "spring.datasource.driver-class-name=org.mariadb.jdbc.Driver",
       "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MariaDBDialect",
       "spring.liquibase.enabled=true",
@@ -42,8 +35,30 @@ import org.springframework.test.context.TestPropertySource;
       "spring.liquibase.contexts=seed",
       "spring.jpa.hibernate.ddl-auto=validate"
     })
-@EnabledIfEnvironmentVariable(named = "LIQUIBASE_IT_DB_URL", matches = ".+")
 class LiquibaseSchemaDriftIT {
+
+  /**
+   * Keep this on the major line we actually deploy — a drift guard against a different engine
+   * version proves less than it appears to. The deployed version comes from the Helm values, which
+   * live outside the chart repository, so this pin is deliberate and needs re-checking when the
+   * cluster's MariaDB moves.
+   */
+  private static final String MARIADB_IMAGE = "mariadb:10.11.18";
+
+  private static MariaDBContainer<?> mariadb;
+
+  @DynamicPropertySource
+  static void datasource(DynamicPropertyRegistry registry) {
+    // Singleton container: started once for this class and reaped by Testcontainers' Ryuk, so the
+    // suite pays one container start regardless of how many tests below run.
+    if (mariadb == null) {
+      mariadb = new MariaDBContainer<>(MARIADB_IMAGE).withDatabaseName("tenantservice");
+      mariadb.start();
+    }
+    registry.add("spring.datasource.url", mariadb::getJdbcUrl);
+    registry.add("spring.datasource.username", mariadb::getUsername);
+    registry.add("spring.datasource.password", mariadb::getPassword);
+  }
 
   @Autowired private JdbcTemplate jdbcTemplate;
 
