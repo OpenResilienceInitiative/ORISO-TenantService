@@ -475,8 +475,21 @@ public class TenantController implements TenantApi, TenantadminApi {
                 ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(image.contentType()))
                     .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                    // Strong content ETag: mail clients and image proxies re-fetch the logo for
+                    // every open; Spring's conditional-GET processing turns a matching
+                    // If-None-Match into a bodyless 304 once the entity carries an ETag.
+                    .eTag(contentEtag(image.bytes()))
                     .body((Resource) new ByteArrayResource(image.bytes())))
         .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
+  private static String contentEtag(byte[] bytes) {
+    try {
+      var digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
+      return java.util.HexFormat.of().formatHex(digest, 0, 16);
+    } catch (java.security.NoSuchAlgorithmException exception) {
+      throw new IllegalStateException("SHA-256 unavailable", exception);
+    }
   }
 
   @Override
