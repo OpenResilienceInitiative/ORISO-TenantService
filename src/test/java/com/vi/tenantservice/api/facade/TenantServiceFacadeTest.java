@@ -875,10 +875,14 @@ class TenantServiceFacadeTest {
     Optional<RestrictedTenantDTO> tenantDTO =
         tenantServiceFacade.findTenantBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME, null);
 
-    // then: the subdomain's own public data comes back, and the override path is not entered
+    // then: the subdomain's own public data comes back, and the override path is not entered.
+    // The override-path proof is verifyNoInteractions(singleDomainTenantOverrideService) — that
+    // service would have been called with the sentinel if the filter had not stripped it. We
+    // deliberately do NOT assert on findRestrictedTenantDataById(0L) any more: the
+    // platform-branding inheritance feature (05647f6) legitimately calls it from
+    // getPlatformTheming to fetch the platform tenant's theming settings.
     assertThat(tenantDTO).isPresent();
     assertThat(tenantDTO.get().getContent().getPrivacy()).contains("content1");
-    verify(tenantService, never()).findRestrictedTenantDataById(0L);
     verifyNoInteractions(singleDomainTenantOverrideService);
   }
 
@@ -911,9 +915,10 @@ class TenantServiceFacadeTest {
     RestrictedTenantDTO tenantDTO =
         tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext();
 
-    // then
+    // then: same reasoning as findTenantBySubdomain above — verifyNoInteractions on
+    // singleDomainTenantOverrideService is the meaningful proof; the platform-branding path
+    // legitimately hits findRestrictedTenantDataById(0L) via getPlatformTheming.
     assertThat(tenantDTO.getContent().getPrivacy()).contains("content1");
-    verify(tenantService, never()).findRestrictedTenantDataById(0L);
     verifyNoInteractions(singleDomainTenantOverrideService);
   }
 
