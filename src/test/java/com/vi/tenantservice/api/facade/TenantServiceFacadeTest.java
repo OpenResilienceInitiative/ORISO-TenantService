@@ -17,6 +17,8 @@ import com.google.common.collect.Maps;
 import com.vi.tenantservice.api.authorisation.Authority.AuthorityValue;
 import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
 import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
+import com.vi.tenantservice.api.converter.EffectiveThemingApplier;
+import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
@@ -129,6 +131,12 @@ class TenantServiceFacadeTest {
   @Spy
   private EffectivePermissionSettingsApplier effectivePermissionSettingsApplier =
       new EffectivePermissionSettingsApplier();
+
+  @Spy private EffectiveThemingApplier effectiveThemingApplier = new EffectiveThemingApplier();
+
+  @Spy
+  private InheritedBrandingEchoStripper inheritedBrandingEchoStripper =
+      new InheritedBrandingEchoStripper();
 
   @Mock private SingleDomainTenantOverrideService singleDomainTenantOverrideService;
   @Mock private TenantIdAllocationService tenantIdAllocationService;
