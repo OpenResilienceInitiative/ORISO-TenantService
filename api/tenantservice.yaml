@@ -784,6 +784,44 @@ paths:
                 $ref: '#/components/schemas/PublicDpiaMasterDataDTO'
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenant/public/branding/{asset}:
+    summary: 'Public effective tenant branding asset'
+    description: >-
+      Serves an uploaded effective logo or favicon as a normal HTTP image. Missing tenant
+      values inherit from platform tenant 0. This allows mail clients and document renderers,
+      which cannot use data URIs, to display the same branding as the application.
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Gets an effective branding image [Authorization: no-auth]'
+      operationId: getPublicBrandingAsset
+      parameters:
+        - name: asset
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [logo, favicon]
+      responses:
+        200:
+          description: Effective branding image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/x-icon:
+              schema:
+                type: string
+                format: binary
+        404:
+          description: No valid image configured
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenant/public/dpa/confirm/{token}:
     summary: 'Public confirmation (signature) of a tenant Data Processing Agreement'
     get:
@@ -2061,8 +2099,9 @@ components:
       type: object
       description: >-
         Document branding source: reuses the existing public tenant appearance
-        (logo upload + appearance tokens) of the resolved tenant context.
-        Absent when no tenant context could be resolved.
+        (logo upload + appearance tokens) of the resolved tenant context, with missing
+        fields inherited from platform tenant 0. Uses platform tenant 0 directly when no
+        tenant context can be resolved.
       properties:
         tenantName:
           type: string
