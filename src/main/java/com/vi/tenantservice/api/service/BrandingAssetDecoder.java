@@ -17,6 +17,14 @@ public class BrandingAssetDecoder {
   private static final Pattern DATA_URI =
       Pattern.compile("^data:([^;,]+);base64,(.+)$", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
+  /**
+   * Upper bound for the decoded image, enforced BEFORE allocating: the endpoint is public and the
+   * backing column is LONGTEXT (see changeset 0022), so without a cap an oversized stored value
+   * would be decoded into memory for every anonymous request. 1 MiB is ~50x the largest branding
+   * image observed in production and far beyond any sensible mail logo.
+   */
+  static final int MAX_DECODED_BYTES = 1024 * 1024;
+
   public record DecodedAsset(String contentType, byte[] bytes) {}
 
   public Optional<DecodedAsset> decode(String storedValue) {
@@ -41,6 +49,9 @@ public class BrandingAssetDecoder {
     } else if (value.regionMatches(true, 0, "http://", 0, 7)
         || value.regionMatches(true, 0, "https://", 0, 8)
         || value.regionMatches(true, 0, "data:", 0, 5)) {
+      return Optional.empty();
+    }
+    if (payload.length() * 3L / 4 > MAX_DECODED_BYTES) {
       return Optional.empty();
     }
     try {
