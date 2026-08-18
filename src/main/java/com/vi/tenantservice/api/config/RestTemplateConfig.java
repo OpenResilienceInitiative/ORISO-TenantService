@@ -14,14 +14,13 @@ public class RestTemplateConfig {
   /**
    * RestTemplate Bean.
    *
-   * <p>Uses {@link JdkClientHttpRequestFactory} rather than {@code
-   * SimpleClientHttpRequestFactory}: the latter is backed by {@code HttpURLConnection}, which does
-   * not support HTTP PATCH and throws {@code java.net.ProtocolException: Invalid HTTP method:
-   * PATCH}. This bean is injected into the generated OpenAPI clients (see {@code
-   * ConsultingTypeServiceApiControllerFactory}, {@code ApplicationSettingsApiControllerFactory},
-   * {@code UserAdminServiceApiControllerFactory}), which do exercise PATCH — e.g. {@code
-   * ConsultingTypeService#patchConsultingType}. The JDK's {@link HttpClient} supports PATCH
-   * natively and does not require an extra HTTP-client dependency.
+   * <p>Uses {@link JdkClientHttpRequestFactory} rather than {@code SimpleClientHttpRequestFactory}:
+   * the latter is backed by {@code HttpURLConnection}, which does not support HTTP PATCH and throws
+   * {@code java.net.ProtocolException: Invalid HTTP method: PATCH}. This bean is injected into the
+   * generated OpenAPI clients (see {@code ConsultingTypeServiceApiControllerFactory}, {@code
+   * ApplicationSettingsApiControllerFactory}, {@code UserAdminServiceApiControllerFactory}), which
+   * do exercise PATCH — e.g. {@code ConsultingTypeService#patchConsultingType}. The JDK's {@link
+   * HttpClient} supports PATCH natively and does not require an extra HTTP-client dependency.
    *
    * @return {@link RestTemplate}
    */
