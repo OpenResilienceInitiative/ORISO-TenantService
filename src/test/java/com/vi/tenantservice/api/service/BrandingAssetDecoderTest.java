@@ -30,4 +30,11 @@ class BrandingAssetDecoderTest {
     assertThat(decoder.decode("https://cdn.example.org/logo.png")).isEmpty();
     assertThat(decoder.decode("data:image/svg+xml;base64,PHN2Zz4=")).isEmpty();
   }
+
+  @Test
+  void decode_shouldRejectPayloadsLargerThanTheDecodedSizeCap() {
+    var overCap = java.util.Base64.getEncoder().encodeToString(new byte[1024 * 1024 + 3]);
+
+    assertThat(decoder.decode("data:image/png;base64," + overCap)).isEmpty();
+  }
 }
