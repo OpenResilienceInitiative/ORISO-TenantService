@@ -123,6 +123,28 @@ class TenantAdminControlsServiceTest {
   }
 
   @Test
+  void getControls_Should_ignoreUnknownFields_When_storedBlobWasWrittenByANewerVersion() {
+    // A newer build writes additional keys into the same tenant_admin_controls blob. Rolling that
+    // build back must not take the service down: this blob feeds getControls() ->
+    // withEffectivePermissions() -> GET /tenant/public/id/{id}, which is what the app bootstraps
+    // from, so a parse failure here is a 500 on the first request of every session.
+    // Observed on Pre-Dev 2026-08-18: "Unrecognized field \"permissionPolicies\"".
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true}},"
+            + "\"caseHandoverPolicies\":{\"requireConsent\":true}}");
+
+    tenantAdminControlsService.getControls();
+
+    // The converter is mocked, so assert on what the parser handed it: the blob was read, the
+    // known field survived, and the unknown ones were dropped instead of throwing.
+    ArgumentCaptor<TenantAdminControlsSettings> captor =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(captor.capture());
+    assertThat(captor.getValue().isPermissionsPageEnabled()).isTrue();
+  }
+
+  @Test
   void getTranslationApiKeys_Should_returnEmptyMap_When_noKeysStored() {
     givenStoredControlsJson("{\"permissionsPageEnabled\":true}");
 
