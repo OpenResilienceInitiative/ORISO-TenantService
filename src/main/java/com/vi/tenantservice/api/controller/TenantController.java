@@ -51,6 +51,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -485,9 +488,9 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   private static String contentEtag(byte[] bytes) {
     try {
-      var digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes);
-      return java.util.HexFormat.of().formatHex(digest, 0, 16);
-    } catch (java.security.NoSuchAlgorithmException exception) {
+      var digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+      return HexFormat.of().formatHex(digest, 0, 16);
+    } catch (NoSuchAlgorithmException exception) {
       throw new IllegalStateException("SHA-256 unavailable", exception);
     }
   }
