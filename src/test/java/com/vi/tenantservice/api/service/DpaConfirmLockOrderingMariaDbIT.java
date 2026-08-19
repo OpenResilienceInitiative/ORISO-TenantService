@@ -23,29 +23,36 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
+import org.testcontainers.containers.MariaDBContainer;
 
 /**
- * Proves the confirm-path lock ordering on a REAL MariaDB — the guarantee the ordering exists for
- * cannot be demonstrated anywhere else (ORISO-TenantService#179).
+ * Exercises two racing confirmations against a REAL MariaDB (ORISO-TenantService#179).
  *
- * <p>Why this is its own gated test rather than part of the normal suite: the integration profile
- * runs H2 in {@code MODE=MySQL}, which has neither InnoDB row locking nor its deadlock detector, so
- * an H2 run would pass whether or not the ordering is correct — the exact "test that cannot fail"
- * shape this PR has been hunting. Gated on an env var like {@code LiquibaseSchemaDriftIT}, so CI
- * skips it and it can be pointed at a real database on demand:
+ * <p><b>What this does NOT do:</b> it does not prove the confirm-path lock ordering. Measured
+ * 2026-08-19: removing {@code lockOutstandingByTenantId} from {@code confirmSignature} — verified
+ * absent from the bytecode — leaves this test green, at 10 rounds and at 60. The deadlock window is
+ * too narrow for a barrier-released pair to hit reliably, which matches the reviewer's own reading
+ * that the race is narrow. Do not read a green run here as evidence that the ordering is intact.
  *
- * <pre>
- * DPA_LOCK_IT_DB_URL=jdbc:mariadb://localhost:3306/tenantservice \
- * DPA_LOCK_IT_DB_USER=root DPA_LOCK_IT_DB_PASSWORD=secret \
- *   ./mvnw verify -Dtest=DpaConfirmLockOrderingMariaDbIT -DfailIfNoTests=false
- * </pre>
+ * <p>The discriminating guard is the unit test {@code
+ * TenantDpaServiceTest#confirmSignature_Should_lockEveryOutstandingLinkBeforeConsuming}, which does
+ * go red on that mutation. What this test adds is real-engine coverage the unit test cannot give:
+ * the Liquibase schema, InnoDB row locking, and the confirm path end to end — exactly one signature
+ * recorded and the loser receiving the defined rejection rather than an error.
+ *
+ * <p>Why it needs its own database: the integration profile runs H2 in {@code MODE=MySQL}, which
+ * has neither InnoDB row locking nor its deadlock detector, so an H2 run would pass whether or not
+ * the ordering is correct — the exact "test that cannot fail" shape this PR has been hunting.
+ *
+ * <p>It was originally gated on {@code DPA_LOCK_IT_DB_URL}, which is set nowhere, so it never ran
+ * and reported as skipped. It now starts its own container, following {@code
+ * LiquibaseSchemaDriftIT} (ORISO-TenantService#208).
  *
  * <p>Without the ordering, two confirmations for one tenant each hold their own row and want the
  * other's, and InnoDB kills one with a deadlock error (SQLState 40001) — which reaches the signer
@@ -54,21 +61,36 @@ import org.springframework.test.context.TestPropertySource;
  * the defined "already used" answer.
  */
 @SpringBootTest(classes = TenantServiceApplication.class)
-@TestPropertySource(properties = "spring.profiles.active=testing")
-@EnabledIfEnvironmentVariable(named = "DPA_LOCK_IT_DB_URL", matches = ".+")
+@TestPropertySource(
+    properties = {
+      "spring.profiles.active=testing",
+      "spring.datasource.driver-class-name=org.mariadb.jdbc.Driver",
+      "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MariaDBDialect",
+      "spring.liquibase.enabled=true",
+      "spring.liquibase.change-log=classpath:db/changelog/tenantservice-master.xml",
+      "spring.liquibase.contexts=seed",
+      "spring.jpa.hibernate.ddl-auto=validate"
+    })
 class DpaConfirmLockOrderingMariaDbIT {
 
   private static final long TENANT_ID = 777L;
   private static final LocalDateTime VERSION = LocalDateTime.of(2026, 7, 1, 12, 0, 0);
   private static final int ROUNDS = 10;
 
+  /** Same pin as {@code LiquibaseSchemaDriftIT}: the engine version we deploy, not the newest. */
+  private static final String MARIADB_IMAGE = "mariadb:10.11.18";
+
+  private static MariaDBContainer<?> mariadb;
+
   @DynamicPropertySource
   static void realMariaDb(DynamicPropertyRegistry registry) {
-    registry.add("spring.datasource.url", () -> System.getenv("DPA_LOCK_IT_DB_URL"));
-    registry.add("spring.datasource.username", () -> System.getenv("DPA_LOCK_IT_DB_USER"));
-    registry.add("spring.datasource.password", () -> System.getenv("DPA_LOCK_IT_DB_PASSWORD"));
-    registry.add(
-        "spring.jpa.properties.hibernate.dialect", () -> "org.hibernate.dialect.MariaDBDialect");
+    if (mariadb == null) {
+      mariadb = new MariaDBContainer<>(MARIADB_IMAGE).withDatabaseName("tenantservice");
+      mariadb.start();
+    }
+    registry.add("spring.datasource.url", mariadb::getJdbcUrl);
+    registry.add("spring.datasource.username", mariadb::getUsername);
+    registry.add("spring.datasource.password", mariadb::getPassword);
   }
 
   @Autowired private TenantDpaService tenantDpaService;
@@ -99,6 +121,8 @@ class DpaConfirmLockOrderingMariaDbIT {
     tenant.setName("Lock Ordering");
     tenant.setSubdomain("lock-ordering");
     tenant.setCreateDate(LocalDateTime.now());
+    // NOT NULL on MariaDB. The H2 test profile let this pass, and this test never ran to notice.
+    tenant.setUpdateDate(LocalDateTime.now());
     tenant.setContentDataProcessingAgreement("<p>AVV</p>");
     tenant.setContentDataProcessingAgreementActivationDate(VERSION);
     tenantRepository.saveAndFlush(tenant);
