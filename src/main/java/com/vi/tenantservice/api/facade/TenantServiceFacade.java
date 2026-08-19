@@ -10,6 +10,8 @@ import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.Authority.AuthorityValue;
 import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
 import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
+import com.vi.tenantservice.api.converter.EffectiveThemingApplier;
+import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
@@ -31,6 +33,7 @@ import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantDpaService;
@@ -113,6 +116,10 @@ public class TenantServiceFacade {
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
 
   private final @NonNull EffectivePermissionSettingsApplier effectivePermissionSettingsApplier;
+
+  private final @NonNull EffectiveThemingApplier effectiveThemingApplier;
+
+  private final @NonNull InheritedBrandingEchoStripper inheritedBrandingEchoStripper;
 
   private final @NonNull TenantResolverService tenantResolverService;
 
@@ -494,6 +501,14 @@ public class TenantServiceFacade {
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
         sanitizedTenantDTO, existingTenantEntity);
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
+    if (existingTenantEntity.getId() != TECHNICAL_TENANT_ID) {
+      tenantService
+          .findTenantById((long) TECHNICAL_TENANT_ID)
+          .ifPresent(
+              platform ->
+                  inheritedBrandingEchoStripper.strip(
+                      sanitizedTenantDTO.getTheming(), existingTenantEntity, platform));
+    }
     // toEntity mutates existingTenantEntity, so capture the stored settings first
     var existingSettingsJson = existingTenantEntity.getSettings();
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
@@ -648,9 +663,10 @@ public class TenantServiceFacade {
   public List<RestrictedTenantDTO> findRestrictedTenantsByIds(Set<Long> ids) {
     String lang = translationService.getCurrentLanguageContext();
     TenantAdminControls controls = tenantAdminControlsService.getControls();
+    Theming platformTheming = getPlatformTheming(lang);
     return tenantService.findRestrictedTenantDataByIds(ids).stream()
         .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
-        .map(tenant -> withEffectivePermissions(tenant, controls))
+        .map(tenant -> withEffectiveSettings(tenant, controls, platformTheming))
         .toList();
   }
 
@@ -660,15 +676,37 @@ public class TenantServiceFacade {
    * controls themselves. See ADR-013 P4.
    */
   private RestrictedTenantDTO withEffectivePermissions(RestrictedTenantDTO dto) {
-    return withEffectivePermissions(dto, tenantAdminControlsService.getControls());
+    String lang = translationService.getCurrentLanguageContext();
+    return withEffectiveSettings(
+        dto, tenantAdminControlsService.getControls(), getPlatformTheming(lang));
   }
 
   private RestrictedTenantDTO withEffectivePermissions(
       RestrictedTenantDTO dto, TenantAdminControls controls) {
+    String lang = translationService.getCurrentLanguageContext();
+    return withEffectiveSettings(dto, controls, getPlatformTheming(lang));
+  }
+
+  private RestrictedTenantDTO withEffectiveSettings(
+      RestrictedTenantDTO dto, TenantAdminControls controls, Theming platformTheming) {
     if (dto != null) {
       effectivePermissionSettingsApplier.applyTo(dto.getSettings(), controls);
+      if (dto.getId() == null || dto.getId() != TECHNICAL_TENANT_ID) {
+        dto.setTheming(effectiveThemingApplier.effective(dto.getTheming(), platformTheming));
+      }
     }
     return dto;
+  }
+
+  private Theming getPlatformTheming(String lang) {
+    return tenantService
+        .findRestrictedTenantDataById((long) TECHNICAL_TENANT_ID)
+        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
+        .orElse(null);
+  }
+
+  public Optional<RestrictedTenantDTO> getPlatformTenant() {
+    return findRestrictedTenantById((long) TECHNICAL_TENANT_ID);
   }
 
   public List<BasicTenantLicensingDTO> getAllTenants() {
@@ -694,10 +732,21 @@ public class TenantServiceFacade {
                 tenantConverter.toRestrictedTenantDTO(tenantBySubdomain.get(), lang)));
   }
 
+  /**
+   * Resolves the tenant the caller wants applied as an override, if any.
+   *
+   * <p>Id {@code 0} is this service's own sentinel for "platform scope, no tenant" ({@link
+   * #TECHNICAL_TENANT_ID}): it is guarded against deletion, excluded from every tenant listing, and
+   * has no row in the tenant table. A platform admin's token carries it in the {@code tenantId}
+   * claim, which the cookie resolver reads back verbatim. Letting it through here made the
+   * single-domain override path look up a tenant that cannot exist, so every authenticated platform
+   * admin got an error instead of the subdomain's public tenant data (#199).
+   */
   private Optional<Long> resolveFromRequestOrCookie(Long optionalTenantIdOverride) {
-    return optionalTenantIdOverride != null
-        ? Optional.of(optionalTenantIdOverride)
-        : tenantResolverService.tryResolveForNonAuthUsers();
+    return (optionalTenantIdOverride != null
+            ? Optional.of(optionalTenantIdOverride)
+            : tenantResolverService.tryResolveForNonAuthUsers())
+        .filter(tenantId -> tenantId != TECHNICAL_TENANT_ID);
   }
 
   public RestrictedTenantDTO getRestrictedTenantDataDeterminingTenantContext() {
@@ -718,6 +767,14 @@ public class TenantServiceFacade {
     var mainTenant =
         tenantService.findRestrictedTenantDataBySubdomain(mainTenantSubdomain).orElseThrow();
     Long actualTenantId = tenantResolverService.tryResolve().orElseThrow();
+    if (actualTenantId == TECHNICAL_TENANT_ID) {
+      // Same sentinel hazard as resolveFromRequestOrCookie (#199): a caller in platform scope has
+      // no tenant to override with, and id 0 has no row, so orElseThrow would fail here instead of
+      // answering. The main tenant's own data is the correct answer for that caller.
+      return withEffectivePermissions(
+          tenantConverter.toRestrictedTenantDTO(
+              mainTenant, translationService.getCurrentLanguageContext()));
+    }
     TenantRestrictedData actualTenant =
         tenantService.findRestrictedTenantDataById(actualTenantId).orElseThrow();
     return withEffectivePermissions(

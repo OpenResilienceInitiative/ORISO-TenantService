@@ -36,6 +36,7 @@ import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.DpaSignedNoticeHintService;
 import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
 import com.vi.tenantservice.api.service.MediaSizeLimitExceededException;
+import com.vi.tenantservice.api.service.PublicBrandingAssetService;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
 import com.vi.tenantservice.api.service.TenantMediaService;
@@ -52,15 +53,23 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
 import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.CollectionUtils;
@@ -81,6 +90,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class TenantController implements TenantApi, TenantadminApi {
 
   private final @NonNull TenantServiceFacade tenantServiceFacade;
+  private final @NonNull PublicBrandingAssetService publicBrandingAssetService;
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TenantDtoMapper tenantDtoMapper;
   private final @NonNull TenantDpaService tenantDpaService;
@@ -496,6 +506,32 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   public ResponseEntity<PublicDpiaMasterDataDTO> getPublicDpiaMasterData() {
     return new ResponseEntity<>(platformDpiaMasterDataFacade.getPublicMasterData(), HttpStatus.OK);
+  }
+
+  @Override
+  public ResponseEntity<Resource> getPublicBrandingAsset(String asset) {
+    return publicBrandingAssetService
+        .find(asset)
+        .map(
+            image ->
+                ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(image.contentType()))
+                    .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                    // Strong content ETag: mail clients and image proxies re-fetch the logo for
+                    // every open; Spring's conditional-GET processing turns a matching
+                    // If-None-Match into a bodyless 304 once the entity carries an ETag.
+                    .eTag(contentEtag(image.bytes()))
+                    .body((Resource) new ByteArrayResource(image.bytes())))
+        .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
+  private static String contentEtag(byte[] bytes) {
+    try {
+      var digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+      return HexFormat.of().formatHex(digest, 0, 16);
+    } catch (NoSuchAlgorithmException exception) {
+      throw new IllegalStateException("SHA-256 unavailable", exception);
+    }
   }
 
   @Override
