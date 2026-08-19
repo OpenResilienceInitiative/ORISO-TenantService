@@ -51,6 +51,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -475,8 +478,21 @@ public class TenantController implements TenantApi, TenantadminApi {
                 ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType(image.contentType()))
                     .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                    // Strong content ETag: mail clients and image proxies re-fetch the logo for
+                    // every open; Spring's conditional-GET processing turns a matching
+                    // If-None-Match into a bodyless 304 once the entity carries an ETag.
+                    .eTag(contentEtag(image.bytes()))
                     .body((Resource) new ByteArrayResource(image.bytes())))
         .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
+  private static String contentEtag(byte[] bytes) {
+    try {
+      var digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+      return HexFormat.of().formatHex(digest, 0, 16);
+    } catch (NoSuchAlgorithmException exception) {
+      throw new IllegalStateException("SHA-256 unavailable", exception);
+    }
   }
 
   @Override

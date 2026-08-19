@@ -883,6 +883,10 @@ class TenantServiceFacadeTest {
     // getPlatformTheming to fetch the platform tenant's theming settings.
     assertThat(tenantDTO).isPresent();
     assertThat(tenantDTO.get().getContent().getPrivacy()).contains("content1");
+    // Not `verify(tenantService, never()).findRestrictedTenantDataById(0L)`: that was a proxy for
+    // "the override path was not entered", and #214 added a second, legitimate reader of tenant 0 —
+    // getPlatformTheming, which resolves inherited branding and is null-safe. The proxy broke while
+    // the invariant it stood for still holds, so assert the override collaborator directly.
     verifyNoInteractions(singleDomainTenantOverrideService);
   }
 
@@ -919,6 +923,10 @@ class TenantServiceFacadeTest {
     // singleDomainTenantOverrideService is the meaningful proof; the platform-branding path
     // legitimately hits findRestrictedTenantDataById(0L) via getPlatformTheming.
     assertThat(tenantDTO.getContent().getPrivacy()).contains("content1");
+    // Not `verify(tenantService, never()).findRestrictedTenantDataById(0L)`: that was a proxy for
+    // "the override path was not entered", and #214 added a second, legitimate reader of tenant 0 —
+    // getPlatformTheming, which resolves inherited branding and is null-safe. The proxy broke while
+    // the invariant it stood for still holds, so assert the override collaborator directly.
     verifyNoInteractions(singleDomainTenantOverrideService);
   }
 
