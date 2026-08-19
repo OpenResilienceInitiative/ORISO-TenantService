@@ -17,7 +17,9 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.PermissionPolicyMode;
+import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -210,7 +212,8 @@ class TenantAdminControlsServiceTest {
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,"
             + "\"permissionPolicies\":{\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}},"
-            + "\"caseHandoverPolicies\":{\"reasons\":{}}}");
+            + "\"caseHandoverPolicies\":{\"reasons\":{\"COUNSELLOR_LEFT\":{\"code\":\"COUNSELLOR_LEFT\","
+            + "\"enabled\":{\"value\":false,\"mode\":\"ENFORCED\"}}}}}");
     TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
     when(tenantConverter.toTenantAdminControlsSettings(request))
         .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
@@ -221,7 +224,10 @@ class TenantAdminControlsServiceTest {
 
     assertThat(capturedSavedControls())
         .contains("\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"")
-        .contains("\"caseHandoverPolicies\":{\"reasons\":{}}");
+        // the stored customisation of a known reason survives the partial update ...
+        .contains("\"enabled\":{\"value\":false,\"mode\":\"ENFORCED\"")
+        // ... while reason codes the blob does not carry are completed from the registry defaults
+        .contains("\"COUNSELLOR_ON_HOLIDAY\"");
   }
 
   @Test
@@ -241,5 +247,203 @@ class TenantAdminControlsServiceTest {
         .isFalse();
     assertThat(settings.getValue().getPermissionPolicies().get("featureSupervisionEnabled").mode())
         .isEqualTo(PermissionPolicyMode.ENFORCED);
+  }
+
+  // --- lenient storage read: the blob is shared across builds (see TenantAdminControlsSettings
+  // javadoc). The stored JSON may have been written by a newer or older build; reading it must
+  // never take down the bootstrap path. An entry this build cannot fully understand is DROPPED
+  // (never defaulted, never fabricated) while every intelligible entry keeps its meaning. ---
+
+  private TenantAdminControlsSettings parsedSettingsHandedToConverter() {
+    ArgumentCaptor<TenantAdminControlsSettings> captor =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(captor.capture());
+    return captor.getValue();
+  }
+
+  @Test
+  void getControls_Should_dropAStoredPolicyEntryWithoutAMode_AndKeepItsValidSiblings() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"permissionPolicies\":{"
+            + "\"featureVideoCallsEnabled\":{\"value\":true},"
+            + "\"featureCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}}}");
+
+    tenantAdminControlsService.getControls();
+
+    TenantAdminControlsSettings parsed = parsedSettingsHandedToConverter();
+    assertThat(parsed.getPermissionPolicies())
+        .containsEntry(
+            "featureCallsEnabled", new PolicyValue<>(false, PermissionPolicyMode.ENFORCED))
+        .doesNotContainKey("featureVideoCallsEnabled");
+  }
+
+  @Test
+  void getControls_Should_dropAStoredPolicyEntryWithAModeUnknownToThisBuild() {
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{"
+            + "\"featureCallsEnabled\":{\"value\":true,\"mode\":\"LOCKED\"},"
+            + "\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}}");
+
+    tenantAdminControlsService.getControls();
+
+    assertThat(parsedSettingsHandedToConverter().getPermissionPolicies())
+        .containsEntry(
+            "featureVideoCallsEnabled", new PolicyValue<>(false, PermissionPolicyMode.SUGGESTED))
+        .doesNotContainKey("featureCallsEnabled");
+  }
+
+  @Test
+  void getControls_Should_dropAStoredPolicyEntryWithoutAValue() {
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{"
+            + "\"featureCallsEnabled\":{\"mode\":\"ENFORCED\"},"
+            + "\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}}");
+
+    tenantAdminControlsService.getControls();
+
+    assertThat(parsedSettingsHandedToConverter().getPermissionPolicies())
+        .containsKey("featureVideoCallsEnabled")
+        .doesNotContainKey("featureCallsEnabled");
+  }
+
+  @Test
+  void getControls_Should_dropAStoredPolicyEntryWithANonBooleanValue() {
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{"
+            + "\"featureCallsEnabled\":{\"value\":\"yes\",\"mode\":\"ENFORCED\"},"
+            + "\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}}");
+
+    tenantAdminControlsService.getControls();
+
+    assertThat(parsedSettingsHandedToConverter().getPermissionPolicies())
+        .containsKey("featureVideoCallsEnabled")
+        .doesNotContainKey("featureCallsEnabled");
+  }
+
+  @Test
+  void getControls_Should_dropAStoredPolicyEntryThatIsNotAnObject() {
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{"
+            + "\"featureCallsEnabled\":true,"
+            + "\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}}");
+
+    tenantAdminControlsService.getControls();
+
+    assertThat(parsedSettingsHandedToConverter().getPermissionPolicies())
+        .containsKey("featureVideoCallsEnabled")
+        .doesNotContainKey("featureCallsEnabled");
+  }
+
+  @Test
+  void getControls_Should_dropAStoredPolicyEntryForAFeatureUnknownToThisBuild() {
+    // A well-formed entry under a feature key this build has never heard of must not survive the
+    // read: TenantPermissionPolicyService.toDomain asserts known features on the public bootstrap
+    // path, so keeping the entry would turn the alien key into a 500 one layer further up.
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{"
+            + "\"someFutureFeatureEnabled\":{\"value\":true,\"mode\":\"ENFORCED\"},"
+            + "\"featureCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}}}");
+
+    tenantAdminControlsService.getControls();
+
+    assertThat(parsedSettingsHandedToConverter().getPermissionPolicies())
+        .containsEntry(
+            "featureCallsEnabled", new PolicyValue<>(false, PermissionPolicyMode.ENFORCED))
+        .doesNotContainKey("someFutureFeatureEnabled");
+  }
+
+  @Test
+  void getControls_Should_keepAStoredPolicyEntryCarryingUnknownExtraFields() {
+    // Additive fields inside an entry (e.g. the API's read-only "inherited") are one-way
+    // tolerated, exactly like unknown fields at the blob root.
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{"
+            + "\"featureCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\",\"inherited\":true,\"note\":\"x\"}}}");
+
+    tenantAdminControlsService.getControls();
+
+    assertThat(parsedSettingsHandedToConverter().getPermissionPolicies())
+        .containsEntry(
+            "featureCallsEnabled", new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+  }
+
+  @Test
+  void getControls_Should_fallBackToLegacyDerivedPolicies_When_noStoredPolicyEntryIsIntelligible() {
+    // When nothing in the canonical map survives, the read behaves as if the alien build's data
+    // were invisible: the canonical policies are re-derived from the legacy toggle maps in the
+    // same blob - the exact behaviour of a build that predates the canonical map.
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{\"someFutureFeatureEnabled\":{\"value\":true}},"
+            + "\"allowedPermissionToggles\":{\"videoCalls\":false}}");
+
+    tenantAdminControlsService.getControls();
+
+    TenantAdminControlsSettings parsed = parsedSettingsHandedToConverter();
+    assertThat(parsed.getPermissionPolicies())
+        .doesNotContainKey("someFutureFeatureEnabled")
+        .containsEntry(
+            "featureVideoCallsEnabled", new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+  }
+
+  @Test
+  void getControls_Should_fallBackToLegacyDerivedPolicies_When_theStoredPolicyMapIsNotAnObject() {
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":[]," + "\"allowedPermissionToggles\":{\"videoCalls\":false}}");
+
+    tenantAdminControlsService.getControls();
+
+    assertThat(parsedSettingsHandedToConverter().getPermissionPolicies())
+        .containsEntry(
+            "featureVideoCallsEnabled", new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+  }
+
+  @Test
+  void getControls_Should_ignoreUnknownFieldsInsideNestedSections_When_writtenByAnotherBuild() {
+    // Verbatim shape of the Pre-Dev 2026-08-18 outage blob: an alien policy entry plus an unknown
+    // field inside a nested generated type. Root-level @JsonIgnoreProperties does not shield
+    // nested types, so the read itself must be lenient at every depth.
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true}},"
+            + "\"caseHandoverPolicies\":{\"requireConsent\":true}}");
+
+    tenantAdminControlsService.getControls();
+
+    assertThat(parsedSettingsHandedToConverter().isPermissionsPageEnabled()).isTrue();
+  }
+
+  @Test
+  void getControls_Should_substituteCaseHandoverDefaults_When_storedSectionHasNoReasons() {
+    // A case-handover section whose reasons are unintelligible to this build behaves as if the
+    // section were absent: the platform defaults apply instead of a null map that would NPE the
+    // resolver downstream.
+    givenStoredControlsJson("{\"caseHandoverPolicies\":{\"requireConsent\":true}}");
+
+    tenantAdminControlsService.getControls();
+
+    assertThat(parsedSettingsHandedToConverter().getCaseHandoverPolicies().getReasons())
+        .containsOnlyKeys(CaseHandoverPolicyDefaults.create().getReasons().keySet());
+  }
+
+  @Test
+  void updateControls_Should_notResurrectADroppedPolicyEntry_When_rewritingTheBlob() {
+    // Dropped means dropped: the rewrite must not fabricate a defaulted entry out of a stored
+    // fragment this build could not understand.
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{"
+            + "\"featureVideoCallsEnabled\":{\"value\":true},"
+            + "\"featureCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}}}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    assertThat(capturedSavedControls())
+        .contains("\"featureCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}")
+        .doesNotContain("featureVideoCallsEnabled");
   }
 }

@@ -1,10 +1,13 @@
 package com.vi.tenantservice.api.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
+import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminControls;
@@ -17,6 +20,7 @@ import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import lombok.NonNull;
@@ -141,13 +145,23 @@ public class TenantAdminControlsService {
     return tenantAdminControlsRepository.findTopByOrderByIdAsc();
   }
 
+  /**
+   * Mapper for the version-shared storage blob. Reading tolerates unknown fields at ANY depth:
+   * {@code @JsonIgnoreProperties} on {@link TenantAdminControlsSettings} only shields the root's
+   * own properties, while the nested generated types (e.g. {@code CaseHandoverPolicies}) carry no
+   * such annotation — a strict mapper would just move the version-skew outage one level deeper.
+   * Serialization is unaffected by the flag. Syntactically broken JSON still fails loudly.
+   */
+  private static final ObjectMapper STORED_CONTROLS_MAPPER =
+      JsonMapper.builder().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
+
   private TenantAdminControlsSettings parseControlsSettings(String controlsJson) {
     if (StringUtils.isBlank(controlsJson) || "{}".equals(controlsJson.trim())) {
       return createDefaultControlsSettings();
     }
     try {
       TenantAdminControlsSettings settings =
-          new ObjectMapper().readValue(controlsJson, TenantAdminControlsSettings.class);
+          STORED_CONTROLS_MAPPER.readValue(controlsJson, TenantAdminControlsSettings.class);
       if (settings == null) {
         return createDefaultControlsSettings();
       }
@@ -160,7 +174,7 @@ public class TenantAdminControlsService {
 
   private String serializeControlsSettings(TenantAdminControlsSettings controlsSettings) {
     try {
-      return new ObjectMapper().writeValueAsString(controlsSettings);
+      return STORED_CONTROLS_MAPPER.writeValueAsString(controlsSettings);
     } catch (JsonProcessingException exception) {
       throw new RuntimeJsonMappingException(exception.getMessage());
     }
@@ -182,8 +196,27 @@ public class TenantAdminControlsService {
           LegacyPermissionPolicyMapper.fromLegacyMaps(
               settings.getAllowedPermissionToggles(), settings.getEnforcedPermissionToggles()));
     }
-    if (settings.getCaseHandoverPolicies() == null) {
+    // The reason registry is defined by this build (CaseHandoverPolicyDefaults); the stored blob
+    // only customises the policies of known reasons. A section written by another build - or one
+    // whose shape this build cannot read - may miss reason codes entirely; the resolver and the
+    // override sanitiser dereference every registry code unconditionally, so missing codes are
+    // completed from the defaults while stored ones keep their customisation.
+    if (settings.getCaseHandoverPolicies() == null
+        || settings.getCaseHandoverPolicies().getReasons() == null) {
       settings.setCaseHandoverPolicies(CaseHandoverPolicyDefaults.create());
+    } else {
+      Map<String, CaseHandoverReasonPolicy> completedReasons =
+          new LinkedHashMap<>(CaseHandoverPolicyDefaults.create().getReasons());
+      settings
+          .getCaseHandoverPolicies()
+          .getReasons()
+          .forEach(
+              (code, storedReason) -> {
+                if (storedReason != null) {
+                  completedReasons.put(code, storedReason);
+                }
+              });
+      settings.getCaseHandoverPolicies().setReasons(completedReasons);
     }
   }
 }

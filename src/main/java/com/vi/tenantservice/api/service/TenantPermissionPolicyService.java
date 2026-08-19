@@ -1,8 +1,9 @@
 package com.vi.tenantservice.api.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
@@ -17,6 +18,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantPermissionPolicyEntity;
 import com.vi.tenantservice.api.policy.CaseHandoverDurationPolicy;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
+import com.vi.tenantservice.api.policy.LenientPolicyValueMapDeserializer;
 import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PermissionPolicyResolver;
 import com.vi.tenantservice.api.policy.PolicyValue;
@@ -41,7 +43,15 @@ public class TenantPermissionPolicyService {
 
   private final @NonNull TenantPermissionPolicyRepository repository;
   private final @NonNull TenantAdminControlsService platformControls;
-  private final ObjectMapper objectMapper = new ObjectMapper();
+
+  /**
+   * The stored per-tenant blobs are version-shared like the platform controls blob and are read on
+   * the public bootstrap path (getResolvedPolicies feeds GET /tenant/public/...). Unknown fields
+   * written by another build are ignored at any depth; syntactically broken JSON still fails
+   * loudly. Serialization is unaffected by the flag.
+   */
+  private final ObjectMapper objectMapper =
+      JsonMapper.builder().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
 
   public Map<String, ResolvedPolicyValue<Boolean>> getResolvedPolicies(Long tenantId) {
     Map<String, PolicyValue<Boolean>> inherited =
@@ -160,8 +170,11 @@ public class TenantPermissionPolicyService {
 
   private Map<String, PolicyValue<Boolean>> deserialize(TenantPermissionPolicyEntity entity) {
     try {
-      return objectMapper.readValue(
-          entity.getPolicies(), new TypeReference<Map<String, PolicyValue<Boolean>>>() {});
+      // Lenient storage read: an override entry another build wrote in a shape this build cannot
+      // fully understand is ignored (the inherited platform policy stands) instead of failing the
+      // bootstrap read. See LenientPolicyValueMapDeserializer for the exact rules.
+      return LenientPolicyValueMapDeserializer.readIntelligibleEntries(
+          objectMapper.readTree(entity.getPolicies()));
     } catch (JsonProcessingException exception) {
       throw mappingFailure("deserialize permission policies", exception);
     }

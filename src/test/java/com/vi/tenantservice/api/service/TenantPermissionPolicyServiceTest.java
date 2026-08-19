@@ -69,6 +69,40 @@ class TenantPermissionPolicyServiceTest {
   }
 
   @Test
+  void resolve_shouldIgnoreAStoredOverrideEntryItCannotParse_InsteadOfFailingTheBootstrapRead() {
+    // The tenant_permission_policy blob is version-shared exactly like the platform controls
+    // blob: an entry written by another build (here: no mode) must not take down
+    // getResolvedPolicies, which feeds GET /tenant/public/... on app bootstrap. The
+    // unintelligible override is ignored - the inherited platform policy stands - while a valid
+    // sibling override keeps working.
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        "featureSupervisionEnabled",
+                        new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED),
+                        "featureVideoCallsEnabled",
+                        new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED))));
+    when(repository.findByTenantId(42L))
+        .thenReturn(
+            Optional.of(
+                TenantPermissionPolicyEntity.builder()
+                    .tenantId(42L)
+                    .policies(
+                        "{\"featureSupervisionEnabled\":{\"value\":false},"
+                            + "\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}")
+                    .build()));
+
+    Map<String, ResolvedPolicyValue<Boolean>> resolved = service.getResolvedPolicies(42L);
+
+    assertThat(resolved.get("featureSupervisionEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
+    assertThat(resolved.get("featureVideoCallsEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(false, SUGGESTED, false));
+  }
+
+  @Test
   void save_shouldRemainTenantScoped() {
     when(platformControls.getControls())
         .thenReturn(
