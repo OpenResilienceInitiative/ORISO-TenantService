@@ -427,6 +427,88 @@ class TenantAdminControlsServiceTest {
   }
 
   @Test
+  void getControls_Should_handOverFullyHydratedDefaults_When_nothingIsStored() {
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc()).thenReturn(Optional.empty());
+    when(tenantConverter.toTenantAdminControlsSettings(any(TenantAdminControls.class)))
+        .thenReturn(TenantAdminControlsSettings.builder().build());
+
+    tenantAdminControlsService.getControls();
+
+    TenantAdminControlsSettings parsed = parsedSettingsHandedToConverter();
+    assertThat(parsed.getPermissionPolicies()).isNotEmpty();
+    assertThat(parsed.getCaseHandoverPolicies().getReasons())
+        .containsOnlyKeys(CaseHandoverPolicyDefaults.create().getReasons().keySet());
+  }
+
+  @Test
+  void getControls_Should_fallBackToDefaults_When_theStoredBlobIsBlank() {
+    givenStoredControlsJson("   ");
+    when(tenantConverter.toTenantAdminControlsSettings(any(TenantAdminControls.class)))
+        .thenReturn(TenantAdminControlsSettings.builder().build());
+
+    tenantAdminControlsService.getControls();
+
+    assertThat(parsedSettingsHandedToConverter().getPermissionPolicies()).isNotEmpty();
+  }
+
+  @Test
+  void getControls_Should_fallBackToDefaults_When_theStoredBlobIsTheNullLiteral() {
+    givenStoredControlsJson("null");
+    when(tenantConverter.toTenantAdminControlsSettings(any(TenantAdminControls.class)))
+        .thenReturn(TenantAdminControlsSettings.builder().build());
+
+    tenantAdminControlsService.getControls();
+
+    assertThat(parsedSettingsHandedToConverter().getPermissionPolicies()).isNotEmpty();
+  }
+
+  @Test
+  void updateControls_Should_completeTheReasonRegistry_When_theRequestCarriesAPartialSection() {
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc()).thenReturn(Optional.empty());
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(true);
+    TenantAdminControlsSettings partial =
+        TenantAdminControlsSettings.builder()
+            .permissionsPageEnabled(true)
+            .permissionPolicies(
+                java.util.Map.of(
+                    "featureCallsEnabled", new PolicyValue<>(false, PermissionPolicyMode.ENFORCED)))
+            .caseHandoverPolicies(new com.vi.tenantservice.api.model.CaseHandoverPolicies())
+            .build();
+    when(tenantConverter.toTenantAdminControlsSettings(request)).thenReturn(partial);
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    TenantAdminControls result = tenantAdminControlsService.updateControls(request);
+
+    assertThat(result).isSameAs(request);
+    assertThat(capturedSavedControls())
+        .contains("\"COUNSELLOR_LEFT\"")
+        .contains("\"COUNSELLOR_ASKED_FOR_ADVICE\"")
+        .contains("\"COUNSELLOR_ON_HOLIDAY\"")
+        .contains("\"COUNSELLOR_IS_ILL\"");
+  }
+
+  @Test
+  void updateControls_Should_treatAnEmptyRequestPolicyMapAsOmitted() {
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{\"featureCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}}}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(
+            TenantAdminControlsSettings.builder()
+                .permissionsPageEnabled(false)
+                .permissionPolicies(java.util.Map.of())
+                .build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    assertThat(capturedSavedControls())
+        .contains("\"featureCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}");
+  }
+
+  @Test
   void updateControls_Should_notResurrectADroppedPolicyEntry_When_rewritingTheBlob() {
     // Dropped means dropped: the rewrite must not fabricate a defaulted entry out of a stored
     // fragment this build could not understand.
