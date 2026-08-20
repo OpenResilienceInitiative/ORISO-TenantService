@@ -11,6 +11,7 @@ import com.vi.tenantservice.api.facade.TenantDpaFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.service.BrandingAssetDecoder.DecodedAsset;
+import com.vi.tenantservice.api.service.DpaSignedNoticeHintService;
 import com.vi.tenantservice.api.service.PublicBrandingAssetService;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
@@ -45,6 +46,7 @@ class TenantControllerBrandingAssetTest {
   @Mock private TenantIdAllocationService tenantIdAllocationService;
   @Mock private PublicBrandingAssetService publicBrandingAssetService;
   @Mock private PlatformDpiaMasterDataFacade platformDpiaMasterDataFacade;
+  @Mock private DpaSignedNoticeHintService dpaSignedNoticeHintService;
 
   @InjectMocks private TenantController controller;
 
