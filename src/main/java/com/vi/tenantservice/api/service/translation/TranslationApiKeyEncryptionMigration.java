@@ -1,14 +1,14 @@
 package com.vi.tenantservice.api.service.translation;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
-import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,9 +22,15 @@ import org.springframework.transaction.annotation.Transactional;
  * One-time (idempotent) startup migration: encrypts machine-translation provider API keys that are
  * still stored in plaintext inside the {@code tenant_admin_controls.controls} JSON.
  *
- * <p>Same shape as {@code SmtpPasswordEncryptionMigration} and for the same reason: without it the
- * keys written before this change would stay in plaintext until a super admin happens to save them
- * again, which may be never.
+ * <p>Same purpose as {@code SmtpPasswordEncryptionMigration}: without it the keys written before
+ * encryption existed would stay in plaintext until a super admin happens to save them again, which
+ * may be never.
+ *
+ * <p><b>The blob is edited as a JSON tree, not through {@code TenantAdminControlsSettings}.</b>
+ * That type ignores unknown fields on purpose, so a newer build may have written keys this build
+ * has never heard of — that is exactly what took Pre-Dev down on 2026-08-18. Reading leniently is
+ * correct; writing the narrower type back would silently delete those fields for everyone. This
+ * migration touches one key and leaves every other byte of the document alone.
  *
  * <p>Runs only when the encryption secret is configured. Values that already authenticate under the
  * key are left untouched, so re-running changes nothing.
@@ -33,6 +39,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @RequiredArgsConstructor
 public class TranslationApiKeyEncryptionMigration {
+
+  private static final String TRANSLATION_API_KEYS = "translationApiKeys";
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   private final @NonNull TenantAdminControlsRepository tenantAdminControlsRepository;
   private final @NonNull TranslationApiKeyEncryptionService translationApiKeyEncryptionService;
@@ -56,51 +65,56 @@ public class TranslationApiKeyEncryptionMigration {
   }
 
   private int encryptPlaintextKeys(TenantAdminControlsEntity entity) {
-    TenantAdminControlsSettings settings = parse(entity.getControls());
-    if (settings == null || settings.getTranslationApiKeys() == null) {
+    ObjectNode controls = readControls(entity.getControls());
+    if (controls == null) {
       return 0;
     }
-    Map<String, String> rewritten = new HashMap<>();
-    int migrated = 0;
-    for (Map.Entry<String, String> entry : settings.getTranslationApiKeys().entrySet()) {
-      String storedValue = entry.getValue();
-      if (StringUtils.isBlank(storedValue)
-          || translationApiKeyEncryptionService.isEncrypted(storedValue)) {
-        rewritten.put(entry.getKey(), storedValue);
-        continue;
-      }
-      rewritten.put(
-          entry.getKey(), translationApiKeyEncryptionService.encryptStoredApiKey(storedValue));
-      migrated++;
-    }
-    if (migrated == 0) {
+    JsonNode apiKeysNode = controls.get(TRANSLATION_API_KEYS);
+    if (apiKeysNode == null || !apiKeysNode.isObject()) {
       return 0;
     }
-    settings.setTranslationApiKeys(rewritten);
-    entity.setControls(serialize(settings));
+    ObjectNode apiKeys = (ObjectNode) apiKeysNode;
+
+    List<String> plaintextProviders = new ArrayList<>();
+    apiKeys
+        .fieldNames()
+        .forEachRemaining(
+            provider -> {
+              String storedValue = apiKeys.get(provider).asText(null);
+              if (StringUtils.isNotBlank(storedValue)
+                  && !translationApiKeyEncryptionService.isEncrypted(storedValue)) {
+                plaintextProviders.add(provider);
+              }
+            });
+    if (plaintextProviders.isEmpty()) {
+      return 0;
+    }
+
+    plaintextProviders.forEach(
+        provider ->
+            apiKeys.put(
+                provider,
+                translationApiKeyEncryptionService.encryptStoredApiKey(
+                    apiKeys.get(provider).asText())));
+
+    entity.setControls(controls.toString());
     entity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));
     tenantAdminControlsRepository.save(entity);
-    return migrated;
+    return plaintextProviders.size();
   }
 
-  private TenantAdminControlsSettings parse(String controlsJson) {
+  private ObjectNode readControls(String controlsJson) {
     if (StringUtils.isBlank(controlsJson)) {
       return null;
     }
     try {
-      return new ObjectMapper().readValue(controlsJson, TenantAdminControlsSettings.class);
-    } catch (JsonProcessingException exception) {
-      // A blob this service cannot read is a separate problem; never fail startup over it.
+      JsonNode tree = OBJECT_MAPPER.readTree(controlsJson);
+      return tree.isObject() ? (ObjectNode) tree : null;
+    } catch (Exception exception) {
+      // A blob this service cannot read is a separate problem; never fail startup over it, and
+      // never overwrite something we did not understand.
       log.warn("Skipping translation API key migration: admin controls blob is not readable");
       return null;
-    }
-  }
-
-  private String serialize(TenantAdminControlsSettings settings) {
-    try {
-      return new ObjectMapper().writeValueAsString(settings);
-    } catch (JsonProcessingException exception) {
-      throw new IllegalStateException("Failed to serialize admin controls", exception);
     }
   }
 }

@@ -127,6 +127,49 @@ class TranslationApiKeyStorageTest {
     verify(tenantAdminControlsRepository).save(saved.capture());
     assertThat(saved.getValue().getControls()).doesNotContain(RAW_KEY);
     assertThat(saved.getValue().getControls()).contains(alreadyEncrypted);
+
+    // Absence of the plaintext is not enough: an encryptor that wrote any non-plaintext value
+    // would pass that check while destroying the key. Assert the migrated key is still usable.
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc())
+        .thenReturn(Optional.of(saved.getValue()));
+    assertThat(tenantAdminControlsService.getTranslationApiKeys())
+        .containsEntry("mistral", RAW_KEY)
+        .containsEntry("openrouter", "sk-already-safe");
+  }
+
+  /**
+   * The controls blob is shared and read leniently: a newer build may have written fields this
+   * build has never heard of. Rewriting it through the narrower settings type would delete them —
+   * the same version-skew problem that took Pre-Dev down on 2026-08-18, from the other side.
+   */
+  @Test
+  void migration_Should_keepFieldsWrittenByANewerBuild() {
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc())
+        .thenReturn(
+            Optional.of(
+                TenantAdminControlsEntity.builder()
+                    .id(1L)
+                    .controls(
+                        "{\"permissionsPageEnabled\":true,"
+                            + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true}},"
+                            + "\"caseHandoverPolicies\":{\"requireConsent\":true},"
+                            + "\"translationApiKeys\":{\"mistral\":\""
+                            + RAW_KEY
+                            + "\"}}")
+                    .build()));
+
+    new TranslationApiKeyEncryptionMigration(tenantAdminControlsRepository, encryptionService)
+        .migrate();
+
+    var saved = ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
+    verify(tenantAdminControlsRepository).save(saved.capture());
+    assertThat(saved.getValue().getControls())
+        .contains("\"permissionPolicies\"")
+        .contains("\"featureVideoCall\"")
+        .contains("\"caseHandoverPolicies\"")
+        .contains("\"requireConsent\"")
+        .contains("\"permissionsPageEnabled\":true")
+        .doesNotContain(RAW_KEY);
   }
 
   @Test
