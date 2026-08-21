@@ -81,7 +81,14 @@ public class TranslationApiKeyEncryptionMigration {
         .fieldNames()
         .forEachRemaining(
             provider -> {
-              String storedValue = apiKeys.get(provider).asText(null);
+              JsonNode storedNode = apiKeys.get(provider);
+              // Only strings. A number or a boolean is not a key we wrote, and asText() would
+              // silently turn it into one - rewriting a value we do not understand is exactly what
+              // this migration must not do.
+              if (!storedNode.isTextual()) {
+                return;
+              }
+              String storedValue = storedNode.asText();
               if (StringUtils.isNotBlank(storedValue)
                   && !translationApiKeyEncryptionService.isEncrypted(storedValue)) {
                 plaintextProviders.add(provider);

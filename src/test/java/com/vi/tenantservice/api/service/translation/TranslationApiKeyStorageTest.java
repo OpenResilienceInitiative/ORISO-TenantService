@@ -65,6 +65,13 @@ class TranslationApiKeyStorageTest {
     verify(tenantAdminControlsRepository).save(saved.capture());
     assertThat(saved.getValue().getControls()).doesNotContain(RAW_KEY);
     assertThat(saved.getValue().getControls()).contains("ENC:");
+
+    // Absence of the plaintext is not enough: storing an arbitrary ciphertext would pass that and
+    // hand the provider the wrong key at translation time.
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc())
+        .thenReturn(Optional.of(saved.getValue()));
+    assertThat(tenantAdminControlsService.getTranslationApiKeys())
+        .containsEntry("mistral", RAW_KEY);
   }
 
   @Test
@@ -110,6 +117,12 @@ class TranslationApiKeyStorageTest {
     var saved = ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
     verify(tenantAdminControlsRepository).save(saved.capture());
     assertThat(saved.getValue().getControls()).doesNotContain(RAW_KEY);
+
+    // and it round-trips as the literal input, prefix and all - not as the key without it
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc())
+        .thenReturn(Optional.of(saved.getValue()));
+    assertThat(tenantAdminControlsService.getTranslationApiKeys())
+        .containsEntry("mistral", "ENC:" + RAW_KEY);
   }
 
   @Test
@@ -176,6 +189,55 @@ class TranslationApiKeyStorageTest {
         .contains("\"caseHandoverPolicies\"")
         .contains("\"requireConsent\"")
         .contains("\"permissionsPageEnabled\":true")
+        .doesNotContain(RAW_KEY);
+  }
+
+  /**
+   * With no secret configured the cipher is a pass-through, so every stored value looks like
+   * plaintext to {@code isEncrypted}. Without the {@code isEnabled()} guard the migration would
+   * rewrite the blob with unchanged content and log that it had encrypted keys — a write that does
+   * nothing and a log line that is a lie.
+   */
+  @Test
+  void migration_Should_notTouchAnythingWhenNoSecretIsConfigured() {
+    var withoutSecret =
+        new TranslationApiKeyEncryptionService(new SmtpPasswordEncryptionService(""));
+    assertThat(withoutSecret.isEnabled()).isFalse();
+
+    new TranslationApiKeyEncryptionMigration(tenantAdminControlsRepository, withoutSecret)
+        .migrate();
+
+    verify(tenantAdminControlsRepository, never()).findTopByOrderByIdAsc();
+    verify(tenantAdminControlsRepository, never()).save(any());
+  }
+
+  /**
+   * A provider value that is not a string was not written by us. {@code asText()} would happily
+   * turn a number into one, so the migration would replace a JSON scalar with an encrypted string
+   * and change the shape of a document it does not understand.
+   */
+  @Test
+  void migration_Should_leaveNonTextualProviderValuesAsTheyAre() {
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc())
+        .thenReturn(
+            Optional.of(
+                TenantAdminControlsEntity.builder()
+                    .id(1L)
+                    .controls(
+                        "{\"translationApiKeys\":{\"a\":42,\"b\":true,\"c\":null,\"mistral\":\""
+                            + RAW_KEY
+                            + "\"}}")
+                    .build()));
+
+    new TranslationApiKeyEncryptionMigration(tenantAdminControlsRepository, encryptionService)
+        .migrate();
+
+    var saved = ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
+    verify(tenantAdminControlsRepository).save(saved.capture());
+    assertThat(saved.getValue().getControls())
+        .contains("\"a\":42")
+        .contains("\"b\":true")
+        .contains("\"c\":null")
         .doesNotContain(RAW_KEY);
   }
 
