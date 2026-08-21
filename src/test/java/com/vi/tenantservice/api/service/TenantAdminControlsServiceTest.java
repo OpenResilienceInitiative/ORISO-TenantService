@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,6 +16,7 @@ import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
+import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +30,7 @@ class TenantAdminControlsServiceTest {
 
   @Mock private TenantAdminControlsRepository tenantAdminControlsRepository;
   @Mock private TenantConverter tenantConverter;
+  @Mock private TranslationApiKeyEncryptionService translationApiKeyEncryptionService;
 
   @InjectMocks private TenantAdminControlsService tenantAdminControlsService;
 
@@ -151,8 +154,24 @@ class TenantAdminControlsServiceTest {
     assertThat(tenantAdminControlsService.getTranslationApiKeys()).isEmpty();
   }
 
+  /** Stub cipher: makes it visible in the assertions that stored values pass through it. */
+  private void givenReversibleCipher() {
+    when(translationApiKeyEncryptionService.decrypt(anyString()))
+        .thenAnswer(call -> unwrap(call.getArgument(0)));
+  }
+
+  private void givenEncryptingCipher() {
+    when(translationApiKeyEncryptionService.encryptNewApiKey(anyString()))
+        .thenAnswer(call -> "ENC(" + call.getArgument(0) + ")");
+  }
+
+  private static String unwrap(String value) {
+    return value.startsWith("ENC(") ? value.substring(4, value.length() - 1) : value;
+  }
+
   @Test
   void getTranslationApiKeys_Should_returnStoredKeys() {
+    givenReversibleCipher();
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,"
             + "\"translationApiKeys\":{\"openrouter\":\"sk-or-key\",\"mistral\":\"mi-key\"}}");
@@ -164,25 +183,30 @@ class TenantAdminControlsServiceTest {
 
   @Test
   void setTranslationApiKey_Should_persistKeyInControlsJson() {
+    givenEncryptingCipher();
     givenStoredControlsJson("{\"permissionsPageEnabled\":true}");
 
     tenantAdminControlsService.setTranslationApiKey("openrouter", "sk-or-new-key");
 
+    // stored through the cipher, never as the raw key
     assertThat(capturedSavedControls())
-        .contains("\"openrouter\":\"sk-or-new-key\"")
+        .contains("\"openrouter\":\"ENC(sk-or-new-key)\"")
+        .doesNotContain("\"openrouter\":\"sk-or-new-key\"")
         .contains("\"permissionsPageEnabled\":true");
   }
 
   @Test
   void setTranslationApiKey_Should_keepOtherProviderKey() {
+    givenEncryptingCipher();
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,\"translationApiKeys\":{\"mistral\":\"mi-key\"}}");
 
     tenantAdminControlsService.setTranslationApiKey("openrouter", "sk-or-new-key");
 
+    // the untouched provider keeps its stored value verbatim - no decrypt/re-encrypt round trip
     assertThat(capturedSavedControls())
         .contains("\"mistral\":\"mi-key\"")
-        .contains("\"openrouter\":\"sk-or-new-key\"");
+        .contains("\"openrouter\":\"ENC(sk-or-new-key)\"");
   }
 
   @Test
