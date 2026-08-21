@@ -1,5 +1,6 @@
 package com.vi.tenantservice.api.service.translation;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -110,9 +111,10 @@ public class TranslationApiKeyEncryptionMigration {
     try {
       JsonNode tree = OBJECT_MAPPER.readTree(controlsJson);
       return tree.isObject() ? (ObjectNode) tree : null;
-    } catch (Exception exception) {
+    } catch (JsonProcessingException unreadableBlob) {
       // A blob this service cannot read is a separate problem; never fail startup over it, and
-      // never overwrite something we did not understand.
+      // never overwrite something we did not understand. Deliberately narrow: catching Exception
+      // here would swallow our own bugs on a path that runs before anyone can react.
       log.warn("Skipping translation API key migration: admin controls blob is not readable");
       return null;
     }

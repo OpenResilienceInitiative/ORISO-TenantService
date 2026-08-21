@@ -1,6 +1,9 @@
 package com.vi.tenantservice.api.service.translation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -11,9 +14,13 @@ import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -170,6 +177,39 @@ class TranslationApiKeyStorageTest {
         .contains("\"requireConsent\"")
         .contains("\"permissionsPageEnabled\":true")
         .doesNotContain(RAW_KEY);
+  }
+
+  /**
+   * The migration runs on every startup, before anyone can react. A blob it cannot make sense of is
+   * a separate problem: it must neither take the service down nor overwrite a document it did not
+   * understand. These cases exercise the branches that decide to do nothing.
+   */
+  @ParameterizedTest(name = "controls = {1}")
+  @MethodSource("unusableControlsBlobs")
+  void migration_Should_leaveBlobsAloneThatItCannotRead(String controls, String description) {
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc())
+        .thenReturn(
+            Optional.of(TenantAdminControlsEntity.builder().id(1L).controls(controls).build()));
+
+    var migration =
+        new TranslationApiKeyEncryptionMigration(tenantAdminControlsRepository, encryptionService);
+
+    assertThatCode(migration::migrate).as(description).doesNotThrowAnyException();
+    verify(tenantAdminControlsRepository, never()).save(any());
+  }
+
+  private static Stream<Arguments> unusableControlsBlobs() {
+    return Stream.of(
+        Arguments.of(null, "no blob stored yet"),
+        Arguments.of("", "empty column"),
+        Arguments.of("   ", "whitespace only"),
+        Arguments.of("{\"translationApiKeys\":", "truncated JSON"),
+        Arguments.of("not json at all", "not JSON"),
+        Arguments.of("[{\"translationApiKeys\":{}}]", "valid JSON, but an array"),
+        Arguments.of("\"just a string\"", "valid JSON, but a scalar"),
+        Arguments.of("{\"permissionsPageEnabled\":true}", "readable, but no keys to migrate"),
+        Arguments.of("{\"translationApiKeys\":\"mistral\"}", "keys present, but not an object"),
+        Arguments.of("{\"translationApiKeys\":{\"mistral\":\"\"}}", "provider present, key blank"));
   }
 
   @Test
