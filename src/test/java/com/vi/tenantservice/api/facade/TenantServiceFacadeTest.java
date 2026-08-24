@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.facade;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -24,17 +25,18 @@ import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
+import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.Content;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO;
+import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
-import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
-import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
@@ -43,6 +45,7 @@ import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
+import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -58,12 +61,14 @@ import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDT
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -130,6 +135,8 @@ class TenantServiceFacadeTest {
 
   @Mock private TenantAdminControlsService tenantAdminControlsService;
 
+  @Mock private TenantPermissionPolicyService tenantPermissionPolicyService;
+
   @Spy
   private EffectivePermissionSettingsApplier effectivePermissionSettingsApplier =
       new EffectivePermissionSettingsApplier();
@@ -148,6 +155,53 @@ class TenantServiceFacadeTest {
   @BeforeEach
   public void initialize() {
     tenantEntity.setId(ID);
+  }
+
+  @Test
+  void getTenantPermissionPolicies_shouldAuthorizeTheRequestedTenantBeforeReading() {
+    when(tenantPermissionPolicyService.getResolvedPolicies(42L)).thenReturn(Map.of());
+
+    tenantServiceFacade.getTenantPermissionPolicies(42L);
+
+    InOrder order =
+        Mockito.inOrder(tenantFacadeAuthorisationService, tenantPermissionPolicyService);
+    order.verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(42L);
+    order.verify(tenantPermissionPolicyService).getResolvedPolicies(42L);
+  }
+
+  @Test
+  void updateTenantPermissionPolicies_shouldAuthorizeBeforeWriting() {
+    var request = new TenantPermissionPolicies(42L, Map.of());
+    when(tenantPermissionPolicyService.getResolvedPolicies(42L)).thenReturn(Map.of());
+
+    tenantServiceFacade.updateTenantPermissionPolicies(42L, request);
+
+    InOrder order =
+        Mockito.inOrder(tenantFacadeAuthorisationService, tenantPermissionPolicyService);
+    order.verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(42L);
+    order.verify(tenantPermissionPolicyService).saveOverrides(42L, Map.of(), null);
+  }
+
+  @Test
+  void findRestrictedTenantById_shouldAttachResolvedPoliciesAndApplyThem() {
+    var entity = mock(TenantRestrictedData.class);
+    var dto = new RestrictedTenantDTO(42L, "Tenant").settings(new Settings());
+    var policy = new BooleanPermissionPolicy(false, PermissionPolicyMode.ENFORCED).inherited(true);
+    when(tenantService.findRestrictedTenantDataById(42L)).thenReturn(Optional.of(entity));
+    when(converter.toRestrictedTenantDTO(entity, null)).thenReturn(dto);
+    when(tenantPermissionPolicyService.getResolvedPolicies(42L))
+        .thenReturn(
+            Map.of(
+                "featureVideoCallsEnabled",
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    false, com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED, true)));
+
+    var result = tenantServiceFacade.findRestrictedTenantById(42L);
+
+    assertThat(result).contains(dto);
+    assertThat(dto.getPermissionPolicies()).containsEntry("featureVideoCallsEnabled", policy);
+    verify(effectivePermissionSettingsApplier)
+        .applyPolicies(eq(dto.getSettings()), eq(dto.getPermissionPolicies()));
   }
 
   @Test
@@ -758,29 +812,29 @@ class TenantServiceFacadeTest {
   }
 
   @Test
-  void getSingleTenant_Should_applyEffectivePlatformControls_toPublicSettings() {
-    // given: platform disallows video calls; the tenant itself has them on
+  void getSingleTenant_Should_applyResolvedTenantPolicy_toPublicSettings() {
     var publicDto =
-        new RestrictedTenantDTO().settings(new Settings().featureVideoCallsEnabled(true));
+        new RestrictedTenantDTO().id(ID).settings(new Settings().featureVideoCallsEnabled(true));
     when(tenantService.getAllTenantData()).thenReturn(List.of(tenantEntity));
     when(translationService.getCurrentLanguageContext()).thenReturn(DE);
     when(converter.toRestrictedTenantDTO(tenantEntity, DE)).thenReturn(publicDto);
-    when(tenantAdminControlsService.getControls())
+    when(tenantPermissionPolicyService.getResolvedPolicies(ID))
         .thenReturn(
-            new TenantAdminControls()
-                .allowedPermissionToggles(
-                    new TenantAdminAllowedPermissionToggles().videoCalls(false)));
+            Map.of(
+                "featureVideoCallsEnabled",
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    false, com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED, true)));
 
     // when
     var result = tenantServiceFacade.getSingleTenant();
 
-    // then: the public settings served to the counselling app reflect the platform constraint
     assertThat(result).isPresent();
-    assertThat(result.get().getSettings().getFeatureVideoCallsEnabled()).isFalse();
+    verify(effectivePermissionSettingsApplier)
+        .applyPolicies(eq(publicDto.getSettings()), eq(publicDto.getPermissionPolicies()));
   }
 
   @Test
-  void findRestrictedTenantsByIds_Should_loadPlatformControlsOnceForTheBatch() {
+  void findRestrictedTenantsByIds_ShouldResolveAllTenantsInOneBulkLookup() {
     var firstTenant = mock(TenantRestrictedData.class);
     var secondTenant = mock(TenantRestrictedData.class);
     var firstDto = new RestrictedTenantDTO().id(1L).settings(new Settings());
@@ -790,12 +844,14 @@ class TenantServiceFacadeTest {
     when(translationService.getCurrentLanguageContext()).thenReturn(DE);
     when(converter.toRestrictedTenantDTO(firstTenant, DE)).thenReturn(firstDto);
     when(converter.toRestrictedTenantDTO(secondTenant, DE)).thenReturn(secondDto);
-    when(tenantAdminControlsService.getControls()).thenReturn(new TenantAdminControls());
+    when(tenantPermissionPolicyService.getResolvedPolicies(Set.of(1L, 2L)))
+        .thenReturn(Map.of(1L, Map.of(), 2L, Map.of()));
 
     var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
 
     assertThat(result).containsExactly(firstDto, secondDto);
-    verify(tenantAdminControlsService, times(1)).getControls();
+    verify(tenantPermissionPolicyService).getResolvedPolicies(Set.of(1L, 2L));
+    verify(tenantPermissionPolicyService, never()).getResolvedPolicies(anyLong());
   }
 
   @Test

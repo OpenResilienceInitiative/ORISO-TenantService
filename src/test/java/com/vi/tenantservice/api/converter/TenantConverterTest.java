@@ -5,9 +5,11 @@ import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.DataProtectionContactTemplateDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NoAgencyContextDTO;
+import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.SmtpConfig;
@@ -460,6 +462,24 @@ class TenantConverterTest {
     // then
     assertThat(converted.getSettings().getTenantAdminControls().getEnforcedPermissionToggles())
         .isNull();
+  }
+
+  @Test
+  void tenantAdminControls_shouldRoundTripTypedPermissionPolicies() {
+    TenantAdminControls controls =
+        new TenantAdminControls()
+            .permissionPolicies(
+                Map.of(
+                    "featureSupervisionEnabled",
+                    new BooleanPermissionPolicy(true, PermissionPolicyMode.ENFORCED),
+                    "featureVideoCallsEnabled",
+                    new BooleanPermissionPolicy(false, PermissionPolicyMode.SUGGESTED)));
+
+    TenantAdminControls converted =
+        tenantConverter.toTenantAdminControls(
+            tenantConverter.toTenantAdminControlsSettings(controls));
+
+    assertThat(converted.getPermissionPolicies()).isEqualTo(controls.getPermissionPolicies());
   }
 
   @Test
