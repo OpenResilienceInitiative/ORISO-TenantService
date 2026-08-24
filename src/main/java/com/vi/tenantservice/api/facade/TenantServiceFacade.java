@@ -36,6 +36,7 @@ import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
@@ -72,6 +73,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort.Direction;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -122,6 +124,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantResolverService tenantResolverService;
 
   private final @NonNull TenantDpaStatusService tenantDpaStatusService;
+
+  private final @NonNull TenantDpaService tenantDpaService;
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
@@ -350,6 +354,13 @@ public class TenantServiceFacade {
     return updateWithSanitizedInput(id, sanitizedTenantDTO);
   }
 
+  /**
+   * Deletes the tenant together with its DPA signature evidence. Transactional on purpose: the
+   * database cascade that used to tie the two together was dropped so sign links could be minted
+   * for a still-reserved id (#179), so this boundary is now the only thing preventing a half
+   * deletion — a surviving tenant whose append-only signature evidence is already gone.
+   */
+  @Transactional
   public void deleteTenant(Long id) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
 
@@ -362,6 +373,9 @@ public class TenantServiceFacade {
             .findTenantById(id)
             .orElseThrow(() -> new TenantNotFoundException("Tenant with id " + id + " not found"));
 
+    // App-level replacement for the DB cascade dropped in changeset 0030 (#179): the tenant's
+    // DPA signature rows (incl. any outstanding sign links) go with the tenant.
+    tenantDpaService.deleteSignaturesForTenant(id);
     tenantService.delete(tenant);
   }
 
