@@ -1,6 +1,8 @@
 package com.vi.tenantservice.api.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.vi.tenantservice.api.policy.LenientPolicyValueMapDeserializer;
 import com.vi.tenantservice.api.policy.PolicyValue;
 import java.util.Map;
 import lombok.AllArgsConstructor;
@@ -40,7 +42,15 @@ public class TenantAdminControlsSettings {
    */
   TenantAdminAllowedPermissionTogglesSettings enforcedPermissionToggles;
 
-  /** Canonical four-state policies. Legacy boolean maps remain readable during migration. */
+  /**
+   * Canonical four-state policies. Legacy boolean maps remain readable during migration.
+   *
+   * <p>Read through {@link LenientPolicyValueMapDeserializer}: an entry this build cannot fully
+   * understand (unknown feature key, missing or non-boolean value, missing or unknown mode) is
+   * dropped on read instead of failing the whole blob — the {@link PolicyValue} invariant stays
+   * strict for deliberate construction only. See the deserializer javadoc for the exact rules.
+   */
+  @JsonDeserialize(using = LenientPolicyValueMapDeserializer.class)
   Map<String, PolicyValue<Boolean>> permissionPolicies;
 
   /** Platform defaults for reason-specific Case Handover policies. */

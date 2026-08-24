@@ -762,17 +762,19 @@ public class TenantServiceFacade {
       Theming platformTheming) {
     if (dto != null) {
       Map<String, BooleanPermissionPolicy> policies =
-          (resolvedPolicies == null ? Map.<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>>of() : resolvedPolicies)
+          (resolvedPolicies == null
+                  ? Map.<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>>of()
+                  : resolvedPolicies)
               .entrySet().stream()
-              .collect(
-                  java.util.stream.Collectors.toUnmodifiableMap(
-                      Map.Entry::getKey,
-                      entry ->
-                          new BooleanPermissionPolicy(
-                                  entry.getValue().value(),
-                                  com.vi.tenantservice.api.model.PermissionPolicyMode.valueOf(
-                                      entry.getValue().mode().name()))
-                              .inherited(entry.getValue().inherited())));
+                  .collect(
+                      java.util.stream.Collectors.toUnmodifiableMap(
+                          Map.Entry::getKey,
+                          entry ->
+                              new BooleanPermissionPolicy(
+                                      entry.getValue().value(),
+                                      com.vi.tenantservice.api.model.PermissionPolicyMode.valueOf(
+                                          entry.getValue().mode().name()))
+                                  .inherited(entry.getValue().inherited())));
       dto.setPermissionPolicies(policies);
       // Legacy boolean-map controls and the new four-state resolved policies both remain live
       // during the migration (see TenantAdminControlsSettings); apply both so neither regresses.
