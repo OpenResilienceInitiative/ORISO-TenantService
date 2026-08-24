@@ -17,6 +17,7 @@ import com.vi.tenantservice.api.model.DpaVersionDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NextFreeTenantIdDTO;
 import com.vi.tenantservice.api.model.PlatformDpiaMasterDataDTO;
+import com.vi.tenantservice.api.model.PublicDpaForwardRequestDTO;
 import com.vi.tenantservice.api.model.PublicDpiaMasterDataDTO;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminControls;
@@ -33,8 +34,10 @@ import com.vi.tenantservice.api.model.TranslationErrorDTO;
 import com.vi.tenantservice.api.model.TranslationRequestDTO;
 import com.vi.tenantservice.api.model.TranslationResponseDTO;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
+import com.vi.tenantservice.api.service.DpaSignedNoticeHintService;
 import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
 import com.vi.tenantservice.api.service.MediaSizeLimitExceededException;
+import com.vi.tenantservice.api.service.PublicBrandingAssetService;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
 import com.vi.tenantservice.api.service.TenantMediaService;
@@ -51,14 +54,23 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.util.CollectionUtils;
@@ -79,10 +91,12 @@ import org.springframework.web.server.ResponseStatusException;
 public class TenantController implements TenantApi, TenantadminApi {
 
   private final @NonNull TenantServiceFacade tenantServiceFacade;
+  private final @NonNull PublicBrandingAssetService publicBrandingAssetService;
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TenantDtoMapper tenantDtoMapper;
   private final @NonNull TenantDpaService tenantDpaService;
   private final @NonNull TenantDpaFacade tenantDpaFacade;
+  private final @NonNull DpaSignedNoticeHintService dpaSignedNoticeHintService;
   private final @NonNull TranslationFacade translationFacade;
   private final @NonNull TenantMediaService tenantMediaService;
   private final @NonNull TenantIdAllocationService tenantIdAllocationService;
@@ -114,6 +128,8 @@ public class TenantController implements TenantApi, TenantadminApi {
     if (!Boolean.TRUE.equals(request.getAccepted())) {
       return ResponseEntity.badRequest().build();
     }
+    // forwardedByUserId/source from the request are deliberately ignored (#179): the forwarder
+    // identity was stamped when the sign link was created and is not client-assignable.
     var signature =
         tenantDpaService.confirmSignature(
             token,
@@ -121,14 +137,17 @@ public class TenantController implements TenantApi, TenantadminApi {
             request.getSignerPosition(),
             request.getSignerEmail(),
             request.getSignerOrganisation(),
-            request.getForwardedByUserId(),
-            request.getSource(),
             Boolean.TRUE.equals(request.getSignerIsMember()),
             request.getLanguage());
+    // Fire-and-forget: tells the UserService a forwarded signature landed so it can notify the
+    // forwarding administrator (ORISO-UserService#1005). Never fails the confirm.
+    dpaSignedNoticeHintService.notifySignatureRecorded(signature.getTenantId());
     var dto =
         new DpaSignatureDTO()
             .tenantId(signature.getTenantId())
             .status(signature.getStatus() == null ? null : signature.getStatus().name())
+            .dpaVersion(
+                signature.getDpaVersion() == null ? null : signature.getDpaVersion().toString())
             .signerName(signature.getSignerName())
             .signerPosition(signature.getSignerPosition())
             .signerEmail(signature.getSignerEmail())
@@ -137,6 +156,36 @@ public class TenantController implements TenantApi, TenantadminApi {
             .source(signature.getSource())
             .signedAt(signature.getSignedAt() == null ? null : signature.getSignedAt().toString());
     return ResponseEntity.ok(dto);
+  }
+
+  /**
+   * Public creation of a DPA sign link from the tenant onboarding wizard (#179). No session — the
+   * request is authorised by the invite's tenant-ID reservation pair, validated fail-closed by the
+   * facade (410 on anything that does not match the ledger).
+   */
+  @Override
+  public ResponseEntity<DpaSignInviteDTO> createPublicDpaForwardInvite(
+      @Valid PublicDpaForwardRequestDTO request) {
+    return ResponseEntity.ok(tenantDpaFacade.createPublicForwardSignInvite(request));
+  }
+
+  /**
+   * Lock contention on the confirm path (#179). The confirmation takes every outstanding link of
+   * the tenant before consuming one, so a concurrent confirmation for the same tenant makes the
+   * second wait; if that wait times out, nothing was written and the caller should simply retry.
+   *
+   * <p>503 rather than the mint path's 429: 429 says "you are asking too often", which is a
+   * statement about the caller and is what the mint path's link cap genuinely means. Here the
+   * caller did nothing wrong and has no budget to stay within — the server was briefly busy with
+   * another signer. 503 with Retry-After is the honest description, and it keeps the two situations
+   * distinguishable in logs and to the client. What matters most is that it is neither a 500 (the
+   * signer has committed nothing and there is no fault to report) nor a 410 (the token is still
+   * perfectly valid).
+   */
+  @ExceptionHandler(PessimisticLockingFailureException.class)
+  ResponseEntity<Void> handleSignLockContention(PessimisticLockingFailureException e) {
+    log.info("DPA confirmation contended for the same tenant; asking the caller to retry");
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", "2").build();
   }
 
   @ExceptionHandler(InvalidDpaSignTokenException.class)
@@ -472,6 +521,32 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   public ResponseEntity<PublicDpiaMasterDataDTO> getPublicDpiaMasterData() {
     return new ResponseEntity<>(platformDpiaMasterDataFacade.getPublicMasterData(), HttpStatus.OK);
+  }
+
+  @Override
+  public ResponseEntity<Resource> getPublicBrandingAsset(String asset) {
+    return publicBrandingAssetService
+        .find(asset)
+        .map(
+            image ->
+                ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType(image.contentType()))
+                    .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                    // Strong content ETag: mail clients and image proxies re-fetch the logo for
+                    // every open; Spring's conditional-GET processing turns a matching
+                    // If-None-Match into a bodyless 304 once the entity carries an ETag.
+                    .eTag(contentEtag(image.bytes()))
+                    .body((Resource) new ByteArrayResource(image.bytes())))
+        .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
+  private static String contentEtag(byte[] bytes) {
+    try {
+      var digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+      return HexFormat.of().formatHex(digest, 0, 16);
+    } catch (NoSuchAlgorithmException exception) {
+      throw new IllegalStateException("SHA-256 unavailable", exception);
+    }
   }
 
   @Override
