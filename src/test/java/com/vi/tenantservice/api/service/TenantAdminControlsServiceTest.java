@@ -199,4 +199,55 @@ class TenantAdminControlsServiceTest {
 
     assertThat(capturedSavedControls()).contains("\"openrouter\":\"sk-or-key\"");
   }
+
+  // --- version skew: the controls blob is shared with builds that know more fields than this one
+  // ---
+
+  private static final String BLOB_FROM_A_NEWER_BUILD =
+      "{\"permissionsPageEnabled\":true,"
+          + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true}},"
+          + "\"caseHandoverPolicies\":{\"requireConsent\":true}}";
+
+  /**
+   * The blob is read leniently on purpose (see {@link TenantAdminControlsSettings}) because a
+   * strict read turns version skew into HTTP 500 on every session bootstrap - that is what took
+   * Pre-Dev down on 2026-08-18. Writing the narrower type back is the same skew from the other
+   * side: it deletes whatever a newer build wrote. Unlike the read failure this one is silent, and
+   * it happens on the ordinary admin path, not only at startup.
+   */
+  @Test
+  void updateControls_Should_keepFieldsWrittenByANewerBuild() {
+    givenStoredControlsJson(BLOB_FROM_A_NEWER_BUILD);
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    assertThat(capturedSavedControls())
+        .contains("\"permissionPolicies\"")
+        .contains("\"featureVideoCall\"")
+        .contains("\"caseHandoverPolicies\"")
+        .contains("\"requireConsent\"")
+        // and the field this build does own is still the one it just wrote
+        .contains("\"permissionsPageEnabled\":false");
+  }
+
+  /** Same defect, reached through the other write on the ordinary admin path. */
+  @Test
+  void setTranslationApiKey_Should_keepFieldsWrittenByANewerBuild() {
+    givenStoredControlsJson(BLOB_FROM_A_NEWER_BUILD);
+
+    tenantAdminControlsService.setTranslationApiKey("openrouter", "sk-or-new-key");
+
+    assertThat(capturedSavedControls())
+        .contains("\"permissionPolicies\"")
+        .contains("\"featureVideoCall\"")
+        .contains("\"caseHandoverPolicies\"")
+        .contains("\"requireConsent\"")
+        .contains("\"openrouter\":\"sk-or-new-key\"")
+        .contains("\"permissionsPageEnabled\":true");
+  }
 }
