@@ -24,16 +24,17 @@
         the upper version -->
         <java.upper.version>21</java.upper.version>
         <springboot.upper.version>4.0.7</springboot.upper.version>
-        <spring.upper.version>6.2.0</spring.upper.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>21</java.version>
         <keycloak.version>17.0.0</keycloak.version>
         <swagger.version>3.0.0</swagger.version>
+        <!-- Kept below the Boot 4.0.7 baseline (2.4.240) on purpose: 2.4.x rejects a
+             tenant_dpa_signature check constraint that 2.2.220 accepts. Raising it needs its
+             own migration work; 2.2.220 already clears the CVE this PR targets. -->
         <h2.version>2.2.220</h2.version>
         <!-- Same version as ORISO-UserService, which already uses this pair. -->
         <testcontainers.version>1.21.4</testcontainers.version>
-        <spring-security.version>7.0.1</spring-security.version>
         <owasp.java.html.sanitizer>20211018.1</owasp.java.html.sanitizer>
         <liquibase.maven.plugin.version>4.23.2</liquibase.maven.plugin.version>
         <openapi.generator.maven.version>7.17.0</openapi.generator.maven.version>
@@ -41,13 +42,11 @@
         <jakarta.ws.rs-api.version>3.1.0</jakarta.ws.rs-api.version>
         <springfox.boot.starter.version>3.0.0</springfox.boot.starter.version>
         <lombok.version>1.18.38</lombok.version>
-        <commons-lang3.version>3.18.0</commons-lang3.version>
         <commons-collections4.version>4.4</commons-collections4.version>
         <awaitility.version>4.2.0</awaitility.version>
         <awaitility-proxy.version>3.1.6</awaitility-proxy.version>
         <easy-random-core.version>5.0.0</easy-random-core.version>
         <assertj-core.version>3.27.7</assertj-core.version>
-        <spring-security-oauth2-test-webmvc-addons.version>3.0.1</spring-security-oauth2-test-webmvc-addons.version>
         <liquibase-core.version>4.23.2</liquibase-core.version>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
@@ -320,7 +319,6 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
-            <version>${commons-lang3.version}</version>
         </dependency>
 
         <dependency>
@@ -413,13 +411,6 @@
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
             <version>1.14.5</version>
-        </dependency>
-        <dependency>
-            <!-- required only for WebMvc "fluent" API -->
-            <groupId>com.c4-soft.springaddons</groupId>
-            <artifactId>spring-security-oauth2-test-webmvc-addons</artifactId>
-            <version>${spring-security-oauth2-test-webmvc-addons.version}</version>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.ehcache</groupId>
