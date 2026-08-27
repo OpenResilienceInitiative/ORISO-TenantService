@@ -1,11 +1,14 @@
 package com.vi.tenantservice.api.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.converter.TenantConverter;
+import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
@@ -14,6 +17,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.policy.PermissionPolicyMode;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -22,6 +26,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class TenantAdminControlsServiceTest {
@@ -103,8 +108,30 @@ class TenantAdminControlsServiceTest {
 
     ArgumentCaptor<TenantAdminControlsEntity> captor =
         ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
-    verify(tenantAdminControlsRepository).save(captor.capture());
+    verify(tenantAdminControlsRepository).saveAndFlush(captor.capture());
     assertThat(captor.getValue().getControls()).contains("groupChat");
+  }
+
+  @Test
+  void updateControls_Should_loadExistingRowOnceAndRejectAStaleWriter() {
+    TenantAdminControlsEntity existing =
+        TenantAdminControlsEntity.builder()
+            .id(1L)
+            .version(3L)
+            .controls("{\"permissionsPageEnabled\":true}")
+            .build();
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc()).thenReturn(Optional.of(existing));
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantAdminControlsRepository.saveAndFlush(existing))
+        .thenThrow(new OptimisticLockingFailureException("stale platform settings"));
+
+    assertThatThrownBy(() -> tenantAdminControlsService.updateControls(request))
+        .isInstanceOf(SettingsUpdateConflictException.class)
+        .hasMessageContaining("changed while saving");
+
+    verify(tenantAdminControlsRepository, times(1)).findTopByOrderByIdAsc();
   }
 
   // --- machine-translation provider API keys (stored in the same controls JSON blob) ---
@@ -118,7 +145,7 @@ class TenantAdminControlsServiceTest {
   private String capturedSavedControls() {
     ArgumentCaptor<TenantAdminControlsEntity> captor =
         ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
-    verify(tenantAdminControlsRepository).save(captor.capture());
+    verify(tenantAdminControlsRepository).saveAndFlush(captor.capture());
     return captor.getValue().getControls();
   }
 
@@ -198,5 +225,43 @@ class TenantAdminControlsServiceTest {
     tenantAdminControlsService.updateControls(request);
 
     assertThat(capturedSavedControls()).contains("\"openrouter\":\"sk-or-key\"");
+  }
+
+  @Test
+  void updateControls_Should_preserveCanonicalPoliciesOmittedByAPartialRequest() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"permissionPolicies\":{\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}},"
+            + "\"caseHandoverPolicies\":{\"reasons\":{}}}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    assertThat(capturedSavedControls())
+        .contains("\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"")
+        .contains("\"caseHandoverPolicies\":{\"reasons\":{}}");
+  }
+
+  @Test
+  void getControls_shouldDualReadLegacyMapsAsCanonicalPolicies() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"allowedPermissionToggles\":{\"videoCalls\":false},"
+            + "\"enforcedPermissionToggles\":{\"supervision\":true}}");
+    when(tenantConverter.toTenantAdminControls(any())).thenReturn(new TenantAdminControls());
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> settings =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(settings.capture());
+    assertThat(settings.getValue().getPermissionPolicies().get("featureVideoCallsEnabled").value())
+        .isFalse();
+    assertThat(settings.getValue().getPermissionPolicies().get("featureSupervisionEnabled").mode())
+        .isEqualTo(PermissionPolicyMode.ENFORCED);
   }
 }
