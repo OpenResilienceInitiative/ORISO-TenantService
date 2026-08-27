@@ -40,7 +40,7 @@
                 <columnExists tableName="tenant" columnName="content_erstantwort_greeting"/>
             </not>
         </preConditions>
-        <sqlFile path="db/changelog/changeset/0030_tenant_erstantwort_texts/addErstantwortTexts.sql" stripComments="true" />
+        <sqlFile path="db/changelog/changeset/0032_tenant_erstantwort_texts/addErstantwortTexts.sql" stripComments="true" />
         <rollback>
             <sql>ALTER TABLE `tenantservice`.`tenant` DROP COLUMN `content_erstantwort_greeting`, DROP COLUMN `content_erstantwort_who_reads_along`, DROP COLUMN `content_erstantwort_emergency_addition`, DROP COLUMN `content_erstantwort_free_notice`, DROP COLUMN `content_erstantwort_closing`, DROP COLUMN `erstantwort_response_deadline_days`;</sql>
         </rollback>

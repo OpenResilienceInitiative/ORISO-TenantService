@@ -36,9 +36,14 @@ class TenantControllerGroupChatTranslationTest {
   @Mock private TenantDtoMapper tenantDtoMapper;
   @Mock private TenantDpaService tenantDpaService;
   @Mock private TenantDpaFacade tenantDpaFacade;
+
+  @Mock
+  private com.vi.tenantservice.api.service.DpaSignedNoticeHintService dpaSignedNoticeHintService;
+
   @Mock private TranslationFacade translationFacade;
   @Mock com.vi.tenantservice.api.service.TenantMediaService tenantMediaService;
   @Mock com.vi.tenantservice.api.service.TenantIdAllocationService tenantIdAllocationService;
+  @Mock com.vi.tenantservice.api.service.PublicBrandingAssetService publicBrandingAssetService;
 
   @Mock com.vi.tenantservice.api.facade.PlatformDpiaMasterDataFacade platformDpiaMasterDataFacade;
 

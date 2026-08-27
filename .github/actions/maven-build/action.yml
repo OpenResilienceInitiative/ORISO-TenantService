@@ -18,46 +18,28 @@ runs:
   # `test` to `verify` after burn-in went green — full local+CI `verify` runs
   # 2026-07-05..07-07: 302 tests, 0 failures, 0 errors).
   # Runs BOTH surefire executions: `unit-tests` (test phase, **/*Test) and
-  # `integration-tests` (integration-test phase, **/*IT.*), then fails the build
-  # if any report shows failures/errors — or if NO reports / zero tests were
-  # produced (a green build with zero reports means tests were silently skipped).
-  # failsafe-reports is globbed too in case a module adopts failsafe later.
+  # `integration-tests` (integration-test phase, **/*IT.*), then hands the
+  # reports to the guard, which fails the build on a failure, an error, no
+  # reports at all, nothing actually executed, or any skipped test.
+  #
+  # The guard lives in scripts/ci/ rather than inline here because the version
+  # that lived inline counted skipped tests as executed and nothing could catch
+  # it: tests/ci runs in the blocking `contract-tests` job, an unreachable
+  # heredoc does not.
+  #
+  # pipefail so that tee cannot swallow the guard's exit status. The summary
+  # section is written from inside the pipeline for the same reason a trailing
+  # echo is avoided in `Report coverage`.
   - name: Run Maven tests (unit + integration)
     shell: bash
     run: |
+      set -o pipefail
       ./mvnw -B verify
-      python3 - <<'PY'
-      from pathlib import Path
-      import sys
-      import xml.etree.ElementTree as ET
-
-      reports = sorted(Path(".").glob("**/target/surefire-reports/TEST-*.xml"))
-      reports += sorted(Path(".").glob("**/target/failsafe-reports/TEST-*.xml"))
-      if not reports:
-          print("::error::Zero test reports found — tests were silently skipped or never ran.")
-          sys.exit(1)
-
-      total_tests = 0
-      failing_reports = []
-      for report in reports:
-          root = ET.parse(report).getroot()
-          total_tests += int(root.attrib.get("tests", 0))
-          failures = int(root.attrib.get("failures", 0))
-          errors = int(root.attrib.get("errors", 0))
-          if failures or errors:
-              failing_reports.append((report, failures, errors))
-
-      print(f"Parsed {len(reports)} test report(s), {total_tests} tests.")
-      if total_tests == 0:
-          print("::error::Test reports contain zero executed tests.")
-          sys.exit(1)
-
-      if failing_reports:
-          print("Maven reported test failures/errors:")
-          for report, failures, errors in failing_reports:
-              print(f"- {report}: failures={failures}, errors={errors}")
-          sys.exit(1)
-      PY
+      {
+        echo "### Test suite"
+        echo
+        python3 scripts/ci/test-report-guard.py
+      } | tee -a "$GITHUB_STEP_SUMMARY"
 
   # jacoco:report is bound to the `test` phase behind surefire, so a green suite has
   # already written the report and this step has nothing to do. Only a red suite halts

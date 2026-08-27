@@ -54,6 +54,8 @@
   <include file="db/changelog/changeset/0027_tenant_theming_accent_and_signal/0027-changeSet.xml"/>
   <include file="db/changelog/changeset/0028_platform_dpia_master_data/0028-changeSet.xml"/>
   <include file="db/changelog/changeset/0029_tenant_theming_login_effect/0029-changeSet.xml"/>
-  <!-- Renumbered from 0028 on merge: pre-dev had already taken 0028 and 0029. -->
-  <include file="db/changelog/changeset/0030_tenant_erstantwort_texts/0030-changeSet.xml"/>
+  <include file="db/changelog/changeset/0030_drop_dpa_signature_tenant_fk/0030-changeSet.xml"/>
+  <include file="db/changelog/changeset/0031_dpa_signature_reservation_binding/0031-changeSet.xml"/>
+  <!-- Renumbered from 0028, then 0030, on merge: pre-dev had already taken those slots. -->
+  <include file="db/changelog/changeset/0032_tenant_erstantwort_texts/0032-changeSet.xml"/>
 </databaseChangeLog>
