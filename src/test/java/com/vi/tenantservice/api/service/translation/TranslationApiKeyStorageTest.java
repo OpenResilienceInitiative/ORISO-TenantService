@@ -62,7 +62,7 @@ class TranslationApiKeyStorageTest {
     tenantAdminControlsService.setTranslationApiKey("mistral", RAW_KEY);
 
     var saved = ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
-    verify(tenantAdminControlsRepository).save(saved.capture());
+    verify(tenantAdminControlsRepository).saveAndFlush(saved.capture());
     assertThat(saved.getValue().getControls()).doesNotContain(RAW_KEY);
     assertThat(saved.getValue().getControls()).contains("ENC:");
 
@@ -115,7 +115,7 @@ class TranslationApiKeyStorageTest {
     tenantAdminControlsService.setTranslationApiKey("mistral", "ENC:" + RAW_KEY);
 
     var saved = ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
-    verify(tenantAdminControlsRepository).save(saved.capture());
+    verify(tenantAdminControlsRepository).saveAndFlush(saved.capture());
     assertThat(saved.getValue().getControls()).doesNotContain(RAW_KEY);
 
     // and it round-trips as the literal input, prefix and all - not as the key without it

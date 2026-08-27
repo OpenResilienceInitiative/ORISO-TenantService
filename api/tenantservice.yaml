@@ -159,6 +159,50 @@ paths:
           description: FORBIDDEN - only super admin can update platform controls
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+
+  /tenantadmin/{id}/permission-policies:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Tenant ID
+        schema:
+          type: integer
+          format: int64
+    get:
+      tags:
+        - tenant-controller
+      summary: Gets the tenant-resolved permission policies
+      operationId: getTenantPermissionPolicies
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantPermissionPolicies'
+        403:
+          description: FORBIDDEN - tenant admins can access only their own tenant
+    put:
+      tags:
+        - tenant-controller
+      summary: Updates tenant-scoped permission policy overrides
+      operationId: updateTenantPermissionPolicies
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantPermissionPolicies'
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantPermissionPolicies'
+        403:
+          description: FORBIDDEN - tenant admins can update only their own tenant
   /tenantadmin/dpia:
     get:
       tags:
@@ -1712,6 +1756,12 @@ components:
         settings:
           $ref:
             '#/components/schemas/Settings'
+        permissionPolicies:
+          type: object
+          readOnly: true
+          description: Resolved boolean policies for downstream services. Suggestions are not applied to settings.
+          additionalProperties:
+            $ref: '#/components/schemas/BooleanPermissionPolicy'
     Licensing:
       type: object
       required:
@@ -1795,6 +1845,54 @@ components:
           type: string
           example: "Llorem ipsum..."
           maxLength: 40
+        erstantwortGreeting:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            ORISO-Admin#601 / ADR-018. Träger-authored Erstantwort Baustein, stored as the
+            same `<lang>` → HTML map the legal texts use, including the `<lang>__meta`
+            machine-translation metadata keys. Absent means this Träger authored nothing and
+            the resolution chain falls through to the platform text — which is not the same
+            as an empty string, and must not be normalised into one.
+        erstantwortWhoReadsAlong:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Who reads along. Träger-authored and mandatory by decision, because the Träger is
+            the controller and ORISO the processor — the platform must not derive a claim about
+            who has access to a counselling room.
+        erstantwortEmergencyAddition:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Träger addition to the platform emergency numbers. An addition, never a replacement:
+            the platform numbers carry no toggle at all (ADR-018 §6).
+        erstantwortFreeNotice:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            The single "Freier Hinweis" (ADR-018 §2) — the one Baustein the catalogue does not
+            anticipate. Exactly one exists, enforced by the schema rather than by a rule.
+        erstantwortClosing:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Träger-authored closing.
+        erstantwortResponseDeadlineDays:
+          type: integer
+          example: 2
+          minimum: 1
+          maximum: 30
+          description: >-
+            The Antwortfrist in working days, as a NUMBER and never as prose (ADR-018), so the
+            promise is one value comparable against what actually happened. Absent means the
+            Träger never chose one and the platform default (2) applies — deliberately
+            distinguishable from a Träger that chose 2.
         privacy:
           type: string
           example: "Llorem ipsum..."
@@ -2207,9 +2305,194 @@ components:
           $ref: '#/components/schemas/TenantAdminAllowedPermissionToggles'
         # enforcedPermissionToggles: per-feature flags an upper role locks ON for every lower role
         # (Platform -> Traeger -> Beratungsstelle). true = enforced-on; absent/false = not enforced.
-        # Same shape as allowedPermissionToggles. See ADR-013.
+        # Same shape as allowedPermissionToggles; retained only for transition reads.
         enforcedPermissionToggles:
           $ref: '#/components/schemas/TenantAdminAllowedPermissionToggles'
+        permissionPolicies:
+          type: object
+          description: >-
+            Canonical per-feature policy map. Keys are PermissionFeatureKey values. This is the
+            only write model for new clients; legacy allowed/enforced maps remain read-compatible
+            for the transition release.
+          additionalProperties:
+            $ref: '#/components/schemas/BooleanPermissionPolicy'
+        caseHandoverPolicies:
+          $ref: '#/components/schemas/CaseHandoverPolicies'
+
+    PermissionPolicyMode:
+      type: string
+      enum:
+        - ENFORCED
+        - SUGGESTED
+
+    BooleanPermissionPolicy:
+      type: object
+      required:
+        - value
+        - mode
+      properties:
+        value:
+          type: boolean
+        mode:
+          $ref: '#/components/schemas/PermissionPolicyMode'
+        inherited:
+          type: boolean
+          readOnly: true
+          description: True when the resolved tenant value comes from the platform policy.
+
+    IntegerPermissionPolicy:
+      type: object
+      required: [value, mode]
+      properties:
+        value:
+          type: integer
+          minimum: 15
+          multipleOf: 15
+          description: Finite duration in 15-minute steps. There is intentionally no product maximum.
+        mode:
+          $ref: '#/components/schemas/PermissionPolicyMode'
+        inherited:
+          type: boolean
+          readOnly: true
+
+    StringListPermissionPolicy:
+      type: object
+      required: [value, mode]
+      properties:
+        value:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        mode:
+          $ref: '#/components/schemas/PermissionPolicyMode'
+        inherited:
+          type: boolean
+          readOnly: true
+
+    MultilingualTextPermissionPolicy:
+      type: object
+      required: [value, mode]
+      properties:
+        value:
+          type: object
+          additionalProperties:
+            type: string
+        mode:
+          $ref: '#/components/schemas/PermissionPolicyMode'
+        inherited:
+          type: boolean
+          readOnly: true
+
+    CaseHandoverReasonPolicy:
+      type: object
+      required:
+        - code
+        - labels
+        - enabled
+        - accessAllowed
+        - clientConsentRequired
+        - approvalRoles
+        - clientNotificationTemplates
+      properties:
+        code:
+          type: string
+          enum:
+            - COUNSELLOR_ASKED_FOR_ADVICE
+            - COUNSELLOR_ON_HOLIDAY
+            - OTHER_EMERGENCY
+            - COUNSELLOR_IS_ILL
+            - COUNSELLOR_LEFT
+        labels:
+          $ref: '#/components/schemas/MultilingualTextPermissionPolicy'
+        enabled:
+          $ref: '#/components/schemas/BooleanPermissionPolicy'
+        accessAllowed:
+          $ref: '#/components/schemas/BooleanPermissionPolicy'
+        clientConsentRequired:
+          $ref: '#/components/schemas/BooleanPermissionPolicy'
+        approvalRoles:
+          $ref: '#/components/schemas/StringListPermissionPolicy'
+        clientNotificationTemplates:
+          $ref: '#/components/schemas/MultilingualTextPermissionPolicy'
+        maxAccessDurationMinutes:
+          allOf:
+            - $ref: '#/components/schemas/IntegerPermissionPolicy'
+          description: Required only for COUNSELLOR_ASKED_FOR_ADVICE; absent for non-expiring takeover reasons.
+
+    CaseHandoverPolicies:
+      type: object
+      required: [reasons]
+      properties:
+        reasons:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CaseHandoverReasonPolicy'
+
+    PermissionFeatureKey:
+      type: string
+      enum:
+        - appearance
+        - featureAnonymousChatEnabled
+        - featureGroupChatV2Enabled
+        - featureCallsEnabled
+        - featureSupervisionEnabled
+        - featureSupervisionAnonymousChatsEnabled
+        - featureSupervisionOneOnOneChatsEnabled
+        - featureAudioCallsEnabled
+        - featureAudioCallsAnonymousChatsEnabled
+        - featureAudioCallsOneOnOneChatsEnabled
+        - featureAudioCallsGroupChatsEnabled
+        - featureAudioCallsSupervisionChatsEnabled
+        - featureVideoCallsEnabled
+        - featureVideoCallsAnonymousChatsEnabled
+        - featureVideoCallsOneOnOneChatsEnabled
+        - featureVideoCallsGroupChatsEnabled
+        - featureVideoCallsSupervisionChatsEnabled
+        - featureThreadsEnabled
+        - featureThreadsAnonymousChatsEnabled
+        - featureThreadsOneOnOneEnabled
+        - featureThreadsGroupChatsEnabled
+        - featureThreadsSupervisionChatsEnabled
+        - featureVoiceMessagesEnabled
+        - featureVoiceMessagesAnonymousChatsEnabled
+        - featureVoiceMessagesOneOnOneChatsEnabled
+        - featureVoiceMessagesGroupChatsEnabled
+        - featureVoiceMessagesSupervisionChatsEnabled
+        - featureMediaUploadEnabled
+        - featureMediaUploadAnonymousChatsEnabled
+        - featureMediaUploadOneOnOneChatsEnabled
+        - featureMediaUploadGroupChatsEnabled
+        - featureMediaUploadSupervisionChatsEnabled
+        - featureMediaInlineDisplayEnabled
+        - featureMediaInlineDisplayAnonymousChatsEnabled
+        - featureMediaInlineDisplayOneOnOneChatsEnabled
+        - featureMediaInlineDisplayGroupChatsEnabled
+        - featureMediaInlineDisplaySupervisionChatsEnabled
+        - featureMediaAiScanEnabled
+        - featureMediaAiScanAnonymousChatsEnabled
+        - featureMediaAiScanOneOnOneChatsEnabled
+        - featureMediaAiScanGroupChatsEnabled
+        - featureMediaAiScanSupervisionChatsEnabled
+        - featureDisplayNameEditable
+        - featureAskerEmailEnabled
+        - caseHandoverEnabled
+
+    TenantPermissionPolicies:
+      type: object
+      required:
+        - tenantId
+        - policies
+      properties:
+        tenantId:
+          type: integer
+          format: int64
+        policies:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/BooleanPermissionPolicy'
+        caseHandoverPolicies:
+          $ref: '#/components/schemas/CaseHandoverPolicies'
 
     TenantAdminAllowedPermissionToggles:
       type: object
@@ -2401,6 +2684,47 @@ components:
           type: object
           additionalProperties:
             type: string
+        erstantwortGreeting:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            ORISO-Admin#601 / ADR-018. Träger-authored Erstantwort Baustein as a `<lang>` → HTML
+            map, the same shape the legal texts use, so machine translation on publish applies
+            unchanged. Absent means the Träger authored nothing and the resolution chain falls
+            through to the platform text — not the same as an empty string.
+        erstantwortWhoReadsAlong:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Mandatory by decision: the Träger is the controller and ORISO the processor, so the
+            platform must not derive a claim about who can read a counselling room.
+        erstantwortEmergencyAddition:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Addition to the platform emergency numbers, never a replacement — those carry no
+            toggle at all (ADR-018 §6).
+        erstantwortFreeNotice:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            The single "Freier Hinweis" (ADR-018 §2). Exactly one, enforced by the schema.
+        erstantwortClosing:
+          type: object
+          additionalProperties:
+            type: string
+        erstantwortResponseDeadlineDays:
+          type: integer
+          example: 2
+          minimum: 1
+          maximum: 30
+          description: >-
+            The Antwortfrist in working days — a NUMBER, never prose (ADR-018). Absent means the
+            platform default (2) applies, deliberately distinguishable from a Träger that chose 2.
         claim:
           type: object
           additionalProperties:
