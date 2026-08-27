@@ -69,6 +69,25 @@ public class GoverningDpaResolver {
     if (!operatorFallbackApplies(tenantId)) {
       return null;
     }
+    return resolveOperatorDpa();
+  }
+
+  /**
+   * The DPA document in force for a tenant that does NOT exist yet (ORISO-TenantService#179): a
+   * sign link created from the public onboarding wizard is bound to a RESERVED tenant id. Such a
+   * tenant cannot have authored an own DPA, so the governing document is always the operator's —
+   * exactly what {@link #resolve} would answer the moment the registration completes. {@code null}
+   * when the operator fallback is disabled or nothing is published.
+   */
+  public GoverningDpa resolveForUnregisteredTenant() {
+    if (operatorTenantId <= 0) {
+      return null;
+    }
+    return resolveOperatorDpa();
+  }
+
+  /** The governing operator document, or {@code null} when the operator published nothing. */
+  private GoverningDpa resolveOperatorDpa() {
     var operatorVersion =
         tenantRepository
             .findById(operatorTenantId)
