@@ -159,7 +159,7 @@ class TenantAdminControlsServiceTest {
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,"
             + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true,\"mode\":\"ENFORCED\"}},"
-            + "\"caseHandoverPolicies\":{\"requireConsent\":true}}");
+            + "\"someBrandNewTopLevelField\":\"future-value\"}");
 
     tenantAdminControlsService.getControls();
 
