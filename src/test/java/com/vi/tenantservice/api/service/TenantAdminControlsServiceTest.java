@@ -158,7 +158,7 @@ class TenantAdminControlsServiceTest {
     // Observed on Pre-Dev 2026-08-18: "Unrecognized field \"permissionPolicies\"".
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,"
-            + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true}},"
+            + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true,\"mode\":\"ENFORCED\"}},"
             + "\"caseHandoverPolicies\":{\"requireConsent\":true}}");
 
     tenantAdminControlsService.getControls();

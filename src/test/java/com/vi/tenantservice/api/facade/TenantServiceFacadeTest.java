@@ -43,6 +43,7 @@ import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
+import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -142,6 +143,7 @@ class TenantServiceFacadeTest {
 
   @Mock private SingleDomainTenantOverrideService singleDomainTenantOverrideService;
   @Mock private TenantIdAllocationService tenantIdAllocationService;
+  @Mock private TenantPermissionPolicyService tenantPermissionPolicyService;
 
   @InjectMocks private TenantServiceFacade tenantServiceFacade;
 
