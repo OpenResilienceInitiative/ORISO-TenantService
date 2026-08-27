@@ -11,12 +11,14 @@ import static com.vi.tenantservice.api.util.JsonConverter.convertToJson;
 import com.google.common.collect.Maps;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.Content;
 import com.vi.tenantservice.api.model.DataProtectionContactTemplateDTO;
 import com.vi.tenantservice.api.model.Licensing;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NoAgencyContextDTO;
+import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.SmtpConfig;
@@ -32,6 +34,7 @@ import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
 import com.vi.tenantservice.api.service.TemplateRenderer;
@@ -189,7 +192,21 @@ public class TenantConverter {
           .contentClaim(convertToJson(tenantDTO.getContent().getClaim()))
           .contentImpressum(convertToJson(tenantDTO.getContent().getImpressum()))
           .contentPrivacy(convertToJson(tenantDTO.getContent().getPrivacy()))
-          .contentTermsAndConditions(convertToJson(tenantDTO.getContent().getTermsAndConditions()));
+          .contentTermsAndConditions(convertToJson(tenantDTO.getContent().getTermsAndConditions()))
+          /* ORISO-Admin#601: the five Träger-authored Erstantwort Bausteine, stored
+          as the same language map the legal texts use so the existing
+          machine-translation-on-publish mechanism applies unchanged. */
+          .contentErstantwortGreeting(
+              convertToJson(tenantDTO.getContent().getErstantwortGreeting()))
+          .contentErstantwortWhoReadsAlong(
+              convertToJson(tenantDTO.getContent().getErstantwortWhoReadsAlong()))
+          .contentErstantwortEmergencyAddition(
+              convertToJson(tenantDTO.getContent().getErstantwortEmergencyAddition()))
+          .contentErstantwortFreeNotice(
+              convertToJson(tenantDTO.getContent().getErstantwortFreeNotice()))
+          .contentErstantwortClosing(convertToJson(tenantDTO.getContent().getErstantwortClosing()))
+          .erstantwortResponseDeadlineDays(
+              tenantDTO.getContent().getErstantwortResponseDeadlineDays());
     }
   }
 
@@ -370,6 +387,8 @@ public class TenantConverter {
                 tenantAdminControls.getAllowedPermissionToggles()))
         .enforcedPermissionToggles(
             toEnforcedPermissionTogglesSettings(tenantAdminControls.getEnforcedPermissionToggles()))
+        .permissionPolicies(toPermissionPolicySettings(tenantAdminControls.getPermissionPolicies()))
+        .caseHandoverPolicies(tenantAdminControls.getCaseHandoverPolicies())
         .build();
   }
 
@@ -454,8 +473,41 @@ public class TenantConverter {
             toTenantAdminAllowedPermissionToggles(
                 tenantAdminControlsSettings.getAllowedPermissionToggles()))
         .enforcedPermissionToggles(
-            toEnforcedPermissionToggles(
-                tenantAdminControlsSettings.getEnforcedPermissionToggles()));
+            toEnforcedPermissionToggles(tenantAdminControlsSettings.getEnforcedPermissionToggles()))
+        .permissionPolicies(
+            toBooleanPermissionPolicies(tenantAdminControlsSettings.getPermissionPolicies()))
+        .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies());
+  }
+
+  private Map<String, PolicyValue<Boolean>> toPermissionPolicySettings(
+      Map<String, BooleanPermissionPolicy> permissionPolicies) {
+    if (permissionPolicies == null) {
+      return null;
+    }
+    return permissionPolicies.entrySet().stream()
+        .collect(
+            java.util.stream.Collectors.toUnmodifiableMap(
+                Map.Entry::getKey,
+                entry ->
+                    new PolicyValue<>(
+                        entry.getValue().getValue(),
+                        com.vi.tenantservice.api.policy.PermissionPolicyMode.valueOf(
+                            entry.getValue().getMode().name()))));
+  }
+
+  private Map<String, BooleanPermissionPolicy> toBooleanPermissionPolicies(
+      Map<String, PolicyValue<Boolean>> permissionPolicies) {
+    if (permissionPolicies == null) {
+      return null;
+    }
+    return permissionPolicies.entrySet().stream()
+        .collect(
+            java.util.stream.Collectors.toUnmodifiableMap(
+                Map.Entry::getKey,
+                entry ->
+                    new BooleanPermissionPolicy(
+                        entry.getValue().value(),
+                        PermissionPolicyMode.valueOf(entry.getValue().mode().name()))));
   }
 
   private TenantAdminAllowedPermissionToggles toTenantAdminAllowedPermissionToggles(
@@ -903,6 +955,17 @@ public class TenantConverter {
         .claim(convertMapFromJson(tenant.getContentClaim()))
         .privacy(convertMapFromJson(tenant.getContentPrivacy()))
         .termsAndConditions(convertMapFromJson(tenant.getContentTermsAndConditions()))
+        /* ORISO-Admin#601: read back what the editor wrote. `convertMapFromJson`
+        yields null for an unset column, which is the point — the Admin form has
+        to be able to tell "never authored" from "authored empty", because only
+        the first falls through to the platform text. */
+        .erstantwortGreeting(convertMapFromJson(tenant.getContentErstantwortGreeting()))
+        .erstantwortWhoReadsAlong(convertMapFromJson(tenant.getContentErstantwortWhoReadsAlong()))
+        .erstantwortEmergencyAddition(
+            convertMapFromJson(tenant.getContentErstantwortEmergencyAddition()))
+        .erstantwortFreeNotice(convertMapFromJson(tenant.getContentErstantwortFreeNotice()))
+        .erstantwortClosing(convertMapFromJson(tenant.getContentErstantwortClosing()))
+        .erstantwortResponseDeadlineDays(tenant.getErstantwortResponseDeadlineDays())
         .dataProtectionContactTemplate(getMultilingualDataProtectionTemplate());
   }
 

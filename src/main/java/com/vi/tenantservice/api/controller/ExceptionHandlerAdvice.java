@@ -1,11 +1,12 @@
 package com.vi.tenantservice.api.controller;
 
+import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import jakarta.validation.ConstraintViolationException;
-import jakarta.ws.rs.BadRequestException;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +39,12 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
     logger.info("Returning HTTP 409 Conflict for tenant ID allocation: " + e.getMessage());
   }
 
+  @ExceptionHandler(value = {SettingsUpdateConflictException.class})
+  @ResponseStatus(HttpStatus.CONFLICT)
+  protected void handleSettingsUpdateConflict(SettingsUpdateConflictException e) {
+    logger.info("Returning HTTP 409 Conflict for concurrent settings update: " + e.getMessage());
+  }
+
   @ExceptionHandler(value = {TenantAuthorisationException.class})
   protected ResponseEntity<Object> handle(TenantAuthorisationException ex, WebRequest request) {
     return handleExceptionInternal(
@@ -50,9 +57,9 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
     logger.warn("Returning HTTP 400 Bad Request for IllegalStateException", e);
   }
 
-  @ExceptionHandler(value = {BadRequestException.class})
+  @ExceptionHandler(value = {TenantBadRequestException.class})
   @ResponseStatus(HttpStatus.BAD_REQUEST)
-  public void handle(BadRequestException e) {
+  public void handle(TenantBadRequestException e) {
     logger.warn("Returning HTTP 400 Bad Request", e);
   }
 
