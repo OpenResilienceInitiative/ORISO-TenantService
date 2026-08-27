@@ -15,6 +15,8 @@ import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -28,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -38,6 +41,11 @@ class TenantConverterTest {
   @Mock TemplateService templateService;
 
   @Mock TemplateRenderer templateRenderer;
+
+  // disabled (no secret): converter unit tests run on plaintext passthrough
+  @Spy
+  SmtpPasswordEncryptionService smtpPasswordEncryptionService =
+      new SmtpPasswordEncryptionService("");
 
   @Test
   void toEntity_should_convertToEntityAndBackToDTO() {
@@ -61,12 +69,63 @@ class TenantConverterTest {
     assertThat(converted.getSubdomain()).isEqualTo(tenantDTO.getSubdomain());
     assertThat(converted.getLicensing()).isEqualTo(tenantDTO.getLicensing());
     assertCoreSettingsAreConverted(tenantDTO.getSettings(), converted.getSettings());
-    assertThat(converted.getTheming()).isEqualTo(tenantDTO.getTheming());
+    assertThat(converted.getTheming()).isEqualTo(asRead(tenantDTO.getTheming()));
     assertThat(converted.getSettings().getIsVideoCallAllowed()).isTrue();
     assertThat(converted.getSettings().getShowAskerProfile()).isTrue();
     assertThat(converted.getSettings().getEmailVisible()).isTrue();
     assertThat(converted.getSettings().getEmailRequired()).isTrue();
     // content comparision is skipped, due to i18n feature, so the structure is different
+  }
+
+  @Test
+  void toEntity_should_roundTripTheLoginStageEffect() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder()
+            .tenantDTO()
+            .withTheming()
+            .withThemingLoginEffect(Theming.LoginEffectEnum.CRACKS)
+            .build();
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then — stored as the enum NAME, not an ordinal, and read back unchanged
+    assertThat(entity.getThemingLoginEffect()).isEqualTo("CRACKS");
+    assertThat(tenantConverter.toDTO(entity, "de").getTheming().getLoginEffect())
+        .isEqualTo(Theming.LoginEffectEnum.CRACKS);
+  }
+
+  @Test
+  void toEntity_should_keepAnUnsetLoginEffectNull() {
+    // given — a tenant that never configured an effect
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withTheming().build();
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then — the column stays null: a written NONE would be indistinguishable
+    // from an administrator having chosen it (same reasoning as the 0027 migration)
+    assertThat(entity.getThemingLoginEffect()).isNull();
+    // ...but a reader is told NONE. "Never configured" is a storage fact, not an
+    // answer to "which effect does this tenant run", and null in the API would
+    // force every consumer to invent that mapping for itself.
+    assertThat(tenantConverter.toDTO(entity, "de").getTheming().getLoginEffect())
+        .isEqualTo(Theming.LoginEffectEnum.NONE);
+  }
+
+  @Test
+  void toDTO_should_fallBackToNoneForAnUnknownStoredLoginEffect() {
+    // given — a value written by a newer version, or a hand-edited row
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withTheming().build();
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+    entity.setThemingLoginEffect("KALEIDOSCOPE");
+
+    // then — the login screen must never break over decoration
+    assertThat(tenantConverter.toDTO(entity, "de").getTheming().getLoginEffect())
+        .isEqualTo(Theming.LoginEffectEnum.NONE);
   }
 
   @Test
@@ -170,7 +229,7 @@ class TenantConverterTest {
     assertThat(restrictedTenantDTO.getName()).isEqualTo(tenantDTO.getName());
     assertThat(restrictedTenantDTO.getId()).isEqualTo(tenantDTO.getId());
     assertThat(restrictedTenantDTO.getSubdomain()).isEqualTo(tenantDTO.getSubdomain());
-    assertThat(restrictedTenantDTO.getTheming()).isEqualTo(tenantDTO.getTheming());
+    assertThat(restrictedTenantDTO.getTheming()).isEqualTo(asRead(tenantDTO.getTheming()));
     assertContentIsProperlyConverted(tenantDTO, restrictedTenantDTO);
     assertRestrictedPublicSettingsAreConverted(
         tenantDTO.getSettings(), restrictedTenantDTO.getSettings());
@@ -279,7 +338,7 @@ class TenantConverterTest {
     assertThat(restrictedTenantDTO.getName()).isEqualTo(tenantDTO.getName());
     assertThat(restrictedTenantDTO.getId()).isEqualTo(tenantDTO.getId());
     assertThat(restrictedTenantDTO.getSubdomain()).isEqualTo(tenantDTO.getSubdomain());
-    assertThat(restrictedTenantDTO.getTheming()).isEqualTo(tenantDTO.getTheming());
+    assertThat(restrictedTenantDTO.getTheming()).isEqualTo(asRead(tenantDTO.getTheming()));
     assertContentIsProperlyConverted(tenantDTO, restrictedTenantDTO);
     assertThat(restrictedTenantDTO.getContent().getRenderedPrivacy())
         .isEqualTo(getGermanTranslation(tenantDTO.getContent().getPrivacy()));
@@ -404,7 +463,7 @@ class TenantConverterTest {
   }
 
   @Test
-  void toDTO_should_preserveSensitiveSettingsForNonPublicDtos() {
+  void toDTO_should_neverExposeSmtpPassword_butReportPasswordSet() {
     // given
     MultilingualTenantDTO tenantDTO =
         new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
@@ -429,7 +488,54 @@ class TenantConverterTest {
     assertThat(converted.getSettings().getFeatureToolsOICDToken()).isEqualTo("secret-oidc-token");
     assertThat(converted.getSettings().getSmtp()).isNotNull();
     assertThat(converted.getSettings().getSmtp().getUsername()).isEqualTo("smtp-user");
-    assertThat(converted.getSettings().getSmtp().getPassword()).isEqualTo("smtp-pass");
+    assertThat(converted.getSettings().getSmtp().getPassword()).isNull();
+    assertThat(converted.getSettings().getSmtp().getPasswordSet()).isTrue();
+  }
+
+  @Test
+  void toDTO_should_reportPasswordSetFalse_When_noSmtpPasswordStored() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).host("smtp.example.org"));
+
+    // when
+    TenantDTO converted = tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de");
+
+    // then
+    assertThat(converted.getSettings().getSmtp().getPassword()).isNull();
+    assertThat(converted.getSettings().getSmtp().getPasswordSet()).isFalse();
+  }
+
+  @Test
+  void toEntity_should_encryptSmtpPassword_When_encryptionConfigured() {
+    // given
+    var encryptionService = new SmtpPasswordEncryptionService("unit-test-secret");
+    var encryptingConverter =
+        new TenantConverter(templateService, templateRenderer, encryptionService);
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).password("plain-secret"));
+
+    // when
+    TenantEntity entity = encryptingConverter.toEntity(tenantDTO);
+
+    // then
+    assertThat(entity.getSettings()).doesNotContain("plain-secret").contains("ENC:");
+  }
+
+  @Test
+  void toEntity_should_normalizeBlankOrMaskedSmtpPasswordToNull() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).password("********"));
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then
+    assertThat(entity.getSettings()).doesNotContain("********");
   }
 
   private static void assertContentIsProperlyConverted(
@@ -605,5 +711,19 @@ class TenantConverterTest {
     assertThat(basicTenantLicensingDTO.getName()).isEqualTo(tenantDTO.getName());
     assertThat(basicTenantLicensingDTO.getSubdomain()).isEqualTo(tenantDTO.getSubdomain());
     assertThat(basicTenantLicensingDTO.getLicensing()).isEqualTo(tenantDTO.getLicensing());
+  }
+
+  /**
+   * The theming a reader gets back for a given input theming.
+   *
+   * <p>Only one field is not an identity on the round trip: an unconfigured login effect is stored
+   * as NULL but read as NONE, so "never configured" stays a storage fact while the API always
+   * answers with an effect. Normalising here keeps these assertions about everything else.
+   */
+  private Theming asRead(Theming written) {
+    if (written == null || written.getLoginEffect() != null) {
+      return written;
+    }
+    return written.loginEffect(Theming.LoginEffectEnum.NONE);
   }
 }

@@ -31,6 +31,9 @@
         <keycloak.version>17.0.0</keycloak.version>
         <swagger.version>3.0.0</swagger.version>
         <h2.version>2.2.220</h2.version>
+        <!-- Same version as ORISO-UserService, which already uses this pair. -->
+        <testcontainers.version>1.21.4</testcontainers.version>
+        <spring-security.version>7.0.1</spring-security.version>
         <owasp.java.html.sanitizer>20211018.1</owasp.java.html.sanitizer>
         <liquibase.maven.plugin.version>4.23.2</liquibase.maven.plugin.version>
         <openapi.generator.maven.version>7.17.0</openapi.generator.maven.version>
@@ -200,6 +203,21 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <version>${h2.version}</version>
+        </dependency>
+
+        <!-- Real MariaDB for LiquibaseSchemaDriftIT. The rest of the suite runs on H2 MODE=MySQL,
+             which cannot detect schema drift against the engine we actually deploy. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mariadb</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
@@ -553,9 +571,18 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <skipTests>false</skipTests>
-                    <excludedGroups>SkipOnCI</excludedGroups>
                 </configuration>
                 <executions>
+                    <!-- Surefire's built-in `default-test` execution is disabled here. Left
+                         enabled it inherits the plugin-level configuration together with
+                         surefire's default includes, selects the same `*Test` classes as
+                         `unit-tests` below, and runs the entire unit suite a second time on
+                         every build. The two named executions below own the unit/IT split
+                         explicitly, each with its own `<includes>`. -->
+                    <execution>
+                        <id>default-test</id>
+                        <phase>none</phase>
+                    </execution>
                     <execution>
                         <id>unit-tests</id>
                         <phase>test</phase>
@@ -652,6 +679,40 @@
                         </path>
                     </annotationProcessorPaths>
                 </configuration>
+            </plugin>
+            <!-- Coverage for the CI run summary. `report` is bound to the `test` phase so
+                 it runs behind the surefire `unit-tests` execution. CI runs `mvnw verify`,
+                 so the integration-test execution appends to the same exec file after the
+                 report has already been written — the reported figure is therefore the
+                 unit-suite floor, not the whole picture. Generated and inner classes are
+                 excluded: they inflate the denominator without being anything a test could
+                 meaningfully reach. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.10</version>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*generated*/**</exclude>
+                        <exclude>**/org/openapitools/**</exclude>
+                        <exclude>**/*$*</exclude>
+                    </excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

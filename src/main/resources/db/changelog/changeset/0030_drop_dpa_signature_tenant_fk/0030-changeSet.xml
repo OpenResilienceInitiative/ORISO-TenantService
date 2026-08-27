@@ -1,0 +1,33 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      ORISO-TenantService#179 (DPA forward from the public onboarding context): a sign link may
+      be issued for a RESERVED tenant id whose tenant row does not exist yet, so the FK from
+      tenant_dpa_signature to tenant has to be dropped. Cleanup on tenant deletion moves to the
+      application layer (explicit delete of the tenant's signature rows).
+    -->
+    <changeSet author="oriso" id="dropDpaSignatureTenantFk">
+        <preConditions onFail="MARK_RAN">
+            <foreignKeyConstraintExists foreignKeyName="fk_tenant_dpa_signature_tenant" foreignKeyTableName="tenant_dpa_signature"/>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0030_drop_dpa_signature_tenant_fk/dropDpaSignatureTenantFk.sql" stripComments="true" />
+        <rollback>
+            <sql>
+                DELETE FROM `tenantservice`.`tenant_dpa_signature`
+                    WHERE tenant_id NOT IN (SELECT id FROM `tenantservice`.`tenant`);
+                -- The previous binary's DpaSignatureStatus knows only PENDING/SIGNED/DENIED, so a
+                -- surviving INVALIDATED row would break enum conversion the next time that
+                -- tenant's signature list is read. These rows are withdrawn invitations, never
+                -- evidence (an INVALIDATED row was by definition never signed), so they are
+                -- deleted rather than translated - mapping them to DENIED would falsely claim the
+                -- agreement was refused and would arm the 365-day deactivation retention.
+                DELETE FROM `tenantservice`.`tenant_dpa_signature`
+                    WHERE signature_status = 'INVALIDATED';
+                ALTER TABLE `tenantservice`.`tenant_dpa_signature`
+                    ADD CONSTRAINT fk_tenant_dpa_signature_tenant FOREIGN KEY (tenant_id)
+                    REFERENCES `tenantservice`.`tenant` (id) ON DELETE CASCADE;
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

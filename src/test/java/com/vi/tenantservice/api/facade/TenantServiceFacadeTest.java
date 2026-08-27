@@ -17,6 +17,8 @@ import com.google.common.collect.Maps;
 import com.vi.tenantservice.api.authorisation.Authority.AuthorityValue;
 import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
 import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
+import com.vi.tenantservice.api.converter.EffectiveThemingApplier;
+import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
@@ -121,6 +123,8 @@ class TenantServiceFacadeTest {
 
   @Mock private TenantDpaStatusService tenantDpaStatusService;
 
+  @Mock private com.vi.tenantservice.api.service.TenantDpaService tenantDpaService;
+
   @Mock
   private TenantFacadeDependentSettingsOverrideService tenantFacadeDependentSettingsOverrideService;
 
@@ -129,6 +133,12 @@ class TenantServiceFacadeTest {
   @Spy
   private EffectivePermissionSettingsApplier effectivePermissionSettingsApplier =
       new EffectivePermissionSettingsApplier();
+
+  @Spy private EffectiveThemingApplier effectiveThemingApplier = new EffectiveThemingApplier();
+
+  @Spy
+  private InheritedBrandingEchoStripper inheritedBrandingEchoStripper =
+      new InheritedBrandingEchoStripper();
 
   @Mock private SingleDomainTenantOverrideService singleDomainTenantOverrideService;
   @Mock private TenantIdAllocationService tenantIdAllocationService;
@@ -816,7 +826,10 @@ class TenantServiceFacadeTest {
     ReflectionTestUtils.setField(
         tenantServiceFacade,
         "tenantConverter",
-        new TenantConverter(new TemplateService(), templateRenderer));
+        new TenantConverter(
+            new TemplateService(),
+            templateRenderer,
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
 
     Optional<TenantRestrictedData> defaultTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
     Optional<TenantRestrictedData> accessTokenTenantData =
@@ -838,6 +851,85 @@ class TenantServiceFacadeTest {
 
     // then
     assertThat(tenantDTO.get().getContent().getPrivacy()).contains("content2");
+  }
+
+  @Test
+  void findTenantBySubdomain_Should_NotOverride_When_ResolvedTenantIsTheTechnicalTenantSentinel() {
+    // given: a platform admin's token carries tenantId 0 -- this service's own sentinel for
+    // "platform scope, no tenant". It has no row in the tenant table, so treating it as an
+    // override made every authenticated platform admin fail (#199).
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    ReflectionTestUtils.setField(
+        tenantServiceFacade,
+        "tenantConverter",
+        new TenantConverter(
+            new TemplateService(),
+            templateRenderer,
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+
+    Optional<TenantRestrictedData> mainTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(mainTenant);
+    when(tenantResolverService.tryResolveForNonAuthUsers()).thenReturn(Optional.of(0L));
+    when(translationService.getCurrentLanguageContext()).thenReturn("de");
+
+    // when
+    Optional<RestrictedTenantDTO> tenantDTO =
+        tenantServiceFacade.findTenantBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME, null);
+
+    // then: the subdomain's own public data comes back, and the override path is not entered.
+    // The override-path proof is verifyNoInteractions(singleDomainTenantOverrideService) — that
+    // service would have been called with the sentinel if the filter had not stripped it. We
+    // deliberately do NOT assert on findRestrictedTenantDataById(0L) any more: the
+    // platform-branding inheritance feature (05647f6) legitimately calls it from
+    // getPlatformTheming to fetch the platform tenant's theming settings.
+    assertThat(tenantDTO).isPresent();
+    assertThat(tenantDTO.get().getContent().getPrivacy()).contains("content1");
+    // Not `verify(tenantService, never()).findRestrictedTenantDataById(0L)`: that was a proxy for
+    // "the override path was not entered", and #214 added a second, legitimate reader of tenant 0 —
+    // getPlatformTheming, which resolves inherited branding and is null-safe. The proxy broke while
+    // the invariant it stood for still holds, so assert the override collaborator directly.
+    verifyNoInteractions(singleDomainTenantOverrideService);
+  }
+
+  @Test
+  void
+      getRestrictedTenantDataDeterminingTenantContext_Should_NotOverride_When_ResolvedTenantIsTheTechnicalTenantSentinel() {
+    // given: same sentinel hazard as findTenantBySubdomain, on the tenant-context path (#199).
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    ReflectionTestUtils.setField(
+        tenantServiceFacade,
+        "tenantConverter",
+        new TenantConverter(
+            new TemplateService(),
+            templateRenderer,
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+
+    var settings =
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+            .ApplicationSettingsDTO();
+    settings.setMainTenantSubdomainForSingleDomainMultitenancy(
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO()
+            .value(SINGLE_DOMAIN_SUBDOMAIN_NAME));
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(settings);
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(getTenantWithPrivacy("{\"de\":\"content1\"}"));
+    when(tenantResolverService.tryResolve()).thenReturn(Optional.of(0L));
+    when(translationService.getCurrentLanguageContext()).thenReturn("de");
+
+    // when
+    RestrictedTenantDTO tenantDTO =
+        tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext();
+
+    // then: same reasoning as findTenantBySubdomain above — verifyNoInteractions on
+    // singleDomainTenantOverrideService is the meaningful proof; the platform-branding path
+    // legitimately hits findRestrictedTenantDataById(0L) via getPlatformTheming.
+    assertThat(tenantDTO.getContent().getPrivacy()).contains("content1");
+    // Not `verify(tenantService, never()).findRestrictedTenantDataById(0L)`: that was a proxy for
+    // "the override path was not entered", and #214 added a second, legitimate reader of tenant 0 —
+    // getPlatformTheming, which resolves inherited branding and is null-safe. The proxy broke while
+    // the invariant it stood for still holds, so assert the override collaborator directly.
+    verifyNoInteractions(singleDomainTenantOverrideService);
   }
 
   @Test
