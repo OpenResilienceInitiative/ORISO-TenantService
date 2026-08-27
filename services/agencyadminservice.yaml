@@ -1590,6 +1590,10 @@ components:
         featureAnonymousChatEnabled:
           type: boolean
           example: true
+        allowAdviceSeekerUsernameEditing:
+          type: boolean
+          example: true
+          description: Whether advice seekers may replace the generated username manually.
         featureCallsEnabled:
           type: boolean
           example: true

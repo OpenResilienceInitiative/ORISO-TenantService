@@ -7,6 +7,7 @@
   "featureGroupChatV2Enabled": false,
   "featureToolsEnabled": false,
   "featureAnonymousChatEnabled": true,
+  "allowAdviceSeekerUsernameEditing": true,
   "featureCallsEnabled": true,
   "featureSupervisionEnabled": true,
   "featureSupervisionAnonymousChatsEnabled": true,

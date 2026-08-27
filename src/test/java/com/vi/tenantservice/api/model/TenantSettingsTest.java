@@ -8,6 +8,17 @@ import org.junit.jupiter.api.Test;
 class TenantSettingsTest {
 
   @Test
+  void applyDefaults_should_keepUsernameEditingCompatible_andPreserveAdminLock() {
+    assertThat(new TenantSettings().applyDefaults().getAllowAdviceSeekerUsernameEditing())
+        .isTrue();
+    assertThat(
+            JsonConverter.convertFromJson("{\"allowAdviceSeekerUsernameEditing\": false}")
+                .applyDefaults()
+                .getAllowAdviceSeekerUsernameEditing())
+        .isFalse();
+  }
+
+  @Test
   void applyDefaults_should_defaultMediaUploadAndInlineDisplayOn_andAiScanOff() {
     var settings = new TenantSettings().applyDefaults();
 

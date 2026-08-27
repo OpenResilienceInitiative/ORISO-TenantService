@@ -89,6 +89,7 @@ public class TenantConverter {
         .featureTeamDiscussionEnabled(settings.getFeatureTeamDiscussionEnabled())
         .featureToolsEnabled(settings.getFeatureToolsEnabled())
         .featureAnonymousChatEnabled(settings.getFeatureAnonymousChatEnabled())
+        .allowAdviceSeekerUsernameEditing(settings.getAllowAdviceSeekerUsernameEditing())
         .featureCallsEnabled(settings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(settings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -266,6 +267,7 @@ public class TenantConverter {
         .featureToolsOICDToken(tenantSettings.getFeatureToolsOIDCToken())
         .featureToolsEnabled(tenantSettings.getFeatureToolsEnabled())
         .featureAnonymousChatEnabled(tenantSettings.getFeatureAnonymousChatEnabled())
+        .allowAdviceSeekerUsernameEditing(tenantSettings.getAllowAdviceSeekerUsernameEditing())
         .featureCallsEnabled(tenantSettings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(tenantSettings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
