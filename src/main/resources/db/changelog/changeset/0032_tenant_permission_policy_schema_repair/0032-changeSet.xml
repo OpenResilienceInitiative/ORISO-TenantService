@@ -1,0 +1,61 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+    <changeSet author="oriso" id="ensureTenantAdminControlsVersion">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant_admin_controls" columnName="version"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="tenant_admin_controls">
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tenant_admin_controls" columnName="version"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet author="oriso" id="ensureTenantPermissionPolicyVersion">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant_permission_policy" columnName="version"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="tenant_permission_policy">
+            <column name="version" type="BIGINT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tenant_permission_policy" columnName="version"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet author="oriso" id="replaceTenantPermissionPolicyForeignKeyWithCascade">
+        <preConditions onFail="MARK_RAN">
+            <and>
+                <foreignKeyConstraintExists foreignKeyName="fk_tenant_permission_policy_tenant" foreignKeyTableName="tenant_permission_policy"/>
+                <sqlCheck expectedResult="0">SELECT COUNT(*) FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = 'fk_tenant_permission_policy_tenant' AND DELETE_RULE = 'CASCADE'</sqlCheck>
+            </and>
+        </preConditions>
+        <dropForeignKeyConstraint baseTableName="tenant_permission_policy" constraintName="fk_tenant_permission_policy_tenant"/>
+        <addForeignKeyConstraint baseTableName="tenant_permission_policy" baseColumnNames="tenant_id" constraintName="fk_tenant_permission_policy_tenant" referencedTableName="tenant" referencedColumnNames="id" onDelete="CASCADE"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="tenant_permission_policy" constraintName="fk_tenant_permission_policy_tenant"/>
+            <addForeignKeyConstraint baseTableName="tenant_permission_policy" baseColumnNames="tenant_id" constraintName="fk_tenant_permission_policy_tenant" referencedTableName="tenant" referencedColumnNames="id"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet author="oriso" id="addMissingTenantPermissionPolicyCascadeForeignKey">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <foreignKeyConstraintExists foreignKeyName="fk_tenant_permission_policy_tenant" foreignKeyTableName="tenant_permission_policy"/>
+            </not>
+        </preConditions>
+        <addForeignKeyConstraint baseTableName="tenant_permission_policy" baseColumnNames="tenant_id" constraintName="fk_tenant_permission_policy_tenant" referencedTableName="tenant" referencedColumnNames="id" onDelete="CASCADE"/>
+        <rollback>
+            <dropForeignKeyConstraint baseTableName="tenant_permission_policy" constraintName="fk_tenant_permission_policy_tenant"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -1,34 +1,11 @@
 <?xml version="1.1" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
-    <!--
-      Split from a single changeset per reviewer comment: a shared precondition
-      that only checks tenant_admin_controls.version would MARK_RAN the whole
-      set on an environment where that column already exists but
-      tenant_permission_policy.version does not, and Hibernate @Version on the
-      policy table would then blow up on the next write.
-    -->
-    <changeSet author="oriso" id="addSettingsOptimisticLockVersion-adminControls">
-        <preConditions onFail="MARK_RAN">
-            <not>
-                <columnExists tableName="tenant_admin_controls" columnName="version"/>
-            </not>
-        </preConditions>
+    <changeSet author="oriso" id="addSettingsOptimisticLockVersions">
         <addColumn tableName="tenant_admin_controls">
             <column name="version" type="BIGINT" defaultValueNumeric="0">
                 <constraints nullable="false"/>
             </column>
         </addColumn>
-        <rollback>
-            <dropColumn tableName="tenant_admin_controls" columnName="version"/>
-        </rollback>
-    </changeSet>
-
-    <changeSet author="oriso" id="addSettingsOptimisticLockVersion-permissionPolicy">
-        <preConditions onFail="MARK_RAN">
-            <not>
-                <columnExists tableName="tenant_permission_policy" columnName="version"/>
-            </not>
-        </preConditions>
         <addColumn tableName="tenant_permission_policy">
             <column name="version" type="BIGINT" defaultValueNumeric="0">
                 <constraints nullable="false"/>
@@ -36,6 +13,7 @@
         </addColumn>
         <rollback>
             <dropColumn tableName="tenant_permission_policy" columnName="version"/>
+            <dropColumn tableName="tenant_admin_controls" columnName="version"/>
         </rollback>
     </changeSet>
 </databaseChangeLog>
