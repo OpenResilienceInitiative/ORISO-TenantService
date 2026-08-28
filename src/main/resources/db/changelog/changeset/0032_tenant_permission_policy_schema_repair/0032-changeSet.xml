@@ -1,5 +1,17 @@
 <?xml version="1.1" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+    <!--
+        Every changeset here is guarded by a precondition with onFail="MARK_RAN", because the
+        objects may already exist: on Pre-Dev 0030/0031 created them, on a fresh database this
+        changelog creates them a few includes earlier.
+
+        That is also why none of them declares a real rollback. Liquibase's RollbackVisitor does
+        not distinguish a changeset that executed from one that was only MARK_RAN, so a rollback
+        would run these blocks even where the guard skipped the forward change - dropping the
+        `version` columns and the foreign key that 0030/0031 own, which this changeset never
+        created. An empty <rollback/> is the honest semantics for an idempotent schema repair:
+        there is nothing of ours to undo.
+    -->
     <changeSet author="oriso" id="ensureTenantAdminControlsVersion">
         <preConditions onFail="MARK_RAN">
             <not>
@@ -11,9 +23,7 @@
                 <constraints nullable="false"/>
             </column>
         </addColumn>
-        <rollback>
-            <dropColumn tableName="tenant_admin_controls" columnName="version"/>
-        </rollback>
+        <rollback/>
     </changeSet>
 
     <changeSet author="oriso" id="ensureTenantPermissionPolicyVersion">
@@ -27,9 +37,7 @@
                 <constraints nullable="false"/>
             </column>
         </addColumn>
-        <rollback>
-            <dropColumn tableName="tenant_permission_policy" columnName="version"/>
-        </rollback>
+        <rollback/>
     </changeSet>
 
     <changeSet author="oriso" id="replaceTenantPermissionPolicyForeignKeyWithCascade">
@@ -41,10 +49,7 @@
         </preConditions>
         <dropForeignKeyConstraint baseTableName="tenant_permission_policy" constraintName="fk_tenant_permission_policy_tenant"/>
         <addForeignKeyConstraint baseTableName="tenant_permission_policy" baseColumnNames="tenant_id" constraintName="fk_tenant_permission_policy_tenant" referencedTableName="tenant" referencedColumnNames="id" onDelete="CASCADE"/>
-        <rollback>
-            <dropForeignKeyConstraint baseTableName="tenant_permission_policy" constraintName="fk_tenant_permission_policy_tenant"/>
-            <addForeignKeyConstraint baseTableName="tenant_permission_policy" baseColumnNames="tenant_id" constraintName="fk_tenant_permission_policy_tenant" referencedTableName="tenant" referencedColumnNames="id"/>
-        </rollback>
+        <rollback/>
     </changeSet>
 
     <changeSet author="oriso" id="addMissingTenantPermissionPolicyCascadeForeignKey">
@@ -54,8 +59,6 @@
             </not>
         </preConditions>
         <addForeignKeyConstraint baseTableName="tenant_permission_policy" baseColumnNames="tenant_id" constraintName="fk_tenant_permission_policy_tenant" referencedTableName="tenant" referencedColumnNames="id" onDelete="CASCADE"/>
-        <rollback>
-            <dropForeignKeyConstraint baseTableName="tenant_permission_policy" constraintName="fk_tenant_permission_policy_tenant"/>
-        </rollback>
+        <rollback/>
     </changeSet>
 </databaseChangeLog>
