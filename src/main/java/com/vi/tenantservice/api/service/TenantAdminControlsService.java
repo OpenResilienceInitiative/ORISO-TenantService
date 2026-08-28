@@ -14,6 +14,7 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
+import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HashMap;
@@ -33,6 +34,7 @@ public class TenantAdminControlsService {
 
   private final @NonNull TenantAdminControlsRepository tenantAdminControlsRepository;
   private final @NonNull TenantConverter tenantConverter;
+  private final @NonNull TranslationApiKeyEncryptionService translationApiKeyEncryptionService;
 
   public TenantAdminControls getControls() {
     return tenantConverter.toTenantAdminControls(getControlsSettings());
@@ -55,7 +57,8 @@ public class TenantAdminControlsService {
       if (controlsSettings.getCaseHandoverPolicies() == null) {
         controlsSettings.setCaseHandoverPolicies(existingSettings.getCaseHandoverPolicies());
       }
-      // the DTO never carries the translation API keys - preserve the stored ones
+      // the DTO never carries the translation API keys - carry the stored values over verbatim,
+      // still encrypted, so this path never decrypts and re-encrypts them for nothing
       controlsSettings.setTranslationApiKeys(existingSettings.getTranslationApiKeys());
     }
     hydrateCanonicalPolicies(controlsSettings);
@@ -65,17 +68,31 @@ public class TenantAdminControlsService {
   }
 
   /**
-   * Raw machine-translation provider API keys (provider id -> key) from the platform-global admin
-   * controls. Internal use only - admin endpoints must expose keys masked.
+   * Usable machine-translation provider API keys (provider id -> key) from the platform-global
+   * admin controls, decrypted for use. Internal use only - admin endpoints must expose keys masked.
+   *
+   * <p>Values stored before the keys were encrypted carry no {@code ENC:} prefix and are returned
+   * unchanged, so a row that the startup migration has not reached yet still works.
    */
   public Map<String, String> getTranslationApiKeys() {
     TenantAdminControlsSettings controlsSettings = getControlsSettings();
-    return controlsSettings != null && controlsSettings.getTranslationApiKeys() != null
-        ? controlsSettings.getTranslationApiKeys()
-        : Map.of();
+    if (controlsSettings == null || controlsSettings.getTranslationApiKeys() == null) {
+      return Map.of();
+    }
+    Map<String, String> decrypted = new HashMap<>();
+    controlsSettings
+        .getTranslationApiKeys()
+        .forEach(
+            (provider, storedValue) ->
+                decrypted.put(provider, translationApiKeyEncryptionService.decrypt(storedValue)));
+    return decrypted;
   }
 
-  /** Stores the machine-translation API key for a provider in the platform-global controls. */
+  /**
+   * Stores the machine-translation API key for a provider in the platform-global controls,
+   * encrypted at rest. The masked read path is unaffected: {@link #getTranslationApiKeys()}
+   * decrypts, and the callers mask what they return.
+   */
   @Transactional
   public void setTranslationApiKey(String provider, String apiKey) {
     Optional<TenantAdminControlsEntity> existingEntity = findExistingControls();
@@ -87,7 +104,7 @@ public class TenantAdminControlsService {
     if (controlsSettings.getTranslationApiKeys() != null) {
       keys.putAll(controlsSettings.getTranslationApiKeys());
     }
-    keys.put(provider, apiKey);
+    keys.put(provider, translationApiKeyEncryptionService.encryptNewApiKey(apiKey));
     controlsSettings.setTranslationApiKeys(keys);
     saveControlsSettings(
         controlsSettings, existingEntity.orElseGet(TenantAdminControlsEntity::new));
