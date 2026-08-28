@@ -11,6 +11,8 @@ import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.TenantContent;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantSetting;
+import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import com.vi.tenantservice.config.security.AuthorisationService;
@@ -33,6 +35,8 @@ public class TenantFacadeAuthorisationService {
   private final @NonNull TenantFacadeChangeDetectionService tenantFacadeChangeDetectionService;
 
   private final @NonNull ApplicationSettingsService applicationSettingsService;
+
+  private final @NonNull TenantAdminControlsService tenantAdminControlsService;
 
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
@@ -141,6 +145,66 @@ public class TenantFacadeAuthorisationService {
     }
     assertSingleTenantAdminDoesNotTryToChangeLicensingInformation(
         sanitizedTenantDTO, existingTenant);
+    assertSingleTenantAdminMayChangeAppearance(sanitizedTenantDTO, existingTenant);
+  }
+
+  /**
+   * The platform admin can take branding away from Träger admins via {@code
+   * allowedPermissionToggles.appearance}. Until now that switch only greyed out the admin panel's
+   * "Individuelle Bilder" card, so the same change still went through over the API. See
+   * TenantService#174.
+   *
+   * <p>Only an explicit {@code false} restricts anything: legacy rows carry no controls at all, and
+   * an absent toggle must keep meaning "allowed" rather than silently locking every existing Träger
+   * out of its own branding.
+   */
+  private void assertSingleTenantAdminMayChangeAppearance(
+      MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenant) {
+    if (appearanceChangesAllowedForTenantAdmins()
+        || !themingChanged(sanitizedTenantDTO, existingTenant)) {
+      return;
+    }
+
+    logAndThrowTenantAuthorisationException(
+        "Single tenant admin cannot change appearance for tenant with id: "
+            + existingTenant.getId(),
+        HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE);
+  }
+
+  private boolean appearanceChangesAllowedForTenantAdmins() {
+    var controls = tenantAdminControlsService.getControls();
+    if (controls == null || controls.getAllowedPermissionToggles() == null) {
+      return true;
+    }
+
+    return !Boolean.FALSE.equals(controls.getAllowedPermissionToggles().getAppearance());
+  }
+
+  /**
+   * Compares the submitted branding against what is stored. The admin panel sends whole tenant
+   * payloads, so every other card's save carries the theming block too - rejecting on its mere
+   * presence would lock a restricted Träger admin out of settings that have nothing to do with
+   * branding. Only a real difference counts.
+   */
+  private boolean themingChanged(MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existing) {
+    var theming = sanitizedTenantDTO.getTheming();
+    if (theming == null) {
+      return false;
+    }
+
+    return !Objects.equals(theming.getLogo(), existing.getThemingLogo())
+        || !Objects.equals(theming.getFavicon(), existing.getThemingFavicon())
+        || !Objects.equals(theming.getAssociationLogo(), existing.getThemingAssociationLogo())
+        || !Objects.equals(theming.getPrimaryColor(), existing.getThemingPrimaryColor())
+        || !Objects.equals(theming.getSecondaryColor(), existing.getThemingSecondaryColor())
+        || !Objects.equals(theming.getAccent(), existing.getThemingAccent())
+        || !Objects.equals(theming.getSignal(), existing.getThemingSignal())
+        || !Objects.equals(loginEffectValue(theming), existing.getThemingLoginEffect());
+  }
+
+  /** Mirrors TenantConverter: the effect is stored as the enum name, null stays null. */
+  private String loginEffectValue(Theming theming) {
+    return theming.getLoginEffect() == null ? null : theming.getLoginEffect().getValue();
   }
 
   private void assertSingleTenantAdminDoesNotTryToChangeLicensingInformation(

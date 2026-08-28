@@ -116,6 +116,18 @@ class LiquibaseSchemaDriftIT {
   }
 
   @Test
+  void tenantPermissionPolicyForeignKey_shouldCascadeTenantDeletion() {
+    String deleteRule =
+        jdbcTemplate.queryForObject(
+            "SELECT DELETE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS"
+                + " WHERE CONSTRAINT_SCHEMA = DATABASE()"
+                + " AND CONSTRAINT_NAME = 'fk_tenant_permission_policy_tenant'",
+            String.class);
+
+    assertThat(deleteRule).as("tenant permission-policy delete rule").isEqualTo("CASCADE");
+  }
+
+  @Test
   void tenantTheming_shouldCarryBothAccentsAndTheSignalColour() {
     // ORISO-TenantService#154: the light accent and the signal colour used to have no column at
     // all, so the Admin panel's values were accepted and dropped. ddl-auto=validate would catch a
