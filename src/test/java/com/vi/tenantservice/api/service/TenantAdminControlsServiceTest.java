@@ -19,6 +19,7 @@ import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.policy.PermissionPolicyMode;
+import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
 import java.util.Optional;
@@ -268,6 +269,57 @@ class TenantAdminControlsServiceTest {
     assertThat(capturedSavedControls())
         .contains("\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"")
         .contains("\"caseHandoverPolicies\":{\"reasons\":{}}");
+  }
+
+  /**
+   * The 2026-08-18 outage shape, one field deeper. A newer build wrote a policy key this build has
+   * never heard of, or an entry whose mode it cannot resolve. Failing the read here is a 500 on
+   * getControls() -> withEffectivePermissions() -> GET /tenant/public/id/{id}, the endpoint every
+   * session bootstraps from. The alien entry is dropped; everything intelligible survives.
+   */
+  @Test
+  void getControls_Should_dropAlienPolicyEntries_When_storedBlobWasWrittenByANewerBuild() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"permissionPolicies\":{"
+            + "\"featureOnlyANewerBuildKnows\":{\"value\":true,\"mode\":\"ENFORCED\"},"
+            + "\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}}}");
+    when(tenantConverter.toTenantAdminControls(any())).thenReturn(new TenantAdminControls());
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> settings =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(settings.capture());
+    assertThat(settings.getValue().getPermissionPolicies())
+        .containsKey("featureVideoCallsEnabled")
+        .doesNotContainKey("featureOnlyANewerBuildKnows");
+  }
+
+  /**
+   * Same boundary, reached through the half-written entry that actually took Pre-Dev down: a policy
+   * object with no {@code mode}. A second, intelligible entry keeps the stored map non-empty, so
+   * the drop stays observable - an empty map would be rebuilt from the legacy toggles by
+   * hydrateCanonicalPolicies and hide the effect.
+   */
+  @Test
+  void getControls_Should_dropPolicyEntriesWithoutAMode() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"permissionPolicies\":{"
+            + "\"featureVideoCallsEnabled\":{\"value\":true},"
+            + "\"featureSupervisionEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}}}");
+    when(tenantConverter.toTenantAdminControls(any())).thenReturn(new TenantAdminControls());
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> settings =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(settings.capture());
+    assertThat(settings.getValue().getPermissionPolicies())
+        .doesNotContainKey("featureVideoCallsEnabled")
+        .containsEntry(
+            "featureSupervisionEnabled", new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
   }
 
   @Test

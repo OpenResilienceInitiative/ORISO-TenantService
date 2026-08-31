@@ -1,6 +1,8 @@
 package com.vi.tenantservice.api.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.vi.tenantservice.api.policy.LenientPolicyValueMapDeserializer;
 import com.vi.tenantservice.api.policy.PolicyValue;
 import java.util.Map;
 import lombok.AllArgsConstructor;
@@ -41,6 +43,7 @@ public class TenantAdminControlsSettings {
   TenantAdminAllowedPermissionTogglesSettings enforcedPermissionToggles;
 
   /** Canonical four-state policies. Legacy boolean maps remain readable during migration. */
+  @JsonDeserialize(using = LenientPolicyValueMapDeserializer.class)
   Map<String, PolicyValue<Boolean>> permissionPolicies;
 
   /** Platform defaults for reason-specific Case Handover policies. */

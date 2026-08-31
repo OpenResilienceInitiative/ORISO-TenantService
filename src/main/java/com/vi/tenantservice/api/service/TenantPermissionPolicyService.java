@@ -1,7 +1,6 @@
 package com.vi.tenantservice.api.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
@@ -15,6 +14,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantPermissionPolicyEntity;
 import com.vi.tenantservice.api.policy.CaseHandoverDurationPolicy;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
+import com.vi.tenantservice.api.policy.LenientPolicyValueMapDeserializer;
 import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PermissionPolicyResolver;
 import com.vi.tenantservice.api.policy.PolicyValue;
@@ -158,8 +158,11 @@ public class TenantPermissionPolicyService {
 
   private Map<String, PolicyValue<Boolean>> deserialize(TenantPermissionPolicyEntity entity) {
     try {
-      return objectMapper.readValue(
-          entity.getPolicies(), new TypeReference<Map<String, PolicyValue<Boolean>>>() {});
+      // Lenient storage read: an override entry another build wrote in a shape this build cannot
+      // fully understand is ignored (the inherited platform policy stands) instead of failing the
+      // bootstrap read. See LenientPolicyValueMapDeserializer for the exact rules.
+      return LenientPolicyValueMapDeserializer.readIntelligibleEntries(
+          objectMapper.readTree(entity.getPolicies()));
     } catch (JsonProcessingException exception) {
       throw mappingFailure("deserialize permission policies", exception);
     }
