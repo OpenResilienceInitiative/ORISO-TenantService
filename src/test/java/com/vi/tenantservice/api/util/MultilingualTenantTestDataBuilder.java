@@ -8,6 +8,7 @@ import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NoAgencyContextDTO;
 import com.vi.tenantservice.api.model.Settings;
+import com.vi.tenantservice.api.model.SmtpConfig;
 import com.vi.tenantservice.api.model.Theming;
 import java.util.HashMap;
 import java.util.List;
@@ -152,10 +153,45 @@ public class MultilingualTenantTestDataBuilder {
     return tenantMultilingualDTO;
   }
 
+  /** Adds a full SMTP block with the given password (may be null, blank or a mask). */
+  public MultilingualTenantTestDataBuilder withSmtp(String password) {
+    if (tenantMultilingualDTO.getSettings() == null) {
+      withSettings();
+    }
+    tenantMultilingualDTO
+        .getSettings()
+        .smtp(
+            new SmtpConfig()
+                .enabled(true)
+                .host("smtp.example.org")
+                .port(587)
+                .secure(false)
+                .username("smtp-user")
+                .password(password)
+                .from("notifications@example.org")
+                .emailThemeColor("#123456"));
+    return this;
+  }
+
+  /** Overrides the SMTP host after {@link #withSmtp(String)}. */
+  public MultilingualTenantTestDataBuilder withSmtpHost(String host) {
+    tenantMultilingualDTO.getSettings().getSmtp().setHost(host);
+    return this;
+  }
+
   /**
    * The colour pair the Admin theme builder submits: {@code primaryColor} is the dark accent and
    * {@code accent} the light accent (ORISO-TenantService#154).
    */
+  /** Theming carrying a chosen login stage effect (#154 follow-up). */
+  public MultilingualTenantTestDataBuilder withThemingLoginEffect(
+      Theming.LoginEffectEnum loginEffect) {
+    Theming theming =
+        tenantMultilingualDTO.getTheming() == null ? theming() : tenantMultilingualDTO.getTheming();
+    tenantMultilingualDTO.setTheming(theming.loginEffect(loginEffect));
+    return this;
+  }
+
   public MultilingualTenantTestDataBuilder withThemingAccents(
       String accentDark, String accentLight, String signal) {
     tenantMultilingualDTO.setTheming(

@@ -39,9 +39,16 @@ class TenantControllerDpaConfirmTest {
   @Mock private TenantDtoMapper tenantDtoMapper;
   @Mock private TenantDpaService tenantDpaService;
   @Mock private TenantDpaFacade tenantDpaFacade;
+
+  @Mock
+  private com.vi.tenantservice.api.service.DpaSignedNoticeHintService dpaSignedNoticeHintService;
+
   @Mock private TranslationFacade translationFacade;
   @Mock com.vi.tenantservice.api.service.TenantMediaService tenantMediaService;
   @Mock com.vi.tenantservice.api.service.TenantIdAllocationService tenantIdAllocationService;
+  @Mock com.vi.tenantservice.api.service.PublicBrandingAssetService publicBrandingAssetService;
+
+  @Mock com.vi.tenantservice.api.facade.PlatformDpiaMasterDataFacade platformDpiaMasterDataFacade;
 
   @InjectMocks private TenantController controller;
 
@@ -70,15 +77,16 @@ class TenantControllerDpaConfirmTest {
 
   @Test
   void confirmDataProcessingAgreement_Should_returnOkWithMappedDto() {
-    // given
+    // given: forwardedByUserId/source in the request are legacy fields the server must IGNORE —
+    // the stamped row values win (#179)
     var request =
         new DpaSignatureRequestDTO()
             .signerName("Erika M")
             .signerPosition("Geschäftsführerin")
             .signerEmail("erika@example.org")
             .signerOrganisation("Caritas Beispiel")
-            .forwardedByUserId("tenant-admin-1")
-            .source("PUBLIC_SIGN_LINK")
+            .forwardedByUserId("spoofed-admin")
+            .source("SPOOFED_SOURCE")
             .signerIsMember(false)
             .accepted(true)
             .language("de");
@@ -90,6 +98,8 @@ class TenantControllerDpaConfirmTest {
             .signerName("Erika M")
             .signerEmail("erika@example.org")
             .signerOrganisation("Caritas Beispiel")
+            .forwardedByUserId("tenant-admin-1")
+            .source("FORWARDED_EXTERNAL")
             .signedAt(signedAt)
             .build();
     when(tenantDpaService.confirmSignature(
@@ -98,8 +108,6 @@ class TenantControllerDpaConfirmTest {
             "Geschäftsführerin",
             "erika@example.org",
             "Caritas Beispiel",
-            "tenant-admin-1",
-            "PUBLIC_SIGN_LINK",
             false,
             "de"))
         .thenReturn(entity);
@@ -115,6 +123,31 @@ class TenantControllerDpaConfirmTest {
     assertThat(response.getBody().getSignerName()).isEqualTo("Erika M");
     assertThat(response.getBody().getSignerEmail()).isEqualTo("erika@example.org");
     assertThat(response.getBody().getSignerOrganisation()).isEqualTo("Caritas Beispiel");
+    // the response reflects the STAMPED forwarder identity, not the spoofed request fields
+    assertThat(response.getBody().getForwardedByUserId()).isEqualTo("tenant-admin-1");
+    assertThat(response.getBody().getSource()).isEqualTo("FORWARDED_EXTERNAL");
+    // the UserService is hinted so it can notify the forwarding admin (ORISO-UserService#1005)
+    org.mockito.Mockito.verify(dpaSignedNoticeHintService).notifySignatureRecorded(7L);
+  }
+
+  @Test
+  void createPublicDpaForwardInvite_Should_delegateToFacade() {
+    // given
+    var request =
+        new com.vi.tenantservice.api.model.PublicDpaForwardRequestDTO()
+            .reservedTenantId(42L)
+            .tenantIdReservationToken("reservation-token");
+    when(tenantDpaFacade.createPublicForwardSignInvite(request))
+        .thenReturn(
+            new DpaSignInviteDTO().token("raw").signLink("https://app.example.org/dpa-sign/raw"));
+
+    // when
+    var response = controller.createPublicDpaForwardInvite(request);
+
+    // then
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().getSignLink()).contains("/dpa-sign/");
   }
 
   @Test
@@ -134,6 +167,18 @@ class TenantControllerDpaConfirmTest {
     // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     verifyNoInteractions(tenantDpaService);
+  }
+
+  @Test
+  void handleSignLockContention_Should_return503WithRetryAfter_NotAServerError() {
+    // a contended confirmation wrote nothing and the token is still valid, so neither 500 nor 410
+    // is the truth — the caller should simply come back
+    var response =
+        controller.handleSignLockContention(
+            new org.springframework.dao.CannotAcquireLockException("lock wait timeout"));
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    assertThat(response.getHeaders().getFirst("Retry-After")).isEqualTo("2");
   }
 
   @Test

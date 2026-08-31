@@ -11,12 +11,14 @@ import static com.vi.tenantservice.api.util.JsonConverter.convertToJson;
 import com.google.common.collect.Maps;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.Content;
 import com.vi.tenantservice.api.model.DataProtectionContactTemplateDTO;
 import com.vi.tenantservice.api.model.Licensing;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NoAgencyContextDTO;
+import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.SmtpConfig;
@@ -32,6 +34,8 @@ import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.policy.PolicyValue;
+import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -55,6 +59,8 @@ public class TenantConverter {
   private final @NonNull TemplateService templateService;
 
   private final @NonNull TemplateRenderer templateRenderer;
+
+  private final @NonNull SmtpPasswordEncryptionService smtpPasswordEncryptionService;
 
   public TenantEntity toEntity(MultilingualTenantDTO tenantDTO) {
     var builder =
@@ -186,7 +192,21 @@ public class TenantConverter {
           .contentClaim(convertToJson(tenantDTO.getContent().getClaim()))
           .contentImpressum(convertToJson(tenantDTO.getContent().getImpressum()))
           .contentPrivacy(convertToJson(tenantDTO.getContent().getPrivacy()))
-          .contentTermsAndConditions(convertToJson(tenantDTO.getContent().getTermsAndConditions()));
+          .contentTermsAndConditions(convertToJson(tenantDTO.getContent().getTermsAndConditions()))
+          /* ORISO-Admin#601: the five Träger-authored Erstantwort Bausteine, stored
+          as the same language map the legal texts use so the existing
+          machine-translation-on-publish mechanism applies unchanged. */
+          .contentErstantwortGreeting(
+              convertToJson(tenantDTO.getContent().getErstantwortGreeting()))
+          .contentErstantwortWhoReadsAlong(
+              convertToJson(tenantDTO.getContent().getErstantwortWhoReadsAlong()))
+          .contentErstantwortEmergencyAddition(
+              convertToJson(tenantDTO.getContent().getErstantwortEmergencyAddition()))
+          .contentErstantwortFreeNotice(
+              convertToJson(tenantDTO.getContent().getErstantwortFreeNotice()))
+          .contentErstantwortClosing(convertToJson(tenantDTO.getContent().getErstantwortClosing()))
+          .erstantwortResponseDeadlineDays(
+              tenantDTO.getContent().getErstantwortResponseDeadlineDays());
     }
   }
 
@@ -207,7 +227,12 @@ public class TenantConverter {
           .themingPrimaryColor(tenantDTO.getTheming().getPrimaryColor())
           .themingSecondaryColor(tenantDTO.getTheming().getSecondaryColor())
           .themingAccent(tenantDTO.getTheming().getAccent())
-          .themingSignal(tenantDTO.getTheming().getSignal());
+          .themingSignal(tenantDTO.getTheming().getSignal())
+          // Stored as the enum name; null stays null and reads back as NONE.
+          .themingLoginEffect(
+              tenantDTO.getTheming().getLoginEffect() == null
+                  ? null
+                  : tenantDTO.getTheming().getLoginEffect().getValue());
     }
   }
 
@@ -362,6 +387,8 @@ public class TenantConverter {
                 tenantAdminControls.getAllowedPermissionToggles()))
         .enforcedPermissionToggles(
             toEnforcedPermissionTogglesSettings(tenantAdminControls.getEnforcedPermissionToggles()))
+        .permissionPolicies(toPermissionPolicySettings(tenantAdminControls.getPermissionPolicies()))
+        .caseHandoverPolicies(tenantAdminControls.getCaseHandoverPolicies())
         .build();
   }
 
@@ -446,8 +473,41 @@ public class TenantConverter {
             toTenantAdminAllowedPermissionToggles(
                 tenantAdminControlsSettings.getAllowedPermissionToggles()))
         .enforcedPermissionToggles(
-            toEnforcedPermissionToggles(
-                tenantAdminControlsSettings.getEnforcedPermissionToggles()));
+            toEnforcedPermissionToggles(tenantAdminControlsSettings.getEnforcedPermissionToggles()))
+        .permissionPolicies(
+            toBooleanPermissionPolicies(tenantAdminControlsSettings.getPermissionPolicies()))
+        .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies());
+  }
+
+  private Map<String, PolicyValue<Boolean>> toPermissionPolicySettings(
+      Map<String, BooleanPermissionPolicy> permissionPolicies) {
+    if (permissionPolicies == null) {
+      return null;
+    }
+    return permissionPolicies.entrySet().stream()
+        .collect(
+            java.util.stream.Collectors.toUnmodifiableMap(
+                Map.Entry::getKey,
+                entry ->
+                    new PolicyValue<>(
+                        entry.getValue().getValue(),
+                        com.vi.tenantservice.api.policy.PermissionPolicyMode.valueOf(
+                            entry.getValue().getMode().name()))));
+  }
+
+  private Map<String, BooleanPermissionPolicy> toBooleanPermissionPolicies(
+      Map<String, PolicyValue<Boolean>> permissionPolicies) {
+    if (permissionPolicies == null) {
+      return null;
+    }
+    return permissionPolicies.entrySet().stream()
+        .collect(
+            java.util.stream.Collectors.toUnmodifiableMap(
+                Map.Entry::getKey,
+                entry ->
+                    new BooleanPermissionPolicy(
+                        entry.getValue().value(),
+                        PermissionPolicyMode.valueOf(entry.getValue().mode().name()))));
   }
 
   private TenantAdminAllowedPermissionToggles toTenantAdminAllowedPermissionToggles(
@@ -678,6 +738,9 @@ public class TenantConverter {
             nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()));
   }
 
+  /** Placeholder some clients send back instead of a real password; never a stored value. */
+  public static final String SMTP_PASSWORD_MASK = "********";
+
   private TenantSmtpSettings toTenantSmtpSettings(SmtpConfig smtpConfig) {
     if (smtpConfig == null) {
       return null;
@@ -688,23 +751,34 @@ public class TenantConverter {
         .port(smtpConfig.getPort())
         .secure(nullAsFalse(smtpConfig.getSecure()))
         .username(smtpConfig.getUsername())
-        .password(smtpConfig.getPassword())
+        .password(
+            smtpPasswordEncryptionService.encryptNewPassword(
+                normalizeIncomingSmtpPassword(smtpConfig.getPassword())))
         .from(smtpConfig.getFrom())
         .emailThemeColor(smtpConfig.getEmailThemeColor())
         .build();
+  }
+
+  /** Blank or masked passwords mean "unchanged" (write-only contract, #182). */
+  private static String normalizeIncomingSmtpPassword(String password) {
+    if (password == null || password.isBlank() || SMTP_PASSWORD_MASK.equals(password)) {
+      return null;
+    }
+    return password;
   }
 
   private SmtpConfig toSmtpConfig(TenantSmtpSettings smtpSettings) {
     if (smtpSettings == null) {
       return null;
     }
+    // write-only contract (#182): the stored password never leaves the service
     return new SmtpConfig()
         .enabled(smtpSettings.isEnabled())
         .host(smtpSettings.getHost())
         .port(smtpSettings.getPort())
         .secure(smtpSettings.isSecure())
         .username(smtpSettings.getUsername())
-        .password(smtpSettings.getPassword())
+        .passwordSet(smtpSettings.getPassword() != null && !smtpSettings.getPassword().isBlank())
         .from(smtpSettings.getFrom())
         .emailThemeColor(smtpSettings.getEmailThemeColor());
   }
@@ -763,7 +837,29 @@ public class TenantConverter {
         .primaryColor(tenant.getThemingPrimaryColor())
         .secondaryColor(tenant.getThemingSecondaryColor())
         .accent(tenant.getThemingAccent())
-        .signal(tenant.getThemingSignal());
+        .signal(tenant.getThemingSignal())
+        .loginEffect(toLoginEffect(tenant.getThemingLoginEffect()));
+  }
+
+  /**
+   * A stored value that no longer maps to a known effect must not break the login screen: an
+   * unknown or absent name reads as NONE, which is the plain stage.
+   *
+   * <p>Absent means NONE <em>to a reader</em> only. The column stays NULL, because "never
+   * configured" and "an administrator chose the plain stage" are different facts and changeset 0029
+   * deliberately does not backfill. Returning null here leaked that distinction into the API, where
+   * it is not a meaningful answer to "which effect does this tenant run".
+   */
+  private Theming.LoginEffectEnum toLoginEffect(String stored) {
+    if (stored == null) {
+      return Theming.LoginEffectEnum.NONE;
+    }
+    try {
+      return Theming.LoginEffectEnum.fromValue(stored);
+    } catch (IllegalArgumentException e) {
+      log.warn("Unknown theming.loginEffect '{}' stored; falling back to NONE", stored);
+      return Theming.LoginEffectEnum.NONE;
+    }
   }
 
   private Content toContentDTO(TenantRestrictedData tenant, String lang) {
@@ -859,6 +955,17 @@ public class TenantConverter {
         .claim(convertMapFromJson(tenant.getContentClaim()))
         .privacy(convertMapFromJson(tenant.getContentPrivacy()))
         .termsAndConditions(convertMapFromJson(tenant.getContentTermsAndConditions()))
+        /* ORISO-Admin#601: read back what the editor wrote. `convertMapFromJson`
+        yields null for an unset column, which is the point — the Admin form has
+        to be able to tell "never authored" from "authored empty", because only
+        the first falls through to the platform text. */
+        .erstantwortGreeting(convertMapFromJson(tenant.getContentErstantwortGreeting()))
+        .erstantwortWhoReadsAlong(convertMapFromJson(tenant.getContentErstantwortWhoReadsAlong()))
+        .erstantwortEmergencyAddition(
+            convertMapFromJson(tenant.getContentErstantwortEmergencyAddition()))
+        .erstantwortFreeNotice(convertMapFromJson(tenant.getContentErstantwortFreeNotice()))
+        .erstantwortClosing(convertMapFromJson(tenant.getContentErstantwortClosing()))
+        .erstantwortResponseDeadlineDays(tenant.getErstantwortResponseDeadlineDays())
         .dataProtectionContactTemplate(getMultilingualDataProtectionTemplate());
   }
 
