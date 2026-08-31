@@ -2,9 +2,12 @@ package com.vi.tenantservice.api.converter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
 import com.vi.tenantservice.api.model.TenantAdminControls;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class EffectivePermissionSettingsApplierTest {
@@ -69,5 +72,21 @@ class EffectivePermissionSettingsApplierTest {
     applier.applyTo(settings, controls);
 
     assertThat(settings.getFeatureThreadsOneOnOneEnabled()).isFalse();
+  }
+
+  @Test
+  void applyPolicies_shouldApplyOnlyEnforcedValues() {
+    var settings = new Settings().featureVideoCallsEnabled(true).featureAudioCallsEnabled(false);
+
+    applier.applyPolicies(
+        settings,
+        Map.of(
+            "featureVideoCallsEnabled",
+            new BooleanPermissionPolicy(false, PermissionPolicyMode.ENFORCED),
+            "featureAudioCallsEnabled",
+            new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED)));
+
+    assertThat(settings.getFeatureVideoCallsEnabled()).isFalse();
+    assertThat(settings.getFeatureAudioCallsEnabled()).isFalse();
   }
 }

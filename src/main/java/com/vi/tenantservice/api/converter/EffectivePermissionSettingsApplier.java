@@ -1,9 +1,12 @@
 package com.vi.tenantservice.api.converter;
 
+import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import org.springframework.stereotype.Component;
@@ -17,6 +20,110 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class EffectivePermissionSettingsApplier {
+
+  private static final Map<String, BiConsumer<Settings, Boolean>> POLICY_SETTERS =
+      Map.ofEntries(
+          Map.entry("featureAnonymousChatEnabled", Settings::setFeatureAnonymousChatEnabled),
+          Map.entry("featureGroupChatV2Enabled", Settings::setFeatureGroupChatV2Enabled),
+          Map.entry("featureCallsEnabled", Settings::setFeatureCallsEnabled),
+          Map.entry("featureSupervisionEnabled", Settings::setFeatureSupervisionEnabled),
+          Map.entry(
+              "featureSupervisionAnonymousChatsEnabled",
+              Settings::setFeatureSupervisionAnonymousChatsEnabled),
+          Map.entry(
+              "featureSupervisionOneOnOneChatsEnabled",
+              Settings::setFeatureSupervisionOneOnOneChatsEnabled),
+          Map.entry("featureAudioCallsEnabled", Settings::setFeatureAudioCallsEnabled),
+          Map.entry(
+              "featureAudioCallsAnonymousChatsEnabled",
+              Settings::setFeatureAudioCallsAnonymousChatsEnabled),
+          Map.entry(
+              "featureAudioCallsOneOnOneChatsEnabled",
+              Settings::setFeatureAudioCallsOneOnOneChatsEnabled),
+          Map.entry(
+              "featureAudioCallsGroupChatsEnabled",
+              Settings::setFeatureAudioCallsGroupChatsEnabled),
+          Map.entry(
+              "featureAudioCallsSupervisionChatsEnabled",
+              Settings::setFeatureAudioCallsSupervisionChatsEnabled),
+          Map.entry("featureVideoCallsEnabled", Settings::setFeatureVideoCallsEnabled),
+          Map.entry(
+              "featureVideoCallsAnonymousChatsEnabled",
+              Settings::setFeatureVideoCallsAnonymousChatsEnabled),
+          Map.entry(
+              "featureVideoCallsOneOnOneChatsEnabled",
+              Settings::setFeatureVideoCallsOneOnOneChatsEnabled),
+          Map.entry(
+              "featureVideoCallsGroupChatsEnabled",
+              Settings::setFeatureVideoCallsGroupChatsEnabled),
+          Map.entry(
+              "featureVideoCallsSupervisionChatsEnabled",
+              Settings::setFeatureVideoCallsSupervisionChatsEnabled),
+          Map.entry("featureThreadsEnabled", Settings::setFeatureThreadsEnabled),
+          Map.entry(
+              "featureThreadsAnonymousChatsEnabled",
+              Settings::setFeatureThreadsAnonymousChatsEnabled),
+          Map.entry("featureThreadsOneOnOneEnabled", Settings::setFeatureThreadsOneOnOneEnabled),
+          Map.entry(
+              "featureThreadsGroupChatsEnabled", Settings::setFeatureThreadsGroupChatsEnabled),
+          Map.entry(
+              "featureThreadsSupervisionChatsEnabled",
+              Settings::setFeatureThreadsSupervisionChatsEnabled),
+          Map.entry("featureVoiceMessagesEnabled", Settings::setFeatureVoiceMessagesEnabled),
+          Map.entry(
+              "featureVoiceMessagesAnonymousChatsEnabled",
+              Settings::setFeatureVoiceMessagesAnonymousChatsEnabled),
+          Map.entry(
+              "featureVoiceMessagesOneOnOneChatsEnabled",
+              Settings::setFeatureVoiceMessagesOneOnOneChatsEnabled),
+          Map.entry(
+              "featureVoiceMessagesGroupChatsEnabled",
+              Settings::setFeatureVoiceMessagesGroupChatsEnabled),
+          Map.entry(
+              "featureVoiceMessagesSupervisionChatsEnabled",
+              Settings::setFeatureVoiceMessagesSupervisionChatsEnabled),
+          Map.entry("featureMediaUploadEnabled", Settings::setFeatureMediaUploadEnabled),
+          Map.entry(
+              "featureMediaUploadAnonymousChatsEnabled",
+              Settings::setFeatureMediaUploadAnonymousChatsEnabled),
+          Map.entry(
+              "featureMediaUploadOneOnOneChatsEnabled",
+              Settings::setFeatureMediaUploadOneOnOneChatsEnabled),
+          Map.entry(
+              "featureMediaUploadGroupChatsEnabled",
+              Settings::setFeatureMediaUploadGroupChatsEnabled),
+          Map.entry(
+              "featureMediaUploadSupervisionChatsEnabled",
+              Settings::setFeatureMediaUploadSupervisionChatsEnabled),
+          Map.entry(
+              "featureMediaInlineDisplayEnabled", Settings::setFeatureMediaInlineDisplayEnabled),
+          Map.entry(
+              "featureMediaInlineDisplayAnonymousChatsEnabled",
+              Settings::setFeatureMediaInlineDisplayAnonymousChatsEnabled),
+          Map.entry(
+              "featureMediaInlineDisplayOneOnOneChatsEnabled",
+              Settings::setFeatureMediaInlineDisplayOneOnOneChatsEnabled),
+          Map.entry(
+              "featureMediaInlineDisplayGroupChatsEnabled",
+              Settings::setFeatureMediaInlineDisplayGroupChatsEnabled),
+          Map.entry(
+              "featureMediaInlineDisplaySupervisionChatsEnabled",
+              Settings::setFeatureMediaInlineDisplaySupervisionChatsEnabled),
+          Map.entry("featureMediaAiScanEnabled", Settings::setFeatureMediaAiScanEnabled),
+          Map.entry(
+              "featureMediaAiScanAnonymousChatsEnabled",
+              Settings::setFeatureMediaAiScanAnonymousChatsEnabled),
+          Map.entry(
+              "featureMediaAiScanOneOnOneChatsEnabled",
+              Settings::setFeatureMediaAiScanOneOnOneChatsEnabled),
+          Map.entry(
+              "featureMediaAiScanGroupChatsEnabled",
+              Settings::setFeatureMediaAiScanGroupChatsEnabled),
+          Map.entry(
+              "featureMediaAiScanSupervisionChatsEnabled",
+              Settings::setFeatureMediaAiScanSupervisionChatsEnabled),
+          Map.entry("featureDisplayNameEditable", Settings::setFeatureDisplayNameEditable),
+          Map.entry("featureAskerEmailEnabled", Settings::setFeatureAskerEmailEnabled));
 
   private record ToggleBinding(
       Function<TenantAdminAllowedPermissionToggles, Boolean> getter,
@@ -118,5 +225,22 @@ public class EffectivePermissionSettingsApplier {
         binding.setter().accept(settings, true);
       }
     }
+  }
+
+  /** Applies only locked policies. Suggestions remain editable tenant settings. */
+  public void applyPolicies(
+      Settings settings, Map<String, BooleanPermissionPolicy> permissionPolicies) {
+    if (settings == null || permissionPolicies == null) {
+      return;
+    }
+    permissionPolicies.forEach(
+        (feature, policy) -> {
+          BiConsumer<Settings, Boolean> setter = POLICY_SETTERS.get(feature);
+          if (setter != null
+              && policy != null
+              && policy.getMode() == PermissionPolicyMode.ENFORCED) {
+            setter.accept(settings, policy.getValue());
+          }
+        });
   }
 }
