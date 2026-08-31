@@ -862,7 +862,11 @@ public class TenantServiceFacade {
             .getValue();
     var mainTenant =
         tenantService.findRestrictedTenantDataBySubdomain(mainTenantSubdomain).orElseThrow();
-    Long actualTenantId = tenantResolverService.tryResolve().orElseThrow();
+    // No resolvable tenant context (anonymous caller without a tenantId cookie on a host whose
+    // subdomain matches no tenant -- e.g. a mail client fetching /tenant/public/branding/logo)
+    // is platform scope too: fold it into the technical-tenant sentinel below instead of
+    // throwing, so the caller gets the main tenant's public data.
+    Long actualTenantId = tenantResolverService.tryResolve().orElse((long) TECHNICAL_TENANT_ID);
     if (actualTenantId == TECHNICAL_TENANT_ID) {
       // Same sentinel hazard as resolveFromRequestOrCookie (#199): a caller in platform scope has
       // no tenant to override with, and id 0 has no row, so orElseThrow would fail here instead of
