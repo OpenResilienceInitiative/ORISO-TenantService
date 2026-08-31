@@ -1,11 +1,15 @@
 package com.vi.tenantservice.api.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.converter.TenantConverter;
+import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
@@ -14,7 +18,9 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.policy.PermissionPolicyMode;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
+import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,12 +28,14 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class TenantAdminControlsServiceTest {
 
   @Mock private TenantAdminControlsRepository tenantAdminControlsRepository;
   @Mock private TenantConverter tenantConverter;
+  @Mock private TranslationApiKeyEncryptionService translationApiKeyEncryptionService;
 
   @InjectMocks private TenantAdminControlsService tenantAdminControlsService;
 
@@ -103,8 +111,30 @@ class TenantAdminControlsServiceTest {
 
     ArgumentCaptor<TenantAdminControlsEntity> captor =
         ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
-    verify(tenantAdminControlsRepository).save(captor.capture());
+    verify(tenantAdminControlsRepository).saveAndFlush(captor.capture());
     assertThat(captor.getValue().getControls()).contains("groupChat");
+  }
+
+  @Test
+  void updateControls_Should_loadExistingRowOnceAndRejectAStaleWriter() {
+    TenantAdminControlsEntity existing =
+        TenantAdminControlsEntity.builder()
+            .id(1L)
+            .version(3L)
+            .controls("{\"permissionsPageEnabled\":true}")
+            .build();
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc()).thenReturn(Optional.of(existing));
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantAdminControlsRepository.saveAndFlush(existing))
+        .thenThrow(new OptimisticLockingFailureException("stale platform settings"));
+
+    assertThatThrownBy(() -> tenantAdminControlsService.updateControls(request))
+        .isInstanceOf(SettingsUpdateConflictException.class)
+        .hasMessageContaining("changed while saving");
+
+    verify(tenantAdminControlsRepository, times(1)).findTopByOrderByIdAsc();
   }
 
   // --- machine-translation provider API keys (stored in the same controls JSON blob) ---
@@ -118,7 +148,7 @@ class TenantAdminControlsServiceTest {
   private String capturedSavedControls() {
     ArgumentCaptor<TenantAdminControlsEntity> captor =
         ArgumentCaptor.forClass(TenantAdminControlsEntity.class);
-    verify(tenantAdminControlsRepository).save(captor.capture());
+    verify(tenantAdminControlsRepository).saveAndFlush(captor.capture());
     return captor.getValue().getControls();
   }
 
@@ -131,8 +161,8 @@ class TenantAdminControlsServiceTest {
     // Observed on Pre-Dev 2026-08-18: "Unrecognized field \"permissionPolicies\"".
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,"
-            + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true}},"
-            + "\"caseHandoverPolicies\":{\"requireConsent\":true}}");
+            + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true,\"mode\":\"ENFORCED\"}},"
+            + "\"someBrandNewTopLevelField\":\"future-value\"}");
 
     tenantAdminControlsService.getControls();
 
@@ -151,8 +181,24 @@ class TenantAdminControlsServiceTest {
     assertThat(tenantAdminControlsService.getTranslationApiKeys()).isEmpty();
   }
 
+  /** Stub cipher: makes it visible in the assertions that stored values pass through it. */
+  private void givenReversibleCipher() {
+    when(translationApiKeyEncryptionService.decrypt(anyString()))
+        .thenAnswer(call -> unwrap(call.getArgument(0)));
+  }
+
+  private void givenEncryptingCipher() {
+    when(translationApiKeyEncryptionService.encryptNewApiKey(anyString()))
+        .thenAnswer(call -> "ENC(" + call.getArgument(0) + ")");
+  }
+
+  private static String unwrap(String value) {
+    return value.startsWith("ENC(") ? value.substring(4, value.length() - 1) : value;
+  }
+
   @Test
   void getTranslationApiKeys_Should_returnStoredKeys() {
+    givenReversibleCipher();
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,"
             + "\"translationApiKeys\":{\"openrouter\":\"sk-or-key\",\"mistral\":\"mi-key\"}}");
@@ -164,25 +210,30 @@ class TenantAdminControlsServiceTest {
 
   @Test
   void setTranslationApiKey_Should_persistKeyInControlsJson() {
+    givenEncryptingCipher();
     givenStoredControlsJson("{\"permissionsPageEnabled\":true}");
 
     tenantAdminControlsService.setTranslationApiKey("openrouter", "sk-or-new-key");
 
+    // stored through the cipher, never as the raw key
     assertThat(capturedSavedControls())
-        .contains("\"openrouter\":\"sk-or-new-key\"")
+        .contains("\"openrouter\":\"ENC(sk-or-new-key)\"")
+        .doesNotContain("\"openrouter\":\"sk-or-new-key\"")
         .contains("\"permissionsPageEnabled\":true");
   }
 
   @Test
   void setTranslationApiKey_Should_keepOtherProviderKey() {
+    givenEncryptingCipher();
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,\"translationApiKeys\":{\"mistral\":\"mi-key\"}}");
 
     tenantAdminControlsService.setTranslationApiKey("openrouter", "sk-or-new-key");
 
+    // the untouched provider keeps its stored value verbatim - no decrypt/re-encrypt round trip
     assertThat(capturedSavedControls())
         .contains("\"mistral\":\"mi-key\"")
-        .contains("\"openrouter\":\"sk-or-new-key\"");
+        .contains("\"openrouter\":\"ENC(sk-or-new-key)\"");
   }
 
   @Test
@@ -203,10 +254,15 @@ class TenantAdminControlsServiceTest {
   // --- version skew: the controls blob is shared with builds that know more fields than this one
   // ---
 
+  /**
+   * A top-level key no build in this tree knows. {@code permissionPolicies} and {@code
+   * caseHandoverPolicies} are deliberately NOT used here any more: since #192 landed they are
+   * fields this build owns, so they are rewritten on purpose and prove nothing about preservation.
+   */
   private static final String BLOB_FROM_A_NEWER_BUILD =
       "{\"permissionsPageEnabled\":true,"
-          + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true}},"
-          + "\"caseHandoverPolicies\":{\"requireConsent\":true}}";
+          + "\"aFieldOnlyANewerBuildKnows\":{\"nested\":true},"
+          + "\"anotherFutureTopLevelField\":\"kept\"}";
 
   /**
    * The blob is read leniently on purpose (see {@link TenantAdminControlsSettings}) because a
@@ -227,10 +283,9 @@ class TenantAdminControlsServiceTest {
     tenantAdminControlsService.updateControls(request);
 
     assertThat(capturedSavedControls())
-        .contains("\"permissionPolicies\"")
-        .contains("\"featureVideoCall\"")
-        .contains("\"caseHandoverPolicies\"")
-        .contains("\"requireConsent\"")
+        .contains("\"aFieldOnlyANewerBuildKnows\"")
+        .contains("\"nested\":true")
+        .contains("\"anotherFutureTopLevelField\":\"kept\"")
         // and the field this build does own is still the one it just wrote
         .contains("\"permissionsPageEnabled\":false");
   }
@@ -238,16 +293,86 @@ class TenantAdminControlsServiceTest {
   /** Same defect, reached through the other write on the ordinary admin path. */
   @Test
   void setTranslationApiKey_Should_keepFieldsWrittenByANewerBuild() {
+    givenEncryptingCipher();
     givenStoredControlsJson(BLOB_FROM_A_NEWER_BUILD);
 
     tenantAdminControlsService.setTranslationApiKey("openrouter", "sk-or-new-key");
 
     assertThat(capturedSavedControls())
-        .contains("\"permissionPolicies\"")
-        .contains("\"featureVideoCall\"")
-        .contains("\"caseHandoverPolicies\"")
-        .contains("\"requireConsent\"")
-        .contains("\"openrouter\":\"sk-or-new-key\"")
+        .contains("\"aFieldOnlyANewerBuildKnows\"")
+        .contains("\"anotherFutureTopLevelField\":\"kept\"")
+        .contains("\"openrouter\":\"ENC(sk-or-new-key)\"")
         .contains("\"permissionsPageEnabled\":true");
+  }
+
+  /**
+   * The merge is top-level only, and that is a decision, not an omission: a stale key nested inside
+   * an object this build owns must NOT survive, otherwise a value an admin just cleared would keep
+   * being merged back in from the stored document. A recursive merge would pass the two tests above
+   * and fail this one.
+   */
+  @Test
+  void updateControls_Should_replaceOwnedObjectsWholesale_NotMergeThemRecursively() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"aFieldOnlyANewerBuildKnows\":{\"nested\":true},"
+            + "\"allowedPermissionToggles\":{\"staleNestedKey\":true}}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(
+            TenantAdminControlsSettings.builder()
+                .permissionsPageEnabled(false)
+                .allowedPermissionToggles(
+                    TenantAdminAllowedPermissionTogglesSettings.builder().videoCalls(false).build())
+                .build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    assertThat(capturedSavedControls())
+        // the object this build owns is replaced, not deep-merged
+        .doesNotContain("staleNestedKey")
+        .contains("\"videoCalls\":false")
+        // while the top-level key it does not own is still untouched
+        .contains("\"aFieldOnlyANewerBuildKnows\"");
+  }
+
+  @Test
+  void updateControls_Should_preserveCanonicalPoliciesOmittedByAPartialRequest() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"permissionPolicies\":{\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}},"
+            + "\"caseHandoverPolicies\":{\"reasons\":{}}}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    assertThat(capturedSavedControls())
+        .contains("\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"")
+        .contains("\"caseHandoverPolicies\":{\"reasons\":{}}");
+  }
+
+  @Test
+  void getControls_shouldDualReadLegacyMapsAsCanonicalPolicies() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"allowedPermissionToggles\":{\"videoCalls\":false},"
+            + "\"enforcedPermissionToggles\":{\"supervision\":true}}");
+    when(tenantConverter.toTenantAdminControls(any())).thenReturn(new TenantAdminControls());
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> settings =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(settings.capture());
+    assertThat(settings.getValue().getPermissionPolicies().get("featureVideoCallsEnabled").value())
+        .isFalse();
+    assertThat(settings.getValue().getPermissionPolicies().get("featureSupervisionEnabled").mode())
+        .isEqualTo(PermissionPolicyMode.ENFORCED);
   }
 }
