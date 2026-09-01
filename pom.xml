@@ -562,9 +562,6 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <skipTests>false</skipTests>
-                </configuration>
                 <executions>
                     <!-- Surefire's built-in `default-test` execution is disabled here. Left
                          enabled it inherits the plugin-level configuration together with
@@ -583,7 +580,6 @@
                             <goal>test</goal>
                         </goals>
                         <configuration>
-                            <skipTests>false</skipTests>
                             <includes>
                                 <include>**/*Test.java</include>
                             </includes>
@@ -596,7 +592,6 @@
                             <goal>test</goal>
                         </goals>
                         <configuration>
-                            <skipTests>false</skipTests>
                             <includes>
                                 <include>**/*IT.*</include>
                             </includes>
