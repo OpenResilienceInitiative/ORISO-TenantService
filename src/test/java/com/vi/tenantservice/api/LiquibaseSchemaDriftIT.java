@@ -3,14 +3,24 @@ package com.vi.tenantservice.api;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.vi.tenantservice.TenantServiceApplication;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.MariaDBContainer;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
 
 /**
  * Permanent schema-drift guard (Liquibase Re-Enablement Plan 2026-07-04, package L1).
@@ -68,7 +78,66 @@ class LiquibaseSchemaDriftIT {
     // and Hibernate validated the entity model against the resulting schema.
     Integer applied =
         jdbcTemplate.queryForObject("SELECT COUNT(*) FROM DATABASECHANGELOG", Integer.class);
-    assertThat(applied).as("applied Liquibase changesets").isGreaterThanOrEqualTo(20);
+    // Deliberately not a pinned count. A floor like ">= 20" only records how many changesets
+    // existed the day it was written: it never fails when a changeset stops being applied, and it
+    // has to be edited every time the number climbs. The real invariant — that every changelog the
+    // master includes actually ran — is asserted below, derived from the master itself.
+    assertThat(applied).as("applied Liquibase changesets").isPositive();
+  }
+
+  @Test
+  void everyChangelogFileIncludedByTheMaster_shouldHaveBeenApplied() {
+    // Derived from the master changelog itself rather than pinned to a count, so adding a
+    // changeset needs no edit here, while an <include> the master still declares but that no
+    // longer produces a DATABASECHANGELOG row — excluded by a context, renamed underneath the
+    // master, or skipped by a precondition path that writes no row — fails loudly.
+    //
+    // Limitation, stated so nobody over-trusts this: the expectation is read from the same
+    // master changelog, so deleting an <include> outright is NOT caught here. That case is
+    // covered by ddl-auto=validate above whenever the deleted changeset backs an entity column,
+    // and is not covered at all when it does not.
+    List<String> includedFiles = includedChangelogFiles();
+    assertThat(includedFiles).as("<include file=...> entries in the master changelog").isNotEmpty();
+
+    List<String> appliedFiles =
+        jdbcTemplate.queryForList("SELECT DISTINCT FILENAME FROM DATABASECHANGELOG", String.class);
+
+    assertThat(appliedFiles)
+        .as("every changelog file included by the master must appear in DATABASECHANGELOG")
+        .containsAll(includedFiles);
+  }
+
+  @Test
+  void appliedChangesets_shouldHaveUniqueIdentity() {
+    // Liquibase identity is (id, author, filename). This repo has already collided on
+    // changeset numbering (two 0010_* directories, one of which the master deliberately
+    // excludes), so guard the invariant instead of trusting the numbering convention.
+    List<String> duplicates =
+        jdbcTemplate.queryForList(
+            "SELECT CONCAT(ID, '::', AUTHOR, '::', FILENAME) FROM DATABASECHANGELOG"
+                + " GROUP BY ID, AUTHOR, FILENAME HAVING COUNT(*) > 1",
+            String.class);
+
+    assertThat(duplicates).as("colliding Liquibase changeset identities").isEmpty();
+  }
+
+  private static List<String> includedChangelogFiles() {
+    try (InputStream master =
+        new ClassPathResource("db/changelog/tenantservice-master.xml").getInputStream()) {
+      DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+      factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+      factory.setNamespaceAware(true);
+      NodeList includes =
+          factory.newDocumentBuilder().parse(master).getElementsByTagNameNS("*", "include");
+
+      List<String> files = new ArrayList<>();
+      for (int i = 0; i < includes.getLength(); i++) {
+        files.add(((Element) includes.item(i)).getAttribute("file"));
+      }
+      return files;
+    } catch (IOException | ParserConfigurationException | SAXException e) {
+      throw new IllegalStateException("Could not read the master changelog", e);
+    }
   }
 
   @Test
