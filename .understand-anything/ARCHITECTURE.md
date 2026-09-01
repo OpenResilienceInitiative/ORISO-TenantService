@@ -26,7 +26,7 @@ Key files:
 OAuth2/JWT security, Keycloak role mapping, local authorities, and tenant resolution.
 
 Key files:
-- `src/main/java/com/vi/tenantservice/config/security/WebSecurityConfig.java` - stateless JWT resource server; `/tenant/public/**` and the Swagger whitelist are `permitAll`, `/tenant/**` and `/tenantadmin/**` require authentication.
+- `src/main/java/com/vi/tenantservice/config/security/WebSecurityConfig.java` - stateless JWT resource server; `/tenant/public/**` and the Swagger whitelist are `permitAll`, `/tenant/**` and `/tenantadmin/**` require authentication, and **`anyRequest()` is `permitAll`** - so every route outside those prefixes is public. `/media/{mediaId}` (`TenantMediaController`) is public by that rule and by design: legal-text images are read by anonymous visitors. Adding a controller outside `/tenant*` therefore publishes it unless a matcher is added here.
 - `src/main/java/com/vi/tenantservice/config/security/JwtAuthConverter.java` and `JwtAuthConverterProperties.java` - read realm roles from the Keycloak JWT.
 - `src/main/java/com/vi/tenantservice/api/authorisation/RoleAuthorizationAuthorityMapper.java`, `Authority.java`, `UserRole.java` - map ORISO roles to local `AUTHORIZATION_*` authorities.
 - `src/main/java/com/vi/tenantservice/config/security/AuthorisationService.java` - accessor for the authenticated principal and its claims.
@@ -89,7 +89,7 @@ Key files:
 - `src/main/java/com/vi/tenantservice/api/model/TenantIdReservationEntity.java`, `TenantIdReservationStatus.java`, `TenantIdAllocationStatus.java` - tenant-id reservation records.
 - Repositories in `src/main/java/com/vi/tenantservice/api/repository/`: `TenantRepository`, `TenantAdminControlsRepository`, `TenantDpaVersionRepository`, `TenantDpaSignatureRepository`, `TenantDpaAdminSignatureRepository`, `TenantIdReservationRepository`, `TenantMediaRepository`, `PlatformDpiaMasterDataRepository`.
 - `src/main/resources/db/changelog/tenantservice-master.xml` - master changelog; changesets `0001`-`0031` under `db/changelog/changeset/`, including `0013_tenant_admin_controls`, `0015`-`0021`+`0025`/`0026`/`0030`/`0031` (DPA versions, signatures, tokens, audit fields, reservation binding), `0022_widen_tenant_settings_column`, `0023_tenant_media`, `0024_tenant_id_reservation`, `0027_tenant_theming_accent_and_signal`, `0028_platform_dpia_master_data`, `0029_tenant_theming_login_effect`.
-- Liquibase execution is env-gated: `application.properties` sets `spring.liquibase.enabled=${SPRING_LIQUIBASE_ENABLED:false}` (disabled by default; the deployed cluster manages the schema separately), the `local` profile defaults it to `true` with the `seed` context, and the `testing` profile disables it outright.
+- Liquibase execution is profile-gated, and every profile default can still be overridden by `SPRING_LIQUIBASE_ENABLED`/`SPRING_LIQUIBASE_CONTEXTS`: base `application.properties` defaults `enabled` to `false` with the `prod` context (the deployed cluster manages the schema separately); `local` and `dev` default `enabled` to `true` with the `seed` context; `staging` and `prod` default `enabled` to `true` with the `prod` context; `testing` sets `enabled=false` unconditionally, with no environment override.
 
 ### Configuration
 
@@ -134,7 +134,7 @@ Key files:
 - Media flow: `/tenantadmin/media` upload -> `TenantMediaService` -> `/media/{mediaId}` and `/tenant/public/branding/{asset}` reads.
 - Tenant-id flow: availability check, next-free lookup, reservation/release via `TenantIdAllocationService` and `AssignedOrSequenceIdGenerator`.
 - Auth flow: `WebSecurityConfig` -> `JwtAuthConverter` -> `RoleAuthorizationAuthorityMapper` -> `@PreAuthorize` rules; tenant context from token, cookie, or subdomain.
-- Database flow: JPA entities and repositories over MariaDB; Liquibase changesets `0001`-`0031` describe the schema but only run where `SPRING_LIQUIBASE_ENABLED` is set (default on only in the `local` profile).
+- Database flow: JPA entities and repositories over MariaDB; Liquibase changesets `0001`-`0031` describe the schema and run wherever the active profile enables them - on by default in `local`, `dev`, `staging` and `prod`, off by default in the base profile, and off unconditionally in `testing` (see the storage section for the contexts).
 - Deployment flow: GitHub Actions (build, contract gate, release image), Maven, Dockerfile, and profile-based runtime properties.
 
 ## API And Service Dependencies
