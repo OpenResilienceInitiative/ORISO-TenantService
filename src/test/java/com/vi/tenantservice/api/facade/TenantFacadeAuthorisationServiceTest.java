@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.Authority;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
+import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import com.vi.tenantservice.api.model.Licensing;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
@@ -18,7 +19,11 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantSetting;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.policy.PermissionFeature;
+import com.vi.tenantservice.api.policy.PermissionPolicyMode;
+import com.vi.tenantservice.api.policy.ResolvedPolicyValue;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.config.security.AuthorisationService;
@@ -43,6 +48,8 @@ class TenantFacadeAuthorisationServiceTest {
   @Mock ApplicationSettingsService applicationSettingsService;
 
   @Mock TenantAdminControlsService tenantAdminControlsService;
+
+  @Mock TenantPermissionPolicyService tenantPermissionPolicyService;
 
   @Test
   void
@@ -309,11 +316,17 @@ class TenantFacadeAuthorisationServiceTest {
     givenAppearanceToggle(false);
 
     // when / then
-    assertThrows(
-        TenantAuthorisationException.class,
-        () ->
-            tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
-                changed, existing));
+    TenantAuthorisationException thrown =
+        assertThrows(
+            TenantAuthorisationException.class,
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(changed, existing));
+
+    // the reason matters: a regression that throws NOT_ALLOWED_TO_CHANGE_SUBDOMAIN, or any other
+    // reason, would satisfy the exception type alone and still tell the caller the wrong thing
+    assertThat(thrown.getCustomHttpHeaders().getFirst("X-Reason"))
+        .isEqualTo(HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE.name());
   }
 
   @Test
@@ -388,5 +401,82 @@ class TenantFacadeAuthorisationServiceTest {
 
     // then no exception - the controls are never consulted for a super admin
     verify(tenantAdminControlsService, org.mockito.Mockito.never()).getControls();
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_AllowBrandingChange_When_ControlsAreAbsentEntirely() {
+    // The other absent branch: not a null toggle, but no controls row at all.
+    TenantEntity existing = tenantWithLogo("old-logo");
+    MultilingualTenantDTO changed =
+        new MultilingualTenantDTO().theming(new Theming().logo("new-logo"));
+    givenSingleTenantAdmin();
+    when(tenantAdminControlsService.getControls()).thenReturn(null);
+
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        changed, existing);
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_AllowBrandingChange_When_ToggleMapIsAbsent() {
+    // Third absent branch: a controls row whose allowedPermissionToggles map is null.
+    TenantEntity existing = tenantWithLogo("old-logo");
+    MultilingualTenantDTO changed =
+        new MultilingualTenantDTO().theming(new Theming().logo("new-logo"));
+    givenSingleTenantAdmin();
+    when(tenantAdminControlsService.getControls()).thenReturn(new TenantAdminControls());
+
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        changed, existing);
+  }
+
+  /**
+   * The point of resolving per tenant. tenant_admin_controls is one platform-wide row, so reading
+   * it alone applies a single global appearance toggle to every tenant. A tenant that overrode the
+   * platform default must get its own answer.
+   */
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_AllowBrandingChange_When_TenantOverridesAPlatformDenial() {
+    TenantEntity existing = tenantWithLogo("old-logo");
+    MultilingualTenantDTO changed =
+        new MultilingualTenantDTO().theming(new Theming().logo("new-logo"));
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(true);
+
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        changed, existing);
+
+    // the platform row is not consulted once a resolved policy exists for this tenant
+    verify(tenantAdminControlsService, org.mockito.Mockito.never()).getControls();
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_RejectBrandingChange_When_TheTenantsResolvedPolicyDeniesIt() {
+    TenantEntity existing = tenantWithLogo("old-logo");
+    MultilingualTenantDTO changed =
+        new MultilingualTenantDTO().theming(new Theming().logo("new-logo"));
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(false);
+
+    TenantAuthorisationException thrown =
+        assertThrows(
+            TenantAuthorisationException.class,
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(changed, existing));
+
+    assertThat(thrown.getCustomHttpHeaders().getFirst("X-Reason"))
+        .isEqualTo(HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE.name());
+  }
+
+  private void givenResolvedAppearancePolicy(boolean allowed) {
+    when(tenantPermissionPolicyService.getResolvedPolicies(ID))
+        .thenReturn(
+            java.util.Map.of(
+                PermissionFeature.APPEARANCE.apiKey(),
+                new ResolvedPolicyValue<>(allowed, PermissionPolicyMode.ENFORCED, false)));
   }
 }
