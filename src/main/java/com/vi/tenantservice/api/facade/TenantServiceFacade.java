@@ -10,8 +10,11 @@ import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.Authority.AuthorityValue;
 import com.vi.tenantservice.api.converter.ConsultingTypePatchDTOConverter;
 import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
+import com.vi.tenantservice.api.converter.EffectiveThemingApplier;
+import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
@@ -19,6 +22,7 @@ import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
@@ -29,13 +33,17 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
+import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
@@ -47,7 +55,6 @@ import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
-import jakarta.ws.rs.BadRequestException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -69,6 +76,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort.Direction;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -110,11 +118,19 @@ public class TenantServiceFacade {
 
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
 
+  private final @NonNull TenantPermissionPolicyService tenantPermissionPolicyService;
+
   private final @NonNull EffectivePermissionSettingsApplier effectivePermissionSettingsApplier;
+
+  private final @NonNull EffectiveThemingApplier effectiveThemingApplier;
+
+  private final @NonNull InheritedBrandingEchoStripper inheritedBrandingEchoStripper;
 
   private final @NonNull TenantResolverService tenantResolverService;
 
   private final @NonNull TenantDpaStatusService tenantDpaStatusService;
+
+  private final @NonNull TenantDpaService tenantDpaService;
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
@@ -138,7 +154,7 @@ public class TenantServiceFacade {
       performRollback(createdTenant, reservationToken);
       log.error(
           "Error while creating consulting types for tenant with id {}", createdTenant.getId(), ex);
-      throw new BadRequestException(
+      throw new TenantBadRequestException(
           "Error while creating consulting types for tenant with id " + createdTenant.getId());
     }
     recordOnboardingDpaAcceptance(
@@ -169,7 +185,7 @@ public class TenantServiceFacade {
       if (!Boolean.TRUE.equals(acceptance.getAccepted())
           || isBlank(acceptance.getSignerUserId())
           || isBlank(acceptance.getSignerName())) {
-        throw new BadRequestException(
+        throw new TenantBadRequestException(
             "onboardingDpaAcceptance requires accepted=true, signerUserId and signerName");
       }
       tenantDpaStatusService.signOnboarding(
@@ -224,7 +240,7 @@ public class TenantServiceFacade {
    */
   private static String bounded(String value, int maxLength, String field) {
     if (value != null && value.length() > maxLength) {
-      throw new BadRequestException(
+      throw new TenantBadRequestException(
           "onboardingDpaAcceptance." + field + " exceeds " + maxLength + " characters");
     }
     return value;
@@ -237,7 +253,8 @@ public class TenantServiceFacade {
     try {
       return LocalDateTime.parse(dpaVersion.trim());
     } catch (DateTimeParseException ex) {
-      throw new BadRequestException("onboardingDpaAcceptance.dpaVersion is not a valid timestamp");
+      throw new TenantBadRequestException(
+          "onboardingDpaAcceptance.dpaVersion is not a valid timestamp");
     }
   }
 
@@ -343,11 +360,18 @@ public class TenantServiceFacade {
     return updateWithSanitizedInput(id, sanitizedTenantDTO);
   }
 
+  /**
+   * Deletes the tenant together with its DPA signature evidence. Transactional on purpose: the
+   * database cascade that used to tie the two together was dropped so sign links could be minted
+   * for a still-reserved id (#179), so this boundary is now the only thing preventing a half
+   * deletion — a surviving tenant whose append-only signature evidence is already gone.
+   */
+  @Transactional
   public void deleteTenant(Long id) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
 
     if (id == TECHNICAL_TENANT_ID) {
-      throw new BadRequestException("Technical tenant cannot be deleted.");
+      throw new TenantBadRequestException("Technical tenant cannot be deleted.");
     }
 
     TenantEntity tenant =
@@ -355,6 +379,9 @@ public class TenantServiceFacade {
             .findTenantById(id)
             .orElseThrow(() -> new TenantNotFoundException("Tenant with id " + id + " not found"));
 
+    // App-level replacement for the DB cascade dropped in changeset 0030 (#179): the tenant's
+    // DPA signature rows (incl. any outstanding sign links) go with the tenant.
+    tenantDpaService.deleteSignaturesForTenant(id);
     tenantService.delete(tenant);
   }
 
@@ -480,6 +507,14 @@ public class TenantServiceFacade {
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
         sanitizedTenantDTO, existingTenantEntity);
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
+    if (existingTenantEntity.getId() != TECHNICAL_TENANT_ID) {
+      tenantService
+          .findTenantById((long) TECHNICAL_TENANT_ID)
+          .ifPresent(
+              platform ->
+                  inheritedBrandingEchoStripper.strip(
+                      sanitizedTenantDTO.getTheming(), existingTenantEntity, platform));
+    }
     // toEntity mutates existingTenantEntity, so capture the stored settings first
     var existingSettingsJson = existingTenantEntity.getSettings();
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
@@ -561,6 +596,54 @@ public class TenantServiceFacade {
     return tenantAdminControlsService.updateControls(tenantAdminControls);
   }
 
+  public TenantPermissionPolicies getTenantPermissionPolicies(Long tenantId) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    return toTenantPermissionPolicies(
+        tenantId,
+        tenantPermissionPolicyService.getResolvedPolicies(tenantId),
+        tenantPermissionPolicyService.getResolvedCaseHandoverPolicies(tenantId));
+  }
+
+  public TenantPermissionPolicies updateTenantPermissionPolicies(
+      Long tenantId, TenantPermissionPolicies request) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    if (request == null || !tenantId.equals(request.getTenantId())) {
+      throw new TenantBadRequestException("Path tenant id must match request tenant id");
+    }
+    tenantPermissionPolicyService.saveOverrides(
+        tenantId,
+        request.getPolicies().entrySet().stream()
+            .collect(
+                java.util.stream.Collectors.toUnmodifiableMap(
+                    Map.Entry::getKey,
+                    entry ->
+                        new com.vi.tenantservice.api.policy.PolicyValue<>(
+                            entry.getValue().getValue(),
+                            com.vi.tenantservice.api.policy.PermissionPolicyMode.valueOf(
+                                entry.getValue().getMode().name())))),
+        request.getCaseHandoverPolicies());
+    return getTenantPermissionPolicies(tenantId);
+  }
+
+  private TenantPermissionPolicies toTenantPermissionPolicies(
+      Long tenantId,
+      Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> policies,
+      com.vi.tenantservice.api.model.CaseHandoverPolicies caseHandoverPolicies) {
+    return new TenantPermissionPolicies(
+            tenantId,
+            policies.entrySet().stream()
+                .collect(
+                    java.util.stream.Collectors.toUnmodifiableMap(
+                        Map.Entry::getKey,
+                        entry ->
+                            new BooleanPermissionPolicy(
+                                    entry.getValue().value(),
+                                    com.vi.tenantservice.api.model.PermissionPolicyMode.valueOf(
+                                        entry.getValue().mode().name()))
+                                .inherited(entry.getValue().inherited()))))
+        .caseHandoverPolicies(caseHandoverPolicies);
+  }
+
   private void assertSuperAdmin() {
     if (!tenantFacadeAuthorisationService.isSuperAdmin()) {
       throw new AccessDeniedException("Only super admin can manage platform tenant admin controls");
@@ -634,9 +717,25 @@ public class TenantServiceFacade {
   public List<RestrictedTenantDTO> findRestrictedTenantsByIds(Set<Long> ids) {
     String lang = translationService.getCurrentLanguageContext();
     TenantAdminControls controls = tenantAdminControlsService.getControls();
-    return tenantService.findRestrictedTenantDataByIds(ids).stream()
-        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
-        .map(tenant -> withEffectivePermissions(tenant, controls))
+    Theming platformTheming = getPlatformTheming(lang);
+    List<RestrictedTenantDTO> tenants =
+        tenantService.findRestrictedTenantDataByIds(ids).stream()
+            .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
+            .toList();
+    Set<Long> resolvedTenantIds =
+        tenants.stream()
+            .map(RestrictedTenantDTO::getId)
+            .collect(java.util.stream.Collectors.toSet());
+    Map<Long, Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>>>
+        policiesByTenant = tenantPermissionPolicyService.getResolvedPolicies(resolvedTenantIds);
+    return tenants.stream()
+        .map(
+            dto ->
+                withEffectiveSettings(
+                    dto,
+                    controls,
+                    platformTheming,
+                    policiesByTenant.getOrDefault(dto.getId(), Map.of())))
         .toList();
   }
 
@@ -646,15 +745,64 @@ public class TenantServiceFacade {
    * controls themselves. See ADR-013 P4.
    */
   private RestrictedTenantDTO withEffectivePermissions(RestrictedTenantDTO dto) {
-    return withEffectivePermissions(dto, tenantAdminControlsService.getControls());
+    if (dto == null) {
+      return null;
+    }
+    String lang = translationService.getCurrentLanguageContext();
+    return withEffectiveSettings(
+        dto,
+        tenantAdminControlsService.getControls(),
+        getPlatformTheming(lang),
+        tenantPermissionPolicyService.getResolvedPolicies(dto.getId()));
   }
 
-  private RestrictedTenantDTO withEffectivePermissions(
-      RestrictedTenantDTO dto, TenantAdminControls controls) {
+  /**
+   * Applies every platform-level effect the public tenant payload owes the counselling app:
+   * resolved permission policies, the platform admin controls, and inherited platform branding.
+   *
+   * <p>Order matters. Policies are applied first and controls last. {@code applyTo} only writes
+   * where the platform is non-neutral (allowed==false forces off, enforced==true forces on) and
+   * leaves every other flag untouched, so applying it last keeps a platform prohibition
+   * authoritative over a per-tenant ENFORCED policy, while a neutral platform still lets the tenant
+   * policy stand. The reverse order would let a tenant policy re-enable a feature the platform
+   * forbids.
+   */
+  private RestrictedTenantDTO withEffectiveSettings(
+      RestrictedTenantDTO dto,
+      TenantAdminControls controls,
+      Theming platformTheming,
+      Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies) {
     if (dto != null) {
+      Map<String, BooleanPermissionPolicy> policies =
+          resolvedPolicies.entrySet().stream()
+              .collect(
+                  java.util.stream.Collectors.toUnmodifiableMap(
+                      Map.Entry::getKey,
+                      entry ->
+                          new BooleanPermissionPolicy(
+                                  entry.getValue().value(),
+                                  com.vi.tenantservice.api.model.PermissionPolicyMode.valueOf(
+                                      entry.getValue().mode().name()))
+                              .inherited(entry.getValue().inherited())));
+      dto.setPermissionPolicies(policies);
+      effectivePermissionSettingsApplier.applyPolicies(dto.getSettings(), policies);
       effectivePermissionSettingsApplier.applyTo(dto.getSettings(), controls);
+      if (dto.getId() == null || dto.getId() != TECHNICAL_TENANT_ID) {
+        dto.setTheming(effectiveThemingApplier.effective(dto.getTheming(), platformTheming));
+      }
     }
     return dto;
+  }
+
+  private Theming getPlatformTheming(String lang) {
+    return tenantService
+        .findRestrictedTenantDataById((long) TECHNICAL_TENANT_ID)
+        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
+        .orElse(null);
+  }
+
+  public Optional<RestrictedTenantDTO> getPlatformTenant() {
+    return findRestrictedTenantById((long) TECHNICAL_TENANT_ID);
   }
 
   public List<BasicTenantLicensingDTO> getAllTenants() {
@@ -680,10 +828,21 @@ public class TenantServiceFacade {
                 tenantConverter.toRestrictedTenantDTO(tenantBySubdomain.get(), lang)));
   }
 
+  /**
+   * Resolves the tenant the caller wants applied as an override, if any.
+   *
+   * <p>Id {@code 0} is this service's own sentinel for "platform scope, no tenant" ({@link
+   * #TECHNICAL_TENANT_ID}): it is guarded against deletion, excluded from every tenant listing, and
+   * has no row in the tenant table. A platform admin's token carries it in the {@code tenantId}
+   * claim, which the cookie resolver reads back verbatim. Letting it through here made the
+   * single-domain override path look up a tenant that cannot exist, so every authenticated platform
+   * admin got an error instead of the subdomain's public tenant data (#199).
+   */
   private Optional<Long> resolveFromRequestOrCookie(Long optionalTenantIdOverride) {
-    return optionalTenantIdOverride != null
-        ? Optional.of(optionalTenantIdOverride)
-        : tenantResolverService.tryResolveForNonAuthUsers();
+    return (optionalTenantIdOverride != null
+            ? Optional.of(optionalTenantIdOverride)
+            : tenantResolverService.tryResolveForNonAuthUsers())
+        .filter(tenantId -> tenantId != TECHNICAL_TENANT_ID);
   }
 
   public RestrictedTenantDTO getRestrictedTenantDataDeterminingTenantContext() {
@@ -703,7 +862,19 @@ public class TenantServiceFacade {
             .getValue();
     var mainTenant =
         tenantService.findRestrictedTenantDataBySubdomain(mainTenantSubdomain).orElseThrow();
-    Long actualTenantId = tenantResolverService.tryResolve().orElseThrow();
+    // No resolvable tenant context (anonymous caller without a tenantId cookie on a host whose
+    // subdomain matches no tenant -- e.g. a mail client fetching /tenant/public/branding/logo)
+    // is platform scope too: fold it into the technical-tenant sentinel below instead of
+    // throwing, so the caller gets the main tenant's public data.
+    Long actualTenantId = tenantResolverService.tryResolve().orElse((long) TECHNICAL_TENANT_ID);
+    if (actualTenantId == TECHNICAL_TENANT_ID) {
+      // Same sentinel hazard as resolveFromRequestOrCookie (#199): a caller in platform scope has
+      // no tenant to override with, and id 0 has no row, so orElseThrow would fail here instead of
+      // answering. The main tenant's own data is the correct answer for that caller.
+      return withEffectivePermissions(
+          tenantConverter.toRestrictedTenantDTO(
+              mainTenant, translationService.getCurrentLanguageContext()));
+    }
     TenantRestrictedData actualTenant =
         tenantService.findRestrictedTenantDataById(actualTenantId).orElseThrow();
     return withEffectivePermissions(
@@ -721,7 +892,7 @@ public class TenantServiceFacade {
     Optional<TenantRestrictedData> tenantToOverridePrivacy =
         tenantService.findRestrictedTenantDataById(resolvedTenantId);
     if (tenantToOverridePrivacy.isEmpty()) {
-      throw new BadRequestException("Tenant not found for id " + resolvedTenantId);
+      throw new TenantBadRequestException("Tenant not found for id " + resolvedTenantId);
     }
     return Optional.of(
         withEffectivePermissions(

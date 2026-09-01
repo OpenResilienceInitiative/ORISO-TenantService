@@ -3,9 +3,13 @@ package com.vi.tenantservice.api.service;
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
+import com.vi.tenantservice.api.model.TenantIdReservationStatus;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
+import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import com.vi.tenantservice.api.repository.TenantRepository;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -36,9 +40,20 @@ public class TenantDpaService {
       String content,
       LocalDateTime expiresAt) {}
 
+  /** Signature source of every token-based sign link (the forwarded path of the agreement). */
+  public static final String SOURCE_FORWARDED_EXTERNAL = "FORWARDED_EXTERNAL";
+
+  /**
+   * Placeholder organisation name for a sign link issued before the tenant registration finished.
+   * Same wording the DPA forward e-mail uses, so the signer sees one consistent phrasing.
+   */
+  static final String UNREGISTERED_TENANT_NAME = "Ihrer Organisation";
+
   private final TenantDpaSignatureRepository signatureRepository;
   private final TenantDpaVersionRepository versionRepository;
   private final TenantRepository tenantRepository;
+  private final TenantIdReservationRepository tenantIdReservationRepository;
+  private final DpaSignatureOwnership dpaSignatureOwnership;
   private final GoverningDpaResolver governingDpaResolver;
 
   /** Persists a SIGNED confirmation of the given DPA version for a tenant. */
@@ -98,13 +113,22 @@ public class TenantDpaService {
     if (dpaVersion == null) {
       return false;
     }
-    return signatureRepository.findByTenantIdAndStatus(tenantId, DpaSignatureStatus.SIGNED).stream()
+    return dpaSignatureOwnership
+        .filterCurrentOccupant(
+            tenantId,
+            signatureRepository.findByTenantIdAndStatus(tenantId, DpaSignatureStatus.SIGNED))
+        .stream()
         .anyMatch(signature -> dpaVersion.equals(signature.getDpaVersion()));
   }
 
-  /** All confirmations for a tenant (for the platform-admin list of confirmed AVVs). */
+  /**
+   * All confirmations for a tenant (for the platform-admin list of confirmed AVVs). Filtered to the
+   * current occupant of the tenant ID: an orphan from a previous occupant of the same ID would
+   * otherwise expose THAT organisation's signer PII to this tenant's admins (#179).
+   */
   public List<TenantDpaSignatureEntity> getSignatures(Long tenantId) {
-    return signatureRepository.findByTenantId(tenantId);
+    return dpaSignatureOwnership.filterCurrentOccupant(
+        tenantId, signatureRepository.findByTenantId(tenantId));
   }
 
   /** Appends a published-version snapshot (called on every publish) for the "look back" history. */
@@ -126,8 +150,30 @@ public class TenantDpaService {
   /**
    * Creates a PENDING confirmation carrying a single-use, expiring sign token and returns the RAW
    * token (caller builds the public sign link from it). Only the token's hash is persisted.
+   *
+   * <p>The forwarder identity is stamped HERE (ORISO-TenantService#179), not on confirmation: the
+   * signing client must never be able to claim who created the link. {@code forwardedByUserId} is
+   * the authenticated admin who forwarded, or {@code null} when the link was created from the
+   * pre-account onboarding wizard.
    */
-  public String createSignInvite(Long tenantId, LocalDateTime dpaVersion, Duration ttl) {
+  public String createSignInvite(
+      Long tenantId, LocalDateTime dpaVersion, Duration ttl, String forwardedByUserId) {
+    return createSignInvite(tenantId, dpaVersion, ttl, forwardedByUserId, null);
+  }
+
+  /**
+   * Same, for the PUBLIC onboarding forward: the raw tenant-ID reservation token that authorised
+   * the call is hashed and stored with the link, binding it to that specific RESERVATION. A tenant
+   * ID released and reserved again keeps its number but gets a new token, so the old link stops
+   * resolving rather than recording a signature for the next holder of the ID (#179). Only the hash
+   * is persisted.
+   */
+  public String createSignInvite(
+      Long tenantId,
+      LocalDateTime dpaVersion,
+      Duration ttl,
+      String forwardedByUserId,
+      String reservationToken) {
     var rawToken = DpaSignToken.generate();
     var now = LocalDateTime.now();
     signatureRepository.save(
@@ -135,11 +181,30 @@ public class TenantDpaService {
             .tenantId(tenantId)
             .dpaVersion(dpaVersion)
             .status(DpaSignatureStatus.PENDING)
+            .forwardedByUserId(forwardedByUserId)
+            .source(SOURCE_FORWARDED_EXTERNAL)
             .tokenHash(DpaSignToken.hash(rawToken))
+            .reservationTokenHash(
+                reservationToken == null ? null : DpaSignToken.hash(reservationToken))
             .tokenExpiresAt(now.plus(ttl))
             .createDate(now)
             .build());
     return rawToken;
+  }
+
+  /**
+   * Outstanding, unexpired links minted from the given reservation — the throttle input for the
+   * public forward. Counting per RESERVATION rather than per tenant id matters once links are
+   * bound: after a release and a fresh reservation of the same id, the previous links are already
+   * unusable, so charging them to the new onboarding would 429 its very first forward.
+   */
+  public long countOutstandingSignInvites(Long tenantId, String reservationToken) {
+    return signatureRepository
+        .countByTenantIdAndReservationTokenHashAndStatusAndTokenExpiresAtAfter(
+            tenantId,
+            DpaSignToken.hash(reservationToken),
+            DpaSignatureStatus.PENDING,
+            LocalDateTime.now());
   }
 
   /**
@@ -160,22 +225,76 @@ public class TenantDpaService {
                 () ->
                     new InvalidDpaSignTokenException(
                         "Published DPA version for sign token was not found"));
-    var tenant =
-        tenantRepository
-            .findById(pending.getTenantId())
-            .orElseThrow(
-                () -> new InvalidDpaSignTokenException("Tenant for sign token was not found"));
+    var tenantName = requireLiveTenantContext(pending);
     return new DpaSignPreview(
         pending.getTenantId(),
-        tenant.getName(),
+        tenantName,
         pending.getDpaVersion(),
         publishedVersion.getContent(),
         pending.getTokenExpiresAt());
   }
 
   /**
+   * Asserts the signature still has a live tenant context and returns the name to display. A sign
+   * link is only honoured while its target actually exists (ORISO-TenantService#179):
+   *
+   * <ul>
+   *   <li>the tenant row exists — the normal case once the registration completed;
+   *   <li>no tenant yet, but the onboarding reservation is still RESERVED — the pre-account wizard
+   *       case. The organisation has no stored name until registration completes, so the neutral
+   *       placeholder the forward e-mail already uses stands in ({@code tenantName} is a non-null
+   *       part of the contract; showing the real organisation is ORISO-Frontend#879).
+   * </ul>
+   *
+   * <p>Everything else fails closed with the same "invalid token" answer, which is what stops a
+   * link outliving its target now that the tenant foreign key is gone: a RELEASED reservation
+   * deletes the ledger row, and a DELETED tenant leaves an ASSIGNED row behind — in both cases the
+   * still-PENDING signature row survives, and confirming it would write signer PII (and, after an
+   * id reuse, a signature that makes an unrelated new tenant look VALID).
+   */
+  private String requireLiveTenantContext(TenantDpaSignatureEntity pending) {
+    var tenantId = pending.getTenantId();
+    var reservation = tenantIdReservationRepository.findById(tenantId);
+    if (pending.getReservationTokenHash() != null) {
+      // Link minted from the public onboarding forward: it belongs to THAT reservation, not to the
+      // tenant-ID slot. The ledger keeps the same token when registration consumes the reservation
+      // (RESERVED -> ASSIGNED), so a legitimate link keeps working across registration; a release
+      // plus a fresh reservation of the same id mints a NEW token, so the old link dies here
+      // instead of recording a signature for whoever holds the id next.
+      var currentHash = reservation.map(row -> DpaSignToken.hash(row.getToken())).orElse(null);
+      if (currentHash == null
+          || !constantTimeEquals(currentHash, pending.getReservationTokenHash())) {
+        throw new InvalidDpaSignTokenException(
+            "Sign token no longer matches the reservation it was issued for");
+      }
+    }
+    var tenant = tenantRepository.findById(tenantId);
+    if (tenant.isPresent()) {
+      return tenant.get().getName();
+    }
+    boolean stillReserved =
+        reservation
+            .filter(row -> row.getStatus() == TenantIdReservationStatus.RESERVED)
+            .isPresent();
+    if (stillReserved) {
+      return UNREGISTERED_TENANT_NAME;
+    }
+    throw new InvalidDpaSignTokenException("Tenant for sign token no longer exists");
+  }
+
+  private static boolean constantTimeEquals(String left, String right) {
+    return MessageDigest.isEqual(
+        left.getBytes(StandardCharsets.UTF_8), right.getBytes(StandardCharsets.UTF_8));
+  }
+
+  /**
    * Confirms a DPA via its single-use sign token: looks up the PENDING row by token hash, validates
-   * it is not expired, records the signer, marks it SIGNED, and consumes the token.
+   * it is not expired, records the signer, marks it SIGNED, and consumes the token. The forwarder
+   * identity ({@code forwardedByUserId}, {@code source}) is NOT taken from the caller — it was
+   * stamped when the link was created and stays untouched (ORISO-TenantService#179).
+   *
+   * <p>The moment the signature is recorded, every OTHER outstanding sign link of the tenant is
+   * invalidated in the same transaction — a signed tenant has no live links left.
    *
    * @throws InvalidDpaSignTokenException if the token is unknown, already used, or expired.
    */
@@ -186,11 +305,21 @@ public class TenantDpaService {
       String signerPosition,
       String signerEmail,
       String signerOrganisation,
-      String forwardedByUserId,
-      String source,
       boolean signerIsMember,
       String language) {
     var pending = requireValidPendingSignature(rawToken);
+    // The token alone is not enough: the tenant it points at must still be live (existing, or a
+    // still-RESERVED onboarding id). Without this, a released reservation or a deleted tenant
+    // would leave a confirmable orphan behind — the tenant foreign key that used to prevent that
+    // was dropped so links could be minted for reserved ids (#179).
+    requireLiveTenantContext(pending);
+    // Take ALL of the tenant's outstanding links in a stable order before touching any of them.
+    // Consuming one row and then invalidating the rest means two confirmations with distinct
+    // tokens for one tenant each hold what the other needs, and InnoDB resolves that by rolling
+    // one back — reporting a committed, legally valid signature to its signer as a 500. Ordering
+    // the acquisition removes the cycle: the second confirmation waits, then finds its own row no
+    // longer PENDING and gets the defined "already used" answer (410).
+    signatureRepository.lockOutstandingByTenantId(pending.getTenantId());
     var tokenHash = DpaSignToken.hash(rawToken);
     var now = LocalDateTime.now();
     // Atomic single-use: only the still-PENDING row is updated, so a concurrent double-submit
@@ -202,28 +331,50 @@ public class TenantDpaService {
             signerPosition,
             signerEmail,
             signerOrganisation,
-            forwardedByUserId,
-            normalizeSource(source),
             signerIsMember,
             language,
+            SOURCE_FORWARDED_EXTERNAL,
             now);
     if (consumed == 0) {
       throw new InvalidDpaSignTokenException("Sign token has already been used");
     }
+    // ORISO-TenantService#179: kill every other outstanding link of this tenant (the consumed row
+    // is already SIGNED, so the conditional bulk update cannot touch it).
+    signatureRepository.invalidateOutstandingByTenantId(pending.getTenantId());
     // The bulk update detached the context (clearAutomatically); build the confirmed view to
-    // return.
+    // return. Forwarder identity and source keep the values stamped at link creation; legacy
+    // pending rows without a stamped source read as the forwarded path they are.
     pending.setSignerName(signerName);
     pending.setSignerPosition(signerPosition);
     pending.setSignerEmail(signerEmail);
     pending.setSignerOrganisation(signerOrganisation);
-    pending.setForwardedByUserId(forwardedByUserId);
-    pending.setSource(normalizeSource(source));
+    pending.setSource(normalizeSource(pending.getSource()));
     pending.setSignerIsMember(signerIsMember);
     pending.setLanguage(language);
     pending.setStatus(DpaSignatureStatus.SIGNED);
     pending.setSignedAt(now);
     pending.setTokenHash(null);
     return pending;
+  }
+
+  /**
+   * Invalidates every outstanding sign link of the tenant. Called whenever a signature is recorded
+   * through a NON-token path (in-app admin signing, onboarding acceptance) so that no live link
+   * survives any successful signature (ORISO-TenantService#179).
+   */
+  @Transactional
+  public void invalidateOutstandingSignInvites(Long tenantId) {
+    signatureRepository.invalidateOutstandingByTenantId(tenantId);
+  }
+
+  /**
+   * Removes every signature row of a deleted tenant — the application-level replacement for the
+   * database cascade that had to go when sign links for still-unregistered (reserved) tenants were
+   * introduced (#179, changeset 0030).
+   */
+  @Transactional
+  public void deleteSignaturesForTenant(Long tenantId) {
+    signatureRepository.deleteByTenantId(tenantId);
   }
 
   private TenantDpaSignatureEntity requireValidPendingSignature(String rawToken) {
@@ -243,6 +394,6 @@ public class TenantDpaService {
   }
 
   private static String normalizeSource(String source) {
-    return source == null || source.isBlank() ? "PUBLIC_SIGN_LINK" : source;
+    return source == null || source.isBlank() ? SOURCE_FORWARDED_EXTERNAL : source;
   }
 }

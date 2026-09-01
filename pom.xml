@@ -31,12 +31,12 @@
         <keycloak.version>17.0.0</keycloak.version>
         <swagger.version>3.0.0</swagger.version>
         <h2.version>2.1.214</h2.version>
-        <spring-security.version>7.0.1</spring-security.version>
+        <!-- Same version as ORISO-UserService, which already uses this pin. -->
+        <testcontainers.version>1.21.4</testcontainers.version>
         <owasp.java.html.sanitizer>20211018.1</owasp.java.html.sanitizer>
         <liquibase.maven.plugin.version>4.23.2</liquibase.maven.plugin.version>
         <openapi.generator.maven.version>7.17.0</openapi.generator.maven.version>
         <jackson.databind.nullable.version>0.2.3</jackson.databind.nullable.version>
-        <jakarta.ws.rs-api.version>3.1.0</jakarta.ws.rs-api.version>
         <springfox.boot.starter.version>3.0.0</springfox.boot.starter.version>
         <lombok.version>1.18.38</lombok.version>
         <commons-lang3.version>3.12.0</commons-lang3.version>
@@ -58,17 +58,14 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-web</artifactId>
-            <version>${spring-security.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-config</artifactId>
-            <version>${spring-security.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-core</artifactId>
-            <version>${spring-security.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -206,6 +203,21 @@
             <version>${h2.version}</version>
         </dependency>
 
+        <!-- Real MariaDB for LiquibaseSchemaDriftIT. The rest of the suite runs on H2 MODE=MySQL,
+             which cannot detect schema drift against the engine we actually deploy. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>mariadb</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-freemarker</artifactId>
@@ -285,12 +297,6 @@
         </dependency>
 
         <dependency>
-            <groupId>jakarta.ws.rs</groupId>
-            <artifactId>jakarta.ws.rs-api</artifactId>
-            <version>${jakarta.ws.rs-api.version}</version>
-        </dependency>
-
-        <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
         </dependency>
@@ -313,12 +319,6 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-collections4</artifactId>
             <version>${commons-collections4.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.github.jknack</groupId>
-            <artifactId>handlebars</artifactId>
-            <version>4.3.1</version>
         </dependency>
 
         <!-- log dependencies -->
@@ -564,9 +564,18 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <skipTests>false</skipTests>
-                    <excludedGroups>SkipOnCI</excludedGroups>
                 </configuration>
                 <executions>
+                    <!-- Surefire's built-in `default-test` execution is disabled here. Left
+                         enabled it inherits the plugin-level configuration together with
+                         surefire's default includes, selects the same `*Test` classes as
+                         `unit-tests` below, and runs the entire unit suite a second time on
+                         every build. The two named executions below own the unit/IT split
+                         explicitly, each with its own `<includes>`. -->
+                    <execution>
+                        <id>default-test</id>
+                        <phase>none</phase>
+                    </execution>
                     <execution>
                         <id>unit-tests</id>
                         <phase>test</phase>
