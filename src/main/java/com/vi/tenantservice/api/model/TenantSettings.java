@@ -24,6 +24,30 @@ public class TenantSettings {
   Boolean featureTeamDiscussionEnabled;
   Boolean featureToolsEnabled;
   Boolean featureAnonymousChatEnabled;
+
+  /**
+   * ORISO-Admin#602 switch 1 — may an advice seeker <b>type</b> their own <b>Anzeigename</b>
+   * ({@code displayName}), or only re-roll the generated one?
+   *
+   * <p>Never the <b>Anmeldename</b> ({@code userName}): that is immutable at every layer and no
+   * setting can change it. Forbidding free entry raises anonymity without patronising anyone,
+   * because a self-typed nickname is the most common way anonymity is lost — people reuse a handle
+   * that is searchable elsewhere. The dice can be re-rolled without limit.
+   *
+   * <p>Effective at the moment of assignment. Consumed by ORISO-Frontend#259 (registration) and
+   * ORISO-Frontend#825 (post-dispatch Baustein and profile).
+   */
+  Boolean featureDisplayNameEditable;
+
+  /**
+   * ORISO-Admin#602 switch 2 — may an advice seeker leave an e-mail address at all?
+   *
+   * <p>Switching it off must silence <b>both</b> the in-chat Erstantwort Baustein and the profile
+   * e-mail field. Silencing only one produces the contradiction this switch exists to remove: the
+   * chat saying nothing while the profile still invites input. U25 is the reference case.
+   */
+  Boolean featureAskerEmailEnabled;
+
   Boolean featureCallsEnabled;
   Boolean featureSupervisionEnabled;
   Boolean featureSupervisionAnonymousChatsEnabled;
@@ -109,6 +133,9 @@ public class TenantSettings {
               Map.entry("featureTeamDiscussionEnabled", false),
               Map.entry("featureToolsEnabled", false),
               Map.entry("featureAnonymousChatEnabled", true),
+              // ORISO-Admin#602: opt-out, so every existing tenant keeps today's behaviour.
+              Map.entry("featureDisplayNameEditable", true),
+              Map.entry("featureAskerEmailEnabled", true),
               Map.entry("featureCallsEnabled", true),
               Map.entry("featureSupervisionEnabled", true),
               Map.entry("featureSupervisionAnonymousChatsEnabled", true),
@@ -284,6 +311,12 @@ public class TenantSettings {
     if (featureSystemNotificationEmailsEnabled == null) {
       featureSystemNotificationEmailsEnabled =
           BOOLEAN_FIELD_DEFAULTS.get("featureSystemNotificationEmailsEnabled");
+    }
+    if (featureDisplayNameEditable == null) {
+      featureDisplayNameEditable = BOOLEAN_FIELD_DEFAULTS.get("featureDisplayNameEditable");
+    }
+    if (featureAskerEmailEnabled == null) {
+      featureAskerEmailEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailEnabled");
     }
     applyMediaDefaults();
     if (isVideoCallAllowed == null) {
