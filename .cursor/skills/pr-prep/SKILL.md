@@ -10,7 +10,7 @@ Create `06-pr-summary.md` in the current task folder, then STOP for user confirm
 Contents:
 
 - **Summary**: what changed and why, 2–4 sentences
-- **Files changed**: from `git diff --stat origin/dev...HEAD`
+- **Files changed**: working tree vs `origin/dev` (`git diff --stat origin/dev` plus `git status --short` for staged and untracked paths)
 - **Test evidence**: link to `04-test-evidence.md`, plus the headline results inline
 - **Screenshots**: embed if UI changed
 - **Risks / follow-ups**: anything reviewers should watch, deferred work

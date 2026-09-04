@@ -10,7 +10,7 @@ Run the whole loop in one turn. Do not stop between iterations to ask "shall I c
 ## Setup (once, before iteration 1)
 
 1. Normalize the goal with the `problem-intake` skill → `00-problem-brief.md`. The acceptance criteria in that brief are the loop's exit test. If the goal is one sentence, write criteria yourself from context; ask the user only for genuinely blocking unknowns.
-2. If non-trivial (more than one file, new behavior, UI, security, or unclear requirements): run the `planner` subagent → `01-spike.md` and `02-implementation-plan.md` (see `spike-doc` and `task-implementation-doc` skills).
+2. If non-trivial (more than one file, new behavior, UI, security, or unclear requirements): run the `planner` subagent (readonly). The parent workflow must write the returned `01-spike.md` and `02-implementation-plan.md` into the task folder before verification.
 3. Git: check `git status`; confirm with user if the tree is dirty. Branch from `dev` as `cursor/<ticket-or-feature>/<short-slug>`. Never implement on `dev`.
 4. Create `03-progress-log.md` with the iteration table (template below).
 
@@ -30,9 +30,8 @@ Repeat THINK → IMPLEMENT → VERIFY → DECIDE.
 
 **VERIFY**
 
-- Narrowest check first: the specific vitest file(s) for touched code, then `npm run lint:scripts` / `npm run lint:style` on style changes, `npm run build` only when imports/config/types changed broadly.
-- For UI changes, use Browser verification and save screenshots to the task folder.
-- Never paste long logs into the conversation; summarize failures in the progress log.
+- Run the current plan subtask’s `Verify with` command first. Default in this repo: `./mvnw -B test`.
+- Never paste long logs into the conversation; summarize failures in the progress log. Redact secrets, tokens, credentials, PII, and raw payloads before writing `03-progress-log.md`.
 
 **DECIDE**
 
@@ -57,9 +56,9 @@ One short block per iteration in `03-progress-log.md`:
 ## Finish
 
 1. Run the `regression-check` skill on touched areas → `04-test-evidence.md`.
-2. If auth, input handling, storage, network, or privacy boundaries were touched: run the `security-auditor` subagent → `05-security-review.md`.
+2. If auth, input handling, storage, network, or privacy boundaries were touched: run the `security-auditor` subagent (readonly). The parent must persist the returned text as `05-security-review.md`.
 3. Run the `pr-prep` skill → `06-pr-summary.md`.
-4. Record any reusable lesson in `.learnings/LEARNINGS.md` (one concept per entry, keep short).
+4. Record any reusable lesson in `.learnings/LEARNINGS.md` (one concept per entry, keep short). Redact secrets, tokens, credentials, PII, and raw payloads.
 5. STOP for user confirmation before opening or updating a PR.
 
 ## Artifacts

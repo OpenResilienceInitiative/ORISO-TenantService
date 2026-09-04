@@ -22,4 +22,4 @@ Rules:
 - Keep the whole brief under ~300 words.
 - If requirements are sufficient, do not ask redundant questions; proceed.
 - If a question is genuinely blocking, ask it before planning, not mid-loop.
-- Everything else (findings, options, risks) belongs in `01-spike.md`, not here.
+- Findings, options, and risks go in `01-spike.md` when a spike is created; otherwise a short section in `00-problem-brief.md`.

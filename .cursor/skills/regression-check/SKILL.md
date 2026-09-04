@@ -9,11 +9,9 @@ Run after the loop exits green, before PR prep. Record results in `04-test-evide
 
 Order (stop escalating when confidence is sufficient):
 
-1. Targeted vitest files for every touched module: `npx vitest run <files>`
-2. `npm run lint:scripts` and, if styles changed, `npm run lint:style`
-3. `npm run test:unit` if changes span multiple modules
-4. `npm run build` if imports, types, or config changed
-5. UI changes: Browser check of the affected screens; save screenshots into the task folder; verify keyboard/focus behavior per AGENTS.md
+1. `./mvnw -B test` for touched modules
+2. `./mvnw -B package -DskipTests` for PR-bound work
+3. Spotless/checkstyle only when this repo’s `pom.xml` defines them and you touched Java sources
 
 Evidence format in `04-test-evidence.md` — one line per check:
 
