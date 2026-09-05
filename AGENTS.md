@@ -20,7 +20,7 @@ CI: `./mvnw -B test` then `./mvnw -B package -DskipTests` on Java 21.
 
 ## Context
 
-- Integration branch: `pre-dev` when used for ORISO feature work.
+- Integration branch: `dev` when used for ORISO feature work.
 - Tenant model ops guide: `../Deployment/guides/tenant/TENANT_AND_MULTITENANCY_GUIDE.md`.
 - Skim `.understand-anything/` before non-trivial changes; README Java version may lag `pom.xml` — trust the POM.
 - Changing tenant resolution affects Admin and other services — call out cross-repo impact.
@@ -43,7 +43,7 @@ delivery rules"). Summary:
   requested reviewers is not open for review.
 - **"Pre-Dev is free" means the server, not the branch.** Deploying images,
   mutating config or data and running E2E on the Pre-Dev server needs no
-  approval; the `pre-dev` *branch* is review-gated like any shared branch.
+  approval; the `dev` *branch* is review-gated like any shared branch.
 - **Restore what you borrowed.** Record image reference *and* `imagePullPolicy`
   before swapping anything on Pre-Dev, put both back before reporting done, and
   say so in the report.
