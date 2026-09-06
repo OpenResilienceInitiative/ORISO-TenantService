@@ -866,6 +866,49 @@ paths:
           description: No valid image configured
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenant/public/branding/{tenantId}/{asset}:
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Gets a tenant branding image without cookies [Authorization: no-auth]'
+      description: >-
+        Returns only stored effective logo or favicon bytes for the specified tenant,
+        including inherited platform branding. The URL identifies the tenant so mail
+        clients and image proxies cannot accidentally resolve another tenant's image.
+        Unknown tenants or unsupported assets return 404; no external image is fetched.
+      operationId: getPublicTenantBrandingAsset
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: asset
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [logo, favicon]
+      responses:
+        200:
+          description: Effective tenant branding image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/x-icon:
+              schema:
+                type: string
+                format: binary
+        404:
+          description: Tenant or valid branding image not found
   /tenant/public/dpa/confirm/{token}:
     summary: 'Public confirmation (signature) of a tenant Data Processing Agreement'
     get:
