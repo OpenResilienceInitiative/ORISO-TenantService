@@ -21,7 +21,7 @@ class SystemEmailDeliveryServiceTest {
   final SmtpPasswordEncryptionService cipher = mock(SmtpPasswordEncryptionService.class);
   final TenantSystemMailTransport transport = mock(TenantSystemMailTransport.class);
   final SystemEmailDeliveryService service =
-      new SystemEmailDeliveryService(tenants, mapper, cipher, transport);
+      new SystemEmailDeliveryService(tenants, cipher, transport);
   final SystemEmailDeliveryRequest request =
       new SystemEmailDeliveryRequest(
           SystemEmailDeliveryRequest.Purpose.EMAIL_ADDRESS_CHANGED,
@@ -78,6 +78,31 @@ class SystemEmailDeliveryServiceTest {
     assertThat(service.deliver(40, request)).isFalse();
     verify(transport, times(1)).send(any(), anyString(), any());
     verify(cipher, times(1)).decrypt(anyString());
+  }
+
+  @Test
+  void unknownPersistedSettingsDoNotDisableExistingTransport() throws Exception {
+    var tenant = tenant(true, true);
+    var settings =
+        (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(tenant.getSettings());
+    settings.put("futureUnrelatedSetting", true);
+    tenant.setSettings(mapper.writeValueAsString(settings));
+    when(tenants.findById(40L)).thenReturn(Optional.of(tenant));
+    when(cipher.decrypt(anyString())).thenReturn("test-password");
+    assertThat(service.deliver(40, request)).isTrue();
+    verify(transport).send(any(), eq("test-password"), same(request));
+  }
+
+  @Test
+  void malformedPersistedSettingsAreSanitizedAndNeverSent() {
+    when(tenants.findById(40L))
+        .thenReturn(
+            Optional.of(TenantEntity.builder().id(40L).settings("{sensitive-fixture").build()));
+    assertThatThrownBy(() -> service.deliver(40, request))
+        .hasMessageContaining("TENANT_SMTP_INVALID")
+        .hasMessageNotContaining("sensitive-fixture")
+        .hasNoCause();
+    verifyNoInteractions(cipher, transport);
   }
 
   @Test

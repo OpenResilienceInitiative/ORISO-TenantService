@@ -1,9 +1,9 @@
 package com.vi.tenantservice.api.service.systememail;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
+import com.vi.tenantservice.api.util.JsonConverter;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.HttpStatus;
@@ -14,7 +14,6 @@ import org.springframework.web.server.ResponseStatusException;
 @RequiredArgsConstructor
 public class SystemEmailDeliveryService {
   private final TenantRepository tenants;
-  private final ObjectMapper mapper;
   private final SmtpPasswordEncryptionService cipher;
   private final TenantSystemMailTransport transport;
 
@@ -28,9 +27,7 @@ public class SystemEmailDeliveryService {
     TenantSettings settings;
     try {
       settings =
-          tenant.getSettings() == null
-              ? null
-              : mapper.readValue(tenant.getSettings(), TenantSettings.class);
+          tenant.getSettings() == null ? null : JsonConverter.convertFromJson(tenant.getSettings());
     } catch (Exception exception) {
       throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_INVALID");
     }
