@@ -1,0 +1,80 @@
+openapi: 3.0.1
+info:
+  title: Tenant-owned internal system email delivery
+  version: 1.0.0
+  description: >-
+    Manually implemented bounded internal contract. Kept separate from TenantApi generation
+    so the existing TenantController does not inherit a second handler for this route.
+paths:
+  /tenant/{tenantId}/internal/system-email-deliveries:
+    post:
+      tags:
+        - internal-system-email-controller
+      operationId: deliverTenantSystemEmail
+      summary: Deliver one existing system notification using tenant-owned SMTP
+      description: >-
+        Requires a validated JWT with technical role and configured exact subject/client pins.
+        Pins default empty (deny all). No SMTP override or secret response. No automatic retries
+        or idempotency guarantee; correlationId is diagnostic only. Tenant flags are read fresh.
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalSystemEmailDeliveryDTO'
+      responses:
+        '200':
+          description: SMTP transport completed; not a mailbox receipt guarantee
+        '204':
+          description: Tenant system email or SMTP is disabled; nothing sent
+        '400':
+          description: Invalid bounded request, recipient, purpose or tenant ID
+        '401':
+          description: Invalid or missing signed authentication
+        '403':
+          description: Caller does not match configured technical identity
+        '404':
+          description: Explicit tenant does not exist
+        '422':
+          description: Tenant SMTP configuration or decryption invalid
+        '502':
+          description: Delivery unconfirmed; do not automatically retry
+components:
+  schemas:
+    InternalSystemEmailDeliveryDTO:
+      type: object
+      additionalProperties: false
+      required: [purpose, recipient, subject, html, text, correlationId]
+      properties:
+        purpose:
+          type: string
+          enum: [EMAIL_ADDRESS_CHANGED, SUPERVISOR_ADDED, SUPERVISOR_REMOVED]
+        recipient:
+          type: string
+          format: email
+          maxLength: 254
+          description: Exactly one mailbox, no recipient list or group
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: No CR or LF
+        html:
+          type: string
+          minLength: 1
+          maxLength: 262144
+        text:
+          type: string
+          minLength: 1
+          maxLength: 131072
+        correlationId:
+          type: string
+          format: uuid

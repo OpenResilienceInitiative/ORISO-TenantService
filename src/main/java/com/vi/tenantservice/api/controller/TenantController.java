@@ -33,6 +33,7 @@ import com.vi.tenantservice.api.model.TranslationApiKeysDTO;
 import com.vi.tenantservice.api.model.TranslationErrorDTO;
 import com.vi.tenantservice.api.model.TranslationRequestDTO;
 import com.vi.tenantservice.api.model.TranslationResponseDTO;
+import com.vi.tenantservice.api.service.BrandingAssetDecoder.DecodedAsset;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.DpaSignedNoticeHintService;
 import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
@@ -525,8 +526,16 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   public ResponseEntity<Resource> getPublicBrandingAsset(String asset) {
-    return publicBrandingAssetService
-        .find(asset)
+    return brandingAssetResponse(publicBrandingAssetService.find(asset));
+  }
+
+  @Override
+  public ResponseEntity<Resource> getPublicTenantBrandingAsset(Long tenantId, String asset) {
+    return brandingAssetResponse(publicBrandingAssetService.find(tenantId, asset));
+  }
+
+  private ResponseEntity<Resource> brandingAssetResponse(Optional<DecodedAsset> asset) {
+    return asset
         .map(
             image ->
                 ResponseEntity.ok()

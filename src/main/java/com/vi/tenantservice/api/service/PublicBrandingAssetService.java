@@ -25,6 +25,18 @@ public class PublicBrandingAssetService {
         .flatMap(brandingAssetDecoder::decode);
   }
 
+  /** A mail image URL must identify its tenant without a browser cookie or session. */
+  public Optional<DecodedAsset> find(Long tenantId, String asset) {
+    if (tenantId == null || tenantId < 0 || !("logo".equals(asset) || "favicon".equals(asset))) {
+      return Optional.empty();
+    }
+    return tenantServiceFacade
+        .findRestrictedTenantById(tenantId)
+        .map(RestrictedTenantDTO::getTheming)
+        .map(theming -> select(theming, asset))
+        .flatMap(brandingAssetDecoder::decode);
+  }
+
   private Optional<RestrictedTenantDTO> resolveTenant() {
     try {
       return Optional.of(tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext());
