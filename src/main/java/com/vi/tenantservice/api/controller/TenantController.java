@@ -534,8 +534,7 @@ public class TenantController implements TenantApi, TenantadminApi {
     return brandingAssetResponse(publicBrandingAssetService.find(tenantId, asset));
   }
 
-  private ResponseEntity<Resource> brandingAssetResponse(
-      Optional<DecodedAsset> asset) {
+  private ResponseEntity<Resource> brandingAssetResponse(Optional<DecodedAsset> asset) {
     return asset
         .map(
             image ->

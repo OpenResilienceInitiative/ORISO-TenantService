@@ -3,8 +3,8 @@ package com.vi.tenantservice.api.controller;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vi.tenantservice.api.facade.PlatformDpiaMasterDataFacade;
@@ -93,14 +93,19 @@ class TenantControllerBrandingAssetTest {
     when(publicBrandingAssetService.find(8L, "logo"))
         .thenReturn(Optional.of(new DecodedAsset("image/png", "tenant-eight".getBytes(UTF_8))));
     var etag =
-        mockMvc.perform(get("/tenant/public/branding/7/logo"))
+        mockMvc
+            .perform(get("/tenant/public/branding/7/logo"))
             .andExpect(status().isOk())
             .andExpect(content().bytes("tenant-seven".getBytes(UTF_8)))
             .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "max-age=300, public"))
-            .andReturn().getResponse().getHeader(HttpHeaders.ETAG);
-    mockMvc.perform(get("/tenant/public/branding/7/logo").header(HttpHeaders.IF_NONE_MATCH, etag))
+            .andReturn()
+            .getResponse()
+            .getHeader(HttpHeaders.ETAG);
+    mockMvc
+        .perform(get("/tenant/public/branding/7/logo").header(HttpHeaders.IF_NONE_MATCH, etag))
         .andExpect(status().isNotModified());
-    mockMvc.perform(get("/tenant/public/branding/8/logo").header(HttpHeaders.IF_NONE_MATCH, etag))
+    mockMvc
+        .perform(get("/tenant/public/branding/8/logo").header(HttpHeaders.IF_NONE_MATCH, etag))
         .andExpect(status().isOk())
         .andExpect(content().bytes("tenant-eight".getBytes(UTF_8)));
   }
