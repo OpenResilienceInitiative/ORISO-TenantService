@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
+import com.vi.tenantservice.api.model.ChatRecoveryMode;
+import com.vi.tenantservice.api.model.ChatRecoverySettings;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminControls;
@@ -25,8 +27,10 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
@@ -60,11 +64,56 @@ public class TenantAdminControlsService {
       // the DTO never carries the translation API keys - carry the stored values over verbatim,
       // still encrypted, so this path never decrypts and re-encrypts them for nothing
       controlsSettings.setTranslationApiKeys(existingSettings.getTranslationApiKeys());
+      // Only the versioned recovery subresource can change creation defaults.
+      controlsSettings.setChatRecoverySettings(existingSettings.getChatRecoverySettings());
     }
     hydrateCanonicalPolicies(controlsSettings);
     saveControlsSettings(
         controlsSettings, existingEntity.orElseGet(TenantAdminControlsEntity::new));
     return tenantConverter.toTenantAdminControls(controlsSettings);
+  }
+
+  public ChatRecoverySettings getChatRecoverySettings() {
+    return recoverySettings(getControlsSettings());
+  }
+
+  @Transactional
+  public ChatRecoverySettings updateChatRecoverySettings(ChatRecoverySettings request) {
+    if (request == null
+        || request.getAsker() == null
+        || request.getConsultant() == null
+        || request.getRevision() == null
+        || request.getRevision() < 0) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Both recovery modes and a nonnegative revision are required");
+    }
+    Optional<TenantAdminControlsEntity> existing = findExistingControls();
+    TenantAdminControlsSettings settings =
+        existing
+            .map(entity -> parseControlsSettings(entity.getControls()))
+            .orElseGet(this::createDefaultControlsSettings);
+    ChatRecoverySettings current = recoverySettings(settings);
+    if (!current.getRevision().equals(request.getRevision())) {
+      throw new SettingsUpdateConflictException(null);
+    }
+    if (current.getAsker() == request.getAsker()
+        && current.getConsultant() == request.getConsultant()) {
+      return current;
+    }
+    ChatRecoverySettings updated =
+        new ChatRecoverySettings(
+            request.getAsker(), request.getConsultant(), Math.addExact(current.getRevision(), 1L));
+    settings.setChatRecoverySettings(updated);
+    saveControlsSettings(settings, existing.orElseGet(TenantAdminControlsEntity::new));
+    return updated;
+  }
+
+  private ChatRecoverySettings recoverySettings(TenantAdminControlsSettings settings) {
+    ChatRecoverySettings stored = settings == null ? null : settings.getChatRecoverySettings();
+    return stored == null
+        ? new ChatRecoverySettings(
+            ChatRecoveryMode.LOGIN_PASSWORD, ChatRecoveryMode.LOGIN_PASSWORD, 0L)
+        : new ChatRecoverySettings(stored.getAsker(), stored.getConsultant(), stored.getRevision());
   }
 
   /**
@@ -193,6 +242,9 @@ public class TenantAdminControlsService {
   private void hydrateCanonicalPolicies(TenantAdminControlsSettings settings) {
     if (settings == null) {
       return;
+    }
+    if (settings.getChatRecoverySettings() == null) {
+      settings.setChatRecoverySettings(recoverySettings(settings));
     }
     if (settings.getPermissionPolicies() == null || settings.getPermissionPolicies().isEmpty()) {
       settings.setPermissionPolicies(

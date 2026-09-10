@@ -1,0 +1,129 @@
+package com.vi.tenantservice.api.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vi.tenantservice.api.converter.TenantConverter;
+import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
+import com.vi.tenantservice.api.model.*;
+import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
+import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.dao.OptimisticLockingFailureException;
+
+class ChatRecoverySettingsServiceTest {
+  private final TenantAdminControlsRepository repository =
+      mock(TenantAdminControlsRepository.class);
+  private final TenantConverter converter =
+      new TenantConverter(
+          mock(TemplateService.class),
+          mock(TemplateRenderer.class),
+          mock(SmtpPasswordEncryptionService.class));
+  private final TenantAdminControlsService service =
+      new TenantAdminControlsService(
+          repository, converter, mock(TranslationApiKeyEncryptionService.class));
+  private TenantAdminControlsEntity stored;
+
+  @BeforeEach
+  void storage() {
+    when(repository.findTopByOrderByIdAsc()).thenAnswer(invocation -> Optional.ofNullable(stored));
+    when(repository.saveAndFlush(any()))
+        .thenAnswer(
+            invocation -> {
+              stored = invocation.getArgument(0);
+              return stored;
+            });
+  }
+
+  @Test
+  void defaultsArePasswordForBothRolesWithoutCreatingARecord() {
+    assertThat(service.getChatRecoverySettings())
+        .isEqualTo(settings(ChatRecoveryMode.LOGIN_PASSWORD, ChatRecoveryMode.LOGIN_PASSWORD, 0));
+    verify(repository, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void changedRolesPersistWithANewRevisionAndSurviveReadback() throws Exception {
+    var saved =
+        service.updateChatRecoverySettings(
+            settings(ChatRecoveryMode.RECOVERY_KEY, ChatRecoveryMode.LOGIN_PASSWORD, 0));
+    assertThat(saved.getRevision()).isEqualTo(1);
+    assertThat(service.getChatRecoverySettings()).isEqualTo(saved);
+    assertThat(service.getControls().getChatRecoverySettings()).isEqualTo(saved);
+    var mapper = new ObjectMapper();
+    assertThat(mapper.readTree(stored.getControls()).get("chatRecoverySettings"))
+        .isEqualTo(
+            mapper.readTree(
+                "{\"asker\":\"RECOVERY_KEY\",\"consultant\":\"LOGIN_PASSWORD\",\"revision\":1}"));
+  }
+
+  @Test
+  void fullControlsWriteCannotEraseOrOverrideRecoveryPolicy() {
+    var saved =
+        service.updateChatRecoverySettings(
+            settings(ChatRecoveryMode.RECOVERY_KEY, ChatRecoveryMode.LOGIN_PASSWORD, 0));
+    service.updateControls(
+        new TenantAdminControls()
+            .permissionsPageEnabled(false)
+            .chatRecoverySettings(
+                settings(ChatRecoveryMode.LOGIN_PASSWORD, ChatRecoveryMode.LOGIN_PASSWORD, 99)));
+    assertThat(service.getChatRecoverySettings()).isEqualTo(saved);
+    assertThat(service.getControls().getPermissionsPageEnabled()).isFalse();
+  }
+
+  @Test
+  void dedicatedWritePreservesUnrelatedSettingsAndEncryptedTranslationKeys() {
+    stored =
+        TenantAdminControlsEntity.builder()
+            .id(1L)
+            .controls(
+                "{\"permissionsPageEnabled\":false,\"translationApiKeys\":{\"provider\":\"ENC:fixture\"}}")
+            .build();
+    service.updateChatRecoverySettings(
+        settings(ChatRecoveryMode.LOGIN_PASSWORD, ChatRecoveryMode.RECOVERY_KEY, 0));
+    assertThat(service.getControls().getPermissionsPageEnabled()).isFalse();
+    assertThat(stored.getControls()).contains("ENC:fixture");
+  }
+
+  @Test
+  void staleWriteIsRejectedWithoutOverwriting() {
+    var saved =
+        service.updateChatRecoverySettings(
+            settings(ChatRecoveryMode.RECOVERY_KEY, ChatRecoveryMode.LOGIN_PASSWORD, 0));
+    assertThatThrownBy(
+            () ->
+                service.updateChatRecoverySettings(
+                    settings(ChatRecoveryMode.LOGIN_PASSWORD, ChatRecoveryMode.RECOVERY_KEY, 0)))
+        .isInstanceOf(SettingsUpdateConflictException.class);
+    assertThat(service.getChatRecoverySettings()).isEqualTo(saved);
+  }
+
+  @Test
+  void unchangedWriteDoesNotAdvanceRevision() {
+    service.updateChatRecoverySettings(
+        settings(ChatRecoveryMode.LOGIN_PASSWORD, ChatRecoveryMode.LOGIN_PASSWORD, 0));
+    assertThat(service.getChatRecoverySettings().getRevision()).isZero();
+    verify(repository, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void concurrentJpaWriteBecomesSettingsConflict() {
+    when(repository.saveAndFlush(any()))
+        .thenThrow(new OptimisticLockingFailureException("concurrent write"));
+    assertThatThrownBy(
+            () ->
+                service.updateChatRecoverySettings(
+                    settings(ChatRecoveryMode.RECOVERY_KEY, ChatRecoveryMode.LOGIN_PASSWORD, 0)))
+        .isInstanceOf(SettingsUpdateConflictException.class);
+  }
+
+  private ChatRecoverySettings settings(
+      ChatRecoveryMode asker, ChatRecoveryMode consultant, long revision) {
+    return new ChatRecoverySettings(asker, consultant, revision);
+  }
+}
