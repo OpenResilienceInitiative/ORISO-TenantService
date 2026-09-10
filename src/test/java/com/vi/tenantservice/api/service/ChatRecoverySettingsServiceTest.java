@@ -14,6 +14,8 @@ import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionS
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.dao.OptimisticLockingFailureException;
 
 class ChatRecoverySettingsServiceTest {
@@ -45,6 +47,46 @@ class ChatRecoverySettingsServiceTest {
     assertThat(service.getChatRecoverySettings())
         .isEqualTo(settings(ChatRecoveryMode.LOGIN_PASSWORD, ChatRecoveryMode.LOGIN_PASSWORD, 0));
     verify(repository, never()).saveAndFlush(any());
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      value = {
+        "{}|LOGIN_PASSWORD|LOGIN_PASSWORD|0",
+        "{\"asker\":null,\"consultant\":null,\"revision\":null}|LOGIN_PASSWORD|LOGIN_PASSWORD|0",
+        "{\"asker\":\"RECOVERY_KEY\",\"revision\":7}|RECOVERY_KEY|LOGIN_PASSWORD|7",
+        "{\"consultant\":\"RECOVERY_KEY\",\"revision\":7}|LOGIN_PASSWORD|RECOVERY_KEY|7",
+        "{\"asker\":\"RECOVERY_KEY\",\"consultant\":\"RECOVERY_KEY\"}|RECOVERY_KEY|RECOVERY_KEY|0"
+      },
+      delimiter = '|')
+  void partialStoredPolicyDefaultsOnlyMissingFields(
+      String json, ChatRecoveryMode asker, ChatRecoveryMode consultant, long revision) {
+    stored =
+        TenantAdminControlsEntity.builder()
+            .id(1L)
+            .controls("{\"chatRecoverySettings\":" + json + "}")
+            .build();
+    var expected = settings(asker, consultant, revision);
+    assertThat(service.getChatRecoverySettings()).isEqualTo(expected);
+    assertThat(service.getControls().getChatRecoverySettings()).isEqualTo(expected);
+    verify(repository, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void partialStoredPolicyCanBeUpdatedFromDefaultRevisionWithoutErasingOtherSettings() {
+    stored =
+        TenantAdminControlsEntity.builder()
+            .id(1L)
+            .controls(
+                "{\"permissionsPageEnabled\":false,\"chatRecoverySettings\":{\"asker\":\"RECOVERY_KEY\"}}")
+            .build();
+    var updated =
+        service.updateChatRecoverySettings(
+            settings(ChatRecoveryMode.RECOVERY_KEY, ChatRecoveryMode.RECOVERY_KEY, 0));
+    assertThat(updated)
+        .isEqualTo(settings(ChatRecoveryMode.RECOVERY_KEY, ChatRecoveryMode.RECOVERY_KEY, 1));
+    assertThat(service.getControls().getPermissionsPageEnabled()).isFalse();
+    assertThat(service.getChatRecoverySettings()).isEqualTo(updated);
   }
 
   @Test
@@ -99,7 +141,8 @@ class ChatRecoverySettingsServiceTest {
             () ->
                 service.updateChatRecoverySettings(
                     settings(ChatRecoveryMode.LOGIN_PASSWORD, ChatRecoveryMode.RECOVERY_KEY, 0)))
-        .isInstanceOf(SettingsUpdateConflictException.class);
+        .isInstanceOf(SettingsUpdateConflictException.class)
+        .hasMessageContaining("currentRevision=1", "submittedRevision=0");
     assertThat(service.getChatRecoverySettings()).isEqualTo(saved);
   }
 

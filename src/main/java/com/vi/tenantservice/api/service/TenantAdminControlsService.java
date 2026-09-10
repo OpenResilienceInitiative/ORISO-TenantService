@@ -94,7 +94,7 @@ public class TenantAdminControlsService {
             .orElseGet(this::createDefaultControlsSettings);
     ChatRecoverySettings current = recoverySettings(settings);
     if (!current.getRevision().equals(request.getRevision())) {
-      throw new SettingsUpdateConflictException(null);
+      throw new SettingsUpdateConflictException(current.getRevision(), request.getRevision());
     }
     if (current.getAsker() == request.getAsker()
         && current.getConsultant() == request.getConsultant()) {
@@ -110,10 +110,14 @@ public class TenantAdminControlsService {
 
   private ChatRecoverySettings recoverySettings(TenantAdminControlsSettings settings) {
     ChatRecoverySettings stored = settings == null ? null : settings.getChatRecoverySettings();
-    return stored == null
-        ? new ChatRecoverySettings(
-            ChatRecoveryMode.LOGIN_PASSWORD, ChatRecoveryMode.LOGIN_PASSWORD, 0L)
-        : new ChatRecoverySettings(stored.getAsker(), stored.getConsultant(), stored.getRevision());
+    return new ChatRecoverySettings(
+        stored == null || stored.getAsker() == null
+            ? ChatRecoveryMode.LOGIN_PASSWORD
+            : stored.getAsker(),
+        stored == null || stored.getConsultant() == null
+            ? ChatRecoveryMode.LOGIN_PASSWORD
+            : stored.getConsultant(),
+        stored == null || stored.getRevision() == null ? 0L : stored.getRevision());
   }
 
   /**
@@ -243,9 +247,7 @@ public class TenantAdminControlsService {
     if (settings == null) {
       return;
     }
-    if (settings.getChatRecoverySettings() == null) {
-      settings.setChatRecoverySettings(recoverySettings(settings));
-    }
+    settings.setChatRecoverySettings(recoverySettings(settings));
     if (settings.getPermissionPolicies() == null || settings.getPermissionPolicies().isEmpty()) {
       settings.setPermissionPolicies(
           LegacyPermissionPolicyMapper.fromLegacyMaps(
