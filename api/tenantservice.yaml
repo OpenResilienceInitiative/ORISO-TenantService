@@ -160,6 +160,48 @@ paths:
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
 
+  /tenantadmin/controls/chat-recovery:
+    get:
+      tags: [tenant-controller]
+      summary: 'Gets recovery defaults for newly created accounts [Authorization: Super admin]'
+      operationId: getChatRecoverySettings
+      responses:
+        200:
+          description: Current role defaults
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatRecoverySettings'
+        401:
+          description: UNAUTHORIZED
+        403:
+          description: FORBIDDEN - platform administrator required
+    put:
+      tags: [tenant-controller]
+      summary: 'Updates recovery defaults for newly created accounts [Authorization: Super admin]'
+      operationId: updateChatRecoverySettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRecoverySettings'
+      responses:
+        200:
+          description: Confirmed role defaults with current revision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatRecoverySettings'
+        400:
+          description: BAD REQUEST - missing or invalid modes or revision
+        401:
+          description: UNAUTHORIZED
+        403:
+          description: FORBIDDEN - platform administrator required
+        409:
+          description: CONFLICT - reload current settings before saving
+
   /tenantadmin/{id}/permission-policies:
     parameters:
       - name: id
@@ -2295,9 +2337,28 @@ components:
         theming:
           $ref: '#/components/schemas/Theming'
 
+    ChatRecoveryMode:
+      type: string
+      enum: [RECOVERY_KEY, LOGIN_PASSWORD]
+
+    ChatRecoverySettings:
+      type: object
+      required: [asker, consultant, revision]
+      properties:
+        asker:
+          $ref: '#/components/schemas/ChatRecoveryMode'
+        consultant:
+          $ref: '#/components/schemas/ChatRecoveryMode'
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+
     TenantAdminControls:
       type: object
       properties:
+        chatRecoverySettings:
+          $ref: '#/components/schemas/ChatRecoverySettings'
         permissionsPageEnabled:
           type: boolean
           example: "true"

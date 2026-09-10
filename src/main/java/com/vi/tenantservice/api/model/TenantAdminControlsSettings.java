@@ -29,6 +29,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class TenantAdminControlsSettings {
+  /** Creation defaults only; existing accounts retain their enrollment policy. */
+  ChatRecoverySettings chatRecoverySettings;
+
   boolean permissionsPageEnabled;
   TenantAdminAllowedPermissionTogglesSettings allowedPermissionToggles;
 

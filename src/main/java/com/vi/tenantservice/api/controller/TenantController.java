@@ -6,6 +6,7 @@ import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
+import com.vi.tenantservice.api.model.ChatRecoverySettings;
 import com.vi.tenantservice.api.model.DpaAdminSignRequestDTO;
 import com.vi.tenantservice.api.model.DpaGateStatusDTO;
 import com.vi.tenantservice.api.model.DpaSignInviteDTO;
@@ -288,6 +289,19 @@ public class TenantController implements TenantApi, TenantadminApi {
       @Valid TenantAdminControls tenantAdminControls) {
     return new ResponseEntity<>(
         tenantServiceFacade.updateTenantAdminControls(tenantAdminControls), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<ChatRecoverySettings> getChatRecoverySettings() {
+    return ResponseEntity.ok(tenantServiceFacade.getChatRecoverySettings());
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<ChatRecoverySettings> updateChatRecoverySettings(
+      @Valid ChatRecoverySettings settings) {
+    return ResponseEntity.ok(tenantServiceFacade.updateChatRecoverySettings(settings));
   }
 
   @Override
