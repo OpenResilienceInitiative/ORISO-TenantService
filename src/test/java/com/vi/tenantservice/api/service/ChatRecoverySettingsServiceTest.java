@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 class ChatRecoverySettingsServiceTest {
   private final TenantAdminControlsRepository repository =
@@ -87,6 +89,27 @@ class ChatRecoverySettingsServiceTest {
         .isEqualTo(settings(ChatRecoveryMode.RECOVERY_KEY, ChatRecoveryMode.RECOVERY_KEY, 1));
     assertThat(service.getControls().getPermissionsPageEnabled()).isFalse();
     assertThat(service.getChatRecoverySettings()).isEqualTo(updated);
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      value = {
+        "NULL,LOGIN_PASSWORD,0",
+        "LOGIN_PASSWORD,NULL,0",
+        "LOGIN_PASSWORD,LOGIN_PASSWORD,NULL",
+        "LOGIN_PASSWORD,LOGIN_PASSWORD,-1"
+      },
+      nullValues = "NULL")
+  void invalidSubmittedFieldsAreRejectedBeforeRepositoryAccess(
+      ChatRecoveryMode asker, ChatRecoveryMode consultant, Long revision) {
+    assertThatThrownBy(
+            () ->
+                service.updateChatRecoverySettings(
+                    new ChatRecoverySettings(asker, consultant, revision)))
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+    verifyNoInteractions(repository);
   }
 
   @Test
