@@ -91,6 +91,15 @@ class ChatRecoverySettingsServiceTest {
     assertThat(service.getChatRecoverySettings()).isEqualTo(updated);
   }
 
+  @Test
+  void nullRequestIsRejectedBeforeRepositoryAccess() {
+    assertThatThrownBy(() -> service.updateChatRecoverySettings(null))
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+    verifyNoInteractions(repository);
+  }
+
   @ParameterizedTest
   @CsvSource(
       value = {
