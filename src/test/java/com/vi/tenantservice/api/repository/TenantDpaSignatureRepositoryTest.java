@@ -35,6 +35,8 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 @DataJpaTest
 class TenantDpaSignatureRepositoryTest {
 
+  private static final LocalDateTime VERSION = LocalDateTime.of(2026, 7, 1, 12, 0);
+
   @Autowired private TenantDpaSignatureRepository signatureRepository;
   @Autowired private TenantRepository tenantRepository;
 
@@ -125,13 +127,15 @@ class TenantDpaSignatureRepositoryTest {
 
   @Test
   void consumeSignToken_Should_signExactlyOnce_andRejectReuse() {
-    // given a PENDING row carrying a token
+    // given a PENDING row carrying a token and the forwarder identity stamped at creation (#179)
     var now = LocalDateTime.now();
     var pending =
         signatureRepository.saveAndFlush(
             TenantDpaSignatureEntity.builder()
                 .tenantId(3L)
                 .status(DpaSignatureStatus.PENDING)
+                .forwardedByUserId("admin-1")
+                .source("FORWARDED_EXTERNAL")
                 .tokenHash("HASH")
                 .tokenExpiresAt(now.plusDays(1))
                 .createDate(now)
@@ -145,10 +149,9 @@ class TenantDpaSignatureRepositoryTest {
             "GF",
             "e@example.org",
             "Caritas",
-            "admin-1",
-            "PUBLIC_SIGN_LINK",
             false,
             "de",
+            "FORWARDED_EXTERNAL",
             now);
     // and a second consume of the same token affects nothing (single-use)
     int second =
@@ -158,10 +161,9 @@ class TenantDpaSignatureRepositoryTest {
             "X",
             "m@example.org",
             "Bad Org",
-            "admin-2",
-            "PUBLIC_SIGN_LINK",
             true,
             "en",
+            "FORWARDED_EXTERNAL",
             now);
     signatureRepository.flush();
 
@@ -173,11 +175,174 @@ class TenantDpaSignatureRepositoryTest {
     assertThat(reloaded.getSignerName()).isEqualTo("Erika"); // not overwritten by the 2nd attempt
     assertThat(reloaded.getSignerEmail()).isEqualTo("e@example.org");
     assertThat(reloaded.getSignerOrganisation()).isEqualTo("Caritas");
+    // the stamped forwarder identity survives the consume untouched (#179)
     assertThat(reloaded.getForwardedByUserId()).isEqualTo("admin-1");
-    assertThat(reloaded.getSource()).isEqualTo("PUBLIC_SIGN_LINK");
+    assertThat(reloaded.getSource()).isEqualTo("FORWARDED_EXTERNAL");
     assertThat(reloaded.getTokenHash()).isNull();
     assertThat(signatureRepository.findByTokenHashAndStatus("HASH", DpaSignatureStatus.PENDING))
         .isEmpty();
+  }
+
+  @Test
+  void invalidateOutstandingByTenantId_Should_killOnlyPendingRowsOfThatTenant() {
+    // given: two outstanding links for tenant 4, a signed row for tenant 4, a link for tenant 5
+    var now = LocalDateTime.now();
+    var outstanding1 = pendingLink(4L, "HASH-A", now);
+    var outstanding2 = pendingLink(4L, "HASH-B", now);
+    var signedRow =
+        signatureRepository.save(
+            TenantDpaSignatureEntity.builder()
+                .tenantId(4L)
+                .status(DpaSignatureStatus.SIGNED)
+                .createDate(now)
+                .build());
+    var otherTenantLink = pendingLink(5L, "HASH-C", now);
+    signatureRepository.flush();
+
+    // when
+    int invalidated = signatureRepository.invalidateOutstandingByTenantId(4L);
+    signatureRepository.flush();
+
+    // then
+    assertThat(invalidated).isEqualTo(2);
+    assertThat(signatureRepository.findById(outstanding1.getId()).orElseThrow().getStatus())
+        .isEqualTo(DpaSignatureStatus.INVALIDATED);
+    assertThat(signatureRepository.findById(outstanding2.getId()).orElseThrow().getTokenHash())
+        .isNull();
+    assertThat(signatureRepository.findById(signedRow.getId()).orElseThrow().getStatus())
+        .isEqualTo(DpaSignatureStatus.SIGNED);
+    assertThat(signatureRepository.findById(otherTenantLink.getId()).orElseThrow().getStatus())
+        .isEqualTo(DpaSignatureStatus.PENDING);
+    // an invalidated link no longer resolves as PENDING -> public endpoints answer 410
+    assertThat(signatureRepository.findByTokenHashAndStatus("HASH-A", DpaSignatureStatus.PENDING))
+        .isEmpty();
+  }
+
+  @Test
+  void outstandingLinkPredicate_Should_seeOnlyUnexpiredPendingLinks() {
+    // given one expired and one live link for tenant 6
+    var now = LocalDateTime.now();
+    signatureRepository.save(
+        TenantDpaSignatureEntity.builder()
+            .tenantId(6L)
+            .dpaVersion(VERSION)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash("HASH-EXPIRED")
+            .tokenExpiresAt(now.minusMinutes(1))
+            .createDate(now)
+            .build());
+    signatureRepository.flush();
+
+    assertThat(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                6L, VERSION, DpaSignatureStatus.PENDING, now))
+        .isEmpty();
+
+    pendingLink(6L, "HASH-LIVE", now);
+    signatureRepository.flush();
+
+    assertThat(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                6L, VERSION, DpaSignatureStatus.PENDING, now))
+        .hasSize(1);
+  }
+
+  @Test
+  void outstandingLinkPredicate_Should_ignoreLinksForASupersededVersion() {
+    // given a live link minted for the PREVIOUS version, then a republish (#179)
+    var now = LocalDateTime.now();
+    var supersededVersion = VERSION.minusDays(10);
+    pendingLink(10L, "HASH-OLD-VERSION", supersededVersion, now);
+    signatureRepository.flush();
+
+    // the stale link can only ever produce an OUTDATED signature, so the CURRENT contract is not
+    // "awaiting a signer" because of it
+    assertThat(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                10L, VERSION, DpaSignatureStatus.PENDING, now))
+        .isEmpty();
+    assertThat(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                10L, supersededVersion, DpaSignatureStatus.PENDING, now))
+        .hasSize(1);
+  }
+
+  @Test
+  void outstandingCount_Should_beScopedToTheReservationThatMintedTheLinks() {
+    // tenant 11 was reserved once (A), released, then reserved again (B). A's links are already
+    // unusable, so they must not count against B's budget.
+    var now = LocalDateTime.now();
+    var hashA = "HASH-RESERVATION-A";
+    var hashB = "HASH-RESERVATION-B";
+    signatureRepository.save(boundPendingLink(11L, "L1", hashA, now));
+    signatureRepository.save(boundPendingLink(11L, "L2", hashA, now));
+    signatureRepository.save(boundPendingLink(11L, "L3", hashB, now));
+    signatureRepository.flush();
+
+    assertThat(
+            signatureRepository
+                .countByTenantIdAndReservationTokenHashAndStatusAndTokenExpiresAtAfter(
+                    11L, hashB, DpaSignatureStatus.PENDING, now))
+        .isEqualTo(1);
+    assertThat(
+            signatureRepository
+                .countByTenantIdAndReservationTokenHashAndStatusAndTokenExpiresAtAfter(
+                    11L, hashA, DpaSignatureStatus.PENDING, now))
+        .isEqualTo(2);
+  }
+
+  private TenantDpaSignatureEntity boundPendingLink(
+      Long tenantId, String tokenHash, String reservationTokenHash, LocalDateTime now) {
+    return TenantDpaSignatureEntity.builder()
+        .tenantId(tenantId)
+        .dpaVersion(VERSION)
+        .status(DpaSignatureStatus.PENDING)
+        .tokenHash(tokenHash)
+        .reservationTokenHash(reservationTokenHash)
+        .tokenExpiresAt(now.plusDays(1))
+        .createDate(now)
+        .build();
+  }
+
+  @Test
+  void deleteByTenantId_Should_removeAllRowsOfTheTenant() {
+    // given
+    var now = LocalDateTime.now();
+    pendingLink(7L, "HASH-D", now);
+    signatureRepository.save(
+        TenantDpaSignatureEntity.builder()
+            .tenantId(7L)
+            .status(DpaSignatureStatus.SIGNED)
+            .createDate(now)
+            .build());
+    pendingLink(8L, "HASH-E", now);
+    signatureRepository.flush();
+
+    // when
+    long removed = signatureRepository.deleteByTenantId(7L);
+    signatureRepository.flush();
+
+    // then
+    assertThat(removed).isEqualTo(2);
+    assertThat(signatureRepository.findByTenantId(7L)).isEmpty();
+    assertThat(signatureRepository.findByTenantId(8L)).hasSize(1);
+  }
+
+  private TenantDpaSignatureEntity pendingLink(Long tenantId, String tokenHash, LocalDateTime now) {
+    return pendingLink(tenantId, tokenHash, VERSION, now);
+  }
+
+  private TenantDpaSignatureEntity pendingLink(
+      Long tenantId, String tokenHash, LocalDateTime dpaVersion, LocalDateTime now) {
+    return signatureRepository.save(
+        TenantDpaSignatureEntity.builder()
+            .tenantId(tenantId)
+            .dpaVersion(dpaVersion)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash(tokenHash)
+            .tokenExpiresAt(now.plusDays(1))
+            .createDate(now)
+            .build());
   }
 
   @Test

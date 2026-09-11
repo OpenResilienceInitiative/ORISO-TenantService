@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api.repository;
 
 import com.vi.tenantservice.api.model.TenantDpaAdminSignatureEntity;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.repository.Repository;
 
@@ -15,6 +16,12 @@ public interface TenantDpaAdminSignatureRepository
   TenantDpaAdminSignatureEntity save(TenantDpaAdminSignatureEntity entity);
 
   List<TenantDpaAdminSignatureEntity> findByTenantIdOrderBySignedAtDescIdDesc(Long tenantId);
+
+  /**
+   * Whether a signature for exactly this tenant and version exists. Used to tell the benign
+   * concurrent-duplicate race apart from a genuine persistence failure (#179).
+   */
+  boolean existsByTenantIdAndDpaVersion(Long tenantId, LocalDateTime dpaVersion);
 
   long countByTenantId(Long tenantId);
 }

@@ -41,14 +41,23 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RequiredArgsConstructor
 public class TenantDpaStatusService {
 
-  /** Authoritative DPA state of a tenant plus the facts it was derived from. */
+  /**
+   * Authoritative DPA state of a tenant plus the facts it was derived from.
+   *
+   * <p>{@code forwardPending} is the orthogonal "contract on hold" fact (ORISO-TenantService#179):
+   * the tenant is not validly signed AND at least one unexpired sign link is outstanding, i.e. the
+   * agreement was forwarded and is awaiting the authorised signer. It is deliberately a separate
+   * flag rather than a status value, so consumers keep receiving the UNSIGNED/OUTDATED they already
+   * handle and can opt into the waiting state.
+   */
   public record DpaStatusView(
       Long tenantId,
       TenantDpaStatus status,
       LocalDateTime currentVersion,
       LocalDateTime signedVersion,
       LocalDateTime signedAt,
-      String signedBy) {}
+      String signedBy,
+      boolean forwardPending) {}
 
   /** The submitted sign form: structured signer fields plus the verbatim JSON snapshot. */
   public record AdminSignatureForm(
@@ -63,6 +72,7 @@ public class TenantDpaStatusService {
 
   private final TenantDpaAdminSignatureRepository adminSignatureRepository;
   private final TenantDpaSignatureRepository signatureRepository;
+  private final DpaSignatureOwnership dpaSignatureOwnership;
   private final GoverningDpaResolver governingDpaResolver;
   private final PlatformTransactionManager transactionManager;
 
@@ -79,7 +89,37 @@ public class TenantDpaStatusService {
         currentVersion,
         latestSigned == null ? null : latestSigned.version(),
         latestSigned == null ? null : latestSigned.signedAt(),
-        latestSigned == null ? null : latestSigned.signedBy());
+        latestSigned == null ? null : latestSigned.signedBy(),
+        isForwardPending(tenantId, status, currentVersion));
+  }
+
+  /**
+   * "Contract on hold" (ORISO-TenantService#179): a not-yet-validly-signed tenant with an unexpired
+   * outstanding sign link FOR THE CURRENT VERSION is waiting for the authorised signer, which the
+   * wizard, the legal gate and the invite progress board need to tell apart from "nobody acted
+   * yet". Matching the version matters: after a republish, a link issued for the previous version
+   * can only ever yield an OUTDATED signature, so counting it would claim the current contract is
+   * awaiting a signer when nobody can actually satisfy it. A VALID, MISSING or INCONSISTENT tenant
+   * is never reported as waiting, and the ledger is only queried when the answer can be true — the
+   * common signed case costs no extra read.
+   */
+  private boolean isForwardPending(
+      Long tenantId, TenantDpaStatus derived, LocalDateTime currentVersion) {
+    if (derived != TenantDpaStatus.UNSIGNED && derived != TenantDpaStatus.OUTDATED) {
+      return false;
+    }
+    if (currentVersion == null) {
+      return false;
+    }
+    // Ownership applies here too: a live link from a PREVIOUS occupant of this tenant ID can no
+    // longer be confirmed (the confirm path checks the binding), so reporting it as "awaiting a
+    // signer" would be a status that lies to the wizard and the legal gate.
+    return !dpaSignatureOwnership
+        .filterCurrentOccupant(
+            tenantId,
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                tenantId, currentVersion, DpaSignatureStatus.PENDING, LocalDateTime.now()))
+        .isEmpty();
   }
 
   /**
@@ -184,9 +224,24 @@ public class TenantDpaStatusService {
     insertTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     try {
       // the catch must wrap the whole transaction boundary: with a SEQUENCE-generated id the
-      // INSERT is deferred until the flush at this template's commit, not save() itself
-      insertTransaction.executeWithoutResult(tx -> adminSignatureRepository.save(entity));
+      // INSERT is deferred until the flush at this template's commit, not save() itself.
+      // The invalidation of outstanding sign links rides INSIDE this transaction on purpose
+      // (#179): recording a signature and killing the tenant's live links either both commit or
+      // both roll back, so a failed invalidation can never leave a usable link behind a signature
+      // that already made the tenant VALID.
+      insertTransaction.executeWithoutResult(
+          tx -> {
+            adminSignatureRepository.save(entity);
+            signatureRepository.invalidateOutstandingByTenantId(tenantId);
+          });
     } catch (DataIntegrityViolationException e) {
+      // Only the concurrent-duplicate race is benign, and it is recognised by the winner's row
+      // actually being there — not by the exception type, which the JPA provider does not
+      // distinguish reliably. Anything else means nothing was recorded, so it must surface
+      // instead of being reported as a successful signature (and instead of invalidating links).
+      if (!adminSignatureRepository.existsByTenantIdAndDpaVersion(tenantId, version)) {
+        throw e;
+      }
       log.info(
           "Concurrent DPA signature for tenant {} version {} was absorbed (unique constraint)",
           tenantId,
@@ -220,8 +275,13 @@ public class TenantDpaStatusService {
                         row.getSignerName() != null
                             ? row.getSignerName()
                             : row.getSignerUsername())));
-    signatureRepository
-        .findByTenantIdAndStatus(tenantId, DpaSignatureStatus.SIGNED)
+    // Only the current occupant's signatures count: a tenant ID is a reusable slot, and an
+    // orphan left behind by a released reservation must never make the next organisation on that
+    // ID look signed (#179).
+    dpaSignatureOwnership
+        .filterCurrentOccupant(
+            tenantId,
+            signatureRepository.findByTenantIdAndStatus(tenantId, DpaSignatureStatus.SIGNED))
         .forEach(
             row ->
                 entries.add(

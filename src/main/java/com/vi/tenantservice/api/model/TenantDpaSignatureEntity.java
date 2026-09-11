@@ -98,6 +98,16 @@ public class TenantDpaSignatureEntity {
   @Column(name = "token_expires_at")
   private LocalDateTime tokenExpiresAt;
 
+  /**
+   * SHA-256 hash of the tenant-ID reservation token this link was minted from (public onboarding
+   * forward only; null for links an authenticated admin created). Binds the link to the RESERVATION
+   * rather than to the tenant-ID slot: an ID that is released and reserved again keeps the same
+   * number but gets a new token, so the old link stops resolving instead of recording a signature
+   * for whoever holds the ID next (ORISO-TenantService#179).
+   */
+  @Column(name = "reservation_token_hash")
+  private String reservationTokenHash;
+
   @Column(name = "create_date", nullable = false)
   private LocalDateTime createDate;
 

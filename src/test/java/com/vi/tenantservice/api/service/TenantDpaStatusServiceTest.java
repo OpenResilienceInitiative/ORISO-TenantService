@@ -48,6 +48,10 @@ class TenantDpaStatusServiceTest {
   @Mock private TenantRepository tenantRepository;
   @Mock private PlatformTransactionManager transactionManager;
 
+  @Mock
+  private com.vi.tenantservice.api.repository.TenantIdReservationRepository
+      tenantIdReservationRepository;
+
   /**
    * The governing-document resolver runs for real over the mocked repositories: the version a
    * tenant is measured against and the document it can read and sign must come from the same logic
@@ -65,6 +69,7 @@ class TenantDpaStatusServiceTest {
         new TenantDpaStatusService(
             adminSignatureRepository,
             signatureRepository,
+            new DpaSignatureOwnership(tenantIdReservationRepository),
             governingDpaResolver,
             transactionManager);
   }
@@ -349,6 +354,9 @@ class TenantDpaStatusServiceTest {
     givenNoSignatures();
     when(adminSignatureRepository.save(any()))
         .thenThrow(new DataIntegrityViolationException("duplicate tenant/version"));
+    // the winner's row is there — that, not the exception type, is what makes this race benign
+    when(adminSignatureRepository.existsByTenantIdAndDpaVersion(TENANT_ID, VERSION_2))
+        .thenReturn(true);
 
     var status =
         service.sign(
@@ -594,5 +602,196 @@ class TenantDpaStatusServiceTest {
     var captor = ArgumentCaptor.forClass(TenantDpaAdminSignatureEntity.class);
     verify(adminSignatureRepository).save(captor.capture());
     assertThat(captor.getValue().getDpaVersion()).isEqualTo(VERSION_2);
+  }
+
+  @Test
+  void sign_Should_rethrow_When_thePersistenceFailureIsNotADuplicate() {
+    // a non-duplicate integrity failure means NOTHING was recorded; reporting it as a signature
+    // (and invalidating the tenant's live sign links) would destroy usable links for nothing
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+    when(adminSignatureRepository.save(any()))
+        .thenThrow(new DataIntegrityViolationException("some other constraint"));
+    when(adminSignatureRepository.existsByTenantIdAndDpaVersion(TENANT_ID, VERSION_2))
+        .thenReturn(false);
+
+    assertThatThrownBy(
+            () ->
+                service.sign(
+                    TENANT_ID,
+                    "admin-user-id",
+                    "tenantadmin",
+                    new TenantDpaStatusService.AdminSignatureForm(
+                        "A", null, null, null, "de", "{}")))
+        .isInstanceOf(DataIntegrityViolationException.class);
+    // the point of re-throwing: nothing was recorded, so the tenant's live sign links must still
+    // be usable. Without this the test would pass even if the failure had destroyed them.
+    verify(signatureRepository, never()).invalidateOutstandingByTenantId(any());
+  }
+
+  // --- contract on hold + link invalidation (ORISO-TenantService#179) ----------------------
+
+  private static TenantDpaSignatureEntity pendingLink(String reservationTokenHash) {
+    return TenantDpaSignatureEntity.builder()
+        .tenantId(TENANT_ID)
+        .dpaVersion(VERSION_2)
+        .status(DpaSignatureStatus.PENDING)
+        .reservationTokenHash(reservationTokenHash)
+        .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+        .build();
+  }
+
+  @Test
+  void getStatus_Should_notReportForwardPending_ForALinkOfAPreviousOccupantOfTheId() {
+    // reservation A left a live PENDING link; the id was released and re-reserved as B. A's link
+    // can no longer be confirmed, so claiming B is "awaiting a signer" would be a lying status.
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+    when(signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+            org.mockito.ArgumentMatchers.eq(TENANT_ID),
+            org.mockito.ArgumentMatchers.eq(VERSION_2),
+            org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
+            any(LocalDateTime.class)))
+        .thenReturn(List.of(pendingLink(DpaSignToken.hash("reservation-token-A"))));
+    when(tenantIdReservationRepository.findById(TENANT_ID))
+        .thenReturn(
+            Optional.of(
+                com.vi.tenantservice.api.model.TenantIdReservationEntity.builder()
+                    .tenantId(TENANT_ID)
+                    .token("reservation-token-B")
+                    .status(com.vi.tenantservice.api.model.TenantIdReservationStatus.RESERVED)
+                    .build()));
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
+    assertThat(status.forwardPending()).isFalse();
+  }
+
+  @Test
+  void getStatus_Should_reportForwardPending_When_unsignedButALiveSignLinkIsOutstanding() {
+    // the link is BOUND to the reservation that currently holds the id, so this exercises the
+    // ownership check in its allow direction — with an unbound link the filter short-circuits and
+    // a defect rejecting every bound link would still pass here
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+    when(signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+            org.mockito.ArgumentMatchers.eq(TENANT_ID),
+            org.mockito.ArgumentMatchers.eq(VERSION_2),
+            org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
+            any(LocalDateTime.class)))
+        .thenReturn(List.of(pendingLink(DpaSignToken.hash("reservation-token"))));
+    when(tenantIdReservationRepository.findById(TENANT_ID))
+        .thenReturn(
+            Optional.of(
+                com.vi.tenantservice.api.model.TenantIdReservationEntity.builder()
+                    .tenantId(TENANT_ID)
+                    .token("reservation-token")
+                    .status(com.vi.tenantservice.api.model.TenantIdReservationStatus.RESERVED)
+                    .build()));
+
+    var status = service.getStatus(TENANT_ID);
+
+    // the signature status is unchanged for existing consumers; the waiting state is additive
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
+    assertThat(status.forwardPending()).isTrue();
+  }
+
+  @Test
+  void getStatus_Should_reportForwardPending_ForAnAdminCreatedLinkWithoutABinding() {
+    // the other allow direction: an authenticated admin's invite carries no binding and is
+    // qualified by the tenant row itself
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+    when(signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+            org.mockito.ArgumentMatchers.eq(TENANT_ID),
+            org.mockito.ArgumentMatchers.eq(VERSION_2),
+            org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
+            any(LocalDateTime.class)))
+        .thenReturn(List.of(pendingLink(null)));
+
+    assertThat(service.getStatus(TENANT_ID).forwardPending()).isTrue();
+  }
+
+  @Test
+  void getStatus_Should_notReportForwardPending_When_theOnlyOutstandingLinkExpired() {
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+    when(signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+            org.mockito.ArgumentMatchers.eq(TENANT_ID),
+            org.mockito.ArgumentMatchers.eq(VERSION_2),
+            org.mockito.ArgumentMatchers.eq(DpaSignatureStatus.PENDING),
+            any(LocalDateTime.class)))
+        .thenReturn(List.of());
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.UNSIGNED);
+    assertThat(status.forwardPending()).isFalse();
+  }
+
+  @Test
+  void getStatus_Should_neverReportForwardPending_When_theTenantIsValid() {
+    // a VALID tenant never reads as waiting, even if (against the invalidation rule) a link
+    // survived — and the ledger is not even queried
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    when(adminSignatureRepository.findByTenantIdOrderBySignedAtDescIdDesc(TENANT_ID))
+        .thenReturn(List.of(adminSignature(VERSION_2)));
+    when(signatureRepository.findByTenantIdAndStatus(TENANT_ID, DpaSignatureStatus.SIGNED))
+        .thenReturn(List.of());
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.VALID);
+    assertThat(status.forwardPending()).isFalse();
+    verify(signatureRepository, never())
+        .findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(any(), any(), any(), any());
+  }
+
+  @Test
+  void sign_Should_invalidateEveryOutstandingSignLink_When_theSignatureIsRecorded() {
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    givenNoSignatures();
+
+    service.sign(
+        TENANT_ID,
+        "admin-user-id",
+        "tenantadmin",
+        new TenantDpaStatusService.AdminSignatureForm("A", null, null, null, "de", "{}"));
+
+    verify(signatureRepository).invalidateOutstandingByTenantId(TENANT_ID);
+  }
+
+  @Test
+  void signOnboarding_Should_invalidateEveryOutstandingSignLink_When_theAcceptanceIsRecorded() {
+    givenOperatorDpa(VERSION_2);
+    givenTenantWithoutOwnDpa();
+    givenNoSignatures();
+
+    service.signOnboarding(
+        TENANT_ID,
+        "onboarded-admin-id",
+        "toni",
+        null,
+        new TenantDpaStatusService.AdminSignatureForm("Toni", null, null, null, null, "{}"));
+
+    verify(signatureRepository).invalidateOutstandingByTenantId(TENANT_ID);
+  }
+
+  @Test
+  void sign_Should_notInvalidateAnything_When_tenantIsAlreadyValid() {
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    when(adminSignatureRepository.findByTenantIdOrderBySignedAtDescIdDesc(TENANT_ID))
+        .thenReturn(List.of(adminSignature(VERSION_2)));
+    when(signatureRepository.findByTenantIdAndStatus(TENANT_ID, DpaSignatureStatus.SIGNED))
+        .thenReturn(List.of());
+
+    service.sign(
+        TENANT_ID,
+        "admin-user-id",
+        "tenantadmin",
+        new TenantDpaStatusService.AdminSignatureForm("A", null, null, null, "de", "{}"));
+
+    verify(signatureRepository, never()).invalidateOutstandingByTenantId(any());
   }
 }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -41,6 +42,24 @@ class ExceptionHandlerAdviceTest {
 
     assertThatThrownBy(() -> advice.handleException(responseStatusException))
         .isSameAs(responseStatusException);
+  }
+
+  /**
+   * #197: the 400 handler used to be keyed on {@code jakarta.ws.rs.BadRequestException}, which no
+   * production code could ever construct, so the handler was unreachable dead code. It is now keyed
+   * on the project's own {@link TenantBadRequestException}; {@link TenantBadRequestStatusIT} proves
+   * the resulting status over the wire.
+   */
+  @Test
+  void handle_Should_mapTenantBadRequestExceptionToBadRequest() throws NoSuchMethodException {
+    var method =
+        ExceptionHandlerAdvice.class.getDeclaredMethod("handle", TenantBadRequestException.class);
+    var responseStatus = method.getAnnotation(ResponseStatus.class);
+
+    assertThat(responseStatus).isNotNull();
+    assertThat(responseStatus.value()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThatCode(() -> advice.handle(new TenantBadRequestException("invalid input")))
+        .doesNotThrowAnyException();
   }
 
   @Test

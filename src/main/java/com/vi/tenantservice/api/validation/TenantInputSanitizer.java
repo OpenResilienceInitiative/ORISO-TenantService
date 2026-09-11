@@ -58,6 +58,9 @@ public class TenantInputSanitizer {
       output.getTheming().setSecondaryColor(inputSanitizer.sanitize(theming.getSecondaryColor()));
       output.getTheming().setAccent(inputSanitizer.sanitize(theming.getAccent()));
       output.getTheming().setSignal(inputSanitizer.sanitize(theming.getSignal()));
+      // loginEffect is a generated enum, not free text — there is nothing to strip,
+      // and the enum itself is the whitelist.
+      output.getTheming().setLoginEffect(theming.getLoginEffect());
     }
   }
 

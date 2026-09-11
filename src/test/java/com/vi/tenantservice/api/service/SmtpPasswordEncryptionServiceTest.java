@@ -1,0 +1,131 @@
+package com.vi.tenantservice.api.service;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import org.junit.jupiter.api.Test;
+
+class SmtpPasswordEncryptionServiceTest {
+
+  private static final String TEST_SECRET = "test-smtp-encryption-secret";
+
+  @Test
+  void encrypt_Should_ReturnPlaintext_When_SecretNotConfigured() {
+    var service = new SmtpPasswordEncryptionService("");
+
+    assertThat(service.isEnabled()).isFalse();
+    assertThat(service.encrypt("plain-pass")).isEqualTo("plain-pass");
+  }
+
+  @Test
+  void encrypt_Should_ReturnEncryptedValue_When_SecretConfigured() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+
+    String encrypted = service.encrypt("plain-pass");
+    String encryptedAgain = service.encrypt("plain-pass");
+
+    assertThat(service.isEnabled()).isTrue();
+    assertThat(encrypted).startsWith(SmtpPasswordEncryptionService.ENCRYPTED_PREFIX);
+    assertThat(encrypted).isNotEqualTo("plain-pass");
+    // a fresh random IV per encryption must yield distinct ciphertext
+    assertThat(encryptedAgain).isNotEqualTo(encrypted);
+    assertThat(service.decrypt(encrypted)).isEqualTo("plain-pass");
+    assertThat(service.decrypt(encryptedAgain)).isEqualTo("plain-pass");
+  }
+
+  @Test
+  void decrypt_Should_RoundTripEncryptedValue() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+
+    String encrypted = service.encrypt("plain-pass");
+
+    assertThat(service.decrypt(encrypted)).isEqualTo("plain-pass");
+  }
+
+  @Test
+  void decrypt_Should_PassThroughLegacyPlaintext() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+
+    assertThat(service.decrypt("legacy-plaintext")).isEqualTo("legacy-plaintext");
+  }
+
+  @Test
+  void encrypt_Should_ReturnEmptyString_When_PasswordIsEmpty() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+
+    assertThat(service.encrypt("")).isEmpty();
+    assertThat(service.encrypt(null)).isNull();
+  }
+
+  @Test
+  void encrypt_Should_NotDoubleEncrypt_When_ValueAlreadyEncrypted() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+
+    String encrypted = service.encrypt("plain-pass");
+
+    assertThat(service.encrypt(encrypted)).isEqualTo(encrypted);
+  }
+
+  @Test
+  void isEncrypted_Should_RejectReservedPrefixWithoutValidPayload() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+
+    assertThat(service.isEncrypted("ENC:not-a-ciphertext")).isFalse();
+    assertThat(service.isEncrypted("ENC:")).isFalse();
+    assertThat(service.isEncrypted(service.encrypt("plain-pass"))).isTrue();
+  }
+
+  @Test
+  void isEncrypted_Should_RejectCounterfeitValidBase64Payload() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+    // structurally valid: ENC: prefix + Base64 of 28 bytes — but never encrypted by us,
+    // so the AES-GCM tag cannot authenticate under the configured key
+    String counterfeit = "ENC:" + java.util.Base64.getEncoder().encodeToString(new byte[28]);
+
+    assertThat(service.isEncrypted(counterfeit)).isFalse();
+
+    String encrypted = service.encrypt(counterfeit);
+    assertThat(service.isEncrypted(encrypted)).isTrue();
+    assertThat(service.decrypt(encrypted)).isEqualTo(counterfeit);
+  }
+
+  @Test
+  void isEncrypted_Should_RejectCiphertextOfAnotherKey() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+    var otherService = new SmtpPasswordEncryptionService("another-secret");
+
+    assertThat(service.isEncrypted(otherService.encrypt("plain-pass"))).isFalse();
+  }
+
+  @Test
+  void encrypt_Should_EncryptReservedPrefixJunk_InsteadOfSkippingIt() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+
+    String encrypted = service.encrypt("ENC:not-a-ciphertext");
+
+    assertThat(service.isEncrypted(encrypted)).isTrue();
+    assertThat(service.decrypt(encrypted)).isEqualTo("ENC:not-a-ciphertext");
+  }
+
+  @Test
+  void encryptNewPassword_Should_TreatEvenValidLookingCiphertextAsPlaintext() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+    String ciphertextLookingInput = service.encrypt("some-other-secret");
+
+    String encrypted = service.encryptNewPassword(ciphertextLookingInput);
+
+    assertThat(encrypted).isNotEqualTo(ciphertextLookingInput);
+    assertThat(service.decrypt(encrypted)).isEqualTo(ciphertextLookingInput);
+  }
+
+  @Test
+  void decrypt_Should_Throw_When_KeyDoesNotMatch() {
+    var service = new SmtpPasswordEncryptionService(TEST_SECRET);
+    var otherService = new SmtpPasswordEncryptionService("another-secret");
+
+    String encrypted = service.encrypt("plain-pass");
+
+    assertThatThrownBy(() -> otherService.decrypt(encrypted))
+        .isInstanceOf(IllegalStateException.class);
+  }
+}

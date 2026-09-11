@@ -1875,6 +1875,7 @@ components:
         delete:
           $ref: '#/components/schemas/HalLink'
     AgencyLinks-2:
+      type: object
       allOf:
         - $ref: '#/components/schemas/DefaultLinks'
         - type: object

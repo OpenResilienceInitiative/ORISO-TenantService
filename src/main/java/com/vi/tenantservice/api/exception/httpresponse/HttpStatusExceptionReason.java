@@ -6,6 +6,13 @@ public enum HttpStatusExceptionReason {
   NOT_ALLOWED_TO_CHANGE_LICENSING,
   NOT_ALLOWED_TO_CHANGE_SETTING,
 
+  /**
+   * The platform admin switched {@code allowedPermissionToggles.appearance} off for Träger admins,
+   * so this tenant admin may not change logo, favicon or colours. Until now the restriction lived
+   * only in the admin panel's UI (ORISO-Admin#688, TenantService#174).
+   */
+  NOT_ALLOWED_TO_CHANGE_APPEARANCE,
+
   NOT_ALLOWED_TO_CHANGE_LEGAL_CONTENT,
 
   LANGUAGE_KEY_NOT_VALID,
