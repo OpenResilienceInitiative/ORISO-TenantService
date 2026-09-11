@@ -54,14 +54,21 @@ public class TenantInputSanitizer {
       output
           .getTheming()
           .setAssociationLogo(inputSanitizer.sanitizeAssetUrl(theming.getAssociationLogo()));
-      output.getTheming().setPrimaryColor(inputSanitizer.sanitize(theming.getPrimaryColor()));
-      output.getTheming().setSecondaryColor(inputSanitizer.sanitize(theming.getSecondaryColor()));
-      output.getTheming().setAccent(inputSanitizer.sanitize(theming.getAccent()));
-      output.getTheming().setSignal(inputSanitizer.sanitize(theming.getSignal()));
+      // Blank/whitespace seeds must stay absent (null), not persist as "". An empty
+      // string is what made the public app discard the entire tenant palette.
+      output.getTheming().setPrimaryColor(sanitizeSeed(theming.getPrimaryColor()));
+      output.getTheming().setSecondaryColor(sanitizeSeed(theming.getSecondaryColor()));
+      output.getTheming().setAccent(sanitizeSeed(theming.getAccent()));
+      output.getTheming().setSignal(sanitizeSeed(theming.getSignal()));
       // loginEffect is a generated enum, not free text — there is nothing to strip,
       // and the enum itself is the whitelist.
       output.getTheming().setLoginEffect(theming.getLoginEffect());
     }
+  }
+
+  private String sanitizeSeed(String value) {
+    String sanitized = inputSanitizer.sanitize(value);
+    return sanitized == null || sanitized.isBlank() ? null : sanitized;
   }
 
   private void sanitizeContent(MultilingualTenantDTO input, MultilingualTenantDTO output) {
