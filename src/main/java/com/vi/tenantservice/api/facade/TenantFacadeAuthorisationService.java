@@ -12,7 +12,10 @@ import com.vi.tenantservice.api.model.TenantContent;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantSetting;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.policy.PermissionFeature;
+import com.vi.tenantservice.api.policy.ResolvedPolicyValue;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import com.vi.tenantservice.config.security.AuthorisationService;
@@ -37,6 +40,8 @@ public class TenantFacadeAuthorisationService {
   private final @NonNull ApplicationSettingsService applicationSettingsService;
 
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
+
+  private final @NonNull TenantPermissionPolicyService tenantPermissionPolicyService;
 
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
@@ -160,7 +165,7 @@ public class TenantFacadeAuthorisationService {
    */
   private void assertSingleTenantAdminMayChangeAppearance(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenant) {
-    if (appearanceChangesAllowedForTenantAdmins()
+    if (appearanceChangesAllowedForTenantAdmins(existingTenant.getId())
         || !themingChanged(sanitizedTenantDTO, existingTenant)) {
       return;
     }
@@ -171,7 +176,31 @@ public class TenantFacadeAuthorisationService {
         HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE);
   }
 
-  private boolean appearanceChangesAllowedForTenantAdmins() {
+  /**
+   * Resolves the appearance permission <em>for this tenant</em>, not from the platform row alone.
+   *
+   * <p>{@code tenant_admin_controls} is a single platform-wide row on purpose - it has no {@code
+   * tenant_id} - so reading it directly would apply one global appearance toggle to every tenant
+   * and silently ignore a tenant-level override. Tenant scope lives in {@code
+   * tenant_permission_policy} (ADR-013 platform -> tenant -> agency), which {@link
+   * TenantPermissionPolicyService#getResolvedPolicies(Long)} resolves.
+   *
+   * <p>The legacy toggle map stays as the fallback for one transition release: a tenant whose
+   * canonical policy has not been written yet still gets the platform answer it got before. Unknown
+   * tenant or missing policy means allowed, matching the previous fail-open behaviour - this check
+   * restricts a Träger admin, it does not grant anything.
+   */
+  private boolean appearanceChangesAllowedForTenantAdmins(Long tenantId) {
+    if (tenantId != null) {
+      ResolvedPolicyValue<Boolean> resolved =
+          tenantPermissionPolicyService
+              .getResolvedPolicies(tenantId)
+              .get(PermissionFeature.APPEARANCE.apiKey());
+      if (resolved != null) {
+        return !Boolean.FALSE.equals(resolved.value());
+      }
+    }
+
     var controls = tenantAdminControlsService.getControls();
     if (controls == null || controls.getAllowedPermissionToggles() == null) {
       return true;
