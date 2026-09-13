@@ -14,6 +14,7 @@ import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
+import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
@@ -255,6 +256,10 @@ public class TenantAdminControlsService {
     }
     if (settings.getCaseHandoverPolicies() == null) {
       settings.setCaseHandoverPolicies(CaseHandoverPolicyDefaults.create());
+    } else {
+      settings.setCaseHandoverPolicies(
+          CaseHandoverPolicyRules.normalize(settings.getCaseHandoverPolicies()));
     }
+    CaseHandoverPolicyRules.validate(settings.getCaseHandoverPolicies());
   }
 }
