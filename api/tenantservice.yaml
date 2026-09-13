@@ -2480,7 +2480,6 @@ components:
           enum:
             - COUNSELLOR_ASKED_FOR_ADVICE
             - COUNSELLOR_ON_HOLIDAY
-            - OTHER_EMERGENCY
             - COUNSELLOR_IS_ILL
             - COUNSELLOR_LEFT
         labels:
@@ -2493,7 +2492,8 @@ components:
           $ref: '#/components/schemas/ConsentPermissionPolicy'
           description: Canonical typed consent policy. Optional while legacy clients migrate from clientConsentRequired.
         clientConsentRequired:
-          $ref: '#/components/schemas/BooleanPermissionPolicy'
+          allOf:
+            - $ref: '#/components/schemas/BooleanPermissionPolicy'
           deprecated: true
           description: Transitional mirror. OPT_IN maps to true; OPT_OUT and NONE map to false.
         approvalRoles:

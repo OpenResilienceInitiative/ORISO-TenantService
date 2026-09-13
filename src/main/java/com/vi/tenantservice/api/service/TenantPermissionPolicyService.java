@@ -15,8 +15,8 @@ import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.StringListPermissionPolicy;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantPermissionPolicyEntity;
-import com.vi.tenantservice.api.policy.CaseHandoverDurationPolicy;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
+import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
 import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PermissionPolicyResolver;
 import com.vi.tenantservice.api.policy.PolicyValue;
@@ -93,7 +93,7 @@ public class TenantPermissionPolicyService {
       Map<String, PolicyValue<Boolean>> overrides,
       CaseHandoverPolicies caseHandoverOverrides) {
     overrides.keySet().forEach(this::assertKnownFeature);
-    validateCaseHandoverOverrides(caseHandoverOverrides);
+    CaseHandoverPolicyRules.validate(caseHandoverOverrides);
     TenantAdminControls platform = platformControls.getControls();
     Map<String, PolicyValue<Boolean>> writableOverrides =
         sanitizeBooleanOverrides(toDomain(platform.getPermissionPolicies()), overrides);
@@ -225,8 +225,8 @@ public class TenantPermissionPolicyService {
               CaseHandoverReasonPolicy parentReason = parent.getReasons().get(code);
               ConsentPermissionPolicy consent =
                   sanitizePolicy(
-                      effectiveConsent(parentReason),
-                      effectiveConsent(localReason),
+                      CaseHandoverPolicyRules.effectiveConsent(parentReason),
+                      CaseHandoverPolicyRules.effectiveConsent(localReason),
                       code + ".clientConsent");
               writableReasons.put(
                   code,
@@ -242,7 +242,7 @@ public class TenantPermissionPolicyService {
                               parentReason.getAccessAllowed(),
                               localReason.getAccessAllowed(),
                               code + ".accessAllowed"),
-                          legacyConsentMirror(consent),
+                          CaseHandoverPolicyRules.legacyConsentMirror(consent),
                           sanitizePolicy(
                               parentReason.getApprovalRoles(),
                               localReason.getApprovalRoles(),
@@ -310,14 +310,16 @@ public class TenantPermissionPolicyService {
   private CaseHandoverReasonPolicy resolveReason(
       CaseHandoverReasonPolicy parent, CaseHandoverReasonPolicy local) {
     ConsentPermissionPolicy consent =
-        resolveConsent(effectiveConsent(parent), local == null ? null : effectiveConsent(local));
+        resolveConsent(
+            CaseHandoverPolicyRules.effectiveConsent(parent),
+            local == null ? null : CaseHandoverPolicyRules.effectiveConsent(local));
     return new CaseHandoverReasonPolicy(
             parent.getCode(),
             resolveMultilingual(parent.getLabels(), local == null ? null : local.getLabels()),
             resolveBoolean(parent.getEnabled(), local == null ? null : local.getEnabled()),
             resolveBoolean(
                 parent.getAccessAllowed(), local == null ? null : local.getAccessAllowed()),
-            legacyConsentMirror(consent),
+            CaseHandoverPolicyRules.legacyConsentMirror(consent),
             resolveStringList(
                 parent.getApprovalRoles(), local == null ? null : local.getApprovalRoles()),
             resolveMultilingual(
@@ -403,78 +405,6 @@ public class TenantPermissionPolicyService {
 
   private PolicyValue<Map<String, String>> toDomain(MultilingualTextPermissionPolicy policy) {
     return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
-  }
-
-  private void validateCaseHandoverOverrides(CaseHandoverPolicies policies) {
-    if (policies == null) {
-      return;
-    }
-    if (policies.getReasons() == null) {
-      throw new IllegalArgumentException("Case Handover reasons must not be null");
-    }
-    Set<String> knownReasons = CaseHandoverPolicyDefaults.create().getReasons().keySet();
-    for (var entry : policies.getReasons().entrySet()) {
-      if (!knownReasons.contains(entry.getKey()) || entry.getValue() == null) {
-        throw new IllegalArgumentException("Unknown Case Handover reason: " + entry.getKey());
-      }
-      CaseHandoverReasonPolicy reason = entry.getValue();
-      if (!entry.getKey().equals(reason.getCode().getValue())) {
-        throw new IllegalArgumentException("Case Handover reason key must match its code");
-      }
-      ConsentPermissionPolicy consent = effectiveConsent(reason);
-      if (consent == null) {
-        throw new IllegalArgumentException("Case Handover client consent must not be null");
-      }
-      if (consent.getValue() == CaseHandoverConsentValue.NONE
-          && consent.getMode() == PermissionPolicyMode.ENFORCED) {
-        throw new IllegalArgumentException(
-            "Case Handover NONE consent is a recommendation, not an enforced state");
-      }
-      if (CaseHandoverPolicyDefaults.ADVICE_NEEDED.equals(entry.getKey())) {
-        IntegerPermissionPolicy duration = reason.getMaxAccessDurationMinutes();
-        CaseHandoverDurationPolicy.validateAdviceNeeded(
-            duration == null ? null : duration.getValue());
-      } else {
-        CaseHandoverDurationPolicy.validateTakeover(
-            reason.getMaxAccessDurationMinutes() == null
-                ? null
-                : reason.getMaxAccessDurationMinutes().getValue());
-      }
-    }
-  }
-
-  private ConsentPermissionPolicy effectiveConsent(CaseHandoverReasonPolicy reason) {
-    if (reason == null) {
-      return null;
-    }
-    BooleanPermissionPolicy legacy = reason.getClientConsentRequired();
-    if (legacy != null
-        && Boolean.TRUE.equals(legacy.getValue())
-        && legacy.getMode() == PermissionPolicyMode.ENFORCED) {
-      return new ConsentPermissionPolicy(CaseHandoverConsentValue.OPT_IN, legacy.getMode())
-          .inherited(legacy.getInherited());
-    }
-    if (reason.getClientConsent() != null) {
-      return reason.getClientConsent();
-    }
-    if (legacy == null) {
-      return null;
-    }
-    return new ConsentPermissionPolicy(
-            Boolean.TRUE.equals(legacy.getValue())
-                ? CaseHandoverConsentValue.OPT_IN
-                : CaseHandoverConsentValue.NONE,
-            legacy.getMode())
-        .inherited(legacy.getInherited());
-  }
-
-  private BooleanPermissionPolicy legacyConsentMirror(ConsentPermissionPolicy consent) {
-    if (consent == null) {
-      return null;
-    }
-    return new BooleanPermissionPolicy(
-            consent.getValue() == CaseHandoverConsentValue.OPT_IN, consent.getMode())
-        .inherited(consent.getInherited());
   }
 
   private void assertKnownFeature(String feature) {
