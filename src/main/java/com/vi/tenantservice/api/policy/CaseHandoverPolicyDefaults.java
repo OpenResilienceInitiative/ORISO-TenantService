@@ -99,10 +99,10 @@ public final class CaseHandoverPolicyDefaults {
             multilingual(labels),
             bool(true),
             bool(true),
-            consent(clientConsent),
+            bool(clientConsent == CaseHandoverConsentValue.OPT_IN),
             new StringListPermissionPolicy(approvalRoles, PermissionPolicyMode.SUGGESTED),
             multilingual(templates))
-        .clientConsentRequired(bool(clientConsent == CaseHandoverConsentValue.OPT_IN));
+        .clientConsent(consent(clientConsent));
   }
 
   private static BooleanPermissionPolicy bool(boolean value) {

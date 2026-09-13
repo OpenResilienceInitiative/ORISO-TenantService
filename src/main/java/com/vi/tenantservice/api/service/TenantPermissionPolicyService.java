@@ -223,6 +223,11 @@ public class TenantPermissionPolicyService {
         .forEach(
             (code, localReason) -> {
               CaseHandoverReasonPolicy parentReason = parent.getReasons().get(code);
+              ConsentPermissionPolicy consent =
+                  sanitizePolicy(
+                      effectiveConsent(parentReason),
+                      effectiveConsent(localReason),
+                      code + ".clientConsent");
               writableReasons.put(
                   code,
                   new CaseHandoverReasonPolicy(
@@ -237,10 +242,7 @@ public class TenantPermissionPolicyService {
                               parentReason.getAccessAllowed(),
                               localReason.getAccessAllowed(),
                               code + ".accessAllowed"),
-                          sanitizePolicy(
-                              effectiveConsent(parentReason),
-                              effectiveConsent(localReason),
-                              code + ".clientConsent"),
+                          legacyConsentMirror(consent),
                           sanitizePolicy(
                               parentReason.getApprovalRoles(),
                               localReason.getApprovalRoles(),
@@ -249,7 +251,7 @@ public class TenantPermissionPolicyService {
                               parentReason.getClientNotificationTemplates(),
                               localReason.getClientNotificationTemplates(),
                               code + ".clientNotificationTemplates"))
-                      .clientConsentRequired(legacyConsentMirror(effectiveConsent(localReason)))
+                      .clientConsent(consent)
                       .maxAccessDurationMinutes(
                           sanitizePolicy(
                               parentReason.getMaxAccessDurationMinutes(),
@@ -307,23 +309,21 @@ public class TenantPermissionPolicyService {
 
   private CaseHandoverReasonPolicy resolveReason(
       CaseHandoverReasonPolicy parent, CaseHandoverReasonPolicy local) {
+    ConsentPermissionPolicy consent =
+        resolveConsent(effectiveConsent(parent), local == null ? null : effectiveConsent(local));
     return new CaseHandoverReasonPolicy(
             parent.getCode(),
             resolveMultilingual(parent.getLabels(), local == null ? null : local.getLabels()),
             resolveBoolean(parent.getEnabled(), local == null ? null : local.getEnabled()),
             resolveBoolean(
                 parent.getAccessAllowed(), local == null ? null : local.getAccessAllowed()),
-            resolveConsent(
-                effectiveConsent(parent), local == null ? null : effectiveConsent(local)),
+            legacyConsentMirror(consent),
             resolveStringList(
                 parent.getApprovalRoles(), local == null ? null : local.getApprovalRoles()),
             resolveMultilingual(
                 parent.getClientNotificationTemplates(),
                 local == null ? null : local.getClientNotificationTemplates()))
-        .clientConsentRequired(
-            legacyConsentMirror(
-                resolveConsent(
-                    effectiveConsent(parent), local == null ? null : effectiveConsent(local))))
+        .clientConsent(consent)
         .maxAccessDurationMinutes(
             parent.getMaxAccessDurationMinutes() == null
                 ? null
