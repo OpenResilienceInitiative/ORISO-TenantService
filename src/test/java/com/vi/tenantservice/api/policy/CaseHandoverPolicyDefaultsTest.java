@@ -1,7 +1,6 @@
 package com.vi.tenantservice.api.policy;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Set;
@@ -16,7 +15,13 @@ class CaseHandoverPolicyDefaultsTest {
   void exposesOnlyTheCurrentReasonCatalogueWithExplicitConsentDefaults() {
     var reasons = CaseHandoverPolicyDefaults.create().getReasons();
 
-    assertFalse(reasons.containsKey("OTHER_EMERGENCY"));
+    assertEquals(
+        Set.of(
+            CaseHandoverPolicyDefaults.ADVICE_NEEDED,
+            "COUNSELLOR_ON_HOLIDAY",
+            "COUNSELLOR_IS_ILL",
+            "COUNSELLOR_LEFT"),
+        reasons.keySet());
     assertEquals(
         "Geplant verhindert",
         reasons.get("COUNSELLOR_ON_HOLIDAY").getLabels().getValue().get("de"));

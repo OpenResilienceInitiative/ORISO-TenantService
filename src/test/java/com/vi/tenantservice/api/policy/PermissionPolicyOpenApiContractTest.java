@@ -65,6 +65,8 @@ class PermissionPolicyOpenApiContractTest {
     var reasonProperties = (Map<String, Object>) reasonPolicy.get("properties");
     assertThat(reasonRequired).contains("clientConsentRequired");
     assertThat(reasonRequired).doesNotContain("clientConsent");
+    assertThat((Map<String, Object>) reasonProperties.get("clientConsent"))
+        .containsEntry("$ref", "#/components/schemas/ConsentPermissionPolicy");
     assertThat((Map<String, Object>) reasonProperties.get("clientConsentRequired"))
         .containsEntry("deprecated", true);
     var duration = (Map<String, Object>) schemas.get("IntegerPermissionPolicy");
