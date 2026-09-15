@@ -162,6 +162,7 @@ class TenantAdminControlsServiceTest {
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,"
             + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true,\"mode\":\"ENFORCED\"}},"
+            + "\"allowedPermissionToggles\":{\"videoCalls\":false,\"futureToggle\":true},"
             + "\"someBrandNewTopLevelField\":\"future-value\"}");
 
     tenantAdminControlsService.getControls();
@@ -172,6 +173,51 @@ class TenantAdminControlsServiceTest {
         ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
     verify(tenantConverter).toTenantAdminControls(captor.capture());
     assertThat(captor.getValue().isPermissionsPageEnabled()).isTrue();
+    assertThat(captor.getValue().getAllowedPermissionToggles().getVideoCalls()).isFalse();
+  }
+
+  @Test
+  void getControls_Should_useDefaults_When_storedRootIsAnArray() {
+    givenStoredControlsJson("[]");
+    TenantAdminControlsSettings defaults =
+        TenantAdminControlsSettings.builder().permissionsPageEnabled(true).build();
+    when(tenantConverter.toTenantAdminControlsSettings(any(TenantAdminControls.class)))
+        .thenReturn(defaults);
+
+    tenantAdminControlsService.getControls();
+
+    verify(tenantConverter).toTenantAdminControls(defaults);
+    assertThat(defaults.getCaseHandoverPolicies()).isNotNull();
+  }
+
+  @Test
+  void updateControls_Should_replaceArrayRootWithRequestedControls() {
+    givenStoredControlsJson("[]");
+    when(tenantConverter.toTenantAdminControlsSettings(any(TenantAdminControls.class)))
+        .thenAnswer(
+            call -> TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+
+    tenantAdminControlsService.updateControls(
+        new TenantAdminControls().permissionsPageEnabled(false));
+
+    assertThat(capturedSavedControls())
+        .startsWith("{")
+        .contains("\"permissionsPageEnabled\":false");
+  }
+
+  @Test
+  void setTranslationApiKey_Should_storeEncryptedKey_When_storedRootIsAnArray() {
+    givenStoredControlsJson("[]");
+    givenEncryptingCipher();
+    when(tenantConverter.toTenantAdminControlsSettings(any(TenantAdminControls.class)))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(true).build());
+
+    tenantAdminControlsService.setTranslationApiKey("openrouter", "new-key");
+
+    assertThat(capturedSavedControls())
+        .startsWith("{")
+        .contains("\"openrouter\":\"ENC(new-key)\"")
+        .contains("\"permissionsPageEnabled\":true");
   }
 
   @Test

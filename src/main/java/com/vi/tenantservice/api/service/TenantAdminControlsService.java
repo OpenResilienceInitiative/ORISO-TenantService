@@ -197,8 +197,7 @@ public class TenantAdminControlsService {
     try {
       JsonNode tree = OBJECT_MAPPER.readTree(controlsJson);
       // A blob that is not a JSON object is not something this service wrote, and there is nothing
-      // in it to preserve. The read path throws on it first, so this is defence in depth rather
-      // than a reachable admin flow.
+      // in it to preserve. The read path uses defaults for these roots as well.
       return tree.isObject() ? (ObjectNode) tree : OBJECT_MAPPER.createObjectNode();
     } catch (JsonProcessingException unreadableBlob) {
       return OBJECT_MAPPER.createObjectNode();
@@ -218,11 +217,12 @@ public class TenantAdminControlsService {
       return createDefaultControlsSettings();
     }
     try {
-      TenantAdminControlsSettings settings =
-          OBJECT_MAPPER.readValue(controlsJson, TenantAdminControlsSettings.class);
-      if (settings == null) {
+      JsonNode tree = OBJECT_MAPPER.readTree(controlsJson);
+      if (!tree.isObject()) {
         return createDefaultControlsSettings();
       }
+      TenantAdminControlsSettings settings =
+          OBJECT_MAPPER.treeToValue(tree, TenantAdminControlsSettings.class);
       hydrateCanonicalPolicies(settings);
       return settings;
     } catch (JsonProcessingException exception) {
