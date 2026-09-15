@@ -75,7 +75,7 @@ class EffectivePermissionSettingsApplierTest {
   }
 
   @Test
-  void applyPolicies_shouldApplyOnlyEnforcedValues() {
+  void applyPolicies_shouldApplyEnforcedAndLeaveOriginlessSuggestionUnchanged() {
     var settings = new Settings().featureVideoCallsEnabled(true).featureAudioCallsEnabled(false);
 
     applier.applyPolicies(
@@ -88,5 +88,31 @@ class EffectivePermissionSettingsApplierTest {
 
     assertThat(settings.getFeatureVideoCallsEnabled()).isFalse();
     assertThat(settings.getFeatureAudioCallsEnabled()).isFalse();
+  }
+
+  @Test
+  void applyPolicies_shouldApplyATenantLocalSuggestedValue() {
+    var settings = new Settings().featureGroupChatV2Enabled(false);
+
+    applier.applyPolicies(
+        settings,
+        Map.of(
+            "featureGroupChatV2Enabled",
+            new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED).inherited(false)));
+
+    assertThat(settings.getFeatureGroupChatV2Enabled()).isTrue();
+  }
+
+  @Test
+  void applyPolicies_shouldLeaveAnInheritedSuggestedValueNonBinding() {
+    var settings = new Settings().featureGroupChatV2Enabled(false);
+
+    applier.applyPolicies(
+        settings,
+        Map.of(
+            "featureGroupChatV2Enabled",
+            new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED).inherited(true)));
+
+    assertThat(settings.getFeatureGroupChatV2Enabled()).isFalse();
   }
 }

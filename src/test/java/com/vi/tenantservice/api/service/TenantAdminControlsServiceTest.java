@@ -23,6 +23,7 @@ import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.PermissionPolicyMode;
+import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
 import java.util.Optional;
@@ -336,5 +337,30 @@ class TenantAdminControlsServiceTest {
     assertThatThrownBy(() -> tenantAdminControlsService.updateControls(new TenantAdminControls()))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("NONE consent");
+  }
+
+  @Test
+  void getControls_shouldCompletePartialCanonicalPoliciesWithoutOverwritingStoredEntries() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"allowedPermissionToggles\":{\"groupChat\":true},"
+            + "\"permissionPolicies\":{"
+            + "\"featureMediaUploadOneOnOneChatsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"},"
+            + "\"someFutureFeatureEnabled\":{\"value\":true,\"mode\":\"ENFORCED\"}}}");
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> settings =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(settings.capture());
+    assertThat(settings.getValue().getPermissionPolicies())
+        .containsEntry(
+            "featureMediaUploadOneOnOneChatsEnabled",
+            new PolicyValue<>(false, PermissionPolicyMode.ENFORCED))
+        .containsEntry(
+            "featureGroupChatV2Enabled", new PolicyValue<>(true, PermissionPolicyMode.SUGGESTED))
+        .containsEntry(
+            "featureCallsEnabled", new PolicyValue<>(true, PermissionPolicyMode.SUGGESTED))
+        .doesNotContainKey("someFutureFeatureEnabled");
   }
 }
