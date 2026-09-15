@@ -4,11 +4,15 @@ import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 import static org.mockito.Mockito.*;
 
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
+import com.vi.tenantservice.api.model.Theming;
 import java.util.HashMap;
 import java.util.Map;
 import org.jeasy.random.EasyRandom;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -74,6 +78,59 @@ class TenantInputSanitizerTest {
     var map = new HashMap<String, String>();
     map.put("de", content);
     return map;
+  }
+
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"   ", "\t"})
+  void sanitize_Should_turnBlankThemingSeedsIntoNull(String blankSeed) {
+    MultilingualTenantDTO tenantDTO = tenantWithSeeds(blankSeed, blankSeed, blankSeed, blankSeed);
+
+    MultilingualTenantDTO sanitized =
+        new TenantInputSanitizer(new InputSanitizer()).sanitize(tenantDTO);
+
+    assertThat(sanitized.getTheming().getPrimaryColor()).isNull();
+    assertThat(sanitized.getTheming().getSecondaryColor()).isNull();
+    assertThat(sanitized.getTheming().getAccent()).isNull();
+    assertThat(sanitized.getTheming().getSignal()).isNull();
+  }
+
+  @Test
+  void sanitize_Should_keepValidThemingSeeds() {
+    MultilingualTenantDTO tenantDTO = tenantWithSeeds("#8B1A2B", "#FFFFFF", "#FFB3C7", "#E53935");
+
+    MultilingualTenantDTO sanitized =
+        new TenantInputSanitizer(new InputSanitizer()).sanitize(tenantDTO);
+
+    assertThat(sanitized.getTheming().getPrimaryColor()).isEqualTo("#8B1A2B");
+    assertThat(sanitized.getTheming().getSecondaryColor()).isEqualTo("#FFFFFF");
+    assertThat(sanitized.getTheming().getAccent()).isEqualTo("#FFB3C7");
+    assertThat(sanitized.getTheming().getSignal()).isEqualTo("#E53935");
+  }
+
+  @Test
+  void sanitize_Should_nullOnlyTheBlankSeedAndKeepTheValidOnes() {
+    MultilingualTenantDTO tenantDTO = tenantWithSeeds("#8B1A2B", "", "  ", "#E53935");
+
+    MultilingualTenantDTO sanitized =
+        new TenantInputSanitizer(new InputSanitizer()).sanitize(tenantDTO);
+
+    assertThat(sanitized.getTheming().getPrimaryColor()).isEqualTo("#8B1A2B");
+    assertThat(sanitized.getTheming().getSecondaryColor()).isNull();
+    assertThat(sanitized.getTheming().getAccent()).isNull();
+    assertThat(sanitized.getTheming().getSignal()).isEqualTo("#E53935");
+  }
+
+  private static MultilingualTenantDTO tenantWithSeeds(
+      String primary, String secondary, String accent, String signal) {
+    EasyRandom generator = new EasyRandom();
+    MultilingualTenantDTO tenantDTO = generator.nextObject(MultilingualTenantDTO.class);
+    Theming theming = tenantDTO.getTheming();
+    theming.setPrimaryColor(primary);
+    theming.setSecondaryColor(secondary);
+    theming.setAccent(accent);
+    theming.setSignal(signal);
+    return tenantDTO;
   }
 
   @Test

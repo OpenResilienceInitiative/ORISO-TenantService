@@ -23,6 +23,7 @@ import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.ChatRecoverySettings;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
@@ -586,6 +587,16 @@ public class TenantServiceFacade {
     return multilingualTenantDTO;
   }
 
+  public ChatRecoverySettings getChatRecoverySettings() {
+    assertSuperAdmin();
+    return tenantAdminControlsService.getChatRecoverySettings();
+  }
+
+  public ChatRecoverySettings updateChatRecoverySettings(ChatRecoverySettings settings) {
+    assertSuperAdmin();
+    return tenantAdminControlsService.updateChatRecoverySettings(settings);
+  }
+
   public TenantAdminControls getTenantAdminControls() {
     assertSuperAdmin();
     return tenantAdminControlsService.getControls();
@@ -787,6 +798,14 @@ public class TenantServiceFacade {
       dto.setPermissionPolicies(policies);
       effectivePermissionSettingsApplier.applyPolicies(dto.getSettings(), policies);
       effectivePermissionSettingsApplier.applyTo(dto.getSettings(), controls);
+      if (dto.getSettings() != null && controls != null) {
+        // Account creation needs the current role defaults, never platform secrets or write access.
+        dto.getSettings()
+            .setTenantAdminControls(
+                new TenantAdminControls()
+                    .chatRecoverySettings(controls.getChatRecoverySettings())
+                    .permissionPolicies(null));
+      }
       if (dto.getId() == null || dto.getId() != TECHNICAL_TENANT_ID) {
         dto.setTheming(effectiveThemingApplier.effective(dto.getTheming(), platformTheming));
       }

@@ -389,6 +389,7 @@ public class TenantConverter {
             toEnforcedPermissionTogglesSettings(tenantAdminControls.getEnforcedPermissionToggles()))
         .permissionPolicies(toPermissionPolicySettings(tenantAdminControls.getPermissionPolicies()))
         .caseHandoverPolicies(tenantAdminControls.getCaseHandoverPolicies())
+        .chatRecoverySettings(tenantAdminControls.getChatRecoverySettings())
         .build();
   }
 
@@ -476,7 +477,8 @@ public class TenantConverter {
             toEnforcedPermissionToggles(tenantAdminControlsSettings.getEnforcedPermissionToggles()))
         .permissionPolicies(
             toBooleanPermissionPolicies(tenantAdminControlsSettings.getPermissionPolicies()))
-        .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies());
+        .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies())
+        .chatRecoverySettings(tenantAdminControlsSettings.getChatRecoverySettings());
   }
 
   private Map<String, PolicyValue<Boolean>> toPermissionPolicySettings(
