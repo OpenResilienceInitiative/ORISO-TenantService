@@ -12,6 +12,37 @@ class CaseHandoverPolicyDefaultsTest {
       Set.of("de", "en", "fr", "ru", "tr", "uk", "ti");
 
   @Test
+  void exposesOnlyTheCurrentReasonCatalogueWithExplicitConsentDefaults() {
+    var reasons = CaseHandoverPolicyDefaults.create().getReasons();
+
+    assertEquals(
+        Set.of(
+            CaseHandoverPolicyDefaults.ADVICE_NEEDED,
+            "COUNSELLOR_ON_HOLIDAY",
+            "COUNSELLOR_IS_ILL",
+            "COUNSELLOR_LEFT"),
+        reasons.keySet());
+    assertEquals(
+        "Geplant verhindert",
+        reasons.get("COUNSELLOR_ON_HOLIDAY").getLabels().getValue().get("de"));
+    assertEquals(
+        "Ungeplant verhindert", reasons.get("COUNSELLOR_IS_ILL").getLabels().getValue().get("de"));
+    assertEquals(
+        "OPT_IN",
+        reasons
+            .get(CaseHandoverPolicyDefaults.ADVICE_NEEDED)
+            .getClientConsent()
+            .getValue()
+            .getValue());
+    reasons.forEach(
+        (code, reason) -> {
+          if (!CaseHandoverPolicyDefaults.ADVICE_NEEDED.equals(code)) {
+            assertEquals("NONE", reason.getClientConsent().getValue().getValue(), code);
+          }
+        });
+  }
+
+  @Test
   void everyReasonProvidesAnEditableNotificationTemplateInEverySupportedLanguage() {
     var reasons = CaseHandoverPolicyDefaults.create().getReasons();
 
