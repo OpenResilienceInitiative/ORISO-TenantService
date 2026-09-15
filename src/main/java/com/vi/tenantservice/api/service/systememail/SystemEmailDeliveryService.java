@@ -54,7 +54,7 @@ public class SystemEmailDeliveryService {
     }
     try {
       transport.send(smtp, password, request);
-    } catch (jakarta.mail.MessagingException ignored) {
+    } catch (Exception exception) {
       // Never attach SMTP exceptions: they can contain server replies, recipient or credentials.
       throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "SMTP_DELIVERY_UNCONFIRMED");
     }
