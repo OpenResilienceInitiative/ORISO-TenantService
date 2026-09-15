@@ -1,8 +1,7 @@
 {
-  "lastAnalyzedAt": "2026-06-12T03:44:12.472Z",
-  "gitCommitHash": "a777c69447609d16db33ae1a1b54fd4efe5366b6",
+  "lastAnalyzedAt": "2026-08-27T12:31:10.649Z",
+  "gitCommitHash": "164d130d0857a723e3ca44a3074dee3a7c042a4a",
   "version": "1.0.0",
-  "analyzedFiles": 177,
-  "generator": "oriso-tenant-ua-generate.mjs deterministic Understand-Anything fallback",
-  "scope": "current repository only"
+  "analyzedFiles": 286,
+  "generator": "oriso-ua-generate.mjs v2 (deterministic A-lite base, rebuilt 2026-07)"
 }

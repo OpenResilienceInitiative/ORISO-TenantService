@@ -935,6 +935,44 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void
+      getRestrictedTenantDataDeterminingTenantContext_Should_FallBackToMainTenant_When_NoTenantContextIsResolvable() {
+    // given: an anonymous caller without a tenantId cookie on a host whose subdomain matches no
+    // tenant -- exactly what a mail client is when it fetches
+    // /tenant/public/branding/logo. In single-domain mode such a caller is in platform scope,
+    // the same situation as the technical-tenant sentinel above, so the main tenant's public
+    // data is the correct answer instead of a NoSuchElementException.
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    ReflectionTestUtils.setField(
+        tenantServiceFacade,
+        "tenantConverter",
+        new TenantConverter(
+            new TemplateService(),
+            templateRenderer,
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+
+    var settings =
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+            .ApplicationSettingsDTO();
+    settings.setMainTenantSubdomainForSingleDomainMultitenancy(
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO()
+            .value(SINGLE_DOMAIN_SUBDOMAIN_NAME));
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(settings);
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(getTenantWithPrivacy("{\"de\":\"content1\"}"));
+    when(tenantResolverService.tryResolve()).thenReturn(Optional.empty());
+    when(translationService.getCurrentLanguageContext()).thenReturn("de");
+
+    // when
+    RestrictedTenantDTO tenantDTO =
+        tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext();
+
+    // then: the main tenant's own public data comes back and no override is attempted
+    assertThat(tenantDTO.getContent().getPrivacy()).contains("content1");
+    verifyNoInteractions(singleDomainTenantOverrideService);
+  }
+
+  @Test
   void findTenantBySubdomain_Should_ReturnEmpty_When_MainTenantIsNotFoundInSingleDomainMode() {
     // given
     ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
