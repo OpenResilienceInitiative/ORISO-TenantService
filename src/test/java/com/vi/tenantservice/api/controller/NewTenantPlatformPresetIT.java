@@ -203,4 +203,100 @@ class NewTenantPlatformPresetIT {
         .andExpect(jsonPath("$.settings.featureInternalGroupChatEnabled", is(true)))
         .andExpect(jsonPath("$.settings.featureTeamDiscussionEnabled", is(false)));
   }
+
+  private void savePlatformPolicies(String policiesJson) throws Exception {
+    mvc.perform(
+            put(PLATFORM_CONTROLS)
+                .with(authentication(platformAdmin()))
+                .contentType(APPLICATION_JSON)
+                .content("{\"permissionPolicies\":" + policiesJson + "}"))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void newTenant_should_followExplicitPlatformPolicyOff_forAMediaFeature() throws Exception {
+    savePlatformPolicies(
+        "{\"featureMediaInlineDisplayEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}");
+
+    String newTenant = createTenant("mediaoff");
+
+    mvc.perform(get(newTenant))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureMediaInlineDisplayEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureMediaInlineDisplayGroupChatsEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureMediaAiScanEnabled", is(false)));
+  }
+
+  @Test
+  void newTenant_should_followExplicitPlatformPolicyOn_forAMediaFeature() throws Exception {
+    // the platform admin switches AI scan off and on again, as the Admin panel does per click
+    savePlatformPolicies(
+        "{\"featureMediaAiScanEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}");
+    savePlatformPolicies("{\"featureMediaAiScanEnabled\":{\"value\":true,\"mode\":\"SUGGESTED\"}}");
+
+    String newTenant = createTenant("aiscanon");
+
+    mvc.perform(get(newTenant))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureMediaAiScanEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureMediaAiScanGroupChatsEnabled", is(false)));
+  }
+
+  @Test
+  void newTenant_should_followAnEnforcedPlatformPolicy_forAMediaFeature() throws Exception {
+    savePlatformPolicies("{\"featureMediaAiScanEnabled\":{\"value\":true,\"mode\":\"ENFORCED\"}}");
+
+    String newTenant = createTenant("aiscanenforced");
+
+    mvc.perform(get(newTenant))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureMediaAiScanEnabled", is(true)));
+  }
+
+  @Test
+  void newTenant_should_keepMediaAndAskerDefaults_whenThePlatformAdminNeverTouchedThem()
+      throws Exception {
+    savePlatformPolicies(
+        "{\"featureGroupChatV2Enabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}");
+
+    String newTenant = createTenant("untouchedmedia");
+
+    // media upload is false here because the testing profile's default-tenant-settings.json says
+    // so: without an explicit platform policy the configured default stays in charge
+    mvc.perform(get(newTenant))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureMediaUploadEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureMediaInlineDisplayEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureMediaAiScanEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureDisplayNameEditable", is(true)))
+        .andExpect(jsonPath("$.settings.featureAskerEmailEnabled", is(true)));
+  }
+
+  @Test
+  void newTenant_should_notTreatThePolicyMapEchoedBackByTheAdminPanel_asExplicit()
+      throws Exception {
+    // The Admin panel PUTs the whole map it received from GET, including entries the platform
+    // derived from the legacy toggles (AI scan shows up as "on, suggested" there). Only what the
+    // platform admin actually changed counts as the preset.
+    String controls =
+        mvc.perform(get(PLATFORM_CONTROLS).with(authentication(platformAdmin())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.permissionPolicies.featureMediaAiScanEnabled.value", is(true)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    mvc.perform(
+            put(PLATFORM_CONTROLS)
+                .with(authentication(platformAdmin()))
+                .contentType(APPLICATION_JSON)
+                .content(controls))
+        .andExpect(status().isOk());
+
+    String newTenant = createTenant("echoedmap");
+
+    mvc.perform(get(newTenant))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureMediaAiScanEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureGroupChatV2Enabled", is(true)));
+  }
 }

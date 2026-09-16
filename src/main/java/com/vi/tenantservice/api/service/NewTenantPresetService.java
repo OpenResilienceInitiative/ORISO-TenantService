@@ -1,9 +1,10 @@
 package com.vi.tenantservice.api.service;
 
-import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
-import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.policy.PermissionFeature;
+import com.vi.tenantservice.api.policy.PolicyValue;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -12,19 +13,25 @@ import org.springframework.stereotype.Service;
 /**
  * #251: a new Träger starts from the platform admin's preset <b>as it is at creation time</b>.
  *
- * <p>The values are written into the new tenant's stored settings, so a later change of the preset
- * only affects Träger created afterwards. Existing tenants and the read defaults in {@link
- * TenantSettings} are deliberately not touched.
+ * <p>The preset is the set of platform policies the platform admin set explicitly ({@link
+ * TenantAdminControlsService#getExplicitPlatformPolicies()}). Their values are written into the new
+ * tenant's stored settings, so a later preset change only affects Träger created afterwards.
+ * Existing tenants and the read defaults in {@link TenantSettings} are deliberately not touched.
  *
- * <p>Scope: the conversation features. A feature the preset does not name starts <b>on</b> (the
- * initial platform preset is "everything on"). Media handling (upload, inline display, AI scan) and
- * the advice-seeker switches are not conversation features and keep their existing defaults.
+ * <p>Where the platform admin set nothing, the feature's existing default applies. For the
+ * conversation features that default is <b>on</b> (decision 2026-09-16: the initial preset is
+ * "everything on"), written explicitly so it overrides the older hard-coded "off" from the default
+ * settings file. Every other registry feature (media handling, advice-seeker switches) keeps
+ * whatever the default settings file or {@code TenantSettings.applyDefaults()} already gives it —
+ * in particular AI scan is not switched on by a policy entry that was merely derived from the
+ * legacy toggles.
  */
 @Service
 @RequiredArgsConstructor
 public class NewTenantPresetService {
 
-  private static final Map<String, BiConsumer<TenantSettings, Boolean>> CONVERSATION_FEATURES =
+  /** Registry features that have a tenant settings field, keyed by policy key. */
+  private static final Map<String, BiConsumer<TenantSettings, Boolean>> SETTERS =
       Map.ofEntries(
           Map.entry("featureAnonymousChatEnabled", TenantSettings::setFeatureAnonymousChatEnabled),
           Map.entry("featureGroupChatV2Enabled", TenantSettings::setFeatureGroupChatV2Enabled),
@@ -33,9 +40,6 @@ public class NewTenantPresetService {
               TenantSettings::setFeatureInternalGroupChatEnabled),
           Map.entry(
               "featureSelfHelpGroupsEnabled", TenantSettings::setFeatureSelfHelpGroupsEnabled),
-          // not part of the permission registry, so the preset never names it: starts on
-          Map.entry(
-              "featureTeamDiscussionEnabled", TenantSettings::setFeatureTeamDiscussionEnabled),
           Map.entry("featureCallsEnabled", TenantSettings::setFeatureCallsEnabled),
           Map.entry("featureSupervisionEnabled", TenantSettings::setFeatureSupervisionEnabled),
           Map.entry(
@@ -94,23 +98,106 @@ public class NewTenantPresetService {
               TenantSettings::setFeatureVoiceMessagesGroupChatsEnabled),
           Map.entry(
               "featureVoiceMessagesSupervisionChatsEnabled",
-              TenantSettings::setFeatureVoiceMessagesSupervisionChatsEnabled));
+              TenantSettings::setFeatureVoiceMessagesSupervisionChatsEnabled),
+          Map.entry("featureMediaUploadEnabled", TenantSettings::setFeatureMediaUploadEnabled),
+          Map.entry(
+              "featureMediaUploadAnonymousChatsEnabled",
+              TenantSettings::setFeatureMediaUploadAnonymousChatsEnabled),
+          Map.entry(
+              "featureMediaUploadOneOnOneChatsEnabled",
+              TenantSettings::setFeatureMediaUploadOneOnOneChatsEnabled),
+          Map.entry(
+              "featureMediaUploadGroupChatsEnabled",
+              TenantSettings::setFeatureMediaUploadGroupChatsEnabled),
+          Map.entry(
+              "featureMediaUploadSupervisionChatsEnabled",
+              TenantSettings::setFeatureMediaUploadSupervisionChatsEnabled),
+          Map.entry(
+              "featureMediaInlineDisplayEnabled",
+              TenantSettings::setFeatureMediaInlineDisplayEnabled),
+          Map.entry(
+              "featureMediaInlineDisplayAnonymousChatsEnabled",
+              TenantSettings::setFeatureMediaInlineDisplayAnonymousChatsEnabled),
+          Map.entry(
+              "featureMediaInlineDisplayOneOnOneChatsEnabled",
+              TenantSettings::setFeatureMediaInlineDisplayOneOnOneChatsEnabled),
+          Map.entry(
+              "featureMediaInlineDisplayGroupChatsEnabled",
+              TenantSettings::setFeatureMediaInlineDisplayGroupChatsEnabled),
+          Map.entry(
+              "featureMediaInlineDisplaySupervisionChatsEnabled",
+              TenantSettings::setFeatureMediaInlineDisplaySupervisionChatsEnabled),
+          Map.entry("featureMediaAiScanEnabled", TenantSettings::setFeatureMediaAiScanEnabled),
+          Map.entry(
+              "featureMediaAiScanAnonymousChatsEnabled",
+              TenantSettings::setFeatureMediaAiScanAnonymousChatsEnabled),
+          Map.entry(
+              "featureMediaAiScanOneOnOneChatsEnabled",
+              TenantSettings::setFeatureMediaAiScanOneOnOneChatsEnabled),
+          Map.entry(
+              "featureMediaAiScanGroupChatsEnabled",
+              TenantSettings::setFeatureMediaAiScanGroupChatsEnabled),
+          Map.entry(
+              "featureMediaAiScanSupervisionChatsEnabled",
+              TenantSettings::setFeatureMediaAiScanSupervisionChatsEnabled),
+          Map.entry("featureDisplayNameEditable", TenantSettings::setFeatureDisplayNameEditable),
+          Map.entry("featureAskerEmailEnabled", TenantSettings::setFeatureAskerEmailEnabled));
+
+  /** Conversation features: without an explicit preset entry they start on. */
+  private static final Set<String> CONVERSATION_FEATURES =
+      Set.of(
+          "featureAnonymousChatEnabled",
+          "featureGroupChatV2Enabled",
+          "featureInternalGroupChatEnabled",
+          "featureSelfHelpGroupsEnabled",
+          "featureCallsEnabled",
+          "featureSupervisionEnabled",
+          "featureSupervisionAnonymousChatsEnabled",
+          "featureSupervisionOneOnOneChatsEnabled",
+          "featureAudioCallsEnabled",
+          "featureAudioCallsAnonymousChatsEnabled",
+          "featureAudioCallsOneOnOneChatsEnabled",
+          "featureAudioCallsGroupChatsEnabled",
+          "featureAudioCallsSupervisionChatsEnabled",
+          "featureVideoCallsEnabled",
+          "featureVideoCallsAnonymousChatsEnabled",
+          "featureVideoCallsOneOnOneChatsEnabled",
+          "featureVideoCallsGroupChatsEnabled",
+          "featureVideoCallsSupervisionChatsEnabled",
+          "featureThreadsEnabled",
+          "featureThreadsAnonymousChatsEnabled",
+          "featureThreadsOneOnOneEnabled",
+          "featureThreadsGroupChatsEnabled",
+          "featureThreadsSupervisionChatsEnabled",
+          "featureVoiceMessagesEnabled",
+          "featureVoiceMessagesAnonymousChatsEnabled",
+          "featureVoiceMessagesOneOnOneChatsEnabled",
+          "featureVoiceMessagesGroupChatsEnabled",
+          "featureVoiceMessagesSupervisionChatsEnabled");
 
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
 
-  /** Writes an explicit value for every conversation feature into {@code newTenantSettings}. */
+  /**
+   * Writes the platform admin's explicit preset into {@code newTenantSettings}; conversation
+   * features without a preset entry are written as on.
+   */
   public TenantSettings applyCurrentPlatformPreset(TenantSettings newTenantSettings) {
-    TenantAdminControls controls = tenantAdminControlsService.getControls();
-    Map<String, BooleanPermissionPolicy> preset =
-        controls == null || controls.getPermissionPolicies() == null
-            ? Map.of()
-            : controls.getPermissionPolicies();
-    CONVERSATION_FEATURES.forEach(
-        (feature, setter) -> setter.accept(newTenantSettings, presetValue(preset.get(feature))));
+    Map<String, PolicyValue<Boolean>> preset =
+        tenantAdminControlsService.getExplicitPlatformPolicies();
+    for (PermissionFeature feature : PermissionFeature.values()) {
+      BiConsumer<TenantSettings, Boolean> setter = SETTERS.get(feature.apiKey());
+      if (setter == null) {
+        continue; // appearance, case handover: no tenant settings field
+      }
+      PolicyValue<Boolean> policy = preset.get(feature.apiKey());
+      if (policy != null) {
+        setter.accept(newTenantSettings, policy.value());
+      } else if (CONVERSATION_FEATURES.contains(feature.apiKey())) {
+        setter.accept(newTenantSettings, true);
+      }
+    }
+    // team discussions are a conversation feature outside the permission registry: start on
+    newTenantSettings.setFeatureTeamDiscussionEnabled(true);
     return newTenantSettings;
-  }
-
-  private static boolean presetValue(BooleanPermissionPolicy policy) {
-    return policy == null || policy.getValue() == null || policy.getValue();
   }
 }
