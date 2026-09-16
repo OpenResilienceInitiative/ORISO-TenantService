@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
+import com.vi.tenantservice.api.model.AccountInactivitySettings;
 import com.vi.tenantservice.api.model.ChatRecoveryMode;
 import com.vi.tenantservice.api.model.ChatRecoverySettings;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
@@ -65,13 +66,52 @@ public class TenantAdminControlsService {
       // the DTO never carries the translation API keys - carry the stored values over verbatim,
       // still encrypted, so this path never decrypts and re-encrypts them for nothing
       controlsSettings.setTranslationApiKeys(existingSettings.getTranslationApiKeys());
-      // Only the versioned recovery subresource can change creation defaults.
+      // Only versioned subresources can change account creation defaults.
       controlsSettings.setChatRecoverySettings(existingSettings.getChatRecoverySettings());
+      controlsSettings.setAccountInactivitySettings(
+          existingSettings.getAccountInactivitySettings());
     }
     hydrateCanonicalPolicies(controlsSettings);
     saveControlsSettings(
         controlsSettings, existingEntity.orElseGet(TenantAdminControlsEntity::new));
     return tenantConverter.toTenantAdminControls(controlsSettings);
+  }
+
+  public AccountInactivitySettings getAccountInactivitySettings() {
+    return inactivitySettings(getControlsSettings());
+  }
+
+  @Transactional
+  public AccountInactivitySettings updateAccountInactivitySettings(
+      AccountInactivitySettings request) {
+    Optional<TenantAdminControlsEntity> existing = findExistingControls();
+    TenantAdminControlsSettings settings =
+        existing
+            .map(entity -> parseControlsSettings(entity.getControls()))
+            .orElseGet(this::createDefaultControlsSettings);
+    AccountInactivitySettings current = inactivitySettings(settings);
+    if (!current.getRevision().equals(request.getRevision())) {
+      throw new SettingsUpdateConflictException(current.getRevision(), request.getRevision());
+    }
+    AccountInactivitySettings updated =
+        new AccountInactivitySettings(
+            request.getAskerMonths(),
+            request.getConsultantMonths(),
+            request.getOtherMonths(),
+            Math.addExact(current.getRevision(), 1L));
+    settings.setAccountInactivitySettings(updated);
+    saveControlsSettings(settings, existing.orElseGet(TenantAdminControlsEntity::new));
+    return updated;
+  }
+
+  private AccountInactivitySettings inactivitySettings(TenantAdminControlsSettings settings) {
+    AccountInactivitySettings stored =
+        settings == null ? null : settings.getAccountInactivitySettings();
+    return new AccountInactivitySettings(
+        stored == null || stored.getAskerMonths() == null ? 24 : stored.getAskerMonths(),
+        stored == null || stored.getConsultantMonths() == null ? 24 : stored.getConsultantMonths(),
+        stored == null || stored.getOtherMonths() == null ? 24 : stored.getOtherMonths(),
+        stored == null || stored.getRevision() == null ? 0L : stored.getRevision());
   }
 
   public ChatRecoverySettings getChatRecoverySettings() {
@@ -249,6 +289,7 @@ public class TenantAdminControlsService {
       return;
     }
     settings.setChatRecoverySettings(recoverySettings(settings));
+    settings.setAccountInactivitySettings(inactivitySettings(settings));
     if (settings.getPermissionPolicies() == null || settings.getPermissionPolicies().isEmpty()) {
       settings.setPermissionPolicies(
           LegacyPermissionPolicyMapper.fromLegacyMaps(
