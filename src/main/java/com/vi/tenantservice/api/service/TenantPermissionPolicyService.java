@@ -77,7 +77,13 @@ public class TenantPermissionPolicyService {
     // tenant overrides stored before the group chat formats were split out (#250) still apply
     Map<String, PolicyValue<Boolean>> effectiveOverrides =
         PermissionFeature.withTransitionFallbacks(overrides);
-    inherited.forEach(
+    // complete the platform map the same way: a split-out format inherits the master
+    // (featureGroupChatV2Enabled) as its parent, so a tenant override for that format is resolved
+    // even when the platform map predates the split and never lists the format key on its own —
+    // otherwise the loop, keyed on the platform map, would drop the override entirely
+    Map<String, PolicyValue<Boolean>> effectiveInherited =
+        PermissionFeature.withTransitionFallbacks(inherited);
+    effectiveInherited.forEach(
         (feature, parent) ->
             resolved.put(
                 feature,

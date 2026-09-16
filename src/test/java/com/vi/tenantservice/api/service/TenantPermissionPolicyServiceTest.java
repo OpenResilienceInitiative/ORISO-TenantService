@@ -69,6 +69,36 @@ class TenantPermissionPolicyServiceTest {
   }
 
   @Test
+  void resolve_shouldApplyASplitFormatOverride_whenThePlatformMapPredatesTheSplit() {
+    // the platform map lists only the master switch, never the split-out format keys (#250).
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        "featureGroupChatV2Enabled",
+                        new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED))));
+    when(repository.findByTenantId(42L))
+        .thenReturn(
+            Optional.of(
+                TenantPermissionPolicyEntity.builder()
+                    .tenantId(42L)
+                    .policies(
+                        "{\"featureSelfHelpGroupsEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}")
+                    .build()));
+
+    Map<String, ResolvedPolicyValue<Boolean>> resolved = service.getResolvedPolicies(42L);
+
+    // the override is honoured against the master inherited as the split format's parent,
+    // not dropped because the platform map lacks the key.
+    assertThat(resolved.get("featureSelfHelpGroupsEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(false, SUGGESTED, false));
+    // the sibling internal format inherits the master untouched.
+    assertThat(resolved.get("featureInternalGroupChatEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
+  }
+
+  @Test
   void save_shouldRemainTenantScoped() {
     when(platformControls.getControls())
         .thenReturn(
