@@ -25,6 +25,9 @@ public class EffectivePermissionSettingsApplier {
       Map.ofEntries(
           Map.entry("featureAnonymousChatEnabled", Settings::setFeatureAnonymousChatEnabled),
           Map.entry("featureGroupChatV2Enabled", Settings::setFeatureGroupChatV2Enabled),
+          Map.entry(
+              "featureInternalGroupChatEnabled", Settings::setFeatureInternalGroupChatEnabled),
+          Map.entry("featureSelfHelpGroupsEnabled", Settings::setFeatureSelfHelpGroupsEnabled),
           Map.entry("featureCallsEnabled", Settings::setFeatureCallsEnabled),
           Map.entry("featureSupervisionEnabled", Settings::setFeatureSupervisionEnabled),
           Map.entry(
@@ -140,6 +143,12 @@ public class EffectivePermissionSettingsApplier {
           new ToggleBinding(
               TenantAdminAllowedPermissionToggles::getGroupChat,
               Settings::setFeatureGroupChatV2Enabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getInternalGroupChat,
+              Settings::setFeatureInternalGroupChatEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getSelfHelpGroups,
+              Settings::setFeatureSelfHelpGroupsEnabled),
           new ToggleBinding(
               TenantAdminAllowedPermissionToggles::getCalls, Settings::setFeatureCallsEnabled),
           new ToggleBinding(

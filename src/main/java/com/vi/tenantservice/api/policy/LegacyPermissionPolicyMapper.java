@@ -29,14 +29,30 @@ public final class LegacyPermissionPolicyMapper {
     Map<String, PolicyValue<Boolean>> policies = new LinkedHashMap<>();
 
     for (PermissionFeature feature : PermissionFeature.values()) {
-      String legacyKey = feature.legacyToggleKey();
-      Boolean legacyAllowed = legacyKey == null ? null : allowedValues.get(legacyKey);
-      Boolean legacyEnforced = legacyKey == null ? null : enforcedValues.get(legacyKey);
+      Boolean legacyAllowed = legacyValue(allowedValues, feature);
+      Boolean legacyEnforced = legacyValue(enforcedValues, feature);
       policies.put(
           feature.apiKey(),
           fromLegacy(legacyAllowed, legacyEnforced, !Boolean.FALSE.equals(legacyAllowed)));
     }
     return Map.copyOf(policies);
+  }
+
+  /** A toggle never stored for a split-out feature (#250) reads the toggle it was split from. */
+  private static Boolean legacyValue(Map<String, Boolean> values, PermissionFeature feature) {
+    String legacyKey = feature.legacyToggleKey();
+    if (legacyKey == null) {
+      return null;
+    }
+    Boolean value = values.get(legacyKey);
+    if (value != null) {
+      return value;
+    }
+    return feature
+        .transitionFallback()
+        .map(PermissionFeature::legacyToggleKey)
+        .map(values::get)
+        .orElse(null);
   }
 
   private static Map<String, Boolean> asMap(TenantAdminAllowedPermissionTogglesSettings settings) {

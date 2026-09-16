@@ -16,6 +16,7 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
+import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
 import java.time.LocalDateTime;
@@ -253,6 +254,10 @@ public class TenantAdminControlsService {
       settings.setPermissionPolicies(
           LegacyPermissionPolicyMapper.fromLegacyMaps(
               settings.getAllowedPermissionToggles(), settings.getEnforcedPermissionToggles()));
+    } else {
+      // policies stored before the group chat formats were split out (#250) keep governing them
+      settings.setPermissionPolicies(
+          PermissionFeature.withTransitionFallbacks(settings.getPermissionPolicies()));
     }
     if (settings.getCaseHandoverPolicies() == null) {
       settings.setCaseHandoverPolicies(CaseHandoverPolicyDefaults.create());

@@ -1988,6 +1988,20 @@ components:
         featureGroupChatV2Enabled:
           type: boolean
           example: "false"
+        featureInternalGroupChatEnabled:
+          type: boolean
+          description: >-
+            Internal group chats (counsellors only), switched separately from conversation
+            circles (#250). When the tenant never stored a value, this reads the tenant's
+            featureGroupChatV2Enabled.
+          example: "true"
+        featureSelfHelpGroupsEnabled:
+          type: boolean
+          description: >-
+            Conversation circles / self-help groups (advice seekers take part), switched
+            separately from internal group chats (#250). When the tenant never stored a value,
+            this reads the tenant's featureGroupChatV2Enabled.
+          example: "true"
         featureTeamDiscussionEnabled:
           type: boolean
           example: "false"
@@ -2520,6 +2534,8 @@ components:
         - appearance
         - featureAnonymousChatEnabled
         - featureGroupChatV2Enabled
+        - featureInternalGroupChatEnabled
+        - featureSelfHelpGroupsEnabled
         - featureCallsEnabled
         - featureSupervisionEnabled
         - featureSupervisionAnonymousChatsEnabled
@@ -2592,6 +2608,12 @@ components:
           type: boolean
           example: "true"
         groupChat:
+          type: boolean
+          example: "true"
+        internalGroupChat:
+          type: boolean
+          example: "true"
+        selfHelpGroups:
           type: boolean
           example: "true"
         supervision:

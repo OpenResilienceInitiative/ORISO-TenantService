@@ -74,11 +74,15 @@ public class TenantPermissionPolicyService {
   private Map<String, ResolvedPolicyValue<Boolean>> resolvePolicies(
       Map<String, PolicyValue<Boolean>> inherited, Map<String, PolicyValue<Boolean>> overrides) {
     Map<String, ResolvedPolicyValue<Boolean>> resolved = new LinkedHashMap<>();
+    // tenant overrides stored before the group chat formats were split out (#250) still apply
+    Map<String, PolicyValue<Boolean>> effectiveOverrides =
+        PermissionFeature.withTransitionFallbacks(overrides);
     inherited.forEach(
         (feature, parent) ->
             resolved.put(
                 feature,
-                PermissionPolicyResolver.resolveWithOrigin(parent, overrides.get(feature))));
+                PermissionPolicyResolver.resolveWithOrigin(
+                    parent, effectiveOverrides.get(feature))));
     return Map.copyOf(resolved);
   }
 
