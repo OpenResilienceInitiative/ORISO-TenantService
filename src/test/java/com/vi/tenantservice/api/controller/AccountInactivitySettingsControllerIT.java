@@ -243,4 +243,21 @@ class AccountInactivitySettingsControllerIT {
         .andExpect(jsonPath("$.revision").value(1))
         .andExpect(jsonPath("$.askerMonths").value(12));
   }
+
+  @Test
+  void firstGeneralControlsSaveCannotInjectInactivityDefaults() throws Exception {
+    mvc.perform(
+            put("/tenantadmin/controls")
+                .with(admin(0))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    "{\"permissionsPageEnabled\":false,\"accountInactivitySettings\":{\"askerMonths\":1,\"consultantMonths\":2,\"otherMonths\":3,\"revision\":99}}"))
+        .andExpect(status().isOk());
+    mvc.perform(get(URL).with(admin(0)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.askerMonths").value(24))
+        .andExpect(jsonPath("$.consultantMonths").value(24))
+        .andExpect(jsonPath("$.otherMonths").value(24))
+        .andExpect(jsonPath("$.revision").value(0));
+  }
 }
