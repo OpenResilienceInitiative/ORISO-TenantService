@@ -171,7 +171,8 @@ class TenantControllerIT {
         .andExpect(jsonPath("settings.topicsInRegistrationEnabled", is(true)))
         .andExpect(jsonPath("settings.featureDemographicsEnabled", is(false)))
         .andExpect(jsonPath("settings.featureAppointmentsEnabled", is(false)))
-        .andExpect(jsonPath("settings.featureGroupChatV2Enabled", is(false)))
+        // #251: conversation features come from the untouched platform preset, not the file
+        .andExpect(jsonPath("settings.featureGroupChatV2Enabled", is(true)))
         .andExpect(jsonPath("settings.featureMediaUploadEnabled", is(false)))
         .andExpect(jsonPath("settings.featureToolsOICDToken", is("token")))
         .andExpect(jsonPath("settings.activeLanguages", is(Lists.newArrayList("de", "en"))));
