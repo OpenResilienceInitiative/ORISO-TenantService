@@ -96,15 +96,15 @@ public class TenantAdminControlsService {
     Map<String, PolicyValue<Boolean>> policies =
         settings.getPermissionPolicies() == null ? Map.of() : settings.getPermissionPolicies();
     Map<String, PolicyValue<Boolean>> explicit = new LinkedHashMap<>();
-    for (PermissionFeature feature : PermissionFeature.values()) {
-      boolean isExplicit =
-          explicitKeys.contains(feature.apiKey())
-              || feature
-                  .transitionFallback()
-                  .map(fallback -> explicitKeys.contains(fallback.apiKey()))
-                  .orElse(false);
-      PolicyValue<Boolean> policy = policies.get(feature.apiKey());
-      if (isExplicit && policy != null) {
+      boolean ownExplicit = explicitKeys.contains(feature.apiKey());
+      PermissionFeature fallback = feature.transitionFallback().orElse(null);
+      boolean fallbackExplicit =
+          !ownExplicit && fallback != null && explicitKeys.contains(fallback.apiKey());
+      PolicyValue<Boolean> policy =
+          ownExplicit
+              ? policies.get(feature.apiKey())
+              : fallbackExplicit ? policies.get(fallback.apiKey()) : null;
+      if (policy != null) {
         explicit.put(feature.apiKey(), policy);
       }
     }
