@@ -236,7 +236,7 @@ public class EffectivePermissionSettingsApplier {
     }
   }
 
-  /** Applies only locked policies. Suggestions remain editable tenant settings. */
+  /** Applies locked policies and resolved tenant-local values. Inherited suggestions are hints. */
   public void applyPolicies(
       Settings settings, Map<String, BooleanPermissionPolicy> permissionPolicies) {
     if (settings == null || permissionPolicies == null) {
@@ -247,7 +247,8 @@ public class EffectivePermissionSettingsApplier {
           BiConsumer<Settings, Boolean> setter = POLICY_SETTERS.get(feature);
           if (setter != null
               && policy != null
-              && policy.getMode() == PermissionPolicyMode.ENFORCED) {
+              && (policy.getMode() == PermissionPolicyMode.ENFORCED
+                  || Boolean.FALSE.equals(policy.getInherited()))) {
             setter.accept(settings, policy.getValue());
           }
         });

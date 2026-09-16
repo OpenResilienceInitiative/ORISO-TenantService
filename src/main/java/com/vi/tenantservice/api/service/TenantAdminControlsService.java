@@ -17,11 +17,13 @@ import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
 import com.vi.tenantservice.api.policy.PermissionFeature;
+import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import lombok.NonNull;
@@ -250,15 +252,23 @@ public class TenantAdminControlsService {
       return;
     }
     settings.setChatRecoverySettings(recoverySettings(settings));
-    if (settings.getPermissionPolicies() == null || settings.getPermissionPolicies().isEmpty()) {
-      settings.setPermissionPolicies(
-          LegacyPermissionPolicyMapper.fromLegacyMaps(
-              settings.getAllowedPermissionToggles(), settings.getEnforcedPermissionToggles()));
-    } else {
-      // policies stored before the group chat formats were split out (#250) keep governing them
-      settings.setPermissionPolicies(
-          PermissionFeature.withTransitionFallbacks(settings.getPermissionPolicies()));
+    Map<String, PolicyValue<Boolean>> completedPolicies =
+        new LinkedHashMap<>(
+            LegacyPermissionPolicyMapper.fromLegacyMaps(
+                settings.getAllowedPermissionToggles(), settings.getEnforcedPermissionToggles()));
+    if (settings.getPermissionPolicies() != null) {
+      // policies stored before the group chat formats were split out (#250) keep governing them:
+      // fill the missing split-out features from featureGroupChatV2Enabled before overlaying, so
+      // the completed registry inherits the stored master value rather than the legacy default
+      PermissionFeature.withTransitionFallbacks(settings.getPermissionPolicies())
+          .forEach(
+              (feature, policy) -> {
+                if (PermissionFeature.byApiKey(feature).isPresent() && policy != null) {
+                  completedPolicies.put(feature, policy);
+                }
+              });
     }
+    settings.setPermissionPolicies(Map.copyOf(completedPolicies));
     if (settings.getCaseHandoverPolicies() == null) {
       settings.setCaseHandoverPolicies(CaseHandoverPolicyDefaults.create());
     } else {
