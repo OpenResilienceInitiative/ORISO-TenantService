@@ -21,10 +21,15 @@ import org.springframework.stereotype.Service;
  * <p>Where the platform admin set nothing, the feature's existing default applies. For the
  * conversation features that default is <b>on</b> (decision 2026-09-16: the initial preset is
  * "everything on"), written explicitly so it overrides the older hard-coded "off" from the default
- * settings file. Every other registry feature (media handling, advice-seeker switches) keeps
- * whatever the default settings file or {@code TenantSettings.applyDefaults()} already gives it —
- * in particular AI scan is not switched on by a policy entry that was merely derived from the
- * legacy toggles.
+ * settings file. Supervision is the deliberate exception: it is not tested yet (decision
+ * 2026-09-16), so the master switch {@code featureSupervisionEnabled}, its per-type switches
+ * ({@code featureSupervisionOneOnOneChatsEnabled}, {@code featureSupervisionAnonymousChatsEnabled})
+ * and the seven {@code feature*SupervisionChatsEnabled} sub-flags (video, audio, voice messages,
+ * threads, media upload, media inline display, media AI scan) are written explicitly <b>off</b>
+ * unless the platform admin set a policy for them. Every other registry feature (media handling,
+ * advice-seeker switches) keeps whatever the default settings file or {@code
+ * TenantSettings.applyDefaults()} already gives it — in particular AI scan is not switched on by a
+ * policy entry that was merely derived from the legacy toggles.
  */
 @Service
 @RequiredArgsConstructor
@@ -151,35 +156,47 @@ public class NewTenantPresetService {
           "featureInternalGroupChatEnabled",
           "featureSelfHelpGroupsEnabled",
           "featureCallsEnabled",
-          "featureSupervisionEnabled",
-          "featureSupervisionAnonymousChatsEnabled",
-          "featureSupervisionOneOnOneChatsEnabled",
           "featureAudioCallsEnabled",
           "featureAudioCallsAnonymousChatsEnabled",
           "featureAudioCallsOneOnOneChatsEnabled",
           "featureAudioCallsGroupChatsEnabled",
-          "featureAudioCallsSupervisionChatsEnabled",
           "featureVideoCallsEnabled",
           "featureVideoCallsAnonymousChatsEnabled",
           "featureVideoCallsOneOnOneChatsEnabled",
           "featureVideoCallsGroupChatsEnabled",
-          "featureVideoCallsSupervisionChatsEnabled",
           "featureThreadsEnabled",
           "featureThreadsAnonymousChatsEnabled",
           "featureThreadsOneOnOneEnabled",
           "featureThreadsGroupChatsEnabled",
-          "featureThreadsSupervisionChatsEnabled",
           "featureVoiceMessagesEnabled",
           "featureVoiceMessagesAnonymousChatsEnabled",
           "featureVoiceMessagesOneOnOneChatsEnabled",
-          "featureVoiceMessagesGroupChatsEnabled",
-          "featureVoiceMessagesSupervisionChatsEnabled");
+          "featureVoiceMessagesGroupChatsEnabled");
+
+  /**
+   * Supervision (decision 2026-09-16, #251): not tested yet, so without an explicit platform policy
+   * a new Träger starts with these off — the master switch, its two per-type switches, and every
+   * {@code feature*SupervisionChatsEnabled} sub-flag across the other feature families.
+   */
+  private static final Set<String> SUPERVISION_FEATURES =
+      Set.of(
+          "featureSupervisionEnabled",
+          "featureSupervisionAnonymousChatsEnabled",
+          "featureSupervisionOneOnOneChatsEnabled",
+          "featureAudioCallsSupervisionChatsEnabled",
+          "featureVideoCallsSupervisionChatsEnabled",
+          "featureThreadsSupervisionChatsEnabled",
+          "featureVoiceMessagesSupervisionChatsEnabled",
+          "featureMediaUploadSupervisionChatsEnabled",
+          "featureMediaInlineDisplaySupervisionChatsEnabled",
+          "featureMediaAiScanSupervisionChatsEnabled");
 
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
 
   /**
    * Writes the platform admin's explicit preset into {@code newTenantSettings}; conversation
-   * features without a preset entry are written as on.
+   * features without a preset entry are written as on, supervision features without a preset entry
+   * are written as off.
    */
   public TenantSettings applyCurrentPlatformPreset(TenantSettings newTenantSettings) {
     Map<String, PolicyValue<Boolean>> preset =
@@ -194,6 +211,8 @@ public class NewTenantPresetService {
         setter.accept(newTenantSettings, policy.value());
       } else if (CONVERSATION_FEATURES.contains(feature.apiKey())) {
         setter.accept(newTenantSettings, true);
+      } else if (SUPERVISION_FEATURES.contains(feature.apiKey())) {
+        setter.accept(newTenantSettings, false);
       }
     }
     // team discussions are a conversation feature outside the permission registry: start on

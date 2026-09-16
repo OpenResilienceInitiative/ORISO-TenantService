@@ -140,6 +140,62 @@ class NewTenantPlatformPresetIT {
   }
 
   @Test
+  void newTenant_should_startWithSupervisionOff_whenPlatformPresetIsUntouched() throws Exception {
+    // decision 2026-09-16: supervision is not tested yet, so a new Träger starts with it off even
+    // though the master conversation-feature default is "on" and the seeded test defaults have
+    // every supervision flag set to true
+    String newTenant = createTenant("supervisionuntouched");
+
+    mvc.perform(get(newTenant))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureSupervisionEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureSupervisionOneOnOneChatsEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureSupervisionAnonymousChatsEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureAudioCallsSupervisionChatsEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureVideoCallsSupervisionChatsEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureThreadsSupervisionChatsEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureVoiceMessagesSupervisionChatsEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureMediaUploadSupervisionChatsEnabled", is(false)))
+        .andExpect(
+            jsonPath("$.settings.featureMediaInlineDisplaySupervisionChatsEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureMediaAiScanSupervisionChatsEnabled", is(false)))
+        // unrelated conversation features stay on: supervision-off is not a blanket "off"
+        .andExpect(jsonPath("$.settings.featureVideoCallsEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureVideoCallsGroupChatsEnabled", is(true)));
+  }
+
+  @Test
+  void newTenant_should_startWithSupervisionOn_afterPlatformAdminSetAnExplicitPolicy()
+      throws Exception {
+    // every policy is already served as "true, SUGGESTED" by default, so requesting true again
+    // would not register as explicit (see the echoed-map test below); flip off then on, as the
+    // Admin panel does per click, so the change is unambiguously explicit
+    savePlatformPolicies(
+        "{\"featureSupervisionEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"},"
+            + "\"featureSupervisionOneOnOneChatsEnabled\":"
+            + "{\"value\":false,\"mode\":\"SUGGESTED\"},"
+            + "\"featureVideoCallsSupervisionChatsEnabled\":"
+            + "{\"value\":false,\"mode\":\"SUGGESTED\"}}");
+    savePlatformPolicies(
+        "{\"featureSupervisionEnabled\":{\"value\":true,\"mode\":\"SUGGESTED\"},"
+            + "\"featureSupervisionOneOnOneChatsEnabled\":"
+            + "{\"value\":true,\"mode\":\"SUGGESTED\"},"
+            + "\"featureVideoCallsSupervisionChatsEnabled\":"
+            + "{\"value\":true,\"mode\":\"SUGGESTED\"}}");
+
+    String newTenant = createTenant("supervisionexplicit");
+
+    mvc.perform(get(newTenant))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureSupervisionEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureSupervisionOneOnOneChatsEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureVideoCallsSupervisionChatsEnabled", is(true)))
+        // left untouched by the platform admin, so it stays off
+        .andExpect(jsonPath("$.settings.featureSupervisionAnonymousChatsEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureAudioCallsSupervisionChatsEnabled", is(false)));
+  }
+
+  @Test
   void newTenant_should_startWithGroupChatsOff_afterPlatformAdminSwitchedThemOffInThePreset()
       throws Exception {
     mvc.perform(
