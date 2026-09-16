@@ -24,11 +24,30 @@ public final class LegacyPermissionPolicyMapper {
   public static Map<String, PolicyValue<Boolean>> fromLegacyMaps(
       TenantAdminAllowedPermissionTogglesSettings allowed,
       TenantAdminAllowedPermissionTogglesSettings enforced) {
+    return complete(Map.of(), allowed, enforced);
+  }
+
+  /**
+   * Returns a policy for every {@link PermissionFeature}: the stored entry where one exists, else
+   * the split-out feature's transition fallback (#250), else the legacy toggle mapping (feature
+   * default SUGGESTED/on). A stored list is never taken at face value (#254): a list that carries
+   * only some features must still yield a platform rule for all of them on every read.
+   *
+   * <p>{@code allowed}/{@code enforced} accept the settings shape or the API toggle DTO; both carry
+   * the same legacy toggle keys.
+   */
+  public static Map<String, PolicyValue<Boolean>> complete(
+      Map<String, PolicyValue<Boolean>> stored, Object allowed, Object enforced) {
     Map<String, Boolean> allowedValues = asMap(allowed);
     Map<String, Boolean> enforcedValues = asMap(enforced);
     Map<String, PolicyValue<Boolean>> policies = new LinkedHashMap<>();
-
+    if (stored != null && !stored.isEmpty()) {
+      policies.putAll(PermissionFeature.withTransitionFallbacks(stored));
+    }
     for (PermissionFeature feature : PermissionFeature.values()) {
+      if (policies.get(feature.apiKey()) != null) {
+        continue;
+      }
       Boolean legacyAllowed = legacyValue(allowedValues, feature);
       Boolean legacyEnforced = legacyValue(enforcedValues, feature);
       policies.put(
@@ -55,10 +74,10 @@ public final class LegacyPermissionPolicyMapper {
         .orElse(null);
   }
 
-  private static Map<String, Boolean> asMap(TenantAdminAllowedPermissionTogglesSettings settings) {
-    if (settings == null) {
+  private static Map<String, Boolean> asMap(Object toggles) {
+    if (toggles == null) {
       return Map.of();
     }
-    return new ObjectMapper().convertValue(settings, new TypeReference<Map<String, Boolean>>() {});
+    return new ObjectMapper().convertValue(toggles, new TypeReference<Map<String, Boolean>>() {});
   }
 }
