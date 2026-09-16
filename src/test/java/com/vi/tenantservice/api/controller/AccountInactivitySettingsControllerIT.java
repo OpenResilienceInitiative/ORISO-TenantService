@@ -48,6 +48,7 @@ class AccountInactivitySettingsControllerIT {
 
   @Autowired WebApplicationContext context;
   @Autowired TenantAdminControlsRepository repository;
+  @Autowired javax.sql.DataSource dataSource;
   @MockitoBean ApplicationSettingsService applicationSettingsService;
   @MockitoBean ApplicationSettingsApiControllerFactory applicationSettingsApiControllerFactory;
   @MockitoBean ConsultingTypeServiceApiControllerFactory consultingTypeServiceApiControllerFactory;
@@ -220,11 +221,17 @@ class AccountInactivitySettingsControllerIT {
 
   @Test
   void concurrentFirstSavesHaveOneWinnerAndOneConflict() throws Exception {
-    var start = new java.util.concurrent.CountDownLatch(1);
+    // The real database pauses both inserts before either row becomes visible.
+    // A start latch alone can pass through two sequential reads and a stale revision.
+    ControlsInsertBarrier.barrier = new java.util.concurrent.CyclicBarrier(2);
+    try (var connection = dataSource.getConnection();
+        var statement = connection.createStatement()) {
+      statement.execute(
+          "CREATE TRIGGER inactivity_first_insert BEFORE INSERT ON tenant_admin_controls FOR EACH ROW CALL 'com.vi.tenantservice.api.controller.ControlsInsertBarrier'");
+    }
     try (var executor = java.util.concurrent.Executors.newFixedThreadPool(2)) {
       java.util.concurrent.Callable<Integer> save =
           () -> {
-            start.await();
             return mvc.perform(put(URL).with(admin(0)).contentType(APPLICATION_JSON).content(MIXED))
                 .andReturn()
                 .getResponse()
@@ -232,12 +239,17 @@ class AccountInactivitySettingsControllerIT {
           };
       var first = executor.submit(save);
       var second = executor.submit(save);
-      start.countDown();
       assertThat(
               List.of(
                   first.get(30, java.util.concurrent.TimeUnit.SECONDS),
                   second.get(30, java.util.concurrent.TimeUnit.SECONDS)))
           .containsExactlyInAnyOrder(200, 409);
+    } finally {
+      try (var connection = dataSource.getConnection();
+          var statement = connection.createStatement()) {
+        statement.execute("DROP TRIGGER IF EXISTS inactivity_first_insert");
+      }
+      ControlsInsertBarrier.barrier = null;
     }
     mvc.perform(get(URL).with(admin(0)))
         .andExpect(jsonPath("$.revision").value(1))
