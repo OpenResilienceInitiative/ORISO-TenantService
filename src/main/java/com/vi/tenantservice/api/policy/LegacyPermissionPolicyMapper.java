@@ -42,7 +42,15 @@ public final class LegacyPermissionPolicyMapper {
     Map<String, Boolean> enforcedValues = asMap(enforced);
     Map<String, PolicyValue<Boolean>> policies = new LinkedHashMap<>();
     if (stored != null && !stored.isEmpty()) {
-      policies.putAll(PermissionFeature.withTransitionFallbacks(stored));
+      // stored entries win, but only for registry features: a non-registry key (e.g. one left by an
+      // older schema) is never a canonical policy and must not be served (#231)
+      PermissionFeature.withTransitionFallbacks(stored)
+          .forEach(
+              (key, policy) -> {
+                if (policy != null && PermissionFeature.byApiKey(key).isPresent()) {
+                  policies.put(key, policy);
+                }
+              });
     }
     for (PermissionFeature feature : PermissionFeature.values()) {
       if (policies.get(feature.apiKey()) != null) {
