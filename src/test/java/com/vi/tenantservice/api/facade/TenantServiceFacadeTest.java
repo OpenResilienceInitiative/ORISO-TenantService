@@ -36,6 +36,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
+import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -130,6 +131,8 @@ class TenantServiceFacadeTest {
   private TenantFacadeDependentSettingsOverrideService tenantFacadeDependentSettingsOverrideService;
 
   @Mock private TenantAdminControlsService tenantAdminControlsService;
+
+  @Mock private NewTenantPresetService newTenantPresetService;
 
   @Spy
   private EffectivePermissionSettingsApplier effectivePermissionSettingsApplier =

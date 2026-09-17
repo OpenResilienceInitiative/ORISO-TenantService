@@ -16,13 +16,18 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
+import com.vi.tenantservice.api.policy.PermissionFeature;
+import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -55,6 +60,8 @@ public class TenantAdminControlsService {
             .map(entity -> parseControlsSettings(entity.getControls()))
             .orElseGet(this::createDefaultControlsSettings);
     if (existingSettings != null) {
+      controlsSettings.setExplicitPermissionPolicyKeys(
+          explicitPolicyKeys(existingSettings, controlsSettings.getPermissionPolicies()));
       if (controlsSettings.getPermissionPolicies() == null
           || controlsSettings.getPermissionPolicies().isEmpty()) {
         controlsSettings.setPermissionPolicies(existingSettings.getPermissionPolicies());
@@ -72,6 +79,61 @@ public class TenantAdminControlsService {
     saveControlsSettings(
         controlsSettings, existingEntity.orElseGet(TenantAdminControlsEntity::new));
     return tenantConverter.toTenantAdminControls(controlsSettings);
+  }
+
+  /**
+   * #251 — the platform admin's preset for new Träger: only the policies the admin set explicitly
+   * (see {@link TenantAdminControlsSettings#getExplicitPermissionPolicyKeys()}). A group chat
+   * format whose own policy was never set follows an explicit {@code featureGroupChatV2Enabled}
+   * policy (#250 transition).
+   */
+  public Map<String, PolicyValue<Boolean>> getExplicitPlatformPolicies() {
+    TenantAdminControlsSettings settings = getControlsSettings();
+    Set<String> explicitKeys =
+        settings.getExplicitPermissionPolicyKeys() == null
+            ? Set.of()
+            : settings.getExplicitPermissionPolicyKeys();
+    Map<String, PolicyValue<Boolean>> policies =
+        settings.getPermissionPolicies() == null ? Map.of() : settings.getPermissionPolicies();
+    Map<String, PolicyValue<Boolean>> explicit = new LinkedHashMap<>();
+    for (PermissionFeature feature : PermissionFeature.values()) {
+      boolean ownExplicit = explicitKeys.contains(feature.apiKey());
+      PermissionFeature fallback = feature.transitionFallback().orElse(null);
+      boolean fallbackExplicit =
+          !ownExplicit && fallback != null && explicitKeys.contains(fallback.apiKey());
+      PolicyValue<Boolean> policy =
+          ownExplicit
+              ? policies.get(feature.apiKey())
+              : fallbackExplicit ? policies.get(fallback.apiKey()) : null;
+      if (policy != null) {
+        explicit.put(feature.apiKey(), policy);
+      }
+    }
+    return Map.copyOf(explicit);
+  }
+
+  /**
+   * A requested policy counts as explicitly set when it differs from what the platform currently
+   * serves for that key (value or mode). Keys marked earlier stay marked.
+   */
+  private static Set<String> explicitPolicyKeys(
+      TenantAdminControlsSettings existing, Map<String, PolicyValue<Boolean>> requested) {
+    Set<String> keys = new LinkedHashSet<>();
+    if (existing.getExplicitPermissionPolicyKeys() != null) {
+      keys.addAll(existing.getExplicitPermissionPolicyKeys());
+    }
+    if (requested == null) {
+      return keys;
+    }
+    Map<String, PolicyValue<Boolean>> served =
+        existing.getPermissionPolicies() == null ? Map.of() : existing.getPermissionPolicies();
+    requested.forEach(
+        (key, policy) -> {
+          if (policy != null && !policy.equals(served.get(key))) {
+            keys.add(key);
+          }
+        });
+    return keys;
   }
 
   public ChatRecoverySettings getChatRecoverySettings() {
