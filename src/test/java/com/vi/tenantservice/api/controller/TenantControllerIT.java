@@ -642,6 +642,40 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.settings.featureSelfHelpGroupsEnabled", is(true)));
   }
 
+  @Test
+  void updateTenant_Should_keepStoredGroupChatFormatFlags_When_updateOmitsThem() throws Exception {
+    // Store an explicit override where the split flags diverge from the master switch:
+    // internal group chats OFF while conversation circles ON, both under group chat v2 ON.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withGroupChatFormats(true, false, true)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureInternalGroupChatEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureSelfHelpGroupsEnabled", is(true)));
+
+    // An unrelated update carries the master switch but omits both split flags (null = left out of
+    // the request). Without preservation the settings full-replace would blank them and
+    // applyDefaults() would re-derive both from featureGroupChatV2Enabled (true), flipping the
+    // stored internal=false back to true.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withGroupChatFormats(true, null, null)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureInternalGroupChatEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureSelfHelpGroupsEnabled", is(true)));
+
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureGroupChatV2Enabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureInternalGroupChatEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureSelfHelpGroupsEnabled", is(true)));
+  }
+
   private org.springframework.test.web.servlet.ResultActions putTenant1AsTenantAdmin(
       String jsonRequest) throws Exception {
     when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
