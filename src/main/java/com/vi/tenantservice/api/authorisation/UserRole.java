@@ -15,7 +15,14 @@ public enum UserRole {
 
   RESTRICTED_AGENCY_ADMIN("restricted-agency-admin"),
 
-  RESTRICTED_CONSULTANT_ADMIN("restricted-consultant-admin");
+  RESTRICTED_CONSULTANT_ADMIN("restricted-consultant-admin"),
+
+  /**
+   * The Keycloak service identity the other services authenticate as when they act on behalf of
+   * nobody. Not an admin role — see {@code Authority.TECHNICAL_USER} for what it may actually do
+   * here (reading a tenant, nothing else).
+   */
+  TECHNICAL("technical");
 
   private final String value;
 
