@@ -10,6 +10,9 @@ import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
+import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
+import com.vi.tenantservice.api.model.ConsentPermissionPolicy;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
@@ -18,6 +21,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.PermissionPolicyMode;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
@@ -287,5 +291,50 @@ class TenantAdminControlsServiceTest {
         .isFalse();
     assertThat(settings.getValue().getPermissionPolicies().get("featureSupervisionEnabled").mode())
         .isEqualTo(PermissionPolicyMode.ENFORCED);
+  }
+
+  @Test
+  void getControls_shouldNormalizeLegacyEnforcedOptOutAsTypedConsent() {
+    givenStoredControlsJson(
+        "{\"caseHandoverPolicies\":{\"reasons\":{\"COUNSELLOR_ON_HOLIDAY\":{"
+            + "\"code\":\"COUNSELLOR_ON_HOLIDAY\","
+            + "\"clientConsentRequired\":{\"value\":false,\"mode\":\"ENFORCED\"}}}}}");
+    when(tenantConverter.toTenantAdminControls(any())).thenReturn(new TenantAdminControls());
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> settings =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(settings.capture());
+    var consent =
+        settings
+            .getValue()
+            .getCaseHandoverPolicies()
+            .getReasons()
+            .get("COUNSELLOR_ON_HOLIDAY")
+            .getClientConsent();
+    assertThat(consent.getValue()).isEqualTo(CaseHandoverConsentValue.OPT_OUT);
+    assertThat(consent.getMode())
+        .isEqualTo(com.vi.tenantservice.api.model.PermissionPolicyMode.ENFORCED);
+  }
+
+  @Test
+  void updateControls_shouldRejectInvalidPlatformConsentPolicy() {
+    var policies = CaseHandoverPolicyDefaults.create();
+    var advice = policies.getReasons().get(CaseHandoverPolicyDefaults.ADVICE_NEEDED);
+    advice.setClientConsent(
+        new ConsentPermissionPolicy(
+            CaseHandoverConsentValue.NONE,
+            com.vi.tenantservice.api.model.PermissionPolicyMode.ENFORCED));
+    advice.setClientConsentRequired(
+        new BooleanPermissionPolicy(
+            false, com.vi.tenantservice.api.model.PermissionPolicyMode.SUGGESTED));
+    when(tenantConverter.toTenantAdminControlsSettings(any()))
+        .thenReturn(TenantAdminControlsSettings.builder().caseHandoverPolicies(policies).build());
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc()).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> tenantAdminControlsService.updateControls(new TenantAdminControls()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("NONE consent");
   }
 }
