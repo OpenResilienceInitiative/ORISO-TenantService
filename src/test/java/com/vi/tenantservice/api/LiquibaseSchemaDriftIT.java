@@ -82,7 +82,8 @@ class LiquibaseSchemaDriftIT {
           "sequence_tenant_admin_controls",
           "sequence_tenant_dpa_signature",
           "sequence_tenant_dpa_version",
-          "sequence_tenant_dpa_admin_signature"
+          "sequence_tenant_dpa_admin_signature",
+          "sequence_tenant_legal_draft"
         }) {
       Integer count =
           jdbcTemplate.queryForObject(
@@ -103,7 +104,8 @@ class LiquibaseSchemaDriftIT {
           "tenant_admin_controls",
           "tenant_dpa_signature",
           "tenant_dpa_version",
-          "tenant_dpa_admin_signature"
+          "tenant_dpa_admin_signature",
+          "tenant_legal_draft"
         }) {
       Integer count =
           jdbcTemplate.queryForObject(
@@ -125,6 +127,18 @@ class LiquibaseSchemaDriftIT {
             String.class);
 
     assertThat(deleteRule).as("tenant permission-policy delete rule").isEqualTo("CASCADE");
+  }
+
+  @Test
+  void tenantLegalDraftForeignKey_shouldCascadeTenantDeletion() {
+    String deleteRule =
+        jdbcTemplate.queryForObject(
+            "SELECT DELETE_RULE FROM information_schema.REFERENTIAL_CONSTRAINTS"
+                + " WHERE CONSTRAINT_SCHEMA = DATABASE()"
+                + " AND CONSTRAINT_NAME = 'fk_tenant_legal_draft_tenant'",
+            String.class);
+
+    assertThat(deleteRule).as("tenant legal-draft delete rule").isEqualTo("CASCADE");
   }
 
   @Test
