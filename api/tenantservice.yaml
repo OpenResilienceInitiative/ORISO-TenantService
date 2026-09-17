@@ -244,6 +244,59 @@ paths:
         409:
           description: CONFLICT - reload current settings before saving
 
+  /tenantadmin/{id}/legal-drafts/{kind}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {type: integer, format: int64}
+      - name: kind
+        in: path
+        required: true
+        schema: {type: string, enum: [PRIVACY, IMPRINT]}
+    get:
+      tags: [tenant-controller]
+      summary: Gets a tenant legal draft
+      operationId: getTenantLegalDraft
+      responses:
+        200:
+          description: Successful operation
+          content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalDraftDTO'}}}
+        400: {description: Invalid legal draft kind}
+        404: {description: No saved draft or tenant}
+        403: {description: Forbidden}
+    put:
+      tags: [tenant-controller]
+      summary: Saves a tenant legal draft using its expected revision
+      operationId: updateTenantLegalDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TenantLegalDraftUpdateRequest'}
+      responses:
+        200:
+          description: Successful operation
+          content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalDraftDTO'}}}
+        400: {description: Invalid legal draft kind or request body}
+        404: {description: Tenant not found}
+        409: {description: Stale draft revision}
+        403: {description: Forbidden}
+    delete:
+      tags: [tenant-controller]
+      summary: Deletes a tenant legal draft using its expected revision
+      operationId: deleteTenantLegalDraft
+      parameters:
+        - name: revision
+          in: query
+          required: true
+          schema: {type: string, pattern: '^(new|[1-9][0-9]*:[0-9]+)$'}
+      responses:
+        204: {description: Deleted}
+        400: {description: Invalid legal draft kind or revision}
+        404: {description: No saved draft or tenant}
+        409: {description: Stale draft revision}
+        403: {description: Forbidden}
   /tenantadmin/{id}/permission-policies:
     parameters:
       - name: id
@@ -2644,6 +2697,49 @@ components:
         - featureDisplayNameEditable
         - featureAskerEmailEnabled
         - caseHandoverEnabled
+
+    TenantLegalDraftDTO:
+      type: object
+      required: [kind, content, revision, updatedAt]
+      properties:
+        kind:
+          type: string
+          enum: [PRIVACY, IMPRINT]
+          readOnly: true
+        content:
+          type: object
+          additionalProperties: {type: string}
+        privacyConsent:
+          type: object
+          additionalProperties: {type: string}
+          description: >-
+            Optional privacy consent sentence map by language. Values are plain text. Supported
+            only for PRIVACY drafts; omit for IMPRINT drafts.
+        revision:
+          type: string
+          pattern: '^(new|[1-9][0-9]*:[0-9]+)$'
+          description: Opaque concurrency token. Use new only when no draft exists.
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+
+    TenantLegalDraftUpdateRequest:
+      type: object
+      required: [content, revision]
+      properties:
+        content:
+          type: object
+          additionalProperties: {type: string}
+        privacyConsent:
+          type: object
+          description: >-
+            Optional privacy consent sentence map by language. Every value must be plain text.
+            Supported only for PRIVACY drafts; omit for IMPRINT drafts.
+        revision:
+          type: string
+          pattern: '^(new|[1-9][0-9]*:[0-9]+)$'
+          description: Opaque concurrency token. Use new only when no draft exists.
 
     TenantPermissionPolicies:
       type: object
