@@ -558,6 +558,90 @@ class TenantControllerIT {
         .andExpect(jsonPath("settings.activeLanguages", is(Lists.newArrayList("de"))));
   }
 
+  @Test
+  void getPublicTenant_Should_fallBackToGroupChatV2_When_formatFlagsWereNeverStored()
+      throws Exception {
+    // tenant 1 is seeded with featureGroupChatV2Enabled=true and no format flags (#250)
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureInternalGroupChatEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureSelfHelpGroupsEnabled", is(true)));
+  }
+
+  @Test
+  void getPublicTenant_Should_fallBackToDisabledGroupChatV2_When_formatFlagsAreOmitted()
+      throws Exception {
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withSettings()
+                .withGroupChatFormats(false, null, null)
+                .jsonify())
+        .andExpect(status().isOk());
+
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureGroupChatV2Enabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureInternalGroupChatEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureSelfHelpGroupsEnabled", is(false)));
+  }
+
+  @Test
+  void updateTenant_Should_letSingleTenantAdminSwitchGroupChatFormats() throws Exception {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(1L));
+    when(authorisationService.hasRole(SINGLE_TENANT_ADMIN.getValue())).thenReturn(true);
+    when(consultingTypeService.getConsultingTypesByTenantId(1))
+        .thenReturn(
+            new com.vi.tenantservice.consultingtypeservice.generated.web.model
+                    .FullConsultingTypeResponseDTO()
+                .id(CONSULTING_TYPE_ID)
+                .isVideoCallAllowed(true)
+                .languageFormal(true));
+    mockMvc
+        .perform(
+            put(EXISTING_TENANT_VIA_ADMIN)
+                .with(
+                    authentication(
+                        new AuthenticationMockBuilder()
+                            .withUserRole(SINGLE_TENANT_ADMIN.getValue())
+                            .build()))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    multilingualTenantTestDataBuilder
+                        .withId(1L)
+                        .withName("tenant")
+                        .withLicensing(5)
+                        .withSubdomain("happylife")
+                        .withSettingTopicsInRegistrationEnabled(true)
+                        .withGroupChatFormats(true, true, false)
+                        .jsonify()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureInternalGroupChatEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureSelfHelpGroupsEnabled", is(false)));
+  }
+
+  @Test
+  void updateTenant_Should_storeGroupChatFormatsSeparately() throws Exception {
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withSettings()
+                .withGroupChatFormats(true, false, true)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureInternalGroupChatEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureSelfHelpGroupsEnabled", is(true)));
+
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureGroupChatV2Enabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureInternalGroupChatEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureSelfHelpGroupsEnabled", is(true)));
+  }
+
   private org.springframework.test.web.servlet.ResultActions putTenant1AsTenantAdmin(
       String jsonRequest) throws Exception {
     when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);

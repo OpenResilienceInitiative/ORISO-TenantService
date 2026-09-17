@@ -93,6 +93,20 @@ public class TenantFacadeChangeDetectionService {
         existingSettingsToCompare.getFeatureGroupChatV2Enabled())) {
       resultList.add(TenantSetting.FEATURE_GROUP_CHAT_V2_ENABLED);
     }
+    // #250: a format flag the request leaves out was not touched by the caller. It is then stored
+    // as absent and follows featureGroupChatV2Enabled, whose own change is checked above.
+    if (inputSettings.getFeatureInternalGroupChatEnabled() != null
+        && isChanged(
+            inputSettings.getFeatureInternalGroupChatEnabled(),
+            existingSettingsToCompare.getFeatureInternalGroupChatEnabled())) {
+      resultList.add(TenantSetting.FEATURE_INTERNAL_GROUP_CHAT_ENABLED);
+    }
+    if (inputSettings.getFeatureSelfHelpGroupsEnabled() != null
+        && isChanged(
+            inputSettings.getFeatureSelfHelpGroupsEnabled(),
+            existingSettingsToCompare.getFeatureSelfHelpGroupsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_SELF_HELP_GROUPS_ENABLED);
+    }
     if (isChanged(
         inputSettings.getFeatureTeamDiscussionEnabled(),
         existingSettingsToCompare.getFeatureTeamDiscussionEnabled())) {
