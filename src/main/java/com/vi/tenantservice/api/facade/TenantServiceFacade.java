@@ -20,6 +20,7 @@ import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
+import com.vi.tenantservice.api.model.AccountInactivitySettings;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
@@ -602,6 +603,17 @@ public class TenantServiceFacade {
     return tenantAdminControlsService.updateChatRecoverySettings(settings);
   }
 
+  public AccountInactivitySettings getAccountInactivitySettings() {
+    assertSuperAdmin();
+    return tenantAdminControlsService.getAccountInactivitySettings();
+  }
+
+  public AccountInactivitySettings updateAccountInactivitySettings(
+      AccountInactivitySettings settings) {
+    assertSuperAdmin();
+    return tenantAdminControlsService.updateAccountInactivitySettings(settings);
+  }
+
   public TenantAdminControls getTenantAdminControls() {
     assertSuperAdmin();
     return tenantAdminControlsService.getControls();
@@ -809,6 +821,7 @@ public class TenantServiceFacade {
             .setTenantAdminControls(
                 new TenantAdminControls()
                     .chatRecoverySettings(controls.getChatRecoverySettings())
+                    .accountInactivitySettings(controls.getAccountInactivitySettings())
                     .permissionPolicies(null));
       }
       if (dto.getId() == null || dto.getId() != TECHNICAL_TENANT_ID) {

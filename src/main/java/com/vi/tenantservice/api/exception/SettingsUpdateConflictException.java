@@ -4,7 +4,7 @@ public class SettingsUpdateConflictException extends RuntimeException {
 
   public SettingsUpdateConflictException(long currentRevision, long submittedRevision) {
     super(
-        "Stale chat recovery settings revision: currentRevision="
+        "Stale settings revision: currentRevision="
             + currentRevision
             + ", submittedRevision="
             + submittedRevision

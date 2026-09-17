@@ -33,6 +33,8 @@ public class TenantAdminControlsSettings {
   /** Creation defaults only; existing accounts retain their enrollment policy. */
   ChatRecoverySettings chatRecoverySettings;
 
+  AccountInactivitySettings accountInactivitySettings;
+
   boolean permissionsPageEnabled;
   TenantAdminAllowedPermissionTogglesSettings allowedPermissionToggles;
 
