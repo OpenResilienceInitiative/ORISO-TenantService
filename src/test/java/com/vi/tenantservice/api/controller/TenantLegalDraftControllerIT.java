@@ -41,7 +41,9 @@ class TenantLegalDraftControllerIT {
 
   private static final String TENANT_ONE_PRIVACY = "/tenantadmin/1/legal-drafts/PRIVACY";
   private static final String NEW_PRIVACY =
-      "{\"content\":{\"de\":\"<p>Draft</p>\"},\"revision\":\"new\"}";
+      "{\"content\":{\"de\":\"<p>Draft</p>\"},"
+          + "\"privacyConsent\":{\"de\":\"Ich habe die {{legal_links}} gelesen.\"},"
+          + "\"revision\":\"new\"}";
 
   @Autowired private WebApplicationContext context;
   @Autowired private TenantLegalDraftRepository draftRepository;
@@ -87,11 +89,13 @@ class TenantLegalDraftControllerIT {
         .andExpect(jsonPath("$.revision").value(org.hamcrest.Matchers.matchesPattern("[0-9]+:0")))
         .andExpect(jsonPath("$.kind").value("PRIVACY"))
         .andExpect(jsonPath("$.updatedAt").isNotEmpty())
+        .andExpect(jsonPath("$.privacyConsent.de").value("Ich habe die {{legal_links}} gelesen."))
         .andExpect(jsonPath("$.content.de").value("<p>Draft</p>"));
 
     mvc.perform(get(TENANT_ONE_PRIVACY).with(tenantAdmin(1L)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.kind").value("PRIVACY"))
+        .andExpect(jsonPath("$.privacyConsent.de").value("Ich habe die {{legal_links}} gelesen."))
         .andExpect(jsonPath("$.content.de").value("<p>Draft</p>"));
   }
 
@@ -120,6 +124,20 @@ class TenantLegalDraftControllerIT {
     mvc.perform(put(url).with(tenantAdmin(0L)).contentType(APPLICATION_JSON).content(body))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.content.de").value("<p>Platform imprint draft</p>"));
+  }
+
+  @Test
+  void imprintDraft_Should_rejectPrivacyConsent() throws Exception {
+    String body =
+        "{\"content\":{\"de\":\"<p>Imprint</p>\"},"
+            + "\"privacyConsent\":{\"de\":\"not applicable\"},\"revision\":\"new\"}";
+
+    mvc.perform(
+            put("/tenantadmin/1/legal-drafts/IMPRINT")
+                .with(tenantAdmin(1L))
+                .contentType(APPLICATION_JSON)
+                .content(body))
+        .andExpect(status().isBadRequest());
   }
 
   private RequestPostProcessor tenantAdmin(long tenantId) {

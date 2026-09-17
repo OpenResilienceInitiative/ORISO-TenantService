@@ -32,7 +32,15 @@ public class TenantLegalDraftService {
 
   @Transactional
   public TenantLegalDraftEntity save(
-      Long tenantId, TenantLegalDraftKind kind, Map<String, String> content, String revision) {
+      Long tenantId,
+      TenantLegalDraftKind kind,
+      Map<String, String> content,
+      Map<String, String> privacyConsent,
+      String revision) {
+    if (kind != TenantLegalDraftKind.PRIVACY && privacyConsent != null) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Privacy consent is only supported for privacy drafts");
+    }
     var existing = repository.findByTenantIdAndKind(tenantId, kind);
     String actual = existing.map(this::revision).orElse(NEW_REVISION);
     if (!actual.equals(revision)) throw new SettingsUpdateConflictException(actual, revision);
@@ -40,6 +48,9 @@ public class TenantLegalDraftService {
         existing.orElseGet(
             () -> TenantLegalDraftEntity.builder().tenantId(tenantId).kind(kind).build());
     entity.setContent(write(sanitize(content)));
+    if (kind == TenantLegalDraftKind.PRIVACY && privacyConsent != null) {
+      entity.setPrivacyConsent(write(privacyConsent));
+    }
     entity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));
     try {
       return repository.saveAndFlush(entity);
@@ -73,11 +84,19 @@ public class TenantLegalDraftService {
   }
 
   public Map<String, String> content(TenantLegalDraftEntity draft) {
+    return read(draft.getContent(), "content");
+  }
+
+  public Map<String, String> privacyConsent(TenantLegalDraftEntity draft) {
+    if (draft.getPrivacyConsent() == null) return null;
+    return read(draft.getPrivacyConsent(), "privacy consent");
+  }
+
+  private Map<String, String> read(String json, String field) {
     try {
-      return objectMapper.readValue(
-          draft.getContent(), new TypeReference<LinkedHashMap<String, String>>() {});
+      return objectMapper.readValue(json, new TypeReference<LinkedHashMap<String, String>>() {});
     } catch (Exception e) {
-      throw new IllegalStateException("Could not read legal draft content", e);
+      throw new IllegalStateException("Could not read legal draft " + field, e);
     }
   }
 

@@ -21,9 +21,16 @@ public class TenantLegalDraftFacade {
     return drafts.get(tenantId, parse(kind)).map(this::dto);
   }
 
-  public TenantLegalDraftDTO save(Long tenantId, String kind, TenantLegalDraftDTO request) {
+  public TenantLegalDraftDTO save(
+      Long tenantId, String kind, TenantLegalDraftUpdateRequest request) {
     authorize(tenantId);
-    return dto(drafts.save(tenantId, parse(kind), request.getContent(), request.getRevision()));
+    return dto(
+        drafts.save(
+            tenantId,
+            parse(kind),
+            request.getContent(),
+            privacyConsent(request.getPrivacyConsent()),
+            request.getRevision()));
   }
 
   public void delete(Long tenantId, String kind, String revision) {
@@ -45,11 +52,31 @@ public class TenantLegalDraftFacade {
     }
   }
 
+  private Map<String, String> privacyConsent(Object value) {
+    if (value == null) return null;
+    if (!(value instanceof Map<?, ?> values)) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Privacy consent must be a language-to-text map");
+    }
+    Map<String, String> result = new LinkedHashMap<>();
+    for (var entry : values.entrySet()) {
+      if (!(entry.getKey() instanceof String key) || !(entry.getValue() instanceof String text)) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "Privacy consent must contain plain-text values");
+      }
+      result.put(key, text);
+    }
+    return result;
+  }
+
   private TenantLegalDraftDTO dto(TenantLegalDraftEntity e) {
-    return new TenantLegalDraftDTO()
-        .kind(TenantLegalDraftDTO.KindEnum.fromValue(e.getKind().name()))
-        .content(drafts.content(e))
-        .revision(drafts.revision(e))
-        .updatedAt(e.getUpdateDate());
+    TenantLegalDraftDTO dto =
+        new TenantLegalDraftDTO()
+            .kind(TenantLegalDraftDTO.KindEnum.fromValue(e.getKind().name()))
+            .content(drafts.content(e))
+            .revision(drafts.revision(e))
+            .updatedAt(e.getUpdateDate());
+    Map<String, String> privacyConsent = drafts.privacyConsent(e);
+    return privacyConsent == null ? dto : dto.privacyConsent(privacyConsent);
   }
 }

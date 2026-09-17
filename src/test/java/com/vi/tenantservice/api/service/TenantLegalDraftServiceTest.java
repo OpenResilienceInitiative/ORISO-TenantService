@@ -57,6 +57,7 @@ class TenantLegalDraftServiceTest {
             Map.of(
                 "de", "<h2 id=\"privacy\">Datenschutz</h2><script>alert(1)</script>",
                 "en", "<p>Privacy</p>"),
+            Map.of("de", "Ich habe die {{legal_links}} gelesen."),
             TenantLegalDraftService.NEW_REVISION);
 
     assertThat(service.revision(saved)).isEqualTo("41:0");
@@ -64,6 +65,56 @@ class TenantLegalDraftServiceTest {
         .contains("<h2 id=\"privacy\">Datenschutz</h2>")
         .doesNotContain("script", "alert");
     assertThat(service.content(saved).get("en")).isEqualTo("<p>Privacy</p>");
+    assertThat(service.privacyConsent(saved))
+        .containsEntry("de", "Ich habe die {{legal_links}} gelesen.");
+  }
+
+  @Test
+  void save_Should_rejectPrivacyConsentOnImprintDraft() {
+    assertThatThrownBy(
+            () ->
+                service.save(
+                    7L,
+                    TenantLegalDraftKind.IMPRINT,
+                    Map.of("de", "Impressum"),
+                    Map.of("de", "not applicable"),
+                    TenantLegalDraftService.NEW_REVISION))
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+    verify(repository, never()).findByTenantIdAndKind(any(), any());
+    verify(repository, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void save_Should_preserveStoredPrivacyConsentWhenRequestOmitsIt() {
+    TenantLegalDraftEntity existing = persisted(8L, 3L);
+    existing.setPrivacyConsent("{\"de\":\"Ich habe die {{legal_links}} gelesen.\"}");
+    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.PRIVACY))
+        .thenReturn(Optional.of(existing));
+    when(repository.saveAndFlush(existing)).thenReturn(existing);
+
+    TenantLegalDraftEntity saved =
+        service.save(7L, TenantLegalDraftKind.PRIVACY, Map.of("de", "aktualisiert"), null, "8:3");
+
+    assertThat(service.privacyConsent(saved))
+        .containsEntry("de", "Ich habe die {{legal_links}} gelesen.");
+  }
+
+  @Test
+  void save_Should_clearStoredPrivacyConsentWhenRequestSendsEmptyMap() {
+    TenantLegalDraftEntity existing = persisted(8L, 3L);
+    existing.setPrivacyConsent("{\"de\":\"Ich habe die {{legal_links}} gelesen.\"}");
+    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.PRIVACY))
+        .thenReturn(Optional.of(existing));
+    when(repository.saveAndFlush(existing)).thenReturn(existing);
+
+    TenantLegalDraftEntity saved =
+        service.save(
+            7L, TenantLegalDraftKind.PRIVACY, Map.of("de", "aktualisiert"), Map.of(), "8:3");
+
+    assertThat(service.privacyConsent(saved)).isEmpty();
   }
 
   @Test
@@ -78,6 +129,7 @@ class TenantLegalDraftServiceTest {
                     7L,
                     TenantLegalDraftKind.IMPRINT,
                     Map.of("de", "neu"),
+                    null,
                     TenantLegalDraftService.NEW_REVISION))
         .isInstanceOf(SettingsUpdateConflictException.class)
         .hasMessageContaining("currentRevision=9:2")
@@ -105,6 +157,7 @@ class TenantLegalDraftServiceTest {
             7L,
             TenantLegalDraftKind.PRIVACY,
             Map.of("de", "winner"),
+            null,
             TenantLegalDraftService.NEW_REVISION);
 
     assertThat(service.revision(winner)).isEqualTo("11:0");
@@ -115,6 +168,7 @@ class TenantLegalDraftServiceTest {
                     7L,
                     TenantLegalDraftKind.PRIVACY,
                     Map.of("de", "stale initial writer"),
+                    null,
                     TenantLegalDraftService.NEW_REVISION))
         .isInstanceOf(SettingsUpdateConflictException.class)
         .hasMessageContaining("changed while saving");
@@ -129,7 +183,8 @@ class TenantLegalDraftServiceTest {
         .thenThrow(new OptimisticLockingFailureException("stale writer"));
 
     assertThatThrownBy(
-            () -> service.save(7L, TenantLegalDraftKind.PRIVACY, Map.of("de", "stale"), "12:4"))
+            () ->
+                service.save(7L, TenantLegalDraftKind.PRIVACY, Map.of("de", "stale"), null, "12:4"))
         .isInstanceOf(SettingsUpdateConflictException.class)
         .hasMessageContaining("changed while saving");
   }
@@ -185,6 +240,7 @@ class TenantLegalDraftServiceTest {
                     7L,
                     TenantLegalDraftKind.PRIVACY,
                     Map.of("de", "stale save from deleted draft"),
+                    null,
                     "21:0"))
         .isInstanceOf(SettingsUpdateConflictException.class)
         .hasMessageContaining("currentRevision=22:0")

@@ -10,6 +10,7 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantLegalDraftDTO;
 import com.vi.tenantservice.api.model.TenantLegalDraftEntity;
 import com.vi.tenantservice.api.model.TenantLegalDraftKind;
+import com.vi.tenantservice.api.model.TenantLegalDraftUpdateRequest;
 import com.vi.tenantservice.api.service.TenantLegalDraftService;
 import com.vi.tenantservice.api.service.TenantService;
 import java.time.LocalDateTime;
@@ -36,17 +37,19 @@ class TenantLegalDraftFacadeTest {
       TenantLegalDraftKind kind) {
     TenantLegalDraftFacade facade =
         new TenantLegalDraftFacade(authorisation, tenantService, drafts);
-    TenantLegalDraftDTO request =
-        new TenantLegalDraftDTO()
-            .kind(TenantLegalDraftDTO.KindEnum.fromValue(kind.name()))
-            .content(Map.of("de", "<p>draft</p>"))
-            .revision("new")
-            .updatedAt(LocalDateTime.of(2026, 9, 17, 10, 0));
+    Map<String, String> privacyConsent =
+        kind == TenantLegalDraftKind.PRIVACY
+            ? Map.of("de", "Ich habe die {{legal_links}} gelesen.")
+            : null;
+    TenantLegalDraftUpdateRequest request =
+        new TenantLegalDraftUpdateRequest().content(Map.of("de", "<p>draft</p>")).revision("new");
+    if (privacyConsent != null) request.privacyConsent(privacyConsent);
     TenantLegalDraftEntity saved = entity(51L, 0L, 7L, kind);
     when(tenantService.findTenantById(7L))
         .thenReturn(Optional.of(TenantEntity.builder().id(7L).build()));
-    when(drafts.save(7L, kind, request.getContent(), "new")).thenReturn(saved);
+    when(drafts.save(7L, kind, request.getContent(), privacyConsent, "new")).thenReturn(saved);
     when(drafts.content(saved)).thenReturn(request.getContent());
+    when(drafts.privacyConsent(saved)).thenReturn(privacyConsent);
     when(drafts.revision(saved)).thenReturn("51:0");
 
     TenantLegalDraftDTO result = facade.save(7L, kind.name(), request);
@@ -54,6 +57,11 @@ class TenantLegalDraftFacadeTest {
     verify(authorisation).assertUserIsAuthorizedToAccessTenant(7L);
     assertThat(result.getKind().getValue()).isEqualTo(kind.name());
     assertThat(result.getContent()).containsEntry("de", "<p>draft</p>");
+    if (privacyConsent == null) {
+      assertThat(result.getPrivacyConsent()).isEmpty();
+    } else {
+      assertThat(result.getPrivacyConsent()).isEqualTo(privacyConsent);
+    }
     assertThat(result.getRevision()).isEqualTo("51:0");
   }
 

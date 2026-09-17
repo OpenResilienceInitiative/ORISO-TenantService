@@ -142,6 +142,18 @@ class LiquibaseSchemaDriftIT {
   }
 
   @Test
+  void tenantLegalDraft_shouldCarryOptionalPrivacyConsent() {
+    String nullable =
+        jdbcTemplate.queryForObject(
+            "SELECT IS_NULLABLE FROM information_schema.columns"
+                + " WHERE table_schema = DATABASE() AND table_name = 'tenant_legal_draft'"
+                + " AND column_name = 'privacy_consent'",
+            String.class);
+
+    assertThat(nullable).as("privacy consent nullability").isEqualTo("YES");
+  }
+
+  @Test
   void tenantTheming_shouldCarryBothAccentsAndTheSignalColour() {
     // ORISO-TenantService#154: the light accent and the signal colour used to have no column at
     // all, so the Admin panel's values were accepted and dropped. ddl-auto=validate would catch a

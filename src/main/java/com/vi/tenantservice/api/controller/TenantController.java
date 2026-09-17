@@ -29,6 +29,7 @@ import com.vi.tenantservice.api.model.TenantIdAvailabilityDTO;
 import com.vi.tenantservice.api.model.TenantIdReservationDTO;
 import com.vi.tenantservice.api.model.TenantIdReservationRequestDTO;
 import com.vi.tenantservice.api.model.TenantLegalDraftDTO;
+import com.vi.tenantservice.api.model.TenantLegalDraftUpdateRequest;
 import com.vi.tenantservice.api.model.TenantMediaResponseDTO;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
@@ -498,8 +499,8 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<TenantLegalDraftDTO> updateTenantLegalDraft(
-      Long id, String kind, TenantLegalDraftDTO tenantLegalDraftDTO) {
-    return ResponseEntity.ok(tenantLegalDraftFacade.save(id, kind, tenantLegalDraftDTO));
+      Long id, String kind, TenantLegalDraftUpdateRequest tenantLegalDraftUpdateRequest) {
+    return ResponseEntity.ok(tenantLegalDraftFacade.save(id, kind, tenantLegalDraftUpdateRequest));
   }
 
   @Override

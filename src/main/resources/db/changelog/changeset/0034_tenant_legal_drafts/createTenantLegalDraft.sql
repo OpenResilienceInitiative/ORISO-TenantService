@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS tenant_legal_draft (
   tenant_id BIGINT NOT NULL,
   kind VARCHAR(16) NOT NULL,
   content TEXT NOT NULL,
+  privacy_consent TEXT NULL,
   update_date TIMESTAMP NOT NULL,
   CONSTRAINT uq_tenant_legal_draft UNIQUE (tenant_id, kind),
   CONSTRAINT fk_tenant_legal_draft_tenant FOREIGN KEY (tenant_id) REFERENCES tenant(id) ON DELETE CASCADE

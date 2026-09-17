@@ -271,7 +271,9 @@ paths:
       operationId: updateTenantLegalDraft
       requestBody:
         required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalDraftDTO'}}}
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TenantLegalDraftUpdateRequest'}
       responses:
         200:
           description: Successful operation
@@ -2707,6 +2709,12 @@ components:
         content:
           type: object
           additionalProperties: {type: string}
+        privacyConsent:
+          type: object
+          additionalProperties: {type: string}
+          description: >-
+            Optional privacy consent sentence map by language. Values are plain text. Supported
+            only for PRIVACY drafts; omit for IMPRINT drafts.
         revision:
           type: string
           pattern: '^(new|[1-9][0-9]*:[0-9]+)$'
@@ -2715,6 +2723,23 @@ components:
           type: string
           format: date-time
           readOnly: true
+
+    TenantLegalDraftUpdateRequest:
+      type: object
+      required: [content, revision]
+      properties:
+        content:
+          type: object
+          additionalProperties: {type: string}
+        privacyConsent:
+          type: object
+          description: >-
+            Optional privacy consent sentence map by language. Every value must be plain text.
+            Supported only for PRIVACY drafts; omit for IMPRINT drafts.
+        revision:
+          type: string
+          pattern: '^(new|[1-9][0-9]*:[0-9]+)$'
+          description: Opaque concurrency token. Use new only when no draft exists.
 
     TenantPermissionPolicies:
       type: object

@@ -33,6 +33,9 @@ public class TenantLegalDraftEntity {
   @Column(nullable = false, columnDefinition = "TEXT")
   private String content;
 
+  @Column(name = "privacy_consent", columnDefinition = "TEXT")
+  private String privacyConsent;
+
   @Column(name = "update_date", nullable = false)
   private LocalDateTime updateDate;
 }

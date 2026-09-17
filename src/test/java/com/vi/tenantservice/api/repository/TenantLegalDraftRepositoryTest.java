@@ -38,13 +38,17 @@ class TenantLegalDraftRepositoryTest {
     TenantEntity tenant = tenant(7L, "Tenant", "tenant-7");
     tenant.setContentPrivacy("{\"de\":\"published tenant privacy\"}");
     tenant.setContentImpressum("{\"de\":\"published tenant imprint\"}");
+    LocalDateTime publishedPrivacyActivation = LocalDateTime.of(2026, 9, 1, 9, 30);
+    tenant.setContentPrivacyActivationDate(publishedPrivacyActivation);
     tenantRepository.saveAndFlush(platform);
     tenantRepository.saveAndFlush(tenant);
 
     TenantLegalDraftEntity platformPrivacy =
         draftRepository.saveAndFlush(draft(0L, TenantLegalDraftKind.PRIVACY, "platform draft"));
-    TenantLegalDraftEntity tenantPrivacy =
-        draftRepository.saveAndFlush(draft(7L, TenantLegalDraftKind.PRIVACY, "tenant privacy"));
+    TenantLegalDraftEntity tenantPrivacyDraft =
+        draft(7L, TenantLegalDraftKind.PRIVACY, "tenant privacy");
+    tenantPrivacyDraft.setPrivacyConsent("{\"de\":\"Ich habe die {{legal_links}} gelesen.\"}");
+    TenantLegalDraftEntity tenantPrivacy = draftRepository.saveAndFlush(tenantPrivacyDraft);
     TenantLegalDraftEntity tenantImprint =
         draftRepository.saveAndFlush(draft(7L, TenantLegalDraftKind.IMPRINT, "tenant imprint"));
     entityManager.clear();
@@ -61,6 +65,12 @@ class TenantLegalDraftRepositoryTest {
                 .orElseThrow()
                 .getContent())
         .isEqualTo("tenant privacy");
+    assertThat(
+            draftRepository
+                .findByTenantIdAndKind(7L, TenantLegalDraftKind.PRIVACY)
+                .orElseThrow()
+                .getPrivacyConsent())
+        .isEqualTo("{\"de\":\"Ich habe die {{legal_links}} gelesen.\"}");
     assertThat(
             draftRepository
                 .findByTenantIdAndKind(7L, TenantLegalDraftKind.IMPRINT)
@@ -81,6 +91,8 @@ class TenantLegalDraftRepositoryTest {
         .isEqualTo("{\"de\":\"published tenant privacy\"}");
     assertThat(reloadedTenant.getContentImpressum())
         .isEqualTo("{\"de\":\"published tenant imprint\"}");
+    assertThat(reloadedTenant.getContentPrivacyActivationDate())
+        .isEqualTo(publishedPrivacyActivation);
   }
 
   @Test
