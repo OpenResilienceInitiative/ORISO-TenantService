@@ -7,7 +7,7 @@ import lombok.*;
 @Entity
 @Table(
     name = "tenant_legal_draft",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"tenant_id", "kind"}))
+    uniqueConstraints = @UniqueConstraint(columnNames = {"owner_key", "kind"}))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -23,7 +23,12 @@ public class TenantLegalDraftEntity {
 
   @Version private Long version;
 
-  @Column(name = "tenant_id", nullable = false)
+  /** API owner id: {@code 0} for the platform sentinel, otherwise the real tenant id. */
+  @Column(name = "owner_key", nullable = false, updatable = false)
+  private Long ownerKey;
+
+  /** Real tenant FK. Platform-owned drafts deliberately store {@code null}. */
+  @Column(name = "tenant_id", updatable = false)
   private Long tenantId;
 
   @Enumerated(EnumType.STRING)

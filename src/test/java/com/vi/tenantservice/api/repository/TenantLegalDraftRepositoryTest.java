@@ -32,15 +32,11 @@ class TenantLegalDraftRepositoryTest {
 
   @Test
   void privacyAndImprintDrafts_Should_roundTripSeparatelyWithoutChangingPublishedContent() {
-    TenantEntity platform = tenant(0L, "Platform", "platform");
-    platform.setContentPrivacy("{\"de\":\"published platform privacy\"}");
-    platform.setContentImpressum("{\"de\":\"published platform imprint\"}");
     TenantEntity tenant = tenant(7L, "Tenant", "tenant-7");
     tenant.setContentPrivacy("{\"de\":\"published tenant privacy\"}");
     tenant.setContentImpressum("{\"de\":\"published tenant imprint\"}");
     LocalDateTime publishedPrivacyActivation = LocalDateTime.of(2026, 9, 1, 9, 30);
     tenant.setContentPrivacyActivationDate(publishedPrivacyActivation);
-    tenantRepository.saveAndFlush(platform);
     tenantRepository.saveAndFlush(tenant);
 
     TenantLegalDraftEntity platformPrivacy =
@@ -55,25 +51,25 @@ class TenantLegalDraftRepositoryTest {
 
     assertThat(
             draftRepository
-                .findByTenantIdAndKind(0L, TenantLegalDraftKind.PRIVACY)
+                .findByOwnerKeyAndKind(0L, TenantLegalDraftKind.PRIVACY)
                 .orElseThrow()
                 .getContent())
         .isEqualTo("platform draft");
     assertThat(
             draftRepository
-                .findByTenantIdAndKind(7L, TenantLegalDraftKind.PRIVACY)
+                .findByOwnerKeyAndKind(7L, TenantLegalDraftKind.PRIVACY)
                 .orElseThrow()
                 .getContent())
         .isEqualTo("tenant privacy");
     assertThat(
             draftRepository
-                .findByTenantIdAndKind(7L, TenantLegalDraftKind.PRIVACY)
+                .findByOwnerKeyAndKind(7L, TenantLegalDraftKind.PRIVACY)
                 .orElseThrow()
                 .getPrivacyConsent())
         .isEqualTo("{\"de\":\"Ich habe die {{legal_links}} gelesen.\"}");
     assertThat(
             draftRepository
-                .findByTenantIdAndKind(7L, TenantLegalDraftKind.IMPRINT)
+                .findByOwnerKeyAndKind(7L, TenantLegalDraftKind.IMPRINT)
                 .orElseThrow()
                 .getContent())
         .isEqualTo("tenant imprint");
@@ -81,12 +77,7 @@ class TenantLegalDraftRepositoryTest {
     assertThat(tenantPrivacy.getVersion()).isZero();
     assertThat(tenantImprint.getVersion()).isZero();
 
-    TenantEntity reloadedPlatform = tenantRepository.findById(0L).orElseThrow();
     TenantEntity reloadedTenant = tenantRepository.findById(7L).orElseThrow();
-    assertThat(reloadedPlatform.getContentPrivacy())
-        .isEqualTo("{\"de\":\"published platform privacy\"}");
-    assertThat(reloadedPlatform.getContentImpressum())
-        .isEqualTo("{\"de\":\"published platform imprint\"}");
     assertThat(reloadedTenant.getContentPrivacy())
         .isEqualTo("{\"de\":\"published tenant privacy\"}");
     assertThat(reloadedTenant.getContentImpressum())
@@ -122,7 +113,8 @@ class TenantLegalDraftRepositoryTest {
 
   private TenantLegalDraftEntity draft(long tenantId, TenantLegalDraftKind kind, String content) {
     return TenantLegalDraftEntity.builder()
-        .tenantId(tenantId)
+        .ownerKey(tenantId)
+        .tenantId(tenantId == 0L ? null : tenantId)
         .kind(kind)
         .content(content)
         .updateDate(LocalDateTime.now())

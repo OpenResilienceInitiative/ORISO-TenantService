@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpHeaders;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -47,6 +48,7 @@ class TenantLegalDraftControllerIT {
 
   @Autowired private WebApplicationContext context;
   @Autowired private TenantLegalDraftRepository draftRepository;
+  @Autowired private JdbcTemplate jdbcTemplate;
   @MockitoBean private ApplicationSettingsService applicationSettingsService;
 
   @MockitoBean
@@ -120,10 +122,33 @@ class TenantLegalDraftControllerIT {
   void platformTenant_Should_keepItsOwnImprintDraft() throws Exception {
     String url = "/tenantadmin/0/legal-drafts/IMPRINT";
     String body = "{\"content\":{\"de\":\"<p>Platform imprint draft</p>\"},\"revision\":\"new\"}";
+    jdbcTemplate.update("DELETE FROM tenant WHERE id = 0");
 
-    mvc.perform(put(url).with(tenantAdmin(0L)).contentType(APPLICATION_JSON).content(body))
+    mvc.perform(put(url).with(platformAdmin()).contentType(APPLICATION_JSON).content(body))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.content.de").value("<p>Platform imprint draft</p>"));
+  }
+
+  @Test
+  void nonPlatformTenantAdmin_Should_notAccessPlatformDraft() throws Exception {
+    mvc.perform(get("/tenantadmin/0/legal-drafts/PRIVACY").with(tenantAdmin(1L)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void technicalCallerWithUpdateAuthority_Should_notAccessPlatformDraft() throws Exception {
+    mvc.perform(
+            get("/tenantadmin/0/legal-drafts/PRIVACY")
+                .with(
+                    jwt()
+                        .jwt(
+                            token ->
+                                token
+                                    .claim("tenantId", 0L)
+                                    .claim("username", "technical")
+                                    .claim("realm_access", Map.of("roles", List.of())))
+                        .authorities(new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"))))
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -149,5 +174,18 @@ class TenantLegalDraftControllerIT {
                     .claim("username", "tenant-admin-" + tenantId)
                     .claim("realm_access", Map.of("roles", List.of("tenant-admin"))))
         .authorities(new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"));
+  }
+
+  private RequestPostProcessor platformAdmin() {
+    return jwt()
+        .jwt(
+            token ->
+                token
+                    .claim("tenantId", 0L)
+                    .claim("username", "platform-admin")
+                    .claim("realm_access", Map.of("roles", List.of("tenant-admin"))))
+        .authorities(
+            new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
+            new SimpleGrantedAuthority("AUTHORIZATION_GET_ALL_TENANTS"));
   }
 }

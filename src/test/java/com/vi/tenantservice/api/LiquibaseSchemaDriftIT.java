@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.vi.tenantservice.TenantServiceApplication;
 import org.junit.jupiter.api.Test;
@@ -139,6 +140,56 @@ class LiquibaseSchemaDriftIT {
             String.class);
 
     assertThat(deleteRule).as("tenant legal-draft delete rule").isEqualTo("CASCADE");
+  }
+
+  @Test
+  void tenantLegalDraft_shouldSupportPlatformOwnerWithoutTenantZeroAndKeepRealTenantCascade() {
+    assertThat(count("tenant", "id", 0L)).as("technical tenant sentinel is not a row").isZero();
+
+    insertDraft(0L, null, "PRIVACY", "platform-privacy");
+    insertDraft(0L, null, "IMPRINT", "platform-imprint");
+    assertThat(count("tenant_legal_draft", "owner_key", 0L)).isEqualTo(2);
+    assertThatThrownBy(() -> insertDraft(0L, null, "PRIVACY", "duplicate-platform-privacy"))
+        .as("one platform draft per legal kind")
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+
+    insertTenant(9_900_001L, "Purged draft owner", "purged-draft-owner");
+    insertTenant(9_900_002L, "Retained draft owner", "retained-draft-owner");
+    assertThatThrownBy(() -> insertDraft(9_900_099L, 9_900_001L, "IMPRINT", "mismatched-owner"))
+        .as("owner key must match its real tenant foreign key")
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    insertDraft(9_900_001L, 9_900_001L, "PRIVACY", "purged-tenant-draft");
+    insertDraft(9_900_002L, 9_900_002L, "PRIVACY", "retained-tenant-draft");
+
+    jdbcTemplate.update("DELETE FROM tenant WHERE id = ?", 9_900_001L);
+
+    assertThat(count("tenant_legal_draft", "owner_key", 9_900_001L)).isZero();
+    assertThat(count("tenant_legal_draft", "owner_key", 9_900_002L)).isOne();
+    assertThat(count("tenant_legal_draft", "owner_key", 0L)).isEqualTo(2);
+
+    jdbcTemplate.update("DELETE FROM tenant WHERE id = ?", 9_900_002L);
+    jdbcTemplate.update("DELETE FROM tenant_legal_draft WHERE owner_key = 0");
+  }
+
+  private void insertTenant(long id, String name, String subdomain) {
+    jdbcTemplate.update(
+        "INSERT INTO tenant (id, name, subdomain) VALUES (?, ?, ?)", id, name, subdomain);
+  }
+
+  private void insertDraft(long ownerKey, Long tenantId, String kind, String content) {
+    jdbcTemplate.update(
+        "INSERT INTO tenant_legal_draft "
+            + "(id, version, owner_key, tenant_id, kind, content, update_date) "
+            + "VALUES (NEXT VALUE FOR sequence_tenant_legal_draft, 0, ?, ?, ?, ?, UTC_TIMESTAMP)",
+        ownerKey,
+        tenantId,
+        kind,
+        content);
+  }
+
+  private long count(String table, String column, long value) {
+    return jdbcTemplate.queryForObject(
+        "SELECT COUNT(*) FROM " + table + " WHERE " + column + " = ?", Long.class, value);
   }
 
   @Test

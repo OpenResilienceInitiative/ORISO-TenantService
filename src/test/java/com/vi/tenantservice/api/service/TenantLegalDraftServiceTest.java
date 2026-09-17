@@ -39,7 +39,7 @@ class TenantLegalDraftServiceTest {
 
   @Test
   void save_Should_sanitizeEveryLanguageAndReturnPersistedOpaqueRevision() {
-    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.PRIVACY))
+    when(repository.findByOwnerKeyAndKind(7L, TenantLegalDraftKind.PRIVACY))
         .thenReturn(Optional.empty());
     when(repository.saveAndFlush(any()))
         .thenAnswer(
@@ -70,6 +70,31 @@ class TenantLegalDraftServiceTest {
   }
 
   @Test
+  void savePlatformDraft_Should_useOwnerZeroWithoutARealTenantForeignKey() {
+    when(repository.findByOwnerKeyAndKind(0L, TenantLegalDraftKind.IMPRINT))
+        .thenReturn(Optional.empty());
+    when(repository.saveAndFlush(any()))
+        .thenAnswer(
+            invocation -> {
+              TenantLegalDraftEntity saved = invocation.getArgument(0);
+              saved.setId(42L);
+              saved.setVersion(0L);
+              return saved;
+            });
+
+    TenantLegalDraftEntity saved =
+        service.save(
+            0L,
+            TenantLegalDraftKind.IMPRINT,
+            Map.of("de", "<p>Platform</p>"),
+            null,
+            TenantLegalDraftService.NEW_REVISION);
+
+    assertThat(saved.getOwnerKey()).isZero();
+    assertThat(saved.getTenantId()).isNull();
+  }
+
+  @Test
   void save_Should_rejectPrivacyConsentOnImprintDraft() {
     assertThatThrownBy(
             () ->
@@ -83,7 +108,7 @@ class TenantLegalDraftServiceTest {
             ResponseStatusException.class,
             exception -> assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
 
-    verify(repository, never()).findByTenantIdAndKind(any(), any());
+    verify(repository, never()).findByOwnerKeyAndKind(any(), any());
     verify(repository, never()).saveAndFlush(any());
   }
 
@@ -91,7 +116,7 @@ class TenantLegalDraftServiceTest {
   void save_Should_preserveStoredPrivacyConsentWhenRequestOmitsIt() {
     TenantLegalDraftEntity existing = persisted(8L, 3L);
     existing.setPrivacyConsent("{\"de\":\"Ich habe die {{legal_links}} gelesen.\"}");
-    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.PRIVACY))
+    when(repository.findByOwnerKeyAndKind(7L, TenantLegalDraftKind.PRIVACY))
         .thenReturn(Optional.of(existing));
     when(repository.saveAndFlush(existing)).thenReturn(existing);
 
@@ -106,7 +131,7 @@ class TenantLegalDraftServiceTest {
   void save_Should_clearStoredPrivacyConsentWhenRequestSendsEmptyMap() {
     TenantLegalDraftEntity existing = persisted(8L, 3L);
     existing.setPrivacyConsent("{\"de\":\"Ich habe die {{legal_links}} gelesen.\"}");
-    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.PRIVACY))
+    when(repository.findByOwnerKeyAndKind(7L, TenantLegalDraftKind.PRIVACY))
         .thenReturn(Optional.of(existing));
     when(repository.saveAndFlush(existing)).thenReturn(existing);
 
@@ -120,7 +145,7 @@ class TenantLegalDraftServiceTest {
   @Test
   void save_Should_rejectNewTokenWhenDraftAlreadyExists() {
     TenantLegalDraftEntity existing = persisted(9L, 2L);
-    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.IMPRINT))
+    when(repository.findByOwnerKeyAndKind(7L, TenantLegalDraftKind.IMPRINT))
         .thenReturn(Optional.of(existing));
 
     assertThatThrownBy(
@@ -140,7 +165,7 @@ class TenantLegalDraftServiceTest {
 
   @Test
   void save_Should_allowOnlyOneOfTwoInitialWritersUsingNewToken() {
-    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.PRIVACY))
+    when(repository.findByOwnerKeyAndKind(7L, TenantLegalDraftKind.PRIVACY))
         .thenReturn(Optional.empty(), Optional.empty());
     when(repository.saveAndFlush(any()))
         .thenAnswer(
@@ -177,7 +202,7 @@ class TenantLegalDraftServiceTest {
   @Test
   void save_Should_mapOptimisticUpdateRaceToConflict() {
     TenantLegalDraftEntity existing = persisted(12L, 4L);
-    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.PRIVACY))
+    when(repository.findByOwnerKeyAndKind(7L, TenantLegalDraftKind.PRIVACY))
         .thenReturn(Optional.of(existing));
     when(repository.saveAndFlush(existing))
         .thenThrow(new OptimisticLockingFailureException("stale writer"));
@@ -192,7 +217,7 @@ class TenantLegalDraftServiceTest {
   @Test
   void delete_Should_rejectStaleTokenBeforeDeleting() {
     TenantLegalDraftEntity existing = persisted(18L, 3L);
-    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.IMPRINT))
+    when(repository.findByOwnerKeyAndKind(7L, TenantLegalDraftKind.IMPRINT))
         .thenReturn(Optional.of(existing));
 
     assertThatThrownBy(() -> service.delete(7L, TenantLegalDraftKind.IMPRINT, "18:2"))
@@ -205,7 +230,7 @@ class TenantLegalDraftServiceTest {
   @Test
   void delete_Should_flushAndMapAConcurrentDeleteToConflict() {
     TenantLegalDraftEntity existing = persisted(18L, 3L);
-    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.IMPRINT))
+    when(repository.findByOwnerKeyAndKind(7L, TenantLegalDraftKind.IMPRINT))
         .thenReturn(Optional.of(existing));
     doThrow(new OptimisticLockingFailureException("already updated")).when(repository).flush();
 
@@ -219,7 +244,7 @@ class TenantLegalDraftServiceTest {
 
   @Test
   void delete_Should_returnNotFoundWhenNoDraftExists() {
-    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.IMPRINT))
+    when(repository.findByOwnerKeyAndKind(7L, TenantLegalDraftKind.IMPRINT))
         .thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.delete(7L, TenantLegalDraftKind.IMPRINT, "1:0"))
@@ -231,7 +256,7 @@ class TenantLegalDraftServiceTest {
   @Test
   void recreatedDraft_Should_rejectTokenFromDeletedIncarnation() {
     TenantLegalDraftEntity recreated = persisted(22L, 0L);
-    when(repository.findByTenantIdAndKind(7L, TenantLegalDraftKind.PRIVACY))
+    when(repository.findByOwnerKeyAndKind(7L, TenantLegalDraftKind.PRIVACY))
         .thenReturn(Optional.of(recreated));
 
     assertThatThrownBy(
@@ -253,6 +278,7 @@ class TenantLegalDraftServiceTest {
     return TenantLegalDraftEntity.builder()
         .id(id)
         .version(version)
+        .ownerKey(7L)
         .tenantId(7L)
         .kind(TenantLegalDraftKind.PRIVACY)
         .content("{}")

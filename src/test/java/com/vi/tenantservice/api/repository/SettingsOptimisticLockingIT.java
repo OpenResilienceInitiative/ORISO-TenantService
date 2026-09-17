@@ -77,6 +77,7 @@ class SettingsOptimisticLockingIT {
                 legalDraftRepository
                     .saveAndFlush(
                         TenantLegalDraftEntity.builder()
+                            .ownerKey(7L)
                             .tenantId(7L)
                             .kind(TenantLegalDraftKind.PRIVACY)
                             .content("{\"de\":\"first\"}")

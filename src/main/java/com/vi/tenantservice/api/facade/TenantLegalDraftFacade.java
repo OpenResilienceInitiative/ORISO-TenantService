@@ -6,6 +6,7 @@ import com.vi.tenantservice.api.service.*;
 import java.util.*;
 import lombok.*;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -39,6 +40,15 @@ public class TenantLegalDraftFacade {
   }
 
   private void authorize(Long tenantId) {
+    if (tenantId == null || tenantId < 0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid tenant id");
+    }
+    if (tenantId == 0L) {
+      if (!authorisation.isSuperAdmin()) {
+        throw new AccessDeniedException("Only the platform administrator may edit platform drafts");
+      }
+      return;
+    }
     authorisation.assertUserIsAuthorizedToAccessTenant(tenantId);
     if (tenantService.findTenantById(tenantId).isEmpty())
       throw new TenantNotFoundException("Tenant with id " + tenantId + " not found");

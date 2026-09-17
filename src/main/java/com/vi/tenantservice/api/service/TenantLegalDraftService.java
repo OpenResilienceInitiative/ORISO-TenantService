@@ -27,7 +27,7 @@ public class TenantLegalDraftService {
 
   @Transactional(readOnly = true)
   public Optional<TenantLegalDraftEntity> get(Long tenantId, TenantLegalDraftKind kind) {
-    return repository.findByTenantIdAndKind(tenantId, kind);
+    return repository.findByOwnerKeyAndKind(tenantId, kind);
   }
 
   @Transactional
@@ -41,12 +41,17 @@ public class TenantLegalDraftService {
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "Privacy consent is only supported for privacy drafts");
     }
-    var existing = repository.findByTenantIdAndKind(tenantId, kind);
+    var existing = repository.findByOwnerKeyAndKind(tenantId, kind);
     String actual = existing.map(this::revision).orElse(NEW_REVISION);
     if (!actual.equals(revision)) throw new SettingsUpdateConflictException(actual, revision);
     var entity =
         existing.orElseGet(
-            () -> TenantLegalDraftEntity.builder().tenantId(tenantId).kind(kind).build());
+            () ->
+                TenantLegalDraftEntity.builder()
+                    .ownerKey(tenantId)
+                    .tenantId(tenantId == 0L ? null : tenantId)
+                    .kind(kind)
+                    .build());
     entity.setContent(write(sanitize(content)));
     if (kind == TenantLegalDraftKind.PRIVACY && privacyConsent != null) {
       entity.setPrivacyConsent(write(privacyConsent));
@@ -63,7 +68,7 @@ public class TenantLegalDraftService {
   public void delete(Long tenantId, TenantLegalDraftKind kind, String revision) {
     var entity =
         repository
-            .findByTenantIdAndKind(tenantId, kind)
+            .findByOwnerKeyAndKind(tenantId, kind)
             .orElseThrow(
                 () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Legal draft not found"));
     String actual = revision(entity);

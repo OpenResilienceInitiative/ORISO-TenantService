@@ -70,17 +70,30 @@ class TenantLegalDraftFacadeTest {
     TenantLegalDraftFacade facade =
         new TenantLegalDraftFacade(authorisation, tenantService, drafts);
     TenantLegalDraftEntity platformDraft = entity(61L, 2L, 0L, TenantLegalDraftKind.PRIVACY);
-    when(tenantService.findTenantById(0L))
-        .thenReturn(Optional.of(TenantEntity.builder().id(0L).build()));
+    when(authorisation.isSuperAdmin()).thenReturn(true);
     when(drafts.get(0L, TenantLegalDraftKind.PRIVACY)).thenReturn(Optional.of(platformDraft));
     when(drafts.content(platformDraft)).thenReturn(Map.of("de", "platform draft"));
     when(drafts.revision(platformDraft)).thenReturn("61:2");
 
     TenantLegalDraftDTO result = facade.get(0L, "PRIVACY").orElseThrow();
 
-    verify(authorisation).assertUserIsAuthorizedToAccessTenant(0L);
+    verify(authorisation).isSuperAdmin();
+    verify(tenantService, never()).findTenantById(0L);
     assertThat(result.getContent()).containsEntry("de", "platform draft");
     assertThat(result.getRevision()).isEqualTo("61:2");
+  }
+
+  @Test
+  void get_Should_denyTenantZeroBeforeDraftLookupForANonPlatformCaller() {
+    TenantLegalDraftFacade facade =
+        new TenantLegalDraftFacade(authorisation, tenantService, drafts);
+    when(authorisation.isSuperAdmin()).thenReturn(false);
+
+    assertThatThrownBy(() -> facade.get(0L, "PRIVACY")).isInstanceOf(AccessDeniedException.class);
+
+    verify(authorisation).isSuperAdmin();
+    verify(tenantService, never()).findTenantById(0L);
+    verify(drafts, never()).get(0L, TenantLegalDraftKind.PRIVACY);
   }
 
   @Test
@@ -115,7 +128,8 @@ class TenantLegalDraftFacadeTest {
     return TenantLegalDraftEntity.builder()
         .id(id)
         .version(version)
-        .tenantId(tenantId)
+        .ownerKey(tenantId)
+        .tenantId(tenantId == 0L ? null : tenantId)
         .kind(kind)
         .content("{}")
         .updateDate(LocalDateTime.of(2026, 9, 17, 9, 0))
