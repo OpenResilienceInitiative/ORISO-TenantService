@@ -96,6 +96,7 @@ public class TenantAdminControlsService {
     Map<String, PolicyValue<Boolean>> policies =
         settings.getPermissionPolicies() == null ? Map.of() : settings.getPermissionPolicies();
     Map<String, PolicyValue<Boolean>> explicit = new LinkedHashMap<>();
+    for (PermissionFeature feature : PermissionFeature.values()) {
       boolean ownExplicit = explicitKeys.contains(feature.apiKey());
       PermissionFeature fallback = feature.transitionFallback().orElse(null);
       boolean fallbackExplicit =
@@ -310,15 +311,13 @@ public class TenantAdminControlsService {
       return;
     }
     settings.setChatRecoverySettings(recoverySettings(settings));
-    if (settings.getPermissionPolicies() == null || settings.getPermissionPolicies().isEmpty()) {
-      settings.setPermissionPolicies(
-          LegacyPermissionPolicyMapper.fromLegacyMaps(
-              settings.getAllowedPermissionToggles(), settings.getEnforcedPermissionToggles()));
-    } else {
-      // policies stored before the group chat formats were split out (#250) keep governing them
-      settings.setPermissionPolicies(
-          PermissionFeature.withTransitionFallbacks(settings.getPermissionPolicies()));
-    }
+    // stored entries win; split-out formats read their pre-#250 rule; every other feature reads
+    // the legacy toggles - on every read, so a partial list (#254) never hides a feature
+    settings.setPermissionPolicies(
+        LegacyPermissionPolicyMapper.complete(
+            settings.getPermissionPolicies(),
+            settings.getAllowedPermissionToggles(),
+            settings.getEnforcedPermissionToggles()));
     if (settings.getCaseHandoverPolicies() == null) {
       settings.setCaseHandoverPolicies(CaseHandoverPolicyDefaults.create());
     } else {
