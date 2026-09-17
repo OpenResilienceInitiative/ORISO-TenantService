@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
+import com.vi.tenantservice.api.model.AccountInactivitySettings;
 import com.vi.tenantservice.api.model.ChatRecoveryMode;
 import com.vi.tenantservice.api.model.ChatRecoverySettings;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
@@ -16,13 +17,18 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
+import com.vi.tenantservice.api.policy.PermissionFeature;
+import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
@@ -55,6 +61,8 @@ public class TenantAdminControlsService {
             .map(entity -> parseControlsSettings(entity.getControls()))
             .orElseGet(this::createDefaultControlsSettings);
     if (existingSettings != null) {
+      controlsSettings.setExplicitPermissionPolicyKeys(
+          explicitPolicyKeys(existingSettings, controlsSettings.getPermissionPolicies()));
       if (controlsSettings.getPermissionPolicies() == null
           || controlsSettings.getPermissionPolicies().isEmpty()) {
         controlsSettings.setPermissionPolicies(existingSettings.getPermissionPolicies());
@@ -65,13 +73,107 @@ public class TenantAdminControlsService {
       // the DTO never carries the translation API keys - carry the stored values over verbatim,
       // still encrypted, so this path never decrypts and re-encrypts them for nothing
       controlsSettings.setTranslationApiKeys(existingSettings.getTranslationApiKeys());
-      // Only the versioned recovery subresource can change creation defaults.
+      // Only versioned subresources can change account creation defaults.
       controlsSettings.setChatRecoverySettings(existingSettings.getChatRecoverySettings());
+      controlsSettings.setAccountInactivitySettings(
+          existingSettings.getAccountInactivitySettings());
     }
     hydrateCanonicalPolicies(controlsSettings);
     saveControlsSettings(
         controlsSettings, existingEntity.orElseGet(TenantAdminControlsEntity::new));
     return tenantConverter.toTenantAdminControls(controlsSettings);
+  }
+
+  public AccountInactivitySettings getAccountInactivitySettings() {
+    return inactivitySettings(getControlsSettings());
+  }
+
+  @Transactional
+  public AccountInactivitySettings updateAccountInactivitySettings(
+      AccountInactivitySettings request) {
+    Optional<TenantAdminControlsEntity> existing = findExistingControls();
+    TenantAdminControlsSettings settings =
+        existing
+            .map(entity -> parseControlsSettings(entity.getControls()))
+            .orElseGet(this::createDefaultControlsSettings);
+    AccountInactivitySettings current = inactivitySettings(settings);
+    if (!current.getRevision().equals(request.getRevision())) {
+      throw new SettingsUpdateConflictException(current.getRevision(), request.getRevision());
+    }
+    AccountInactivitySettings updated =
+        new AccountInactivitySettings(
+            request.getAskerMonths(),
+            request.getConsultantMonths(),
+            request.getOtherMonths(),
+            Math.addExact(current.getRevision(), 1L));
+    settings.setAccountInactivitySettings(updated);
+    saveControlsSettings(settings, existing.orElseGet(TenantAdminControlsEntity::new));
+    return updated;
+  }
+
+  private AccountInactivitySettings inactivitySettings(TenantAdminControlsSettings settings) {
+    AccountInactivitySettings stored =
+        settings == null ? null : settings.getAccountInactivitySettings();
+    return new AccountInactivitySettings(
+        stored == null || stored.getAskerMonths() == null ? 24 : stored.getAskerMonths(),
+        stored == null || stored.getConsultantMonths() == null ? 24 : stored.getConsultantMonths(),
+        stored == null || stored.getOtherMonths() == null ? 24 : stored.getOtherMonths(),
+        stored == null || stored.getRevision() == null ? 0L : stored.getRevision());
+  }
+
+  /**
+   * #251 — the platform admin's preset for new Träger: only the policies the admin set explicitly
+   * (see {@link TenantAdminControlsSettings#getExplicitPermissionPolicyKeys()}). A group chat
+   * format whose own policy was never set follows an explicit {@code featureGroupChatV2Enabled}
+   * policy (#250 transition).
+   */
+  public Map<String, PolicyValue<Boolean>> getExplicitPlatformPolicies() {
+    TenantAdminControlsSettings settings = getControlsSettings();
+    Set<String> explicitKeys =
+        settings.getExplicitPermissionPolicyKeys() == null
+            ? Set.of()
+            : settings.getExplicitPermissionPolicyKeys();
+    Map<String, PolicyValue<Boolean>> policies =
+        settings.getPermissionPolicies() == null ? Map.of() : settings.getPermissionPolicies();
+    Map<String, PolicyValue<Boolean>> explicit = new LinkedHashMap<>();
+    for (PermissionFeature feature : PermissionFeature.values()) {
+      boolean ownExplicit = explicitKeys.contains(feature.apiKey());
+      PermissionFeature fallback = feature.transitionFallback().orElse(null);
+      boolean fallbackExplicit =
+          !ownExplicit && fallback != null && explicitKeys.contains(fallback.apiKey());
+      PolicyValue<Boolean> policy =
+          ownExplicit
+              ? policies.get(feature.apiKey())
+              : fallbackExplicit ? policies.get(fallback.apiKey()) : null;
+      if (policy != null) {
+        explicit.put(feature.apiKey(), policy);
+      }
+    }
+    return Map.copyOf(explicit);
+  }
+
+  /**
+   * A requested policy counts as explicitly set when it differs from what the platform currently
+   * serves for that key (value or mode). Keys marked earlier stay marked.
+   */
+  private static Set<String> explicitPolicyKeys(
+      TenantAdminControlsSettings existing, Map<String, PolicyValue<Boolean>> requested) {
+    Set<String> keys = new LinkedHashSet<>();
+    if (existing.getExplicitPermissionPolicyKeys() != null) {
+      keys.addAll(existing.getExplicitPermissionPolicyKeys());
+    }
+    if (requested == null) {
+      return keys;
+    }
+    Map<String, PolicyValue<Boolean>> served =
+        existing.getPermissionPolicies() == null ? Map.of() : existing.getPermissionPolicies();
+    requested.forEach(
+        (key, policy) -> {
+          if (policy != null && !policy.equals(served.get(key))) {
+            keys.add(key);
+          }
+        });
+    return keys;
   }
 
   public ChatRecoverySettings getChatRecoverySettings() {
@@ -249,11 +351,14 @@ public class TenantAdminControlsService {
       return;
     }
     settings.setChatRecoverySettings(recoverySettings(settings));
-    if (settings.getPermissionPolicies() == null || settings.getPermissionPolicies().isEmpty()) {
-      settings.setPermissionPolicies(
-          LegacyPermissionPolicyMapper.fromLegacyMaps(
-              settings.getAllowedPermissionToggles(), settings.getEnforcedPermissionToggles()));
-    }
+    settings.setAccountInactivitySettings(inactivitySettings(settings));
+    // stored entries win; split-out formats read their pre-#250 rule; every other feature reads
+    // the legacy toggles - on every read, so a partial list (#254) never hides a feature
+    settings.setPermissionPolicies(
+        LegacyPermissionPolicyMapper.complete(
+            settings.getPermissionPolicies(),
+            settings.getAllowedPermissionToggles(),
+            settings.getEnforcedPermissionToggles()));
     if (settings.getCaseHandoverPolicies() == null) {
       settings.setCaseHandoverPolicies(CaseHandoverPolicyDefaults.create());
     } else {

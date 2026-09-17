@@ -4,6 +4,7 @@ import com.vi.tenantservice.api.facade.PlatformDpiaMasterDataFacade;
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
+import com.vi.tenantservice.api.model.AccountInactivitySettings;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.ChatRecoverySettings;
@@ -302,6 +303,19 @@ public class TenantController implements TenantApi, TenantadminApi {
   public ResponseEntity<ChatRecoverySettings> updateChatRecoverySettings(
       @Valid ChatRecoverySettings settings) {
     return ResponseEntity.ok(tenantServiceFacade.updateChatRecoverySettings(settings));
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<AccountInactivitySettings> getAccountInactivitySettings() {
+    return ResponseEntity.ok(tenantServiceFacade.getAccountInactivitySettings());
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<AccountInactivitySettings> updateAccountInactivitySettings(
+      @Valid AccountInactivitySettings settings) {
+    return ResponseEntity.ok(tenantServiceFacade.updateAccountInactivitySettings(settings));
   }
 
   @Override

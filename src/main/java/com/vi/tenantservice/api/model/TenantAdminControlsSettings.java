@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.model;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.vi.tenantservice.api.policy.PolicyValue;
 import java.util.Map;
+import java.util.Set;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -32,6 +33,8 @@ public class TenantAdminControlsSettings {
   /** Creation defaults only; existing accounts retain their enrollment policy. */
   ChatRecoverySettings chatRecoverySettings;
 
+  AccountInactivitySettings accountInactivitySettings;
+
   boolean permissionsPageEnabled;
   TenantAdminAllowedPermissionTogglesSettings allowedPermissionToggles;
 
@@ -45,6 +48,14 @@ public class TenantAdminControlsSettings {
 
   /** Canonical four-state policies. Legacy boolean maps remain readable during migration. */
   Map<String, PolicyValue<Boolean>> permissionPolicies;
+
+  /**
+   * #251 — the policy keys the platform admin set <em>explicitly</em>, as opposed to entries that
+   * were derived from the legacy toggles or echoed back unchanged by the Admin panel (it PUTs the
+   * whole map on every click). Only these form the preset a new Träger starts from. Sticky: once a
+   * key was changed it stays explicit. Absent on rows written before this field existed.
+   */
+  Set<String> explicitPermissionPolicyKeys;
 
   /** Platform defaults for reason-specific Case Handover policies. */
   CaseHandoverPolicies caseHandoverPolicies;

@@ -22,9 +22,12 @@ import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
+import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PermissionPolicyMode;
+import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -294,6 +297,52 @@ class TenantAdminControlsServiceTest {
   }
 
   @Test
+  void getControls_shouldCompleteAPartialPolicyList_onEveryRead() {
+    // dev, 2026-09-16 (#254): the stored list holds a single entry and never healed, because the
+    // legacy toggles were only consulted while the list was completely empty
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"allowedPermissionToggles\":{\"videoCalls\":false},"
+            + "\"permissionPolicies\":{\"caseHandoverEnabled\":{\"value\":true,\"mode\":\"SUGGESTED\"}}}");
+    when(tenantConverter.toTenantAdminControls(any())).thenReturn(new TenantAdminControls());
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> settings =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(settings.capture());
+    Map<String, PolicyValue<Boolean>> policies = settings.getValue().getPermissionPolicies();
+    assertThat(policies)
+        .containsOnlyKeys(
+            java.util.Arrays.stream(PermissionFeature.values())
+                .map(PermissionFeature::apiKey)
+                .toArray(String[]::new));
+    assertThat(policies.get("caseHandoverEnabled"))
+        .isEqualTo(new PolicyValue<>(true, PermissionPolicyMode.SUGGESTED));
+    assertThat(policies.get("featureVideoCallsEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+    assertThat(policies.get("featureAudioCallsEnabled"))
+        .isEqualTo(new PolicyValue<>(true, PermissionPolicyMode.SUGGESTED));
+  }
+
+  @Test
+  void getControls_shouldLetAStoredGroupChatRuleGovernTheFormats_beforeFallingBackToLegacy() {
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{\"featureGroupChatV2Enabled\":{\"value\":false,\"mode\":\"ENFORCED\"}}}");
+    when(tenantConverter.toTenantAdminControls(any())).thenReturn(new TenantAdminControls());
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> settings =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(settings.capture());
+    assertThat(settings.getValue().getPermissionPolicies().get("featureInternalGroupChatEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+    assertThat(settings.getValue().getPermissionPolicies().get("featureSelfHelpGroupsEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+  }
+
+  @Test
   void getControls_shouldNormalizeLegacyEnforcedOptOutAsTypedConsent() {
     givenStoredControlsJson(
         "{\"caseHandoverPolicies\":{\"reasons\":{\"COUNSELLOR_ON_HOLIDAY\":{"
@@ -336,5 +385,30 @@ class TenantAdminControlsServiceTest {
     assertThatThrownBy(() -> tenantAdminControlsService.updateControls(new TenantAdminControls()))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("NONE consent");
+  }
+
+  @Test
+  void getControls_shouldCompletePartialCanonicalPoliciesWithoutOverwritingStoredEntries() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"allowedPermissionToggles\":{\"groupChat\":true},"
+            + "\"permissionPolicies\":{"
+            + "\"featureMediaUploadOneOnOneChatsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"},"
+            + "\"someFutureFeatureEnabled\":{\"value\":true,\"mode\":\"ENFORCED\"}}}");
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> settings =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(settings.capture());
+    assertThat(settings.getValue().getPermissionPolicies())
+        .containsEntry(
+            "featureMediaUploadOneOnOneChatsEnabled",
+            new PolicyValue<>(false, PermissionPolicyMode.ENFORCED))
+        .containsEntry(
+            "featureGroupChatV2Enabled", new PolicyValue<>(true, PermissionPolicyMode.SUGGESTED))
+        .containsEntry(
+            "featureCallsEnabled", new PolicyValue<>(true, PermissionPolicyMode.SUGGESTED))
+        .doesNotContainKey("someFutureFeatureEnabled");
   }
 }

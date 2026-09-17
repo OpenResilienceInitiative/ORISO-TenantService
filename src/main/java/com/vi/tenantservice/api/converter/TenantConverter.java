@@ -92,6 +92,8 @@ public class TenantConverter {
         .featureAppointmentsEnabled(settings.getFeatureAppointmentsEnabled())
         .featureStatisticsEnabled(settings.getFeatureStatisticsEnabled())
         .featureGroupChatV2Enabled(settings.getFeatureGroupChatV2Enabled())
+        .featureInternalGroupChatEnabled(settings.getFeatureInternalGroupChatEnabled())
+        .featureSelfHelpGroupsEnabled(settings.getFeatureSelfHelpGroupsEnabled())
         .featureTeamDiscussionEnabled(settings.getFeatureTeamDiscussionEnabled())
         .featureToolsEnabled(settings.getFeatureToolsEnabled())
         .featureAnonymousChatEnabled(settings.getFeatureAnonymousChatEnabled())
@@ -291,6 +293,8 @@ public class TenantConverter {
         .featureAppointmentsEnabled(tenantSettings.getFeatureAppointmentsEnabled())
         .featureStatisticsEnabled(tenantSettings.getFeatureStatisticsEnabled())
         .featureGroupChatV2Enabled(tenantSettings.getFeatureGroupChatV2Enabled())
+        .featureInternalGroupChatEnabled(tenantSettings.getFeatureInternalGroupChatEnabled())
+        .featureSelfHelpGroupsEnabled(tenantSettings.getFeatureSelfHelpGroupsEnabled())
         .featureTeamDiscussionEnabled(tenantSettings.getFeatureTeamDiscussionEnabled())
         .featureToolsOICDToken(tenantSettings.getFeatureToolsOIDCToken())
         .featureToolsEnabled(tenantSettings.getFeatureToolsEnabled())
@@ -390,6 +394,7 @@ public class TenantConverter {
         .permissionPolicies(toPermissionPolicySettings(tenantAdminControls.getPermissionPolicies()))
         .caseHandoverPolicies(tenantAdminControls.getCaseHandoverPolicies())
         .chatRecoverySettings(tenantAdminControls.getChatRecoverySettings())
+        .accountInactivitySettings(tenantAdminControls.getAccountInactivitySettings())
         .build();
   }
 
@@ -403,6 +408,8 @@ public class TenantConverter {
         .anonymousChat(nullAsTrue(allowedPermissionToggles.getAnonymousChat()))
         .calls(nullAsTrue(allowedPermissionToggles.getCalls()))
         .groupChat(nullAsTrue(allowedPermissionToggles.getGroupChat()))
+        .internalGroupChat(allowedPermissionToggles.getInternalGroupChat())
+        .selfHelpGroups(allowedPermissionToggles.getSelfHelpGroups())
         .supervision(nullAsTrue(allowedPermissionToggles.getSupervision()))
         .supervisionAnonymousChats(
             nullAsTrue(allowedPermissionToggles.getSupervisionAnonymousChats()))
@@ -478,7 +485,8 @@ public class TenantConverter {
         .permissionPolicies(
             toBooleanPermissionPolicies(tenantAdminControlsSettings.getPermissionPolicies()))
         .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies())
-        .chatRecoverySettings(tenantAdminControlsSettings.getChatRecoverySettings());
+        .chatRecoverySettings(tenantAdminControlsSettings.getChatRecoverySettings())
+        .accountInactivitySettings(tenantAdminControlsSettings.getAccountInactivitySettings());
   }
 
   private Map<String, PolicyValue<Boolean>> toPermissionPolicySettings(
@@ -522,6 +530,16 @@ public class TenantConverter {
         .anonymousChat(nullAsTrue(allowedPermissionTogglesSettings.getAnonymousChat()))
         .calls(nullAsTrue(allowedPermissionTogglesSettings.getCalls()))
         .groupChat(nullAsTrue(allowedPermissionTogglesSettings.getGroupChat()))
+        .internalGroupChat(
+            nullAsTrue(
+                orGroupChat(
+                    allowedPermissionTogglesSettings.getInternalGroupChat(),
+                    allowedPermissionTogglesSettings)))
+        .selfHelpGroups(
+            nullAsTrue(
+                orGroupChat(
+                    allowedPermissionTogglesSettings.getSelfHelpGroups(),
+                    allowedPermissionTogglesSettings)))
         .supervision(nullAsTrue(allowedPermissionTogglesSettings.getSupervision()))
         .supervisionAnonymousChats(
             nullAsTrue(allowedPermissionTogglesSettings.getSupervisionAnonymousChats()))
@@ -601,6 +619,8 @@ public class TenantConverter {
         .anonymousChat(nullAsFalse(allowedPermissionToggles.getAnonymousChat()))
         .calls(nullAsFalse(allowedPermissionToggles.getCalls()))
         .groupChat(nullAsFalse(allowedPermissionToggles.getGroupChat()))
+        .internalGroupChat(allowedPermissionToggles.getInternalGroupChat())
+        .selfHelpGroups(allowedPermissionToggles.getSelfHelpGroups())
         .supervision(nullAsFalse(allowedPermissionToggles.getSupervision()))
         .supervisionAnonymousChats(
             nullAsFalse(allowedPermissionToggles.getSupervisionAnonymousChats()))
@@ -661,6 +681,16 @@ public class TenantConverter {
         .build();
   }
 
+  /**
+   * #250 transition: a group chat format toggle that was never stored follows the stored legacy
+   * {@code groupChat} toggle, so a platform rule written before the split still covers both
+   * formats.
+   */
+  private static Boolean orGroupChat(
+      Boolean formatToggle, TenantAdminAllowedPermissionTogglesSettings toggles) {
+    return formatToggle != null ? formatToggle : toggles.getGroupChat();
+  }
+
   private TenantAdminAllowedPermissionToggles toEnforcedPermissionToggles(
       TenantAdminAllowedPermissionTogglesSettings allowedPermissionTogglesSettings) {
     if (allowedPermissionTogglesSettings == null) {
@@ -671,6 +701,16 @@ public class TenantConverter {
         .anonymousChat(nullAsFalse(allowedPermissionTogglesSettings.getAnonymousChat()))
         .calls(nullAsFalse(allowedPermissionTogglesSettings.getCalls()))
         .groupChat(nullAsFalse(allowedPermissionTogglesSettings.getGroupChat()))
+        .internalGroupChat(
+            nullAsFalse(
+                orGroupChat(
+                    allowedPermissionTogglesSettings.getInternalGroupChat(),
+                    allowedPermissionTogglesSettings)))
+        .selfHelpGroups(
+            nullAsFalse(
+                orGroupChat(
+                    allowedPermissionTogglesSettings.getSelfHelpGroups(),
+                    allowedPermissionTogglesSettings)))
         .supervision(nullAsFalse(allowedPermissionTogglesSettings.getSupervision()))
         .supervisionAnonymousChats(
             nullAsFalse(allowedPermissionTogglesSettings.getSupervisionAnonymousChats()))

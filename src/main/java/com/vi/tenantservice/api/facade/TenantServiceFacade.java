@@ -20,6 +20,7 @@ import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
+import com.vi.tenantservice.api.model.AccountInactivitySettings;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
@@ -38,6 +39,7 @@ import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantDpaService;
@@ -120,6 +122,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
 
   private final @NonNull TenantPermissionPolicyService tenantPermissionPolicyService;
+
+  private final @NonNull NewTenantPresetService newTenantPresetService;
 
   private final @NonNull EffectivePermissionSettingsApplier effectivePermissionSettingsApplier;
 
@@ -321,7 +325,9 @@ public class TenantServiceFacade {
 
   private void setDefaultTenantSettings(TenantEntity tenant) {
     var defaultTenantSettings = tenantService.getDefaultTenantSettings();
-    tenant.setSettings(convertToJson(defaultTenantSettings));
+    // #251: the platform admin's current preset decides the conversation features of a new Träger
+    tenant.setSettings(
+        convertToJson(newTenantPresetService.applyCurrentPlatformPreset(defaultTenantSettings)));
   }
 
   private void createDefaultConsultingTypeSettings(TenantEntity createdTenant)
@@ -597,6 +603,17 @@ public class TenantServiceFacade {
     return tenantAdminControlsService.updateChatRecoverySettings(settings);
   }
 
+  public AccountInactivitySettings getAccountInactivitySettings() {
+    assertSuperAdmin();
+    return tenantAdminControlsService.getAccountInactivitySettings();
+  }
+
+  public AccountInactivitySettings updateAccountInactivitySettings(
+      AccountInactivitySettings settings) {
+    assertSuperAdmin();
+    return tenantAdminControlsService.updateAccountInactivitySettings(settings);
+  }
+
   public TenantAdminControls getTenantAdminControls() {
     assertSuperAdmin();
     return tenantAdminControlsService.getControls();
@@ -804,6 +821,7 @@ public class TenantServiceFacade {
             .setTenantAdminControls(
                 new TenantAdminControls()
                     .chatRecoverySettings(controls.getChatRecoverySettings())
+                    .accountInactivitySettings(controls.getAccountInactivitySettings())
                     .permissionPolicies(null));
       }
       if (dto.getId() == null || dto.getId() != TECHNICAL_TENANT_ID) {
