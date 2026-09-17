@@ -39,6 +39,7 @@ import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantDpaService;
@@ -121,6 +122,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
 
   private final @NonNull TenantPermissionPolicyService tenantPermissionPolicyService;
+
+  private final @NonNull NewTenantPresetService newTenantPresetService;
 
   private final @NonNull EffectivePermissionSettingsApplier effectivePermissionSettingsApplier;
 
@@ -322,7 +325,9 @@ public class TenantServiceFacade {
 
   private void setDefaultTenantSettings(TenantEntity tenant) {
     var defaultTenantSettings = tenantService.getDefaultTenantSettings();
-    tenant.setSettings(convertToJson(defaultTenantSettings));
+    // #251: the platform admin's current preset decides the conversation features of a new Träger
+    tenant.setSettings(
+        convertToJson(newTenantPresetService.applyCurrentPlatformPreset(defaultTenantSettings)));
   }
 
   private void createDefaultConsultingTypeSettings(TenantEntity createdTenant)

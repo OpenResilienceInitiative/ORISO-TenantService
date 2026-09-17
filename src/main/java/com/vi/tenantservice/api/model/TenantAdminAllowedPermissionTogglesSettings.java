@@ -14,6 +14,8 @@ public class TenantAdminAllowedPermissionTogglesSettings {
   Boolean anonymousChat;
   Boolean calls;
   Boolean groupChat;
+  Boolean internalGroupChat;
+  Boolean selfHelpGroups;
   Boolean supervision;
   Boolean supervisionAnonymousChats;
   Boolean supervisionOneOnOneChats;

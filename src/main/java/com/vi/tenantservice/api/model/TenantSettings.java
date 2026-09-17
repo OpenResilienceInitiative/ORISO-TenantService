@@ -21,6 +21,21 @@ public class TenantSettings {
   Boolean featureDemographicsEnabled;
   Boolean featureAppointmentsEnabled;
   Boolean featureGroupChatV2Enabled;
+
+  /**
+   * #250 — internal group chats (counsellors only). Switched separately from {@link
+   * #featureSelfHelpGroupsEnabled}. Deliberately absent from {@link #BOOLEAN_FIELD_DEFAULTS}: a
+   * tenant that never stored it reads its own {@link #featureGroupChatV2Enabled}, so existing
+   * tenants keep today's behaviour.
+   */
+  Boolean featureInternalGroupChatEnabled;
+
+  /**
+   * #250 — conversation circles / self-help groups (advice seekers take part). Same transition rule
+   * as {@link #featureInternalGroupChatEnabled}.
+   */
+  Boolean featureSelfHelpGroupsEnabled;
+
   Boolean featureTeamDiscussionEnabled;
   Boolean featureToolsEnabled;
   Boolean featureAnonymousChatEnabled;
@@ -209,6 +224,14 @@ public class TenantSettings {
     }
     if (featureGroupChatV2Enabled == null) {
       featureGroupChatV2Enabled = BOOLEAN_FIELD_DEFAULTS.get("featureGroupChatV2Enabled");
+    }
+    // #250 transition: the format flags follow the tenant's own legacy group chat switch until
+    // they are stored explicitly (must run after featureGroupChatV2Enabled got its default).
+    if (featureInternalGroupChatEnabled == null) {
+      featureInternalGroupChatEnabled = featureGroupChatV2Enabled;
+    }
+    if (featureSelfHelpGroupsEnabled == null) {
+      featureSelfHelpGroupsEnabled = featureGroupChatV2Enabled;
     }
     if (featureTeamDiscussionEnabled == null) {
       featureTeamDiscussionEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureTeamDiscussionEnabled");
