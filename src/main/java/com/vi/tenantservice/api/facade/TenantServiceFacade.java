@@ -54,6 +54,7 @@ import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
+import com.vi.tenantservice.api.validation.SubdomainValidator;
 import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
@@ -105,6 +106,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantIdAllocationService tenantIdAllocationService;
   private final @NonNull TenantConverter tenantConverter;
   private final @NonNull TenantInputSanitizer tenantInputSanitizer;
+
+  private final @NonNull SubdomainValidator subdomainValidator;
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TranslationService translationService;
@@ -146,6 +149,8 @@ public class TenantServiceFacade {
     log.info("Creating new tenant");
     MultilingualTenantDTO sanitizedTenantDTO = tenantInputSanitizer.sanitize(tenantDTO);
     validateCreateTenantInput(tenantDTO);
+    // The sanitized value is the one that would be stored, so that is the one that is checked.
+    subdomainValidator.validateOnCreate(sanitizedTenantDTO.getSubdomain());
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnCreate(
         sanitizedTenantDTO);
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
@@ -509,6 +514,8 @@ public class TenantServiceFacade {
 
   private MultilingualTenantDTO updateExistingTenant(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenantEntity) {
+    subdomainValidator.validateOnUpdate(
+        sanitizedTenantDTO.getSubdomain(), existingTenantEntity.getSubdomain());
     tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
         sanitizedTenantDTO, existingTenantEntity);
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
