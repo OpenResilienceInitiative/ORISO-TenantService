@@ -36,7 +36,25 @@ public enum Authority {
       UserRole.RESTRICTED_AGENCY_ADMIN, singletonList(AuthorityValue.GET_TENANT)),
 
   READ_TENANT_AS_CONSULTANT_ADMIN(
-      UserRole.RESTRICTED_CONSULTANT_ADMIN, singletonList(AuthorityValue.GET_TENANT));
+      UserRole.RESTRICTED_CONSULTANT_ADMIN, singletonList(AuthorityValue.GET_TENANT)),
+
+  /**
+   * Read-only tenant access for the technical service user. The public invite flows create accounts
+   * on behalf of nobody — UserService authenticates those server-to-server calls as the technical
+   * user — and creating a consultant reads the tenant's licensing to enforce the licensed user
+   * limit. Without this, every counsellor invite acceptance dies with
+   * TENANT_LICENSING_NOT_CONFIGURED, because UserService cannot tell a 403 on the tenant lookup
+   * from an unreachable TenantService.
+   *
+   * <p>GET_ALL_TENANTS rides along because it is what {@code
+   * TenantFacadeAuthorisationService#assertUserIsAuthorizedToAccessTenant} reads as "may look
+   * beyond its own tenant": the technical user has no tenant of its own, so without it every lookup
+   * of a real tenant is denied on the tenant-id comparison. Both are READ authorities — the
+   * technical user never creates or changes a tenant.
+   */
+  TECHNICAL_USER(
+      UserRole.TECHNICAL,
+      Lists.newArrayList(AuthorityValue.GET_TENANT, AuthorityValue.GET_ALL_TENANTS));
 
   private final UserRole userRole;
   private final List<String> grantedAuthorities;
