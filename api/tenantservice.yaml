@@ -1702,6 +1702,16 @@ components:
               maxLength: 40
             subdomain:
               type: string
+              description: >-
+                Multitenancy routing key. Must match `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`: lowercase
+                letters, digits and hyphens, starting and ending alphanumeric. Enforced by the
+                service on create, and on update whenever the submitted value differs from the
+                stored one - rows written before the rule existed stay editable. A violation is
+                answered with 400 and `X-Reason: SUBDOMAIN_INVALID`.
+
+                Deliberately not expressed as `pattern`: that would apply the rule to every
+                update of an already-stored value as well, locking admins out of records that
+                predate it.
               example: "companyname"
               maxLength: 100
             address:
