@@ -343,13 +343,13 @@ class TenantControllerIT {
                         multilingualTenantTestDataBuilder
                             .withId(1L)
                             .withName("tenant")
-                            .withSubdomain("changed subdomain")
+                            .withSubdomain("changed-subdomain")
                             .withSettingActiveLanguages(Lists.newArrayList("fr", "pl"))
                             .withLicensing()
                             .jsonify())
                     .contentType(APPLICATION_JSON))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.subdomain").value("changed subdomain"))
+            .andExpect(jsonPath("$.subdomain").value("changed-subdomain"))
             .andExpect(jsonPath("$.settings.topicsInRegistrationEnabled").value("true"))
             .andExpect(jsonPath("$.settings.activeLanguages").value(Lists.newArrayList("fr", "pl")))
             .andReturn();
