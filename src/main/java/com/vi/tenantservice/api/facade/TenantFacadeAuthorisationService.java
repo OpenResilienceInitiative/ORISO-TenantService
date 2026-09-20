@@ -311,6 +311,46 @@ public class TenantFacadeAuthorisationService {
     }
   }
 
+  /** Platform sender and the exact recipient may read incoming proposal history. */
+  public void assertCanReadLegalProposal(Long recipientTenantId) {
+    if (isTechnicalUser()) {
+      throw new AccessDeniedException("Technical users cannot read legal proposals");
+    }
+    if (isSuperAdmin()) return;
+    assertExactRecipient(recipientTenantId);
+    assertLegalProposalPermission();
+  }
+
+  public void assertCanDistributeLegalProposals() {
+    if (isTechnicalUser() || !isSuperAdmin()) {
+      throw new AccessDeniedException("Only the platform administrator may share legal drafts");
+    }
+  }
+
+  /** Proposal acknowledgement and adoption are actions of the exact recipient legal editor. */
+  public void assertCanManageOwnLegalProposal(Long recipientTenantId) {
+    assertExactRecipient(recipientTenantId);
+    assertLegalProposalPermission();
+  }
+
+  private void assertExactRecipient(Long recipientTenantId) {
+    if (isTechnicalUser()) {
+      throw new AccessDeniedException("Technical users cannot act on legal proposals");
+    }
+    Optional<Long> tokenTenantId = authorisationService.findTenantIdInAccessToken();
+    if (recipientTenantId == null
+        || recipientTenantId <= 0
+        || !tenantMatching(recipientTenantId, tokenTenantId)) {
+      throw new AccessDeniedException("User is not the legal proposal recipient");
+    }
+  }
+
+  private void assertLegalProposalPermission() {
+    if (!isAllowedToEditLegalContent()) {
+      throw new AccessDeniedException("User may not manage legal proposals");
+    }
+  }
+
   private boolean isTechnicalUser() {
     try {
       return "technical".equals(authorisationService.getUsername());

@@ -79,13 +79,20 @@ public class TenantLegalDraftFacade {
     return result;
   }
 
-  private TenantLegalDraftDTO dto(TenantLegalDraftEntity e) {
+  TenantLegalDraftDTO dto(TenantLegalDraftEntity e) {
     TenantLegalDraftDTO dto =
         new TenantLegalDraftDTO()
             .kind(TenantLegalDraftDTO.KindEnum.fromValue(e.getKind().name()))
             .content(drafts.content(e))
             .revision(drafts.revision(e))
-            .updatedAt(e.getUpdateDate());
+            .updatedAt(e.getUpdateDate())
+            .originProposalId(e.getOriginProposalId())
+            .originSourceRevision(e.getOriginSourceRevision())
+            .originSourceUpdatedAt(e.getOriginSourceUpdatedAt())
+            .originSharedBy(e.getOriginSharedBy());
+    if (e.getOriginDistributionId() != null) {
+      dto.setOriginDistributionId(UUID.fromString(e.getOriginDistributionId()));
+    }
     Map<String, String> privacyConsent = drafts.privacyConsent(e);
     return privacyConsent == null ? dto : dto.privacyConsent(privacyConsent);
   }

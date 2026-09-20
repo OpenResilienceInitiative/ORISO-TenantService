@@ -3,6 +3,8 @@ package com.vi.tenantservice.api.facade;
 import static com.vi.tenantservice.api.authorisation.UserRole.SINGLE_TENANT_ADMIN;
 import static com.vi.tenantservice.api.authorisation.UserRole.TENANT_ADMIN;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -50,6 +52,40 @@ class TenantFacadeAuthorisationServiceTest {
   @Mock TenantAdminControlsService tenantAdminControlsService;
 
   @Mock TenantPermissionPolicyService tenantPermissionPolicyService;
+
+  @Test
+  void platformTenantAdminMayReadButCannotActForARecipient() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertCanReadLegalProposal(7L))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanManageOwnLegalProposal(7L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void exactRecipientWithLegalAuthorityMayReadAndAct() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(7L));
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CHANGE_LEGAL_CONTENT))
+        .thenReturn(true);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertCanReadLegalProposal(7L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertCanManageOwnLegalProposal(7L))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void foreignRecipientAndTechnicalPrincipalAreDeniedBeforeProposalLookup() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(8L));
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanReadLegalProposal(7L))
+        .isInstanceOf(AccessDeniedException.class);
+
+    when(authorisationService.getUsername()).thenReturn("technical");
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanManageOwnLegalProposal(7L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
 
   @Test
   void

@@ -43,4 +43,19 @@ public class TenantLegalDraftEntity {
 
   @Column(name = "update_date", nullable = false)
   private LocalDateTime updateDate;
+
+  @Column(name = "origin_proposal_id")
+  private Long originProposalId;
+
+  @Column(name = "origin_distribution_id", length = 36)
+  private String originDistributionId;
+
+  @Column(name = "origin_source_revision", length = 64)
+  private String originSourceRevision;
+
+  @Column(name = "origin_source_updated_at")
+  private LocalDateTime originSourceUpdatedAt;
+
+  @Column(name = "origin_shared_by")
+  private String originSharedBy;
 }

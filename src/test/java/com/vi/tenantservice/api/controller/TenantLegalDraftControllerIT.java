@@ -1,15 +1,19 @@
 package com.vi.tenantservice.api.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.TenantServiceApplication;
 import com.vi.tenantservice.api.config.apiclient.ApplicationSettingsApiControllerFactory;
 import com.vi.tenantservice.api.config.apiclient.ConsultingTypeServiceApiControllerFactory;
@@ -49,6 +53,7 @@ class TenantLegalDraftControllerIT {
   @Autowired private WebApplicationContext context;
   @Autowired private TenantLegalDraftRepository draftRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
+  private final ObjectMapper objectMapper = new ObjectMapper();
   @MockitoBean private ApplicationSettingsService applicationSettingsService;
 
   @MockitoBean
@@ -69,6 +74,10 @@ class TenantLegalDraftControllerIT {
 
   @BeforeEach
   void setUp() {
+    jdbcTemplate.update("DELETE FROM tenant_legal_proposal_delivery");
+    jdbcTemplate.update("DELETE FROM tenant_legal_proposal");
+    jdbcTemplate.update("DELETE FROM tenant_legal_draft_archive");
+    jdbcTemplate.update("DELETE FROM tenant_legal_proposal_distribution");
     draftRepository.deleteAll();
     mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
     when(consultingTypeServiceApiControllerFactory.createControllerApi())
@@ -165,6 +174,112 @@ class TenantLegalDraftControllerIT {
         .andExpect(status().isBadRequest());
   }
 
+  @Test
+  void proposalNoticeCanBeDismissedReopenedAndAdoptedWithoutPublishing() throws Exception {
+    String publishedBefore =
+        jdbcTemplate.queryForObject(
+            "SELECT content_privacy FROM tenant WHERE id = 1", String.class);
+    String platformDraft =
+        mvc.perform(
+                put("/tenantadmin/0/legal-drafts/PRIVACY")
+                    .with(platformAdmin())
+                    .contentType(APPLICATION_JSON)
+                    .content(
+                        "{\"content\":{\"de\":\"<p>Neue Plattformfassung</p>\"},"
+                            + "\"privacyConsent\":{\"de\":\"Einwilligung\"},\"revision\":\"new\"}"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String sourceRevision = objectMapper.readTree(platformDraft).get("revision").asText();
+    String distribution =
+        mvc.perform(
+                post("/tenantadmin/legal-proposal-distributions")
+                    .with(platformAdmin())
+                    .contentType(APPLICATION_JSON)
+                    .content(
+                        "{\"requestKey\":\"controller-dismiss-adopt\",\"kind\":\"PRIVACY\","
+                            + "\"sourceRevision\":\""
+                            + sourceRevision
+                            + "\",\"audience\":\"SELECTED\",\"tenantIds\":[1]}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.recipientTenantIds[0]").value(1))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    JsonNode proposal = objectMapper.readTree(distribution).get("proposals").get(0);
+    long proposalId = proposal.get("id").asLong();
+    String proposalRevision = proposal.get("revision").asText();
+    String proposalUrl = "/tenantadmin/1/legal-proposals/" + proposalId;
+
+    mvc.perform(
+            post("/tenantadmin/legal-proposal-distributions")
+                .with(platformAdmin())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    "{\"requestKey\":\"controller-dismiss-adopt\",\"kind\":\"PRIVACY\","
+                        + "\"sourceRevision\":\""
+                        + sourceRevision
+                        + "\",\"audience\":\"SELECTED\",\"tenantIds\":[1]}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.proposals[0].id").value(proposalId));
+
+    mvc.perform(get(proposalUrl).with(platformAdmin())).andExpect(status().isOk());
+    mvc.perform(get(proposalUrl).with(tenantAdmin(2L))).andExpect(status().isForbidden());
+    mvc.perform(get(proposalUrl).with(technicalLegalCaller(1L))).andExpect(status().isForbidden());
+
+    String dismissed =
+        mvc.perform(
+                post(proposalUrl + "/dismiss")
+                    .with(legalTenantAdmin(1L))
+                    .contentType(APPLICATION_JSON)
+                    .content("{\"expectedProposalRevision\":\"" + proposalRevision + "\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("DISMISSED"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String dismissedRevision = objectMapper.readTree(dismissed).get("revision").asText();
+    mvc.perform(get(proposalUrl).with(legalTenantAdmin(1L)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("DISMISSED"));
+
+    mvc.perform(
+            post(proposalUrl + "/adopt")
+                .with(legalTenantAdmin(1L))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    "{\"mode\":\"CREATE_IF_EMPTY\",\"expectedProposalRevision\":\""
+                        + dismissedRevision
+                        + "\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content.de").value("<p>Neue Plattformfassung</p>"))
+        .andExpect(jsonPath("$.privacyConsent.de").value("Einwilligung"))
+        .andExpect(jsonPath("$.originProposalId").value(proposalId));
+    assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT content_privacy FROM tenant WHERE id = 1", String.class))
+        .isEqualTo(publishedBefore);
+  }
+
+  @Test
+  void technicalPlatformShapedTokenCannotDistributeOrReadBeforeResourceLookup() throws Exception {
+    RequestPostProcessor technical = technicalPlatformCaller();
+    mvc.perform(
+            post("/tenantadmin/legal-proposal-distributions")
+                .with(technical)
+                .contentType(APPLICATION_JSON)
+                .content(
+                    "{\"requestKey\":\"technical-must-not-send\",\"kind\":\"PRIVACY\","
+                        + "\"sourceRevision\":\"999:0\",\"audience\":\"SELECTED\","
+                        + "\"tenantIds\":[1]}"))
+        .andExpect(status().isForbidden());
+    mvc.perform(get("/tenantadmin/1/legal-proposals/999").with(technicalPlatformCaller()))
+        .andExpect(status().isForbidden());
+    mvc.perform(get("/tenantadmin/1/legal-draft-archives/999").with(technicalPlatformCaller()))
+        .andExpect(status().isForbidden());
+  }
+
   private RequestPostProcessor tenantAdmin(long tenantId) {
     return jwt()
         .jwt(
@@ -174,6 +289,45 @@ class TenantLegalDraftControllerIT {
                     .claim("username", "tenant-admin-" + tenantId)
                     .claim("realm_access", Map.of("roles", List.of("tenant-admin"))))
         .authorities(new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"));
+  }
+
+  private RequestPostProcessor legalTenantAdmin(long tenantId) {
+    return jwt()
+        .jwt(
+            token ->
+                token
+                    .claim("tenantId", tenantId)
+                    .claim("username", "legal-tenant-admin-" + tenantId)
+                    .claim("realm_access", Map.of("roles", List.of("tenant-admin"))))
+        .authorities(
+            new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
+            new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));
+  }
+
+  private RequestPostProcessor technicalLegalCaller(long tenantId) {
+    return jwt()
+        .jwt(
+            token ->
+                token
+                    .claim("tenantId", tenantId)
+                    .claim("username", "technical")
+                    .claim("realm_access", Map.of("roles", List.of())))
+        .authorities(
+            new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
+            new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));
+  }
+
+  private RequestPostProcessor technicalPlatformCaller() {
+    return jwt()
+        .jwt(
+            token ->
+                token
+                    .claim("tenantId", 0L)
+                    .claim("username", "technical")
+                    .claim("realm_access", Map.of("roles", List.of("tenant-admin"))))
+        .authorities(
+            new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
+            new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));
   }
 
   private RequestPostProcessor platformAdmin() {
