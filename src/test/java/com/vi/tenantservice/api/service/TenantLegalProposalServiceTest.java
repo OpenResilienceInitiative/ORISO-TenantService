@@ -46,7 +46,7 @@ class TenantLegalProposalServiceTest {
     when(draftRepository.findLockedByOwnerKeyAndKind(0L, TenantLegalDraftKind.PRIVACY))
         .thenReturn(Optional.of(source));
     when(tenantRepository.findAllById(Set.of(7L, 9L))).thenReturn(List.of(tenant(7L), tenant(9L)));
-    when(proposalRepository.findBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
+    when(proposalRepository.findLockedBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
             10L, 4L, Set.of(7L, 9L)))
         .thenReturn(List.of());
     when(distributionRepository.saveAndFlush(any()))
@@ -87,7 +87,7 @@ class TenantLegalProposalServiceTest {
         .thenReturn(Optional.of(sourceDraft(11L, 2L, TenantLegalDraftKind.IMPRINT)));
     when(tenantRepository.findAllIds()).thenReturn(List.of(0L, 8L, 3L));
     when(tenantRepository.findAllById(Set.of(3L, 8L))).thenReturn(List.of(tenant(3L), tenant(8L)));
-    when(proposalRepository.findBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
+    when(proposalRepository.findLockedBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
             11L, 2L, Set.of(3L, 8L)))
         .thenReturn(List.of());
     when(distributionRepository.saveAndFlush(any()))
@@ -366,7 +366,7 @@ class TenantLegalProposalServiceTest {
     when(draftRepository.findLockedByOwnerKeyAndKind(0L, TenantLegalDraftKind.PRIVACY))
         .thenReturn(Optional.of(source));
     when(tenantRepository.findAllById(Set.of(7L))).thenReturn(List.of(tenant(7L)));
-    when(proposalRepository.findBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
+    when(proposalRepository.findLockedBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
             10L, 5L, Set.of(7L)))
         .thenReturn(List.of());
     when(distributionRepository.saveAndFlush(any()))

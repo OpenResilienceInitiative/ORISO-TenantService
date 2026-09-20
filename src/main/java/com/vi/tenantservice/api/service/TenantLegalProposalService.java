@@ -104,7 +104,7 @@ public class TenantLegalProposalService {
       distributionRepository.saveAndFlush(distribution);
       Map<Long, TenantLegalProposalEntity> proposals =
           proposalRepository
-              .findBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
+              .findLockedBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
                   source.getId(), source.getVersion(), recipients)
               .stream()
               .collect(

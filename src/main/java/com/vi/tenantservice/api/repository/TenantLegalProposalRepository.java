@@ -8,8 +8,22 @@ import org.springframework.data.repository.query.Param;
 
 public interface TenantLegalProposalRepository
     extends JpaRepository<TenantLegalProposalEntity, Long> {
-  List<TenantLegalProposalEntity> findBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
-      Long sourceDraftId, Long sourceDraftVersion, Collection<Long> recipientTenantIds);
+  /**
+   * The same lookup as a locking read. A delivery must decide which recipients already hold this
+   * exact revision <em>after</em> it has waited for the platform-draft lock. A plain read answers
+   * from the transaction's MariaDB REPEATABLE READ snapshot, which was taken before that wait, so
+   * it cannot see a proposal another overlapping delivery has just committed — and the insert that
+   * follows then hits {@code uq_tenant_legal_proposal_source_recipient}. Locking makes it a current
+   * read. Deliveries are already serialised by the platform-draft lock, so this adds no contention.
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query(
+      "select p from TenantLegalProposalEntity p where p.sourceDraftId = :sourceDraftId and p.sourceDraftVersion = :sourceDraftVersion and p.recipientTenantId in :recipientTenantIds")
+  List<TenantLegalProposalEntity>
+      findLockedBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
+          @Param("sourceDraftId") Long sourceDraftId,
+          @Param("sourceDraftVersion") Long sourceDraftVersion,
+          @Param("recipientTenantIds") Collection<Long> recipientTenantIds);
 
   List<TenantLegalProposalEntity> findByRecipientTenantIdOrderByCreatedAtDesc(Long tenantId);
 
