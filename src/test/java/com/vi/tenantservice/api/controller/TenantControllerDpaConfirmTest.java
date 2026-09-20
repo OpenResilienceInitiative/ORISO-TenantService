@@ -41,6 +41,7 @@ class TenantControllerDpaConfirmTest {
   @Mock private TenantDpaService tenantDpaService;
   @Mock private TenantDpaFacade tenantDpaFacade;
   @Mock private TenantLegalDraftFacade tenantLegalDraftFacade;
+  @Mock private com.vi.tenantservice.api.facade.TenantLegalProposalFacade tenantLegalProposalFacade;
 
   @Mock
   private com.vi.tenantservice.api.service.DpaSignedNoticeHintService dpaSignedNoticeHintService;
