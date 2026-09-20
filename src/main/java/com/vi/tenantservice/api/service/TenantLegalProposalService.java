@@ -480,8 +480,4 @@ public class TenantLegalProposalService {
   private String sourceRevision(TenantLegalProposalEntity proposal) {
     return proposal.getSourceDraftId() + ":" + proposal.getSourceDraftVersion();
   }
-
-  private String sourceRevision(TenantLegalProposalDistributionEntity distribution) {
-    return distribution.getSourceDraftId() + ":" + distribution.getSourceDraftVersion();
-  }
 }

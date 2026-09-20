@@ -2,5 +2,19 @@
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.2.xsd">
   <changeSet author="oriso" id="createTenantLegalProposals">
     <sqlFile path="db/changelog/changeset/0035_tenant_legal_proposals/createTenantLegalProposals.sql" stripComments="true"/>
+    <rollback>
+      <sql>ALTER TABLE tenant_legal_draft DROP COLUMN origin_shared_by;</sql>
+      <sql>ALTER TABLE tenant_legal_draft DROP COLUMN origin_source_updated_at;</sql>
+      <sql>ALTER TABLE tenant_legal_draft DROP COLUMN origin_source_revision;</sql>
+      <sql>ALTER TABLE tenant_legal_draft DROP COLUMN origin_distribution_id;</sql>
+      <sql>ALTER TABLE tenant_legal_draft DROP COLUMN origin_proposal_id;</sql>
+      <sql>DROP TABLE IF EXISTS tenant_legal_draft_archive;</sql>
+      <sql>DROP TABLE IF EXISTS tenant_legal_proposal_delivery;</sql>
+      <sql>DROP TABLE IF EXISTS tenant_legal_proposal;</sql>
+      <sql>DROP TABLE IF EXISTS tenant_legal_proposal_distribution;</sql>
+      <sql>DROP SEQUENCE IF EXISTS sequence_tenant_legal_draft_archive;</sql>
+      <sql>DROP SEQUENCE IF EXISTS sequence_tenant_legal_proposal_delivery;</sql>
+      <sql>DROP SEQUENCE IF EXISTS sequence_tenant_legal_proposal;</sql>
+    </rollback>
   </changeSet>
 </databaseChangeLog>
