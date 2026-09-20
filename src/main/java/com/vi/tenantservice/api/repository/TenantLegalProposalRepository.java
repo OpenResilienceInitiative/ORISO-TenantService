@@ -14,7 +14,14 @@ public interface TenantLegalProposalRepository
    * from the transaction's MariaDB REPEATABLE READ snapshot, which was taken before that wait, so
    * it cannot see a proposal another overlapping delivery has just committed — and the insert that
    * follows then hits {@code uq_tenant_legal_proposal_source_recipient}. Locking makes it a current
-   * read. Deliveries are already serialised by the platform-draft lock, so this adds no contention.
+   * read.
+   *
+   * <p>The platform-draft lock serialises deliveries of the <em>same</em> kind, so this costs
+   * nothing there. It is not free across kinds: a privacy and an imprint delivery running at the
+   * same time take gap locks on this unique index and can deadlock on the insert that follows.
+   * InnoDB rolls one of them back, and the caller gets the 503 with Retry-After that {@code
+   * TenantController#handleLockContention} answers with — the same shape the sibling {@code
+   * findLockedByRequestKey} already has.
    */
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query(

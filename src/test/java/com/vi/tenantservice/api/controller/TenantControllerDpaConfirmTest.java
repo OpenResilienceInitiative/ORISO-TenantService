@@ -173,11 +173,11 @@ class TenantControllerDpaConfirmTest {
   }
 
   @Test
-  void handleSignLockContention_Should_return503WithRetryAfter_NotAServerError() {
+  void handleLockContention_Should_return503WithRetryAfter_NotAServerError() {
     // a contended confirmation wrote nothing and the token is still valid, so neither 500 nor 410
     // is the truth — the caller should simply come back
     var response =
-        controller.handleSignLockContention(
+        controller.handleLockContention(
             new org.springframework.dao.CannotAcquireLockException("lock wait timeout"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);

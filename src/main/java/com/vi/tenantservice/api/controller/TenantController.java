@@ -197,8 +197,12 @@ public class TenantController implements TenantApi, TenantadminApi {
    * perfectly valid).
    */
   @ExceptionHandler(PessimisticLockingFailureException.class)
-  ResponseEntity<Void> handleSignLockContention(PessimisticLockingFailureException e) {
-    log.info("DPA confirmation contended for the same tenant; asking the caller to retry");
+  ResponseEntity<Void> handleLockContention(PessimisticLockingFailureException e) {
+    // Shared by every pessimistically locked write on this controller, not only DPA signing:
+    // distributing a legal proposal locks the platform draft and the recipients' proposal rows,
+    // so two deliveries of different kinds can deadlock in InnoDB. Same answer, so the log line
+    // must not claim a signature was involved.
+    log.info("A locked tenant write was contended; asking the caller to retry", e);
     return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", "2").build();
   }
 

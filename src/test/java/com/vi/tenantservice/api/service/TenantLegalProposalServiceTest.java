@@ -79,6 +79,14 @@ class TenantLegalProposalServiceTest {
               assertThat(proposal.getStatus()).isEqualTo(TenantLegalProposalStatus.PENDING);
             });
     verify(proposalRepository).saveAllAndFlush(any());
+    // The lookup for "who already holds this revision" must be the LOCKING one. A plain read
+    // answers from the REPEATABLE READ snapshot taken before the platform-draft lock was granted,
+    // misses a proposal an overlapping delivery has just committed, and turns the following insert
+    // into a unique-constraint violation the caller sees as a 409. Strict stubbing alone would only
+    // report an unnecessary stub if this regressed, which is not a statement about behaviour.
+    verify(proposalRepository)
+        .findLockedBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
+            10L, 4L, Set.of(7L, 9L));
   }
 
   @Test
