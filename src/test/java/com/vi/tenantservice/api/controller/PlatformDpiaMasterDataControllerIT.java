@@ -1,6 +1,8 @@
 package com.vi.tenantservice.api.controller;
 
 import static com.vi.tenantservice.api.authorisation.UserRole.TENANT_ADMIN;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -34,6 +36,7 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.GrantedAuthority;
@@ -178,6 +181,7 @@ class PlatformDpiaMasterDataControllerIT {
   @Test
   void updatePlatformDpiaMasterData_Should_overwriteSingleton_When_calledTwice() throws Exception {
     saveFullMasterData();
+    Long originalId = platformDpiaMasterDataRepository.findAll().getFirst().getId();
     AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
     mockMvc
         .perform(
@@ -196,6 +200,35 @@ class PlatformDpiaMasterDataControllerIT {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.operator.legalName", is("New operator")))
         .andExpect(jsonPath("$.operator.shortName").doesNotExist());
+    assertThat(platformDpiaMasterDataRepository.findAll())
+        .singleElement()
+        .satisfies(
+            row -> {
+              assertThat(row.getId()).isEqualTo(originalId).isEqualTo(1L);
+              assertThat(row.getOperatorLegalName()).isEqualTo("New operator");
+              assertThat(row.getKeyFigureTenants()).isNull();
+            });
+  }
+
+  @Test
+  void database_Should_rejectSecondMasterDataRow() throws Exception {
+    saveFullMasterData();
+    assertThatThrownBy(
+            () ->
+                jdbcTemplate.update(
+                    "INSERT INTO platform_dpia_master_data (id, operator_legal_name, update_date) VALUES (999999, 'Second operator', CURRENT_TIMESTAMP)"))
+        .isInstanceOf(DataIntegrityViolationException.class);
+    assertThat(platformDpiaMasterDataRepository.count()).isEqualTo(1);
+  }
+
+  @Test
+  void database_Should_rejectNonSingletonIdEvenWhenEmpty() {
+    assertThatThrownBy(
+            () ->
+                jdbcTemplate.update(
+                    "INSERT INTO platform_dpia_master_data (id, update_date) VALUES (2, CURRENT_TIMESTAMP)"))
+        .isInstanceOf(DataIntegrityViolationException.class);
+    assertThat(platformDpiaMasterDataRepository.count()).isZero();
   }
 
   @Test

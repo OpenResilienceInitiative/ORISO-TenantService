@@ -54,6 +54,7 @@ import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
+import com.vi.tenantservice.api.validation.SubdomainValidator;
 import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
@@ -105,6 +106,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantIdAllocationService tenantIdAllocationService;
   private final @NonNull TenantConverter tenantConverter;
   private final @NonNull TenantInputSanitizer tenantInputSanitizer;
+
+  private final @NonNull SubdomainValidator subdomainValidator;
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TranslationService translationService;
@@ -146,6 +149,8 @@ public class TenantServiceFacade {
     log.info("Creating new tenant");
     MultilingualTenantDTO sanitizedTenantDTO = tenantInputSanitizer.sanitize(tenantDTO);
     validateCreateTenantInput(tenantDTO);
+    // The sanitized value is the one that would be stored, so that is the one that is checked.
+    subdomainValidator.validateOnCreate(sanitizedTenantDTO.getSubdomain());
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnCreate(
         sanitizedTenantDTO);
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
@@ -509,6 +514,8 @@ public class TenantServiceFacade {
 
   private MultilingualTenantDTO updateExistingTenant(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenantEntity) {
+    subdomainValidator.validateOnUpdate(
+        sanitizedTenantDTO.getSubdomain(), existingTenantEntity.getSubdomain());
     tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
         sanitizedTenantDTO, existingTenantEntity);
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
@@ -526,6 +533,7 @@ public class TenantServiceFacade {
     var existingSettingsJson = existingTenantEntity.getSettings();
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
     preserveStoredSmtpPassword(existingSettingsJson, updatedEntity);
+    preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     updatedEntity = tenantService.update(updatedEntity);
     updateExtendedSettingsAsConsultingType(sanitizedTenantDTO, existingTenantEntity.getId());
@@ -554,6 +562,41 @@ public class TenantServiceFacade {
       return;
     }
     updatedSettings.getSmtp().setPassword(existingSettings.getSmtp().getPassword());
+    updatedEntity.setSettings(convertToJson(updatedSettings));
+  }
+
+  /**
+   * The #250 split-format flags ({@code featureInternalGroupChatEnabled}, {@code
+   * featureSelfHelpGroupsEnabled}) are explicit stored overrides. Like the SMTP password, they must
+   * survive the settings full-replace: a request that omits them (any update from a client that
+   * does not carry the fields) would blank them, and {@link TenantSettings#applyDefaults()} would
+   * then re-derive them from {@code featureGroupChatV2Enabled} on read, silently flipping a stored
+   * override. Retain the stored value whenever the request omits the field; a non-null request
+   * value still overrides it.
+   */
+  private void preserveStoredGroupChatFormatFlags(
+      String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
+    if (existingSettingsJson == null || updatedEntity.getSettings() == null) {
+      return;
+    }
+    Settings requestSettings = tenantDTO.getSettings();
+    boolean internalOmitted =
+        requestSettings == null || requestSettings.getFeatureInternalGroupChatEnabled() == null;
+    boolean selfHelpOmitted =
+        requestSettings == null || requestSettings.getFeatureSelfHelpGroupsEnabled() == null;
+    if (!internalOmitted && !selfHelpOmitted) {
+      return;
+    }
+    TenantSettings existingSettings = convertFromJson(existingSettingsJson);
+    TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
+    if (internalOmitted) {
+      updatedSettings.setFeatureInternalGroupChatEnabled(
+          existingSettings.getFeatureInternalGroupChatEnabled());
+    }
+    if (selfHelpOmitted) {
+      updatedSettings.setFeatureSelfHelpGroupsEnabled(
+          existingSettings.getFeatureSelfHelpGroupsEnabled());
+    }
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }
 

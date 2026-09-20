@@ -2,6 +2,14 @@ package com.vi.tenantservice.api.exception.httpresponse;
 
 public enum HttpStatusExceptionReason {
   SUBDOMAIN_NOT_UNIQUE,
+
+  /**
+   * The submitted subdomain is not a usable routing key. The format rule used to live only in the
+   * admin panel's tenant form, so every other writer stored the value unchecked
+   * (ORISO-Admin/src/utils/isValidSubdomain.ts).
+   */
+  SUBDOMAIN_INVALID,
+
   NOT_ALLOWED_TO_CHANGE_SUBDOMAIN,
   NOT_ALLOWED_TO_CHANGE_LICENSING,
   NOT_ALLOWED_TO_CHANGE_SETTING,
