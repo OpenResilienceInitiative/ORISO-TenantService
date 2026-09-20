@@ -7,6 +7,8 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vi.tenantservice.TenantServiceApplication;
@@ -64,6 +66,12 @@ class TenantBadRequestStatusIT {
 
   private static final long ONBOARDED_TENANT = 42L;
 
+  /** A tenant row that predates the subdomain format rule. */
+  private static final long LEGACY_TENANT = 77L;
+
+  /** Stored before any format rule existed: uppercase and an underscore. */
+  private static final String LEGACY_SUBDOMAIN = "Traeger_Nord";
+
   @Autowired private WebApplicationContext context;
   @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
   @Autowired private TenantRepository tenantRepository;
@@ -98,12 +106,16 @@ class TenantBadRequestStatusIT {
   }
 
   private void seedTenant(long id) {
+    seedTenant(id, "subdomain-" + id);
+  }
+
+  private void seedTenant(long id, String subdomain) {
     var now = LocalDateTime.now();
     tenantRepository.save(
         TenantEntity.builder()
             .id(id)
             .name("tenant-" + id)
-            .subdomain("subdomain-" + id)
+            .subdomain(subdomain)
             .createDate(now)
             .updateDate(now)
             .build());
@@ -150,6 +162,75 @@ class TenantBadRequestStatusIT {
                         .withOnboardingDpaAcceptance("  ", "Toni Tenantadmin", null)
                         .jsonify()))
         .andExpect(status().isBadRequest());
+  }
+
+  /**
+   * The subdomain is the multitenancy routing key. Its format was enforced only by the admin
+   * panel's tenant form ({@code isValidSubdomain.ts}); any other caller — another admin screen or
+   * plain {@code curl} — could store a value that can never appear in a host name.
+   */
+  @Test
+  void createTenant_Should_returnBadRequest_When_theSubdomainIsMalformed() throws Exception {
+    mockMvc
+        .perform(
+            post(TENANTADMIN_RESOURCE)
+                .with(platformAdmin())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    new MultilingualTenantTestDataBuilder()
+                        .withId(ONBOARDED_TENANT)
+                        .withName("Traeger Ost")
+                        .withSubdomain("Traeger_Ost")
+                        .withLicensing()
+                        .jsonify()))
+        .andExpect(status().isBadRequest())
+        .andExpect(header().string("X-Reason", "SUBDOMAIN_INVALID"));
+  }
+
+  /** The same rule on the update path, for the field that is actually being changed. */
+  @Test
+  void updateTenant_Should_returnBadRequest_When_theSubdomainIsChangedToAMalformedValue()
+      throws Exception {
+    seedTenant(LEGACY_TENANT, "traeger-nord");
+
+    mockMvc
+        .perform(
+            put(TENANTADMIN_RESOURCE + "/" + LEGACY_TENANT)
+                .with(platformAdmin())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    new MultilingualTenantTestDataBuilder()
+                        .withId(LEGACY_TENANT)
+                        .withName("Traeger Nord")
+                        .withSubdomain("-traeger-nord-")
+                        .jsonify()))
+        .andExpect(status().isBadRequest())
+        .andExpect(header().string("X-Reason", "SUBDOMAIN_INVALID"));
+  }
+
+  /**
+   * Rows stored before the rule existed must stay editable. The admin panel round-trips the whole
+   * tenant, so a record-wide check would answer 400 for every other change an admin makes to such a
+   * tenant — including the change that would fix the subdomain itself, since it is sent in the same
+   * body as everything else. Only a subdomain that actually changes is checked.
+   */
+  @Test
+  void updateTenant_Should_notRejectTheRequest_When_aStoredMalformedSubdomainIsLeftUnchanged()
+      throws Exception {
+    seedTenant(LEGACY_TENANT, LEGACY_SUBDOMAIN);
+
+    mockMvc
+        .perform(
+            put(TENANTADMIN_RESOURCE + "/" + LEGACY_TENANT)
+                .with(platformAdmin())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    new MultilingualTenantTestDataBuilder()
+                        .withId(LEGACY_TENANT)
+                        .withName("Traeger Nord, umbenannt")
+                        .withSubdomain(LEGACY_SUBDOMAIN)
+                        .jsonify()))
+        .andExpect(status().isOk());
   }
 
   /** {@code TenantServiceFacade.parseDpaVersion} — dpaVersion is not an ISO-8601 timestamp. */
