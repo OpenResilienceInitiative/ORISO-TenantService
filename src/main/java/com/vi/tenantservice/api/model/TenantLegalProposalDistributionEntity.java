@@ -41,7 +41,11 @@ public class TenantLegalProposalDistributionEntity {
   private String requestFingerprint;
 
   /** Immutable original audience, retained even when a recipient tenant is later deleted. */
-  @Column(name = "recipient_ids", nullable = false, updatable = false, columnDefinition = "TEXT")
+  @Column(
+      name = "recipient_ids",
+      nullable = false,
+      updatable = false,
+      columnDefinition = "LONGTEXT")
   private String recipientIds;
 
   @Column(name = "created_by", nullable = false, updatable = false)
