@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -150,6 +151,40 @@ class TenantLegalDraftControllerIT {
                                     .claim("realm_access", Map.of("roles", List.of())))
                         .authorities(new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"))))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void technicalCallerWithAPlatformShapedToken_Should_notReadOrWriteThePlatformDraft()
+      throws Exception {
+    // Tenant 0 plus the tenant-admin role makes isSuperAdmin() true; only the technical-user
+    // exclusion keeps this caller out of the platform draft.
+    mvc.perform(get("/tenantadmin/0/legal-drafts/PRIVACY").with(technicalPlatformCaller()))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            put("/tenantadmin/0/legal-drafts/IMPRINT")
+                .with(technicalPlatformCaller())
+                .contentType(APPLICATION_JSON)
+                .content("{\"content\":{\"de\":\"<p>Impressum</p>\"},\"revision\":\"new\"}"))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            delete("/tenantadmin/0/legal-drafts/IMPRINT")
+                .param("revision", "1:0")
+                .with(technicalPlatformCaller()))
+        .andExpect(status().isForbidden());
+    assertThat(draftRepository.count()).isZero();
+  }
+
+  private RequestPostProcessor technicalPlatformCaller() {
+    return jwt()
+        .jwt(
+            token ->
+                token
+                    .claim("tenantId", 0L)
+                    .claim("username", "technical")
+                    .claim("realm_access", Map.of("roles", List.of("tenant-admin"))))
+        .authorities(
+            new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
+            new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));
   }
 
   @Test
