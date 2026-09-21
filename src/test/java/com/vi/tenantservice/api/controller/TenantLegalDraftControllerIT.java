@@ -182,19 +182,6 @@ class TenantLegalDraftControllerIT {
     assertThat(draftRepository.count()).isZero();
   }
 
-  private RequestPostProcessor technicalPlatformCaller() {
-    return jwt()
-        .jwt(
-            token ->
-                token
-                    .claim("tenantId", 0L)
-                    .claim("username", "technical")
-                    .claim("realm_access", Map.of("roles", List.of("tenant-admin"))))
-        .authorities(
-            new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
-            new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));
-  }
-
   @Test
   void imprintDraft_Should_rejectPrivacyConsent() throws Exception {
     String body =
