@@ -2,6 +2,8 @@ package com.vi.tenantservice.api.facade;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -70,14 +72,14 @@ class TenantLegalDraftFacadeTest {
     TenantLegalDraftFacade facade =
         new TenantLegalDraftFacade(authorisation, tenantService, drafts);
     TenantLegalDraftEntity platformDraft = entity(61L, 2L, 0L, TenantLegalDraftKind.PRIVACY);
-    when(authorisation.isSuperAdmin()).thenReturn(true);
+    when(authorisation.isPlatformAdministrator()).thenReturn(true);
     when(drafts.get(0L, TenantLegalDraftKind.PRIVACY)).thenReturn(Optional.of(platformDraft));
     when(drafts.content(platformDraft)).thenReturn(Map.of("de", "platform draft"));
     when(drafts.revision(platformDraft)).thenReturn("61:2");
 
     TenantLegalDraftDTO result = facade.get(0L, "PRIVACY").orElseThrow();
 
-    verify(authorisation).isSuperAdmin();
+    verify(authorisation).isPlatformAdministrator();
     verify(tenantService, never()).findTenantById(0L);
     assertThat(result.getContent()).containsEntry("de", "platform draft");
     assertThat(result.getRevision()).isEqualTo("61:2");
@@ -87,13 +89,63 @@ class TenantLegalDraftFacadeTest {
   void get_Should_denyTenantZeroBeforeDraftLookupForANonPlatformCaller() {
     TenantLegalDraftFacade facade =
         new TenantLegalDraftFacade(authorisation, tenantService, drafts);
-    when(authorisation.isSuperAdmin()).thenReturn(false);
+    when(authorisation.isPlatformAdministrator()).thenReturn(false);
 
     assertThatThrownBy(() -> facade.get(0L, "PRIVACY")).isInstanceOf(AccessDeniedException.class);
 
-    verify(authorisation).isSuperAdmin();
+    verify(authorisation).isPlatformAdministrator();
     verify(tenantService, never()).findTenantById(0L);
     verify(drafts, never()).get(0L, TenantLegalDraftKind.PRIVACY);
+  }
+
+  @Test
+  void save_Should_refuseATraegerAdminWithoutLegalContentRights_andWriteNothing() {
+    // Review finding on #261/#266: the draft endpoints only checked tenant access, so a
+    // single-tenant-admin could write the legal drafts the publish path would refuse.
+    TenantLegalDraftFacade facade =
+        new TenantLegalDraftFacade(authorisation, tenantService, drafts);
+    when(tenantService.findTenantById(7L))
+        .thenReturn(Optional.of(TenantEntity.builder().id(7L).build()));
+    doThrow(new AccessDeniedException("no legal content rights"))
+        .when(authorisation)
+        .assertCanWriteLegalDraft();
+    TenantLegalDraftUpdateRequest request =
+        new TenantLegalDraftUpdateRequest().content(Map.of("de", "<p>draft</p>")).revision("new");
+
+    assertThatThrownBy(() -> facade.save(7L, "IMPRINT", request))
+        .isInstanceOf(AccessDeniedException.class);
+
+    verify(drafts, never()).save(any(), any(), any(), any(), any());
+  }
+
+  @Test
+  void delete_Should_refuseATraegerAdminWithoutLegalContentRights_andDeleteNothing() {
+    TenantLegalDraftFacade facade =
+        new TenantLegalDraftFacade(authorisation, tenantService, drafts);
+    when(tenantService.findTenantById(7L))
+        .thenReturn(Optional.of(TenantEntity.builder().id(7L).build()));
+    doThrow(new AccessDeniedException("no legal content rights"))
+        .when(authorisation)
+        .assertCanWriteLegalDraft();
+
+    assertThatThrownBy(() -> facade.delete(7L, "PRIVACY", "51:0"))
+        .isInstanceOf(AccessDeniedException.class);
+
+    verify(drafts, never()).delete(any(), any(), any());
+  }
+
+  @Test
+  void get_Should_stayReadableWithTenantAccessAlone() {
+    // Reading is not writing: the legal-content rule must not leak into the read path.
+    TenantLegalDraftFacade facade =
+        new TenantLegalDraftFacade(authorisation, tenantService, drafts);
+    when(tenantService.findTenantById(7L))
+        .thenReturn(Optional.of(TenantEntity.builder().id(7L).build()));
+    when(drafts.get(7L, TenantLegalDraftKind.IMPRINT)).thenReturn(Optional.empty());
+
+    facade.get(7L, "IMPRINT");
+
+    verify(authorisation, never()).assertCanWriteLegalDraft();
   }
 
   @Test

@@ -2,5 +2,9 @@
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.2.xsd">
   <changeSet author="oriso" id="createTenantLegalDraft">
     <sqlFile path="db/changelog/changeset/0034_tenant_legal_drafts/createTenantLegalDraft.sql" stripComments="true"/>
+    <rollback>
+      <sql>DROP TABLE IF EXISTS tenant_legal_draft;</sql>
+      <sql>DROP SEQUENCE IF EXISTS sequence_tenant_legal_draft;</sql>
+    </rollback>
   </changeSet>
 </databaseChangeLog>
