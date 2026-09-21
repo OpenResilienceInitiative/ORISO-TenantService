@@ -14,7 +14,7 @@ CREATE TABLE tenant_legal_proposal_distribution (
   source_draft_version BIGINT NOT NULL,
   source_updated_at TIMESTAMP NOT NULL,
   request_fingerprint VARCHAR(64) NOT NULL,
-  recipient_ids TEXT NOT NULL,
+  recipient_ids LONGTEXT NOT NULL,
   created_by VARCHAR(255) NOT NULL,
   created_at TIMESTAMP NOT NULL,
   CONSTRAINT uq_tenant_legal_proposal_distribution_request UNIQUE (request_key)

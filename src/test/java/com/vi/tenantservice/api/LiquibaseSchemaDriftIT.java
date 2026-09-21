@@ -251,6 +251,15 @@ class LiquibaseSchemaDriftIT {
         assertThat(type).as(table + "." + column).isEqualToIgnoringCase("longtext");
       }
     }
+    // The fixed audience of an ALL delivery grows with the number of Träger; TEXT would cap it
+    // at a few thousand ids and roll the whole delivery back.
+    String audience =
+        jdbcTemplate.queryForObject(
+            "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema = DATABASE()"
+                + " AND table_name = 'tenant_legal_proposal_distribution'"
+                + " AND column_name = 'recipient_ids'",
+            String.class);
+    assertThat(audience).as("distribution recipient_ids").isEqualToIgnoringCase("longtext");
   }
 
   @Test
