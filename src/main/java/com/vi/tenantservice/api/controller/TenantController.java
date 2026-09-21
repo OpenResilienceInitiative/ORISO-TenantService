@@ -2,6 +2,8 @@ package com.vi.tenantservice.api.controller;
 
 import com.vi.tenantservice.api.facade.PlatformDpiaMasterDataFacade;
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
+import com.vi.tenantservice.api.facade.TenantLegalDraftFacade;
+import com.vi.tenantservice.api.facade.TenantLegalProposalFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.model.AccountInactivitySettings;
@@ -27,6 +29,14 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantIdAvailabilityDTO;
 import com.vi.tenantservice.api.model.TenantIdReservationDTO;
 import com.vi.tenantservice.api.model.TenantIdReservationRequestDTO;
+import com.vi.tenantservice.api.model.TenantLegalDraftArchiveDTO;
+import com.vi.tenantservice.api.model.TenantLegalDraftDTO;
+import com.vi.tenantservice.api.model.TenantLegalDraftUpdateRequest;
+import com.vi.tenantservice.api.model.TenantLegalProposalAdoptRequest;
+import com.vi.tenantservice.api.model.TenantLegalProposalDTO;
+import com.vi.tenantservice.api.model.TenantLegalProposalDismissRequest;
+import com.vi.tenantservice.api.model.TenantLegalProposalDistributionDTO;
+import com.vi.tenantservice.api.model.TenantLegalProposalDistributionRequest;
 import com.vi.tenantservice.api.model.TenantMediaResponseDTO;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
@@ -93,6 +103,8 @@ import org.springframework.web.server.ResponseStatusException;
 public class TenantController implements TenantApi, TenantadminApi {
 
   private final @NonNull TenantServiceFacade tenantServiceFacade;
+  private final @NonNull TenantLegalDraftFacade tenantLegalDraftFacade;
+  private final @NonNull TenantLegalProposalFacade tenantLegalProposalFacade;
   private final @NonNull PublicBrandingAssetService publicBrandingAssetService;
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TenantDtoMapper tenantDtoMapper;
@@ -185,8 +197,12 @@ public class TenantController implements TenantApi, TenantadminApi {
    * perfectly valid).
    */
   @ExceptionHandler(PessimisticLockingFailureException.class)
-  ResponseEntity<Void> handleSignLockContention(PessimisticLockingFailureException e) {
-    log.info("DPA confirmation contended for the same tenant; asking the caller to retry");
+  ResponseEntity<Void> handleLockContention(PessimisticLockingFailureException e) {
+    // Shared by every pessimistically locked write on this controller, not only DPA signing:
+    // distributing a legal proposal locks the platform draft and the recipients' proposal rows,
+    // so two deliveries of different kinds can deadlock in InnoDB. Same answer, so the log line
+    // must not claim a signature was involved.
+    log.info("A locked tenant write was contended; asking the caller to retry", e);
     return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).header("Retry-After", "2").build();
   }
 
@@ -481,6 +497,79 @@ public class TenantController implements TenantApi, TenantadminApi {
     log.info("Updating tenant with id {} by user {} ", id, authorisationService.getUsername());
     var updatedTenantDTO = tenantServiceFacade.updateTenant(id, tenantDTO);
     return new ResponseEntity<>(updatedTenantDTO, HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<TenantLegalDraftDTO> getTenantLegalDraft(Long id, String kind) {
+    return tenantLegalDraftFacade
+        .get(id, kind)
+        .map(draft -> ResponseEntity.ok(draft))
+        .orElseGet(() -> ResponseEntity.notFound().build());
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<TenantLegalDraftDTO> updateTenantLegalDraft(
+      Long id, String kind, TenantLegalDraftUpdateRequest tenantLegalDraftUpdateRequest) {
+    return ResponseEntity.ok(tenantLegalDraftFacade.save(id, kind, tenantLegalDraftUpdateRequest));
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<Void> deleteTenantLegalDraft(Long id, String kind, String revision) {
+    tenantLegalDraftFacade.delete(id, kind, revision);
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<TenantLegalProposalDistributionDTO> distributeTenantLegalProposal(
+      TenantLegalProposalDistributionRequest request) {
+    var result = tenantLegalProposalFacade.distribute(request);
+    return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
+        .body(result.body());
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<List<TenantLegalProposalDTO>> getTenantLegalProposals(
+      Long id, String kind) {
+    return ResponseEntity.ok(tenantLegalProposalFacade.list(id, kind));
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<TenantLegalProposalDTO> getTenantLegalProposal(Long id, Long proposalId) {
+    return ResponseEntity.ok(tenantLegalProposalFacade.get(id, proposalId));
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<TenantLegalProposalDTO> dismissTenantLegalProposal(
+      Long id, Long proposalId, TenantLegalProposalDismissRequest request) {
+    return ResponseEntity.ok(tenantLegalProposalFacade.dismiss(id, proposalId, request));
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<TenantLegalDraftDTO> adoptTenantLegalProposal(
+      Long id, Long proposalId, TenantLegalProposalAdoptRequest request) {
+    return ResponseEntity.ok(tenantLegalProposalFacade.adopt(id, proposalId, request));
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<List<TenantLegalDraftArchiveDTO>> getTenantLegalDraftArchives(
+      Long id, String kind) {
+    return ResponseEntity.ok(tenantLegalProposalFacade.archives(id, kind));
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<TenantLegalDraftArchiveDTO> getTenantLegalDraftArchive(
+      Long id, Long archiveId) {
+    return ResponseEntity.ok(tenantLegalProposalFacade.archive(id, archiveId));
   }
 
   @DeleteMapping("/tenant/{id}")

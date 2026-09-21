@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.vi.tenantservice.api.facade.PlatformDpiaMasterDataFacade;
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
+import com.vi.tenantservice.api.facade.TenantLegalDraftFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.service.BrandingAssetDecoder.DecodedAsset;
@@ -41,6 +42,8 @@ class TenantControllerBrandingAssetTest {
   @Mock private TenantDtoMapper tenantDtoMapper;
   @Mock private TenantDpaService tenantDpaService;
   @Mock private TenantDpaFacade tenantDpaFacade;
+  @Mock private TenantLegalDraftFacade tenantLegalDraftFacade;
+  @Mock private com.vi.tenantservice.api.facade.TenantLegalProposalFacade tenantLegalProposalFacade;
   @Mock private TranslationFacade translationFacade;
   @Mock private TenantMediaService tenantMediaService;
   @Mock private TenantIdAllocationService tenantIdAllocationService;

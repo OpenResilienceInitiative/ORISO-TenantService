@@ -300,6 +300,30 @@ public class TenantFacadeAuthorisationService {
     }
   }
 
+  /**
+   * Writing a legal draft follows the same rule as publishing legal content. A Träger admin ({@code
+   * single-tenant-admin}) may only change legal texts while the platform allows it ({@code
+   * legalContentChangesBySingleTenantAdminsAllowed}); without this check the draft endpoints let
+   * them write privacy and imprint drafts the publish path would refuse. Reading a draft is
+   * deliberately not covered here — it stays with tenant access.
+   */
+  public void assertCanWriteLegalDraft() {
+    if (!isAllowedToEditLegalContent()) {
+      logAndThrowTenantAuthorisationException(
+          "User does not have permissions to write legal drafts",
+          HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_LEGAL_CONTENT);
+    }
+  }
+
+  /**
+   * The platform administrator as a person. {@link #isSuperAdmin()} alone also accepts the
+   * technical user when its token carries tenant 0 and the tenant-admin role; platform legal drafts
+   * must not be reachable that way.
+   */
+  public boolean isPlatformAdministrator() {
+    return isSuperAdmin() && !isTechnicalUser();
+  }
+
   public boolean isSuperAdmin() {
     try {
       Optional<Long> tenantId = authorisationService.findTenantIdInAccessToken();
@@ -308,6 +332,50 @@ public class TenantFacadeAuthorisationService {
     } catch (Exception e) {
       log.debug("Could not determine tenant id from access token while checking super admin", e);
       return false;
+    }
+  }
+
+  /**
+   * Platform sender and the exact recipient may read incoming proposal history. Reading needs no
+   * legal-editor right: a Träger admin who may not change legal texts still has to see that a
+   * platform update is waiting. Dismissing and adopting stay with {@link
+   * #assertCanManageOwnLegalProposal(Long)}.
+   */
+  public void assertCanReadLegalProposal(Long recipientTenantId) {
+    if (isTechnicalUser()) {
+      throw new AccessDeniedException("Technical users cannot read legal proposals");
+    }
+    if (isSuperAdmin()) return;
+    assertExactRecipient(recipientTenantId);
+  }
+
+  public void assertCanDistributeLegalProposals() {
+    if (isTechnicalUser() || !isSuperAdmin()) {
+      throw new AccessDeniedException("Only the platform administrator may share legal drafts");
+    }
+  }
+
+  /** Proposal acknowledgement and adoption are actions of the exact recipient legal editor. */
+  public void assertCanManageOwnLegalProposal(Long recipientTenantId) {
+    assertExactRecipient(recipientTenantId);
+    assertLegalProposalPermission();
+  }
+
+  private void assertExactRecipient(Long recipientTenantId) {
+    if (isTechnicalUser()) {
+      throw new AccessDeniedException("Technical users cannot act on legal proposals");
+    }
+    Optional<Long> tokenTenantId = authorisationService.findTenantIdInAccessToken();
+    if (recipientTenantId == null
+        || recipientTenantId <= 0
+        || !tenantMatching(recipientTenantId, tokenTenantId)) {
+      throw new AccessDeniedException("User is not the legal proposal recipient");
+    }
+  }
+
+  private void assertLegalProposalPermission() {
+    if (!isAllowedToEditLegalContent()) {
+      throw new AccessDeniedException("User may not manage legal proposals");
     }
   }
 
