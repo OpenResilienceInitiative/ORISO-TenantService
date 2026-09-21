@@ -34,6 +34,10 @@ public interface TenantLegalProposalRepository
 
   List<TenantLegalProposalEntity> findByRecipientTenantIdOrderByCreatedAtDesc(Long tenantId);
 
+  /** Every proposal of one source revision carries the same snapshot; any one of them shows it. */
+  Optional<TenantLegalProposalEntity> findFirstBySourceDraftIdAndSourceDraftVersionOrderByIdAsc(
+      Long sourceDraftId, Long sourceDraftVersion);
+
   List<TenantLegalProposalEntity> findByRecipientTenantIdAndKindOrderByCreatedAtDesc(
       Long tenantId, TenantLegalDraftKind kind);
 

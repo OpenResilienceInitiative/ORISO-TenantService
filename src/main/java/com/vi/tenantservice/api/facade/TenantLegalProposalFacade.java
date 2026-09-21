@@ -38,6 +38,29 @@ public class TenantLegalProposalFacade {
     return new DistributionResult(dto, result.created());
   }
 
+  public List<TenantLegalTemplateVersionDTO> templateHistory(String kind) {
+    authorisation.assertCanDistributeLegalProposals();
+    return proposals.templateHistory(kind(kind)).stream().map(this::templateDto).toList();
+  }
+
+  private TenantLegalTemplateVersionDTO templateDto(
+      TenantLegalProposalService.TemplateVersion version) {
+    TenantLegalProposalDistributionEntity distribution = version.distribution();
+    TenantLegalTemplateVersionDTO dto =
+        new TenantLegalTemplateVersionDTO()
+            .distributionId(UUID.fromString(distribution.getId()))
+            .sourceRevision(
+                distribution.getSourceDraftId() + ":" + distribution.getSourceDraftVersion())
+            .createdAt(distribution.getCreatedAt())
+            .recipientCount(proposals.fixedRecipients(distribution).size())
+            .content(version.snapshot().map(p -> read(p.getContent())).orElseGet(Map::of));
+    version
+        .snapshot()
+        .map(TenantLegalProposalEntity::getPrivacyConsent)
+        .ifPresent(consent -> dto.setPrivacyConsent(read(consent)));
+    return dto;
+  }
+
   public List<TenantLegalProposalDTO> list(Long tenantId, String kind) {
     authorisation.assertCanReadLegalProposal(tenantId);
     TenantLegalDraftKind parsed = kind == null ? null : kind(kind);

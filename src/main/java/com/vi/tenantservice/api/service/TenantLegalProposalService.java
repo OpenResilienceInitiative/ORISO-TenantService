@@ -145,6 +145,28 @@ public class TenantLegalProposalService {
       List<TenantLegalProposalEntity> proposals,
       boolean created) {}
 
+  /** One sent template version: the distribution and the snapshot its recipients received. */
+  public record TemplateVersion(
+      TenantLegalProposalDistributionEntity distribution,
+      Optional<TenantLegalProposalEntity> snapshot) {}
+
+  /**
+   * The platform's sent template versions of one document, newest first. Proposals are immutable
+   * snapshots of a source revision, so the content shown here is exactly what went out — even after
+   * the platform draft moved on or a recipient adopted and edited its copy.
+   */
+  @Transactional(readOnly = true)
+  public List<TemplateVersion> templateHistory(TenantLegalDraftKind kind) {
+    return distributionRepository.findByKindOrderByCreatedAtDescIdDesc(kind).stream()
+        .map(
+            distribution ->
+                new TemplateVersion(
+                    distribution,
+                    proposalRepository.findFirstBySourceDraftIdAndSourceDraftVersionOrderByIdAsc(
+                        distribution.getSourceDraftId(), distribution.getSourceDraftVersion())))
+        .toList();
+  }
+
   @Transactional(readOnly = true)
   public List<TenantLegalProposalEntity> list(Long tenantId, TenantLegalDraftKind kind) {
     return kind == null
