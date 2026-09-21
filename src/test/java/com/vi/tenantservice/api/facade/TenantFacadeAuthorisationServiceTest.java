@@ -479,4 +479,61 @@ class TenantFacadeAuthorisationServiceTest {
                 PermissionFeature.APPEARANCE.apiKey(),
                 new ResolvedPolicyValue<>(allowed, PermissionPolicyMode.ENFORCED, false)));
   }
+
+  private void platformAllowsTraegerLegalChanges(boolean allowed) {
+    var settings =
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+            .ApplicationSettingsDTO();
+    settings.setLegalContentChangesBySingleTenantAdminsAllowed(
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO()
+            .value(allowed));
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(settings);
+  }
+
+  @Test
+  void assertCanWriteLegalDraft_Should_refuseATraegerAdminWhileThePlatformForbidsLegalChanges() {
+    when(authorisationService.hasRole("single-tenant-admin")).thenReturn(true);
+    platformAllowsTraegerLegalChanges(false);
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CHANGE_LEGAL_CONTENT))
+        .thenReturn(false);
+
+    assertThrows(
+        TenantAuthorisationException.class,
+        () -> tenantFacadeAuthorisationService.assertCanWriteLegalDraft());
+  }
+
+  @Test
+  void assertCanWriteLegalDraft_Should_allowATraegerAdminWhenThePlatformAllowsLegalChanges() {
+    when(authorisationService.hasRole("single-tenant-admin")).thenReturn(true);
+    platformAllowsTraegerLegalChanges(true);
+
+    tenantFacadeAuthorisationService.assertCanWriteLegalDraft();
+  }
+
+  @Test
+  void assertCanWriteLegalDraft_Should_allowAnAdminWhoMayChangeLegalContent() {
+    when(authorisationService.hasRole("single-tenant-admin")).thenReturn(false);
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CHANGE_LEGAL_CONTENT))
+        .thenReturn(true);
+
+    tenantFacadeAuthorisationService.assertCanWriteLegalDraft();
+  }
+
+  @Test
+  void isPlatformAdministrator_Should_rejectTheTechnicalUserEvenWithAPlatformShapedToken() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    when(authorisationService.getUsername()).thenReturn("technical");
+
+    assertThat(tenantFacadeAuthorisationService.isPlatformAdministrator()).isFalse();
+  }
+
+  @Test
+  void isPlatformAdministrator_Should_acceptThePlatformAdministrator() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    when(authorisationService.getUsername()).thenReturn("monty.burns");
+
+    assertThat(tenantFacadeAuthorisationService.isPlatformAdministrator()).isTrue();
+  }
 }

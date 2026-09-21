@@ -1,5 +1,6 @@
 package com.vi.tenantservice.api.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -165,6 +166,25 @@ class TenantLegalDraftControllerIT {
         .andExpect(status().isBadRequest());
   }
 
+  @Test
+  void traegerAdminWithoutLegalRights_Should_notWriteADraft() throws Exception {
+    var settings =
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+            .ApplicationSettingsDTO();
+    settings.setLegalContentChangesBySingleTenantAdminsAllowed(
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO()
+            .value(false));
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(settings);
+
+    mvc.perform(
+            put("/tenantadmin/1/legal-drafts/IMPRINT")
+                .with(traegerAdminWithoutLegalRights(1L))
+                .contentType(APPLICATION_JSON)
+                .content("{\"content\":{\"de\":\"<p>Impressum</p>\"},\"revision\":\"new\"}"))
+        .andExpect(status().isForbidden());
+    assertThat(draftRepository.count()).isZero();
+  }
+
   private RequestPostProcessor tenantAdmin(long tenantId) {
     return jwt()
         .jwt(
@@ -173,6 +193,19 @@ class TenantLegalDraftControllerIT {
                     .claim("tenantId", tenantId)
                     .claim("username", "tenant-admin-" + tenantId)
                     .claim("realm_access", Map.of("roles", List.of("tenant-admin"))))
+        .authorities(
+            new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
+            new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));
+  }
+
+  private RequestPostProcessor traegerAdminWithoutLegalRights(long tenantId) {
+    return jwt()
+        .jwt(
+            token ->
+                token
+                    .claim("tenantId", tenantId)
+                    .claim("username", "single-tenant-admin-" + tenantId)
+                    .claim("realm_access", Map.of("roles", List.of("single-tenant-admin"))))
         .authorities(new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"));
   }
 
@@ -186,6 +219,7 @@ class TenantLegalDraftControllerIT {
                     .claim("realm_access", Map.of("roles", List.of("tenant-admin"))))
         .authorities(
             new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
-            new SimpleGrantedAuthority("AUTHORIZATION_GET_ALL_TENANTS"));
+            new SimpleGrantedAuthority("AUTHORIZATION_GET_ALL_TENANTS"),
+            new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));
   }
 }

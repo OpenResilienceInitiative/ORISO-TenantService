@@ -25,6 +25,7 @@ public class TenantLegalDraftFacade {
   public TenantLegalDraftDTO save(
       Long tenantId, String kind, TenantLegalDraftUpdateRequest request) {
     authorize(tenantId);
+    authorisation.assertCanWriteLegalDraft();
     return dto(
         drafts.save(
             tenantId,
@@ -36,6 +37,7 @@ public class TenantLegalDraftFacade {
 
   public void delete(Long tenantId, String kind, String revision) {
     authorize(tenantId);
+    authorisation.assertCanWriteLegalDraft();
     drafts.delete(tenantId, parse(kind), revision);
   }
 
@@ -44,7 +46,7 @@ public class TenantLegalDraftFacade {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid tenant id");
     }
     if (tenantId == 0L) {
-      if (!authorisation.isSuperAdmin()) {
+      if (!authorisation.isPlatformAdministrator()) {
         throw new AccessDeniedException("Only the platform administrator may edit platform drafts");
       }
       return;

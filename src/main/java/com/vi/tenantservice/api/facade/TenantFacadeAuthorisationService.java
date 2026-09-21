@@ -300,6 +300,30 @@ public class TenantFacadeAuthorisationService {
     }
   }
 
+  /**
+   * Writing a legal draft follows the same rule as publishing legal content. A Träger admin ({@code
+   * single-tenant-admin}) may only change legal texts while the platform allows it ({@code
+   * legalContentChangesBySingleTenantAdminsAllowed}); without this check the draft endpoints let
+   * them write privacy and imprint drafts the publish path would refuse. Reading a draft is
+   * deliberately not covered here — it stays with tenant access.
+   */
+  public void assertCanWriteLegalDraft() {
+    if (!isAllowedToEditLegalContent()) {
+      logAndThrowTenantAuthorisationException(
+          "User does not have permissions to write legal drafts",
+          HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_LEGAL_CONTENT);
+    }
+  }
+
+  /**
+   * The platform administrator as a person. {@link #isSuperAdmin()} alone also accepts the
+   * technical user when its token carries tenant 0 and the tenant-admin role; platform legal drafts
+   * must not be reachable that way.
+   */
+  public boolean isPlatformAdministrator() {
+    return isSuperAdmin() && !isTechnicalUser();
+  }
+
   public boolean isSuperAdmin() {
     try {
       Optional<Long> tenantId = authorisationService.findTenantIdInAccessToken();
