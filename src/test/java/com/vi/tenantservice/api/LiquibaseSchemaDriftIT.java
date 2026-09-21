@@ -235,6 +235,25 @@ class LiquibaseSchemaDriftIT {
   }
 
   @Test
+  void legalSnapshots_shouldHoldADraftAsLargeAsTheDraftItself() {
+    // Delivery copies the platform draft into a proposal, and replacing a draft copies it into
+    // the archive. With TEXT (65,535 bytes) there, a draft that saves fine would fail on
+    // distribution or adoption and roll back.
+    for (String table : List.of("tenant_legal_proposal", "tenant_legal_draft_archive")) {
+      for (String column : List.of("content", "privacy_consent")) {
+        String type =
+            jdbcTemplate.queryForObject(
+                "SELECT DATA_TYPE FROM information_schema.columns"
+                    + " WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",
+                String.class,
+                table,
+                column);
+        assertThat(type).as(table + "." + column).isEqualToIgnoringCase("longtext");
+      }
+    }
+  }
+
+  @Test
   void tenantLegalDraft_shouldCarryOptionalPrivacyConsent() {
     String nullable =
         jdbcTemplate.queryForObject(

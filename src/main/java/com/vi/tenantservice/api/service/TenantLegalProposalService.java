@@ -148,8 +148,9 @@ public class TenantLegalProposalService {
   @Transactional(readOnly = true)
   public List<TenantLegalProposalEntity> list(Long tenantId, TenantLegalDraftKind kind) {
     return kind == null
-        ? proposalRepository.findByRecipientTenantIdOrderByCreatedAtDesc(tenantId)
-        : proposalRepository.findByRecipientTenantIdAndKindOrderByCreatedAtDesc(tenantId, kind);
+        ? proposalRepository.findByRecipientTenantIdOrderByCreatedAtDescIdDesc(tenantId)
+        : proposalRepository.findByRecipientTenantIdAndKindOrderByCreatedAtDescIdDesc(
+            tenantId, kind);
   }
 
   @Transactional(readOnly = true)
@@ -236,8 +237,8 @@ public class TenantLegalProposalService {
   @Transactional(readOnly = true)
   public List<TenantLegalDraftArchiveEntity> archives(Long tenantId, TenantLegalDraftKind kind) {
     return kind == null
-        ? archiveRepository.findByTenantIdOrderByArchivedAtDesc(tenantId)
-        : archiveRepository.findByTenantIdAndKindOrderByArchivedAtDesc(tenantId, kind);
+        ? archiveRepository.findByTenantIdOrderByArchivedAtDescIdDesc(tenantId)
+        : archiveRepository.findByTenantIdAndKindOrderByArchivedAtDescIdDesc(tenantId, kind);
   }
 
   @Transactional(readOnly = true)
