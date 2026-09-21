@@ -34,10 +34,10 @@ public class TenantLegalDraftArchiveEntity {
   @Column(name = "draft_revision", nullable = false, updatable = false, length = 64)
   private String draftRevision;
 
-  @Column(nullable = false, updatable = false, columnDefinition = "TEXT")
+  @Column(nullable = false, updatable = false, columnDefinition = "LONGTEXT")
   private String content;
 
-  @Column(name = "privacy_consent", updatable = false, columnDefinition = "TEXT")
+  @Column(name = "privacy_consent", updatable = false, columnDefinition = "LONGTEXT")
   private String privacyConsent;
 
   @Column(name = "draft_saved_at", nullable = false, updatable = false)

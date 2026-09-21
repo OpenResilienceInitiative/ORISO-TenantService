@@ -32,13 +32,13 @@ public interface TenantLegalProposalRepository
           @Param("sourceDraftVersion") Long sourceDraftVersion,
           @Param("recipientTenantIds") Collection<Long> recipientTenantIds);
 
-  List<TenantLegalProposalEntity> findByRecipientTenantIdOrderByCreatedAtDesc(Long tenantId);
+  List<TenantLegalProposalEntity> findByRecipientTenantIdOrderByCreatedAtDescIdDesc(Long tenantId);
 
   /** Every proposal of one source revision carries the same snapshot; any one of them shows it. */
   Optional<TenantLegalProposalEntity> findFirstBySourceDraftIdAndSourceDraftVersionOrderByIdAsc(
       Long sourceDraftId, Long sourceDraftVersion);
 
-  List<TenantLegalProposalEntity> findByRecipientTenantIdAndKindOrderByCreatedAtDesc(
+  List<TenantLegalProposalEntity> findByRecipientTenantIdAndKindOrderByCreatedAtDescIdDesc(
       Long tenantId, TenantLegalDraftKind kind);
 
   Optional<TenantLegalProposalEntity> findByIdAndRecipientTenantId(Long id, Long tenantId);

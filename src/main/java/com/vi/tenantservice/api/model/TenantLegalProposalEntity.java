@@ -48,10 +48,10 @@ public class TenantLegalProposalEntity {
   @Column(name = "source_updated_at", nullable = false, updatable = false)
   private LocalDateTime sourceUpdatedAt;
 
-  @Column(nullable = false, updatable = false, columnDefinition = "TEXT")
+  @Column(nullable = false, updatable = false, columnDefinition = "LONGTEXT")
   private String content;
 
-  @Column(name = "privacy_consent", updatable = false, columnDefinition = "TEXT")
+  @Column(name = "privacy_consent", updatable = false, columnDefinition = "LONGTEXT")
   private String privacyConsent;
 
   @Enumerated(EnumType.STRING)
