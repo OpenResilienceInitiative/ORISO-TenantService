@@ -87,6 +87,13 @@ class TenantLegalProposalServiceTest {
     verify(proposalRepository)
         .findLockedBySourceDraftIdAndSourceDraftVersionAndRecipientTenantIdIn(
             10L, 4L, Set.of(7L, 9L));
+    // Superseding locks every recipient's open proposal of this kind, and a Träger's own dismiss
+    // or adopt waits for it. It has to be the last write so that wait is the commit alone.
+    var order = inOrder(deliveryRepository, proposalRepository);
+    order.verify(deliveryRepository).saveAllAndFlush(any());
+    order
+        .verify(proposalRepository)
+        .findLockedByRecipientTenantIdInAndKindAndStatusIn(any(), any(), any());
   }
 
   @Test

@@ -77,6 +77,19 @@ class TenantFacadeAuthorisationServiceTest {
   }
 
   @Test
+  void exactRecipientWithoutLegalAuthorityMayReadButNotAct() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(7L));
+    when(authorisationService.hasRole("single-tenant-admin")).thenReturn(false);
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CHANGE_LEGAL_CONTENT))
+        .thenReturn(false);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertCanReadLegalProposal(7L))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanManageOwnLegalProposal(7L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
   void foreignRecipientAndTechnicalPrincipalAreDeniedBeforeProposalLookup() {
     when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(8L));
     assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanReadLegalProposal(7L))

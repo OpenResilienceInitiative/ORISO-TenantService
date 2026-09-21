@@ -335,14 +335,18 @@ public class TenantFacadeAuthorisationService {
     }
   }
 
-  /** Platform sender and the exact recipient may read incoming proposal history. */
+  /**
+   * Platform sender and the exact recipient may read incoming proposal history. Reading needs no
+   * legal-editor right: a Träger admin who may not change legal texts still has to see that a
+   * platform update is waiting. Dismissing and adopting stay with {@link
+   * #assertCanManageOwnLegalProposal(Long)}.
+   */
   public void assertCanReadLegalProposal(Long recipientTenantId) {
     if (isTechnicalUser()) {
       throw new AccessDeniedException("Technical users cannot read legal proposals");
     }
     if (isSuperAdmin()) return;
     assertExactRecipient(recipientTenantId);
-    assertLegalProposalPermission();
   }
 
   public void assertCanDistributeLegalProposals() {

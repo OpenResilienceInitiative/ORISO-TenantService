@@ -119,8 +119,6 @@ public class TenantLegalProposalService {
           .saveAllAndFlush(missing)
           .forEach(p -> proposals.put(p.getRecipientTenantId(), p));
 
-      supersedeOlderIncoming(recipients, kind, new HashSet<>(proposals.values()), now);
-
       List<TenantLegalProposalDeliveryEntity> deliveries =
           recipients.stream()
               .map(
@@ -131,6 +129,10 @@ public class TenantLegalProposalService {
                           .build())
               .toList();
       deliveryRepository.saveAllAndFlush(deliveries);
+      // Last on purpose: superseding locks every recipient's open proposal of this kind, and a
+      // Träger's own dismiss or adopt waits for that lock. Taking it as the final write keeps
+      // that wait to the commit alone.
+      supersedeOlderIncoming(recipients, kind, new HashSet<>(proposals.values()), now);
       return new DeliveryResult(
           distribution, recipients.stream().map(proposals::get).toList(), true);
     } catch (DataIntegrityViolationException | OptimisticLockingFailureException exception) {
@@ -333,6 +335,13 @@ public class TenantLegalProposalService {
         .build();
   }
 
+  /**
+   * Marks each recipient's older open proposal of this kind as superseded by the new one. The read
+   * locks those rows: without it a Träger could adopt or dismiss a proposal in the same moment it
+   * is superseded, leaving it both adopted and superseded. Only open proposals of this kind and of
+   * these recipients are locked, in a fixed order, and the caller takes the lock as its last write,
+   * so a concurrent dismiss or adopt waits for the commit and no longer.
+   */
   private void supersedeOlderIncoming(
       SortedSet<Long> recipients,
       TenantLegalDraftKind kind,
