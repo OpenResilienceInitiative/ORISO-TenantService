@@ -90,6 +90,33 @@ class TenantFacadeAuthorisationServiceTest {
   }
 
   @Test
+  void onlyThePlatformAdministratorMaySharePlatformLegalDrafts() {
+    // Sharing writes a proposal into every selected Träger, so the guard on it is the most
+    // privileged rule here. A Träger admin of tenant 7 must not reach it.
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(7L));
+
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanDistributeLegalProposals())
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void theTechnicalPrincipalMayNotSharePlatformLegalDrafts() {
+    when(authorisationService.getUsername()).thenReturn("technical");
+
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanDistributeLegalProposals())
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void thePlatformAdministratorMaySharePlatformLegalDrafts() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertCanDistributeLegalProposals())
+        .doesNotThrowAnyException();
+  }
+
+  @Test
   void foreignRecipientAndTechnicalPrincipalAreDeniedBeforeProposalLookup() {
     when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(8L));
     assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanReadLegalProposal(7L))
