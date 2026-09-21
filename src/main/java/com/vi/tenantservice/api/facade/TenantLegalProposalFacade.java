@@ -52,12 +52,19 @@ public class TenantLegalProposalFacade {
             .sourceRevision(
                 distribution.getSourceDraftId() + ":" + distribution.getSourceDraftVersion())
             .createdAt(distribution.getCreatedAt())
-            .recipientCount(proposals.fixedRecipients(distribution).size())
-            .content(version.snapshot().map(p -> read(p.getContent())).orElseGet(Map::of));
-    version
-        .snapshot()
-        .map(TenantLegalProposalEntity::getPrivacyConsent)
-        .ifPresent(consent -> dto.setPrivacyConsent(read(consent)));
+            .recipientCount(proposals.fixedRecipients(distribution).size());
+    // The distribution's own copy survives deleted recipients; older rows fall back to a proposal.
+    String content =
+        distribution.getContent() != null
+            ? distribution.getContent()
+            : version.snapshot().map(TenantLegalProposalEntity::getContent).orElse(null);
+    String consent =
+        distribution.getContent() != null
+            ? distribution.getPrivacyConsent()
+            : version.snapshot().map(TenantLegalProposalEntity::getPrivacyConsent).orElse(null);
+    // Unknown stays absent rather than an empty map, which would claim an empty text was sent.
+    if (content != null) dto.setContent(read(content));
+    if (consent != null) dto.setPrivacyConsent(read(consent));
     return dto;
   }
 

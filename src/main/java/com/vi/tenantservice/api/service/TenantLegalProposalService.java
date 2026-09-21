@@ -96,6 +96,8 @@ public class TenantLegalProposalService {
             .sourceUpdatedAt(source.getUpdateDate())
             .requestFingerprint(fingerprint(kind, sourceRevision, audience, selectedTenantIds))
             .recipientIds(encodeRecipients(recipients))
+            .content(source.getContent())
+            .privacyConsent(source.getPrivacyConsent())
             .createdBy(actorId)
             .createdAt(now)
             .build();
@@ -157,7 +159,9 @@ public class TenantLegalProposalService {
    */
   @Transactional(readOnly = true)
   public List<TemplateVersion> templateHistory(TenantLegalDraftKind kind) {
-    return distributionRepository.findByKindOrderByCreatedAtDescIdDesc(kind).stream()
+    return distributionRepository
+        .findByKindOrderByCreatedAtDescSourceDraftVersionDescIdDesc(kind)
+        .stream()
         .map(
             distribution ->
                 new TemplateVersion(

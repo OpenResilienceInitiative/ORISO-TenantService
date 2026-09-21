@@ -14,8 +14,12 @@ public interface TenantLegalProposalDistributionRepository
     extends JpaRepository<TenantLegalProposalDistributionEntity, String> {
   Optional<TenantLegalProposalDistributionEntity> findByRequestKey(String requestKey);
 
-  List<TenantLegalProposalDistributionEntity> findByKindOrderByCreatedAtDescIdDesc(
-      TenantLegalDraftKind kind);
+  /**
+   * created_at is second-precision TIMESTAMP on MariaDB and the id a random UUID, so two sends in
+   * one second are ordered by the draft version they sent — the later revision is the newer one.
+   */
+  List<TenantLegalProposalDistributionEntity>
+      findByKindOrderByCreatedAtDescSourceDraftVersionDescIdDesc(TenantLegalDraftKind kind);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select d from TenantLegalProposalDistributionEntity d where d.requestKey = :requestKey")

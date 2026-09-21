@@ -2917,13 +2917,16 @@ components:
         proposals: {type: array, items: {$ref: '#/components/schemas/TenantLegalProposalDTO'}}
     TenantLegalTemplateVersionDTO:
       type: object
-      required: [distributionId, sourceRevision, createdAt, recipientCount, content]
+      required: [distributionId, sourceRevision, createdAt, recipientCount]
       properties:
         distributionId: {type: string, format: uuid}
         sourceRevision: {type: string, description: 'Platform draft revision (id:version) that was sent'}
         createdAt: {type: string, format: date-time, description: 'When it was sent (UTC)'}
         recipientCount: {type: integer, format: int32}
-        content: {type: object, additionalProperties: {type: string}}
+        content:
+          type: object
+          additionalProperties: {type: string}
+          description: Snapshot that was sent; absent only if it can no longer be recovered.
         privacyConsent: {type: object, additionalProperties: {type: string}}
     TenantLegalProposalDTO:
       type: object

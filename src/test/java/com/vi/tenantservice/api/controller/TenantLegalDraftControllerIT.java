@@ -322,6 +322,44 @@ class TenantLegalDraftControllerIT {
         .andExpect(status().isForbidden());
   }
 
+  @Test
+  void templateHistory_Should_keepTheSentText_whenAllRecipientProposalsAreGone() throws Exception {
+    String revision = savePlatformImprint("<p>Gesendet</p>", "new");
+    distributeImprint("history-deleted", revision, "[1]");
+    // A deleted recipient tenant cascades its proposals away.
+    jdbcTemplate.update("DELETE FROM tenant_legal_proposal_delivery");
+    jdbcTemplate.update("DELETE FROM tenant_legal_proposal");
+
+    mvc.perform(
+            get("/tenantadmin/legal-proposal-distributions")
+                .param("kind", "IMPRINT")
+                .with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].content.de").value("<p>Gesendet</p>"));
+  }
+
+  @Test
+  void templateHistory_Should_putTheLaterRevisionFirst_whenBothWereSentInTheSameSecond()
+      throws Exception {
+    String first = savePlatformImprint("<p>Erste</p>", "new");
+    distributeImprint("same-second-1", first, "[1]");
+    String second = savePlatformImprint("<p>Zweite</p>", first);
+    distributeImprint("same-second-2", second, "[1]");
+    // MariaDB keeps whole seconds; make the tie explicit.
+    jdbcTemplate.update(
+        "UPDATE tenant_legal_proposal_distribution SET created_at = '2026-09-22 10:00:00'");
+
+    for (int i = 0; i < 5; i++) {
+      mvc.perform(
+              get("/tenantadmin/legal-proposal-distributions")
+                  .param("kind", "IMPRINT")
+                  .with(platformAdmin()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$[0].sourceRevision").value(second))
+          .andExpect(jsonPath("$[1].sourceRevision").value(first));
+    }
+  }
+
   private String savePlatformImprint(String html, String revision) throws Exception {
     String response =
         mvc.perform(
