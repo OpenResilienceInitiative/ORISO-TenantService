@@ -35,10 +35,13 @@ public class TenantLegalDraftEntity {
   @Column(nullable = false, length = 16)
   private TenantLegalDraftKind kind;
 
-  @Column(nullable = false, columnDefinition = "TEXT")
+  // LONGTEXT like the published `content_privacy` / `content_impressum`: a policy
+  // that publishes must also be storable as a draft, and a multilingual HTML map
+  // passes MariaDB's 64 KB TEXT limit long before the API refuses it.
+  @Column(nullable = false, columnDefinition = "LONGTEXT")
   private String content;
 
-  @Column(name = "privacy_consent", columnDefinition = "TEXT")
+  @Column(name = "privacy_consent", columnDefinition = "LONGTEXT")
   private String privacyConsent;
 
   @Column(name = "update_date", nullable = false)

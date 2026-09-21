@@ -193,6 +193,25 @@ class LiquibaseSchemaDriftIT {
   }
 
   @Test
+  void tenantLegalDraft_shouldHoldAPolicyAsLargeAsThePublishedOne() {
+    // The published texts live in LONGTEXT columns. A draft column of TEXT (65,535
+    // bytes) would reject a multilingual policy that publishes without trouble, and
+    // save() reports the failure as a revision conflict, so the admin is told to
+    // reload and retry forever instead of learning the real reason.
+    String oversized = "<p>" + "a".repeat(100_000) + "</p>";
+
+    insertDraft(0L, null, "PRIVACY", oversized);
+
+    Long stored =
+        jdbcTemplate.queryForObject(
+            "SELECT CHAR_LENGTH(content) FROM tenant_legal_draft WHERE owner_key = 0 AND kind = 'PRIVACY'",
+            Long.class);
+    assertThat(stored).as("stored draft length").isEqualTo(oversized.length());
+
+    jdbcTemplate.update("DELETE FROM tenant_legal_draft WHERE owner_key = 0");
+  }
+
+  @Test
   void tenantLegalDraft_shouldCarryOptionalPrivacyConsent() {
     String nullable =
         jdbcTemplate.queryForObject(
