@@ -339,6 +339,23 @@ class TenantLegalDraftControllerIT {
   }
 
   @Test
+  void templateHistory_Should_readOlderDistributionsWithoutASnapshotFromTheirProposals()
+      throws Exception {
+    String revision = savePlatformImprint("<p>Vor 0036</p>", "new");
+    distributeImprint("history-legacy", revision, "[1,2]");
+    // Rows written before changeset 0036 have no snapshot of their own.
+    jdbcTemplate.update(
+        "UPDATE tenant_legal_proposal_distribution SET content = NULL, privacy_consent = NULL");
+
+    mvc.perform(
+            get("/tenantadmin/legal-proposal-distributions")
+                .param("kind", "IMPRINT")
+                .with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].content.de").value("<p>Vor 0036</p>"));
+  }
+
+  @Test
   void templateHistory_Should_putTheLaterRevisionFirst_whenBothWereSentInTheSameSecond()
       throws Exception {
     String first = savePlatformImprint("<p>Erste</p>", "new");

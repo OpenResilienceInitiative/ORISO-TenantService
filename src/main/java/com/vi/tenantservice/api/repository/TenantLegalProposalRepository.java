@@ -34,9 +34,9 @@ public interface TenantLegalProposalRepository
 
   List<TenantLegalProposalEntity> findByRecipientTenantIdOrderByCreatedAtDescIdDesc(Long tenantId);
 
-  /** Every proposal of one source revision carries the same snapshot; any one of them shows it. */
-  Optional<TenantLegalProposalEntity> findFirstBySourceDraftIdAndSourceDraftVersionOrderByIdAsc(
-      Long sourceDraftId, Long sourceDraftVersion);
+  /** Fallback snapshots for distributions written before changeset 0036, in one query. */
+  List<TenantLegalProposalEntity> findBySourceDraftIdInOrderByIdAsc(
+      Collection<Long> sourceDraftIds);
 
   List<TenantLegalProposalEntity> findByRecipientTenantIdAndKindOrderByCreatedAtDescIdDesc(
       Long tenantId, TenantLegalDraftKind kind);

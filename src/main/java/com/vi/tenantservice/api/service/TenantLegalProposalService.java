@@ -159,15 +159,37 @@ public class TenantLegalProposalService {
    */
   @Transactional(readOnly = true)
   public List<TemplateVersion> templateHistory(TenantLegalDraftKind kind) {
-    return distributionRepository
-        .findByKindOrderByCreatedAtDescSourceDraftVersionDescIdDesc(kind)
-        .stream()
+    List<TenantLegalProposalDistributionEntity> distributions =
+        distributionRepository.findByKindOrderByCreatedAtDescSourceDraftVersionDescIdDesc(kind);
+    // Distributions store their own snapshot since 0036; only older rows need a proposal, and
+    // those are loaded in one query instead of one per distribution.
+    Set<Long> legacyDraftIds =
+        distributions.stream()
+            .filter(distribution -> distribution.getContent() == null)
+            .map(TenantLegalProposalDistributionEntity::getSourceDraftId)
+            .collect(Collectors.toSet());
+    Map<String, TenantLegalProposalEntity> firstProposalByRevision = new HashMap<>();
+    if (!legacyDraftIds.isEmpty()) {
+      proposalRepository
+          .findBySourceDraftIdInOrderByIdAsc(legacyDraftIds)
+          .forEach(
+              proposal ->
+                  firstProposalByRevision.putIfAbsent(
+                      proposal.getSourceDraftId() + ":" + proposal.getSourceDraftVersion(),
+                      proposal));
+    }
+    return distributions.stream()
         .map(
             distribution ->
                 new TemplateVersion(
                     distribution,
-                    proposalRepository.findFirstBySourceDraftIdAndSourceDraftVersionOrderByIdAsc(
-                        distribution.getSourceDraftId(), distribution.getSourceDraftVersion())))
+                    distribution.getContent() != null
+                        ? Optional.empty()
+                        : Optional.ofNullable(
+                            firstProposalByRevision.get(
+                                distribution.getSourceDraftId()
+                                    + ":"
+                                    + distribution.getSourceDraftVersion()))))
         .toList();
   }
 
