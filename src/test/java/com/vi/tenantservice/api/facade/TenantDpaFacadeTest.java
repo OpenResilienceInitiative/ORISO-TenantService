@@ -73,7 +73,7 @@ class TenantDpaFacadeTest {
     var result = tenantDpaFacade.getSignatures(5L);
 
     // then — IDOR guard runs first
-    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
+    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToReadTenant(5L);
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getStatus()).isEqualTo("SIGNED");
     assertThat(result.get(0).getSignerName()).isEqualTo("Erika");
@@ -87,7 +87,7 @@ class TenantDpaFacadeTest {
     // given
     doThrow(new AccessDeniedException("nope"))
         .when(tenantFacadeAuthorisationService)
-        .assertUserIsAuthorizedToAccessTenant(5L);
+        .assertUserIsAuthorizedToReadTenant(5L);
 
     // when / then
     assertThatThrownBy(() -> tenantDpaFacade.getSignatures(5L))
@@ -423,7 +423,7 @@ class TenantDpaFacadeTest {
     var result = tenantDpaFacade.getVersions(5L);
 
     // then
-    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
+    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToReadTenant(5L);
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getContent()).isEqualTo("{\"de\":\"x\"}");
     assertThat(result.get(0).getActivationDate()).isNotBlank();
@@ -450,7 +450,7 @@ class TenantDpaFacadeTest {
     var result = tenantDpaFacade.getVersions(5L);
 
     // then the full multilingual map is passed through — the caller picks the signer's language
-    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
+    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToReadTenant(5L);
     verify(tenantDpaService, never()).getVersions(5L);
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getContent())

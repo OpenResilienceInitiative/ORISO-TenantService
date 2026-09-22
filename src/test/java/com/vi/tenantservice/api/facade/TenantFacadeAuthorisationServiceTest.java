@@ -612,4 +612,36 @@ class TenantFacadeAuthorisationServiceTest {
 
     assertThat(tenantFacadeAuthorisationService.isPlatformAdministrator()).isTrue();
   }
+
+  @Test
+  void assertUserIsAuthorizedToReadTenant_Should_letTheTechnicalReadAuthorityReadAnyTenant() {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.TECHNICAL_READ_TENANT))
+        .thenReturn(true);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(7L))
+        .doesNotThrowAnyException();
+    verify(authorisationService, org.mockito.Mockito.never()).findTenantIdInAccessToken();
+  }
+
+  @Test
+  void assertUserIsAuthorizedToReadTenant_Should_keepTheSingleTenantCheckForEveryoneElse() {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.TECHNICAL_READ_TENANT))
+        .thenReturn(false);
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
+        .thenReturn(false);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(8L));
+
+    assertThatThrownBy(
+            () -> tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(7L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void mayOnlyCreateReservedTenants_Should_dependOnTheFullCreateAuthority() {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT))
+        .thenReturn(true, false);
+
+    assertThat(tenantFacadeAuthorisationService.mayOnlyCreateReservedTenants()).isFalse();
+    assertThat(tenantFacadeAuthorisationService.mayOnlyCreateReservedTenants()).isTrue();
+  }
 }
