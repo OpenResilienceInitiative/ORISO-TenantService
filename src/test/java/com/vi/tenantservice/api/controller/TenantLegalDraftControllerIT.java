@@ -45,6 +45,9 @@ import org.springframework.web.context.WebApplicationContext;
 @Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class TenantLegalDraftControllerIT {
 
+  /** Matches technical.service.subject in application-testing.properties. */
+  private static final String TECHNICAL_SERVICE_SUBJECT = "test-technical-service-subject";
+
   private static final String TENANT_ONE_PRIVACY = "/tenantadmin/1/legal-drafts/PRIVACY";
   private static final String NEW_PRIVACY =
       "{\"content\":{\"de\":\"<p>Draft</p>\"},"
@@ -154,9 +157,10 @@ class TenantLegalDraftControllerIT {
                         .jwt(
                             token ->
                                 token
+                                    .subject(TECHNICAL_SERVICE_SUBJECT)
                                     .claim("tenantId", 0L)
                                     .claim("username", "technical")
-                                    .claim("realm_access", Map.of("roles", List.of())))
+                                    .claim("realm_access", Map.of("roles", List.of("technical"))))
                         .authorities(new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"))))
         .andExpect(status().isForbidden());
   }
@@ -363,9 +367,10 @@ class TenantLegalDraftControllerIT {
         .jwt(
             token ->
                 token
+                    .subject(TECHNICAL_SERVICE_SUBJECT)
                     .claim("tenantId", tenantId)
                     .claim("username", "technical")
-                    .claim("realm_access", Map.of("roles", List.of())))
+                    .claim("realm_access", Map.of("roles", List.of("technical"))))
         .authorities(
             new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
             new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));
@@ -376,9 +381,10 @@ class TenantLegalDraftControllerIT {
         .jwt(
             token ->
                 token
+                    .subject(TECHNICAL_SERVICE_SUBJECT)
                     .claim("tenantId", 0L)
                     .claim("username", "technical")
-                    .claim("realm_access", Map.of("roles", List.of("tenant-admin"))))
+                    .claim("realm_access", Map.of("roles", List.of("technical", "tenant-admin"))))
         .authorities(
             new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
             new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));

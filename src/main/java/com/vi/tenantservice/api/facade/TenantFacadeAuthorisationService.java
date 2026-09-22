@@ -19,6 +19,7 @@ import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import com.vi.tenantservice.config.security.AuthorisationService;
+import com.vi.tenantservice.config.security.TechnicalServiceIdentity;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -42,6 +43,8 @@ public class TenantFacadeAuthorisationService {
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
 
   private final @NonNull TenantPermissionPolicyService tenantPermissionPolicyService;
+
+  private final @NonNull TechnicalServiceIdentity technicalServiceIdentity;
 
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
@@ -303,19 +306,10 @@ public class TenantFacadeAuthorisationService {
     }
 
     try {
-      var tenantIdInAccessToken = authorisationService.findTenantIdInAccessToken();
-      boolean result = tenantMatching(tenantId.get(), tenantIdInAccessToken);
-
-      // Temporary workaround: always return true for technical user
-      if (isTechnicalUser()) {
-        return true;
-      }
-
-      return result;
+      return tenantMatching(tenantId.get(), authorisationService.findTenantIdInAccessToken());
     } catch (Exception e) {
       log.debug("Could not determine tenant access from access token", e);
-      // Temporary workaround: always return true for technical user
-      return isTechnicalUser();
+      return false;
     }
   }
 
@@ -399,11 +393,6 @@ public class TenantFacadeAuthorisationService {
   }
 
   private boolean isTechnicalUser() {
-    try {
-      return "technical".equals(authorisationService.getUsername());
-    } catch (Exception e) {
-      log.debug("Could not determine username from access token while checking technical user", e);
-      return false;
-    }
+    return technicalServiceIdentity.isCurrentCaller();
   }
 }
