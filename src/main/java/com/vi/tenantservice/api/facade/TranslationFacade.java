@@ -124,7 +124,7 @@ public class TranslationFacade {
     for (String providerId : List.of(OpenRouterClient.PROVIDER_ID, MistralClient.PROVIDER_ID)) {
       var client = clientsById.get(providerId);
       var apiKey = apiKeys.get(providerId);
-      if (client != null && StringUtils.isNotBlank(apiKey)) {
+      if (client != null && client.isConfigured() && StringUtils.isNotBlank(apiKey)) {
         return new ResolvedProvider(client, apiKey);
       }
     }
