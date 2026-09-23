@@ -30,11 +30,21 @@ public class PublicBrandingAssetService {
     if (tenantId == null || tenantId < 0 || !("logo".equals(asset) || "favicon".equals(asset))) {
       return Optional.empty();
     }
-    return tenantServiceFacade
-        .findRestrictedTenantById(tenantId)
-        .map(RestrictedTenantDTO::getTheming)
-        .map(theming -> select(theming, asset))
-        .flatMap(brandingAssetDecoder::decode);
+    Optional<RestrictedTenantDTO> tenant = tenantServiceFacade.findRestrictedTenantById(tenantId);
+    if (tenant.isEmpty()) {
+      return Optional.empty();
+    }
+    // Like Admin -> Appearance (EffectiveThemingApplier): an unset image is inherited
+    // from the platform tenant, so the mail shows what the Träger admin sees.
+    String stored = select(tenant.get().getTheming(), asset);
+    if (stored == null || stored.isBlank()) {
+      stored =
+          tenantServiceFacade
+              .getPlatformTenant()
+              .map(platform -> select(platform.getTheming(), asset))
+              .orElse(null);
+    }
+    return brandingAssetDecoder.decode(stored);
   }
 
   private Optional<RestrictedTenantDTO> resolveTenant() {
