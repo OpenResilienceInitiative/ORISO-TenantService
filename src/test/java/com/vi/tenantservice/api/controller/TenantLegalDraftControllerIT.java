@@ -285,6 +285,135 @@ class TenantLegalDraftControllerIT {
   }
 
   @Test
+  void templateHistory_Should_listSentSnapshotsNewestFirst_forThePlatformOnly() throws Exception {
+    String first = savePlatformImprint("<p>Erste Fassung</p>", "new");
+    distributeImprint("history-1", first, "[1]");
+    String second = savePlatformImprint("<p>Zweite Fassung</p>", first);
+    distributeImprint("history-2", second, "[1,2]");
+
+    mvc.perform(
+            get("/tenantadmin/legal-proposal-distributions")
+                .param("kind", "IMPRINT")
+                .with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(2))
+        .andExpect(jsonPath("$[0].sourceRevision").value(second))
+        .andExpect(jsonPath("$[0].recipientCount").value(2))
+        .andExpect(jsonPath("$[0].content.de").value("<p>Zweite Fassung</p>"))
+        .andExpect(jsonPath("$[1].sourceRevision").value(first))
+        .andExpect(jsonPath("$[1].recipientCount").value(1))
+        .andExpect(jsonPath("$[1].content.de").value("<p>Erste Fassung</p>"));
+
+    mvc.perform(
+            get("/tenantadmin/legal-proposal-distributions")
+                .param("kind", "PRIVACY")
+                .with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(0));
+    mvc.perform(
+            get("/tenantadmin/legal-proposal-distributions")
+                .param("kind", "IMPRINT")
+                .with(legalTenantAdmin(1L)))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            get("/tenantadmin/legal-proposal-distributions")
+                .param("kind", "IMPRINT")
+                .with(technicalPlatformCaller()))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void templateHistory_Should_keepTheSentText_whenAllRecipientProposalsAreGone() throws Exception {
+    String revision = savePlatformImprint("<p>Gesendet</p>", "new");
+    distributeImprint("history-deleted", revision, "[1]");
+    // A deleted recipient tenant cascades its proposals away.
+    jdbcTemplate.update("DELETE FROM tenant_legal_proposal_delivery");
+    jdbcTemplate.update("DELETE FROM tenant_legal_proposal");
+
+    mvc.perform(
+            get("/tenantadmin/legal-proposal-distributions")
+                .param("kind", "IMPRINT")
+                .with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].content.de").value("<p>Gesendet</p>"));
+  }
+
+  @Test
+  void templateHistory_Should_readOlderDistributionsWithoutASnapshotFromTheirProposals()
+      throws Exception {
+    String revision = savePlatformImprint("<p>Vor 0036</p>", "new");
+    distributeImprint("history-legacy", revision, "[1,2]");
+    // Rows written before changeset 0036 have no snapshot of their own.
+    jdbcTemplate.update(
+        "UPDATE tenant_legal_proposal_distribution SET content = NULL, privacy_consent = NULL");
+
+    mvc.perform(
+            get("/tenantadmin/legal-proposal-distributions")
+                .param("kind", "IMPRINT")
+                .with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[0].content.de").value("<p>Vor 0036</p>"));
+  }
+
+  @Test
+  void templateHistory_Should_putTheLaterRevisionFirst_whenBothWereSentInTheSameSecond()
+      throws Exception {
+    String first = savePlatformImprint("<p>Erste</p>", "new");
+    distributeImprint("same-second-1", first, "[1]");
+    String second = savePlatformImprint("<p>Zweite</p>", first);
+    distributeImprint("same-second-2", second, "[1]");
+    // MariaDB keeps whole seconds; make the tie explicit.
+    jdbcTemplate.update(
+        "UPDATE tenant_legal_proposal_distribution SET created_at = '2026-09-22 10:00:00'");
+
+    for (int i = 0; i < 5; i++) {
+      mvc.perform(
+              get("/tenantadmin/legal-proposal-distributions")
+                  .param("kind", "IMPRINT")
+                  .with(platformAdmin()))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$[0].sourceRevision").value(second))
+          .andExpect(jsonPath("$[1].sourceRevision").value(first));
+    }
+  }
+
+  private String savePlatformImprint(String html, String revision) throws Exception {
+    String response =
+        mvc.perform(
+                put("/tenantadmin/0/legal-drafts/IMPRINT")
+                    .with(platformAdmin())
+                    .contentType(APPLICATION_JSON)
+                    .content(
+                        "{\"content\":{\"de\":\""
+                            + html
+                            + "\"},\"revision\":\""
+                            + revision
+                            + "\"}"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    return objectMapper.readTree(response).get("revision").asText();
+  }
+
+  private void distributeImprint(String requestKey, String revision, String tenantIds)
+      throws Exception {
+    mvc.perform(
+            post("/tenantadmin/legal-proposal-distributions")
+                .with(platformAdmin())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    "{\"requestKey\":\""
+                        + requestKey
+                        + "\",\"kind\":\"IMPRINT\",\"sourceRevision\":\""
+                        + revision
+                        + "\",\"audience\":\"SELECTED\",\"tenantIds\":"
+                        + tenantIds
+                        + "}"))
+        .andExpect(status().isCreated());
+  }
+
+  @Test
   void technicalPlatformShapedTokenCannotDistributeOrReadBeforeResourceLookup() throws Exception {
     RequestPostProcessor technical = technicalPlatformCaller();
     mvc.perform(

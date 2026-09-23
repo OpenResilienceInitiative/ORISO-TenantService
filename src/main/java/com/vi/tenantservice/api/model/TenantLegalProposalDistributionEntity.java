@@ -48,6 +48,13 @@ public class TenantLegalProposalDistributionEntity {
       columnDefinition = "LONGTEXT")
   private String recipientIds;
 
+  /** Snapshot of what was sent; null only for distributions written before changeset 0036. */
+  @Column(name = "content", updatable = false, columnDefinition = "LONGTEXT")
+  private String content;
+
+  @Column(name = "privacy_consent", updatable = false, columnDefinition = "LONGTEXT")
+  private String privacyConsent;
+
   @Column(name = "created_by", nullable = false, updatable = false)
   private String createdBy;
 

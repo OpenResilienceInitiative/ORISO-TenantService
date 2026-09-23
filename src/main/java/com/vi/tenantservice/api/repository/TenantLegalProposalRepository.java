@@ -34,6 +34,10 @@ public interface TenantLegalProposalRepository
 
   List<TenantLegalProposalEntity> findByRecipientTenantIdOrderByCreatedAtDescIdDesc(Long tenantId);
 
+  /** Fallback snapshots for distributions written before changeset 0036, in one query. */
+  List<TenantLegalProposalEntity> findBySourceDraftIdInOrderByIdAsc(
+      Collection<Long> sourceDraftIds);
+
   List<TenantLegalProposalEntity> findByRecipientTenantIdAndKindOrderByCreatedAtDescIdDesc(
       Long tenantId, TenantLegalDraftKind kind);
 

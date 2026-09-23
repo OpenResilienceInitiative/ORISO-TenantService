@@ -70,6 +70,40 @@ class PublicBrandingAssetServiceTest {
     verifyNoMoreInteractions(tenants);
   }
 
+  @Test
+  void tenantWithoutItsOwnLogoShowsThePlatformLogoAsAdminDoes() {
+    // Admin -> Appearance shows a Träger without its own logo the inherited platform
+    // logo (EffectiveThemingApplier); the mail image must match what Admin shows.
+    var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
+    when(tenants.findRestrictedTenantById(7L))
+        .thenReturn(Optional.of(new RestrictedTenantDTO().theming(new Theming())));
+    when(tenants.getPlatformTenant()).thenReturn(Optional.of(tenant("platform-logo")));
+
+    assertThat(service.find(7L, "logo").orElseThrow().bytes())
+        .isEqualTo("platform-logo".getBytes(StandardCharsets.UTF_8));
+  }
+
+  @Test
+  void tenantWithoutThemingShowsThePlatformLogo() {
+    var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
+    when(tenants.findRestrictedTenantById(7L)).thenReturn(Optional.of(new RestrictedTenantDTO()));
+    when(tenants.getPlatformTenant()).thenReturn(Optional.of(tenant("platform-logo")));
+
+    assertThat(service.find(7L, "logo").orElseThrow().bytes())
+        .isEqualTo("platform-logo".getBytes(StandardCharsets.UTF_8));
+  }
+
+  @Test
+  void neitherTenantNorPlatformLogoMeansNoImage() {
+    var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
+    when(tenants.findRestrictedTenantById(7L))
+        .thenReturn(Optional.of(new RestrictedTenantDTO().theming(new Theming())));
+    when(tenants.getPlatformTenant())
+        .thenReturn(Optional.of(new RestrictedTenantDTO().theming(new Theming())));
+
+    assertThat(service.find(7L, "logo")).isEmpty();
+  }
+
   private RestrictedTenantDTO tenant(String logo) {
     var theming = new Theming();
     theming.setLogo(

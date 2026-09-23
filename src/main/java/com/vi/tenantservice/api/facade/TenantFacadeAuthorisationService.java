@@ -71,6 +71,25 @@ public class TenantFacadeAuthorisationService {
     }
   }
 
+  /**
+   * Read-only variant of {@link #assertUserIsAuthorizedToAccessTenant(Long)}: the technical service
+   * identity may read any single tenant (ORISO-Helm#367). Write paths keep the strict check.
+   */
+  void assertUserIsAuthorizedToReadTenant(Long tenantId) {
+    if (authorisationService.hasAuthority(Authority.AuthorityValue.TECHNICAL_READ_TENANT)) {
+      return;
+    }
+    assertUserIsAuthorizedToAccessTenant(tenantId);
+  }
+
+  /**
+   * True for a caller that may create tenants only by consuming an open ID reservation (the
+   * technical service identity without the full create right).
+   */
+  boolean mayOnlyCreateReservedTenants() {
+    return !authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT);
+  }
+
   private boolean hasSingleTenantAccessAuthority() {
     return !authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS);
   }

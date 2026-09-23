@@ -298,6 +298,23 @@ paths:
         409: {description: Stale draft revision}
         403: {description: Forbidden}
   /tenantadmin/legal-proposal-distributions:
+    get:
+      tags: [tenant-controller]
+      summary: Lists the template versions the platform has sent for one legal document
+      description: >-
+        Platform administrator only. Newest first. Each entry is one distribution with the exact
+        snapshot every recipient received, so the admin can look back at what went out and to how
+        many Träger.
+      operationId: getTenantLegalTemplateHistory
+      parameters:
+        - {name: kind, in: query, required: true, schema: {type: string, enum: [PRIVACY, IMPRINT]}}
+      responses:
+        200:
+          description: Sent template versions, newest first
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/TenantLegalTemplateVersionDTO'}}}}
+        400: {description: Invalid kind}
+        401: {description: Unauthorized}
+        403: {description: Platform administrator required}
     post:
       tags: [tenant-controller]
       summary: Shares an immutable platform legal draft revision with a fixed tenant audience
@@ -2984,6 +3001,19 @@ components:
           description: Immutable original audience, including recipients deleted after delivery.
           items: {type: integer, format: int64}
         proposals: {type: array, items: {$ref: '#/components/schemas/TenantLegalProposalDTO'}}
+    TenantLegalTemplateVersionDTO:
+      type: object
+      required: [distributionId, sourceRevision, createdAt, recipientCount]
+      properties:
+        distributionId: {type: string, format: uuid}
+        sourceRevision: {type: string, description: 'Platform draft revision (id:version) that was sent'}
+        createdAt: {type: string, format: date-time, description: 'When it was sent (UTC)'}
+        recipientCount: {type: integer, format: int32}
+        content:
+          type: object
+          additionalProperties: {type: string}
+          description: Snapshot that was sent; absent only if it can no longer be recovered.
+        privacyConsent: {type: object, additionalProperties: {type: string}}
     TenantLegalProposalDTO:
       type: object
       required: [id, recipientTenantId, kind, content, status, revision, sourceRevision, sourceUpdatedAt, distributionId, createdBy, createdAt]
