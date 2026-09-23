@@ -126,4 +126,26 @@ class TenantRepositoryTest {
     assertThat(tenants.size()).isEqualTo(1);
     assertThat(tenants.get(0).getId()).isEqualTo(EXISTING_ID);
   }
+
+  @Test
+  void findTenantDataById_Should_carryLegalNameAndContact() {
+    TenantEntity entity = tenantRepository.findById(EXISTING_ID).orElseThrow();
+    entity.setLegalName("Caritasverband für die Erzdiözese Musterstadt e.V.");
+    entity.setContactEmail("beratung@caritas-musterstadt.de");
+    entity.setContactPhone("+49 761 200-0");
+    tenantRepository.saveAndFlush(entity);
+
+    var view = tenantRepository.findTenantDataById(EXISTING_ID);
+
+    assertThat(view.getLegalName()).isEqualTo("Caritasverband für die Erzdiözese Musterstadt e.V.");
+    assertThat(view.getContactEmail()).isEqualTo("beratung@caritas-musterstadt.de");
+    assertThat(view.getContactPhone()).isEqualTo("+49 761 200-0");
+    assertThat(
+            tenantRepository.findAllTenantData().stream()
+                .filter(tenant -> tenant.getId() == EXISTING_ID)
+                .findFirst()
+                .orElseThrow()
+                .getLegalName())
+        .isEqualTo("Caritasverband für die Erzdiözese Musterstadt e.V.");
+  }
 }

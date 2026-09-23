@@ -1905,6 +1905,26 @@ components:
         description:
           type: string
           example: "Short description of the tenant."
+        legalName:
+          type: string
+          maxLength: 255
+          description: >-
+            Full legal name of the Träger, e.g. "Caritasverband für die Erzdiözese Musterstadt e.V.".
+            Optional; `name` stays the short display name (max 40). Mail footers name this as the
+            sender where it is set. Same limit as the platform operator's `DpiaOperatorDTO.legalName`.
+          example: "Caritasverband für die Erzdiözese Musterstadt e.V."
+        contactEmail:
+          type: string
+          format: email
+          maxLength: 255
+          description: >-
+            Contact e-mail address of the Träger, shown in the mail footer's contact line. Optional.
+          example: "beratung@caritas-musterstadt.de"
+        contactPhone:
+          type: string
+          maxLength: 64
+          description: Contact phone number of the Träger, shown in the mail footer. Optional.
+          example: "+49 761 200-0"
         createDate:
           type: string
         updateDate:
@@ -1954,6 +1974,29 @@ components:
             description:
               type: string
               example: "Short description of the tenant."
+            legalName:
+              type: string
+              maxLength: 255
+              description: >-
+                Full legal name of the Träger, e.g. "Caritasverband für die Erzdiözese Musterstadt e.V.".
+                Optional; `name` stays the short display name (max 40). Mail footers name this as the
+                sender where it is set. Same limit as the platform operator's `DpiaOperatorDTO.legalName`.
+                On update, an absent value keeps the stored one and a blank value clears it, so a
+                client that does not know the field cannot wipe it by saving the rest of the tenant.
+                The same applies to `contactEmail` and `contactPhone`.
+              example: "Caritasverband für die Erzdiözese Musterstadt e.V."
+            contactEmail:
+              type: string
+              format: email
+              maxLength: 255
+              description: >-
+                Contact e-mail address of the Träger, shown in the mail footer's contact line. Optional.
+              example: "beratung@caritas-musterstadt.de"
+            contactPhone:
+              type: string
+              maxLength: 64
+              description: Contact phone number of the Träger, shown in the mail footer. Optional.
+              example: "+49 761 200-0"
             adminEmails:
               type: array
               items:
