@@ -33,9 +33,12 @@ public class TechnicalServiceIdentity {
 
   public boolean isCurrentCaller() {
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-    if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) {
-      return false;
-    }
+    return authentication != null
+        && authentication.getPrincipal() instanceof Jwt jwt
+        && isServiceIdentity(jwt);
+  }
+
+  public boolean isServiceIdentity(Jwt jwt) {
     return subject.equals(jwt.getSubject())
         && jwt.getClaims().get("realm_access") instanceof Map<?, ?> access
         && access.get("roles") instanceof Collection<?> roles
