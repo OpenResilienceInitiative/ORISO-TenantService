@@ -215,7 +215,8 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  @PreAuthorize(
+      "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')")
   public ResponseEntity<List<DpaSignatureDTO>> getDataProcessingAgreementSignatures(
       @NotNull Long id) {
     return new ResponseEntity<>(tenantDpaFacade.getSignatures(id), HttpStatus.OK);
@@ -228,7 +229,8 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  @PreAuthorize(
+      "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')")
   public ResponseEntity<List<DpaVersionDTO>> getDataProcessingAgreementVersions(@NotNull Long id) {
     return new ResponseEntity<>(tenantDpaFacade.getVersions(id), HttpStatus.OK);
   }
@@ -278,7 +280,8 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  @PreAuthorize(
+      "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')")
   public ResponseEntity<TenantDTO> getTenantById(@NotNull Long id) {
 
     var tenantById = tenantServiceFacade.findTenantById(id);
@@ -337,7 +340,8 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  @PreAuthorize(
+      "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')")
   public ResponseEntity<TenantPermissionPolicies> getTenantPermissionPolicies(@NotNull Long id) {
     return ResponseEntity.ok(tenantServiceFacade.getTenantPermissionPolicies(id));
   }
@@ -474,7 +478,9 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  @PreAuthorize(
+      "hasAnyAuthority('AUTHORIZATION_CREATE_TENANT',"
+          + " 'AUTHORIZATION_TECHNICAL_RELEASE_TENANT_ID_RESERVATION')")
   public ResponseEntity<Void> releaseTenantIdReservation(Long id) {
     log.info(
         "Releasing tenant ID reservation {} by user {}", id, authorisationService.getUsername());
@@ -484,7 +490,9 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  @PreAuthorize(
+      "hasAnyAuthority('AUTHORIZATION_CREATE_TENANT',"
+          + " 'AUTHORIZATION_TECHNICAL_CREATE_RESERVED_TENANT')")
   public ResponseEntity<MultilingualTenantDTO> createTenant(
       @Valid MultilingualTenantDTO tenantMultilingualDTO) {
     log.info("Creating tenant by user {} ", authorisationService.getUsername());

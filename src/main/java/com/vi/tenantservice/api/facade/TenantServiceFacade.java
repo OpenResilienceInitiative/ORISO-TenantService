@@ -35,6 +35,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.TenantIdAllocationStatus;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
@@ -147,6 +148,7 @@ public class TenantServiceFacade {
 
   public MultilingualTenantDTO createTenant(MultilingualTenantDTO tenantDTO) {
     log.info("Creating new tenant");
+    assertCallerMayCreateThisTenant(tenantDTO);
     MultilingualTenantDTO sanitizedTenantDTO = tenantInputSanitizer.sanitize(tenantDTO);
     validateCreateTenantInput(tenantDTO);
     // The sanitized value is the one that would be stored, so that is the one that is checked.
@@ -172,6 +174,23 @@ public class TenantServiceFacade {
     var createdTenantDto = tenantConverter.toMultilingualDTO(createdTenant);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(createdTenantDto);
     return createdTenantDto;
+  }
+
+  /**
+   * A caller without the full create right (the technical service identity) may only complete a
+   * public onboarding: the request must name an ID that is currently RESERVED and carry a token.
+   * Whether the token matches is decided atomically when the reservation is consumed.
+   */
+  private void assertCallerMayCreateThisTenant(MultilingualTenantDTO tenantDTO) {
+    if (!tenantFacadeAuthorisationService.mayOnlyCreateReservedTenants()) {
+      return;
+    }
+    Long id = tenantDTO.getId();
+    if (id == null
+        || isBlank(tenantDTO.getTenantIdReservationToken())
+        || tenantIdAllocationService.getStatus(id) != TenantIdAllocationStatus.RESERVED) {
+      throw new AccessDeniedException("Tenant creation requires an open ID reservation");
+    }
   }
 
   /**
@@ -617,7 +636,7 @@ public class TenantServiceFacade {
   }
 
   public Optional<TenantDTO> findTenantById(Long id) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id);
     var tenantById = tenantService.findTenantDataById(id);
     if (tenantById.isEmpty()) {
       return Optional.empty();
@@ -668,7 +687,7 @@ public class TenantServiceFacade {
   }
 
   public TenantPermissionPolicies getTenantPermissionPolicies(Long tenantId) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId);
     return toTenantPermissionPolicies(
         tenantId,
         tenantPermissionPolicyService.getResolvedPolicies(tenantId),

@@ -203,7 +203,7 @@ public class TenantDpaFacade {
 
   /** The tenant's confirmed-DPA audit list (the platform-admin "list of confirmed AVVs"). */
   public List<DpaSignatureDTO> getSignatures(Long tenantId) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId);
     return tenantDpaService.getSignatures(tenantId).stream().map(TenantDpaFacade::toDto).toList();
   }
 
@@ -369,7 +369,7 @@ public class TenantDpaFacade {
    * language. Signatures stay strictly per-tenant — only the CONTENT is shared.
    */
   public List<DpaVersionDTO> getVersions(Long tenantId) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId);
     var documentTenantId = governingDpaResolver.documentTenantIdFor(tenantId);
     return tenantDpaService.getVersions(documentTenantId).stream()
         .map(TenantDpaFacade::toVersionDto)

@@ -15,7 +15,10 @@ public enum UserRole {
 
   RESTRICTED_AGENCY_ADMIN("restricted-agency-admin"),
 
-  RESTRICTED_CONSULTANT_ADMIN("restricted-consultant-admin");
+  RESTRICTED_CONSULTANT_ADMIN("restricted-consultant-admin"),
+
+  /** Service identity of the UserService (ORISO-Helm#367); never a human role. */
+  TECHNICAL("technical");
 
   private final String value;
 
