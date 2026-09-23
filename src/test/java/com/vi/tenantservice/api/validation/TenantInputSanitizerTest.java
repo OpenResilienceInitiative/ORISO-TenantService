@@ -160,6 +160,10 @@ class TenantInputSanitizerTest {
     verify(inputSanitizer).sanitize(tenantDTO.getSubdomain());
     verify(inputSanitizer).sanitize(tenantDTO.getAddress());
     verify(inputSanitizer).sanitize(tenantDTO.getDescription());
+    // Plain text shown in mail footers: markup removed, but not HTML-encoded ("+49", "@").
+    verify(inputSanitizer).sanitizePlainText(tenantDTO.getLegalName());
+    verify(inputSanitizer).sanitizePlainText(tenantDTO.getContactEmail());
+    verify(inputSanitizer).sanitizePlainText(tenantDTO.getContactPhone());
     // Assets go through the URL whitelist, NOT the HTML sanitizer — the latter
     // encoded their base64 payload and broke every stored logo/favicon.
     verify(inputSanitizer).sanitizeAssetUrl(tenantDTO.getTheming().getLogo());
