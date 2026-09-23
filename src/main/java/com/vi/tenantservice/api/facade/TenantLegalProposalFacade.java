@@ -38,6 +38,36 @@ public class TenantLegalProposalFacade {
     return new DistributionResult(dto, result.created());
   }
 
+  public List<TenantLegalTemplateVersionDTO> templateHistory(String kind) {
+    authorisation.assertCanDistributeLegalProposals();
+    return proposals.templateHistory(kind(kind)).stream().map(this::templateDto).toList();
+  }
+
+  private TenantLegalTemplateVersionDTO templateDto(
+      TenantLegalProposalService.TemplateVersion version) {
+    TenantLegalProposalDistributionEntity distribution = version.distribution();
+    TenantLegalTemplateVersionDTO dto =
+        new TenantLegalTemplateVersionDTO()
+            .distributionId(UUID.fromString(distribution.getId()))
+            .sourceRevision(
+                distribution.getSourceDraftId() + ":" + distribution.getSourceDraftVersion())
+            .createdAt(distribution.getCreatedAt())
+            .recipientCount(proposals.fixedRecipients(distribution).size());
+    // The distribution's own copy survives deleted recipients; older rows fall back to a proposal.
+    String content =
+        distribution.getContent() != null
+            ? distribution.getContent()
+            : version.snapshot().map(TenantLegalProposalEntity::getContent).orElse(null);
+    String consent =
+        distribution.getContent() != null
+            ? distribution.getPrivacyConsent()
+            : version.snapshot().map(TenantLegalProposalEntity::getPrivacyConsent).orElse(null);
+    // Unknown stays absent rather than an empty map, which would claim an empty text was sent.
+    if (content != null) dto.setContent(read(content));
+    if (consent != null) dto.setPrivacyConsent(read(consent));
+    return dto;
+  }
+
   public List<TenantLegalProposalDTO> list(Long tenantId, String kind) {
     authorisation.assertCanReadLegalProposal(tenantId);
     TenantLegalDraftKind parsed = kind == null ? null : kind(kind);

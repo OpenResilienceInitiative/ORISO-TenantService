@@ -96,6 +96,8 @@ public class TenantLegalProposalService {
             .sourceUpdatedAt(source.getUpdateDate())
             .requestFingerprint(fingerprint(kind, sourceRevision, audience, selectedTenantIds))
             .recipientIds(encodeRecipients(recipients))
+            .content(source.getContent())
+            .privacyConsent(source.getPrivacyConsent())
             .createdBy(actorId)
             .createdAt(now)
             .build();
@@ -144,6 +146,52 @@ public class TenantLegalProposalService {
       TenantLegalProposalDistributionEntity distribution,
       List<TenantLegalProposalEntity> proposals,
       boolean created) {}
+
+  /** One sent template version: the distribution and the snapshot its recipients received. */
+  public record TemplateVersion(
+      TenantLegalProposalDistributionEntity distribution,
+      Optional<TenantLegalProposalEntity> snapshot) {}
+
+  /**
+   * The platform's sent template versions of one document, newest first. Proposals are immutable
+   * snapshots of a source revision, so the content shown here is exactly what went out — even after
+   * the platform draft moved on or a recipient adopted and edited its copy.
+   */
+  @Transactional(readOnly = true)
+  public List<TemplateVersion> templateHistory(TenantLegalDraftKind kind) {
+    List<TenantLegalProposalDistributionEntity> distributions =
+        distributionRepository.findByKindOrderByCreatedAtDescSourceDraftVersionDescIdDesc(kind);
+    // Distributions store their own snapshot since 0036; only older rows need a proposal, and
+    // those are loaded in one query instead of one per distribution.
+    Set<Long> legacyDraftIds =
+        distributions.stream()
+            .filter(distribution -> distribution.getContent() == null)
+            .map(TenantLegalProposalDistributionEntity::getSourceDraftId)
+            .collect(Collectors.toSet());
+    Map<String, TenantLegalProposalEntity> firstProposalByRevision = new HashMap<>();
+    if (!legacyDraftIds.isEmpty()) {
+      proposalRepository
+          .findBySourceDraftIdInOrderByIdAsc(legacyDraftIds)
+          .forEach(
+              proposal ->
+                  firstProposalByRevision.putIfAbsent(
+                      proposal.getSourceDraftId() + ":" + proposal.getSourceDraftVersion(),
+                      proposal));
+    }
+    return distributions.stream()
+        .map(
+            distribution ->
+                new TemplateVersion(
+                    distribution,
+                    distribution.getContent() != null
+                        ? Optional.empty()
+                        : Optional.ofNullable(
+                            firstProposalByRevision.get(
+                                distribution.getSourceDraftId()
+                                    + ":"
+                                    + distribution.getSourceDraftVersion()))))
+        .toList();
+  }
 
   @Transactional(readOnly = true)
   public List<TenantLegalProposalEntity> list(Long tenantId, TenantLegalDraftKind kind) {

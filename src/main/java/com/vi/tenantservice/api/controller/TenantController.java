@@ -37,6 +37,7 @@ import com.vi.tenantservice.api.model.TenantLegalProposalDTO;
 import com.vi.tenantservice.api.model.TenantLegalProposalDismissRequest;
 import com.vi.tenantservice.api.model.TenantLegalProposalDistributionDTO;
 import com.vi.tenantservice.api.model.TenantLegalProposalDistributionRequest;
+import com.vi.tenantservice.api.model.TenantLegalTemplateVersionDTO;
 import com.vi.tenantservice.api.model.TenantMediaResponseDTO;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
@@ -530,6 +531,13 @@ public class TenantController implements TenantApi, TenantadminApi {
     var result = tenantLegalProposalFacade.distribute(request);
     return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
         .body(result.body());
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<List<TenantLegalTemplateVersionDTO>> getTenantLegalTemplateHistory(
+      String kind) {
+    return ResponseEntity.ok(tenantLegalProposalFacade.templateHistory(kind));
   }
 
   @Override

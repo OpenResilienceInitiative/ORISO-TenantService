@@ -239,7 +239,11 @@ class LiquibaseSchemaDriftIT {
     // Delivery copies the platform draft into a proposal, and replacing a draft copies it into
     // the archive. With TEXT (65,535 bytes) there, a draft that saves fine would fail on
     // distribution or adoption and roll back.
-    for (String table : List.of("tenant_legal_proposal", "tenant_legal_draft_archive")) {
+    for (String table :
+        List.of(
+            "tenant_legal_proposal",
+            "tenant_legal_draft_archive",
+            "tenant_legal_proposal_distribution")) {
       for (String column : List.of("content", "privacy_consent")) {
         String type =
             jdbcTemplate.queryForObject(
