@@ -17,6 +17,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantPermissionPolicyEntity;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
+import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
 import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PermissionPolicyResolver;
 import com.vi.tenantservice.api.policy.PolicyValue;
@@ -44,8 +45,7 @@ public class TenantPermissionPolicyService {
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   public Map<String, ResolvedPolicyValue<Boolean>> getResolvedPolicies(Long tenantId) {
-    Map<String, PolicyValue<Boolean>> inherited =
-        toDomain(platformControls.getControls().getPermissionPolicies());
+    Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platformControls.getControls());
     Map<String, PolicyValue<Boolean>> overrides =
         repository.findByTenantId(tenantId).map(this::deserialize).orElse(Map.of());
     return resolvePolicies(inherited, overrides);
@@ -56,8 +56,7 @@ public class TenantPermissionPolicyService {
     if (tenantIds.isEmpty()) {
       return Map.of();
     }
-    Map<String, PolicyValue<Boolean>> inherited =
-        toDomain(platformControls.getControls().getPermissionPolicies());
+    Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platformControls.getControls());
     Map<Long, Map<String, PolicyValue<Boolean>>> overridesByTenant = new LinkedHashMap<>();
     repository
         .findByTenantIdIn(tenantIds)
@@ -71,14 +70,33 @@ public class TenantPermissionPolicyService {
     return Map.copyOf(resolvedByTenant);
   }
 
+  /**
+   * The platform rule for every registry feature. The stored platform list may be partial (dev
+   * carried only {@code caseHandoverEnabled}, #254); the missing features take the same default the
+   * platform read uses: the legacy toggle mapping, else SUGGESTED/on.
+   */
+  private Map<String, PolicyValue<Boolean>> platformPolicies(TenantAdminControls platform) {
+    return LegacyPermissionPolicyMapper.complete(
+        toDomain(platform.getPermissionPolicies()),
+        platform.getAllowedPermissionToggles(),
+        platform.getEnforcedPermissionToggles());
+  }
+
   private Map<String, ResolvedPolicyValue<Boolean>> resolvePolicies(
       Map<String, PolicyValue<Boolean>> inherited, Map<String, PolicyValue<Boolean>> overrides) {
     Map<String, ResolvedPolicyValue<Boolean>> resolved = new LinkedHashMap<>();
-    inherited.forEach(
-        (feature, parent) ->
-            resolved.put(
-                feature,
-                PermissionPolicyResolver.resolveWithOrigin(parent, overrides.get(feature))));
+    // tenant overrides stored before the group chat formats were split out (#250) still apply
+    Map<String, PolicyValue<Boolean>> effectiveOverrides =
+        PermissionFeature.withTransitionFallbacks(overrides);
+    // resolve over the registry, never over the platform keys: a tenant override for a feature the
+    // platform list does not mention must survive the read (#254)
+    for (PermissionFeature feature : PermissionFeature.values()) {
+      String key = feature.apiKey();
+      resolved.put(
+          key,
+          PermissionPolicyResolver.resolveWithOrigin(
+              inherited.get(key), effectiveOverrides.get(key)));
+    }
     return Map.copyOf(resolved);
   }
 
@@ -96,7 +114,7 @@ public class TenantPermissionPolicyService {
     CaseHandoverPolicyRules.validate(caseHandoverOverrides);
     TenantAdminControls platform = platformControls.getControls();
     Map<String, PolicyValue<Boolean>> writableOverrides =
-        sanitizeBooleanOverrides(toDomain(platform.getPermissionPolicies()), overrides);
+        sanitizeBooleanOverrides(platformPolicies(platform), overrides);
     CaseHandoverPolicies parentCaseHandover = platform.getCaseHandoverPolicies();
     if (parentCaseHandover == null) {
       parentCaseHandover = CaseHandoverPolicyDefaults.create();

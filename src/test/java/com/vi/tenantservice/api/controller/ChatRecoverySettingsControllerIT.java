@@ -148,12 +148,13 @@ class ChatRecoverySettingsControllerIT {
     var publicControls =
         (com.fasterxml.jackson.databind.node.ObjectNode)
             mapper.readTree(response).at("/settings/tenantAdminControls");
-    // Generated DTOs may serialize absent values as null; only recovery data may be present.
+    // Generated DTOs may serialize absent values as null; only safe creation defaults may be
+    // present.
     publicControls.properties().removeIf(entry -> entry.getValue().isNull());
     assertThat(publicControls)
         .isEqualTo(
             mapper.readTree(
-                "{\"chatRecoverySettings\":{\"asker\":\"RECOVERY_KEY\",\"consultant\":\"LOGIN_PASSWORD\",\"revision\":1}}"));
+                "{\"chatRecoverySettings\":{\"asker\":\"RECOVERY_KEY\",\"consultant\":\"LOGIN_PASSWORD\",\"revision\":1},\"accountInactivitySettings\":{\"askerMonths\":24,\"consultantMonths\":24,\"otherMonths\":24,\"revision\":0}}"));
   }
 
   @Test

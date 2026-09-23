@@ -93,6 +93,25 @@ public class TenantFacadeChangeDetectionService {
         existingSettingsToCompare.getFeatureGroupChatV2Enabled())) {
       resultList.add(TenantSetting.FEATURE_GROUP_CHAT_V2_ENABLED);
     }
+    // #250: a format flag the request leaves out follows featureGroupChatV2Enabled once stored (see
+    // TenantSettings#applyDefaults). Compare the effective incoming value - the split flag when the
+    // caller sent it, otherwise the incoming group chat flag - against the already-resolved stored
+    // value, so an omitted flag that flips the effective value is still detected and its change
+    // permission-checked, even when featureGroupChatV2Enabled itself did not change.
+    if (isChanged(
+        effectiveFormatFlag(
+            inputSettings.getFeatureInternalGroupChatEnabled(),
+            inputSettings.getFeatureGroupChatV2Enabled()),
+        existingSettingsToCompare.getFeatureInternalGroupChatEnabled())) {
+      resultList.add(TenantSetting.FEATURE_INTERNAL_GROUP_CHAT_ENABLED);
+    }
+    if (isChanged(
+        effectiveFormatFlag(
+            inputSettings.getFeatureSelfHelpGroupsEnabled(),
+            inputSettings.getFeatureGroupChatV2Enabled()),
+        existingSettingsToCompare.getFeatureSelfHelpGroupsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_SELF_HELP_GROUPS_ENABLED);
+    }
     if (isChanged(
         inputSettings.getFeatureTeamDiscussionEnabled(),
         existingSettingsToCompare.getFeatureTeamDiscussionEnabled())) {
@@ -284,6 +303,12 @@ public class TenantFacadeChangeDetectionService {
 
   private boolean isChanged(Boolean inputSettings, Boolean existingSettingsToCompare) {
     return nullAsFalse(inputSettings) != nullAsFalse(existingSettingsToCompare);
+  }
+
+  // #250 transition: a split format flag the caller omits follows the incoming group chat flag,
+  // mirroring TenantSettings#applyDefaults() on the stored side.
+  private Boolean effectiveFormatFlag(Boolean formatFlag, Boolean groupChatV2Fallback) {
+    return formatFlag != null ? formatFlag : groupChatV2Fallback;
   }
 
   private boolean isChangedIgnoringOrder(
