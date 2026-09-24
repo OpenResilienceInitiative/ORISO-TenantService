@@ -47,6 +47,17 @@ public class TenantEntity implements TenantData {
   @Column(name = "description", columnDefinition = "TEXT")
   private String description;
 
+  /* Mail-footer sender block of the Träger (Frank, 2026-09-23). Optional; NULL means "not
+  entered", and the platform operator's value applies in its place. */
+  @Column(name = "legal_name", length = 255)
+  private String legalName;
+
+  @Column(name = "contact_email", length = 255)
+  private String contactEmail;
+
+  @Column(name = "contact_phone", length = 64)
+  private String contactPhone;
+
   @Column(name = "licensing_allowed_users")
   private Integer licensingAllowedNumberOfUsers;
 

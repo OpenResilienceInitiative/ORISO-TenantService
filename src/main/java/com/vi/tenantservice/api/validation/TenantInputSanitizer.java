@@ -25,6 +25,10 @@ public class TenantInputSanitizer {
     output.setSubdomain(inputSanitizer.sanitize(input.getSubdomain()));
     output.setAddress(inputSanitizer.sanitize(input.getAddress()));
     output.setDescription(inputSanitizer.sanitize(input.getDescription()));
+    // null must survive as null: on update it means "keep the stored value", not "clear it".
+    output.setLegalName(inputSanitizer.sanitizePlainText(input.getLegalName()));
+    output.setContactEmail(inputSanitizer.sanitizePlainText(input.getContactEmail()));
+    output.setContactPhone(inputSanitizer.sanitizePlainText(input.getContactPhone()));
     sanitizeTheming(input, output);
     sanitizeContent(input, output);
     return output;

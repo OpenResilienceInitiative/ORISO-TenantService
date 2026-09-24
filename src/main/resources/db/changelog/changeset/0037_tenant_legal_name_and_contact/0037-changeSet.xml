@@ -1,0 +1,59 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Träger sender block for mail footers (Frank, 2026-09-23): an optional full legal name
+      beside the 40-character display name, plus a contact e-mail and phone. Additive and
+      nullable only - existing rows keep NULL, which every reader treats as "not entered".
+      Lengths mirror the platform operator's fields in platform_dpia_master_data (0028).
+      One changeset per column with a columnExists guard, so a column added by hand on a
+      cluster that ran with Liquibase switched off is marked as run instead of failing.
+    -->
+    <changeSet author="oriso" id="tenantAddLegalName">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant" columnName="legal_name"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="tenant">
+            <column name="legal_name" type="VARCHAR(255)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tenant" columnName="legal_name"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet author="oriso" id="tenantAddContactEmail">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant" columnName="contact_email"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="tenant">
+            <column name="contact_email" type="VARCHAR(255)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tenant" columnName="contact_email"/>
+        </rollback>
+    </changeSet>
+
+    <changeSet author="oriso" id="tenantAddContactPhone">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant" columnName="contact_phone"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="tenant">
+            <column name="contact_phone" type="VARCHAR(64)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tenant" columnName="contact_phone"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

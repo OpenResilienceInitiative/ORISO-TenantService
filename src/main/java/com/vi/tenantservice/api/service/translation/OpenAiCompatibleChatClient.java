@@ -36,16 +36,45 @@ public abstract class OpenAiCompatibleChatClient implements TranslationProviderC
   private final ObjectMapper objectMapper = new ObjectMapper();
   private final RestTemplate restTemplate;
   private final String baseUrl;
+  private final String baseUrlVariable;
   private final String model;
 
+  /**
+   * The base URL is explicit configuration (ORISO-Helm#368), never a built-in default. Blank
+   * disables only this provider; a set but unusable value is a configuration error.
+   */
   protected OpenAiCompatibleChatClient(
-      String baseUrl, String model, long connectTimeoutMillis, long readTimeoutMillis) {
-    this.baseUrl = StringUtils.removeEnd(baseUrl, "/");
+      String baseUrl,
+      String baseUrlVariable,
+      String model,
+      long connectTimeoutMillis,
+      long readTimeoutMillis) {
+    this.baseUrlVariable = baseUrlVariable;
+    this.baseUrl = StringUtils.isBlank(baseUrl) ? null : requireAbsoluteUrl(baseUrl.trim());
     this.model = model;
     var factory = new SimpleClientHttpRequestFactory();
     factory.setConnectTimeout(Duration.ofMillis(connectTimeoutMillis));
     factory.setReadTimeout(Duration.ofMillis(readTimeoutMillis));
     this.restTemplate = new RestTemplate(factory);
+  }
+
+  private String requireAbsoluteUrl(String value) {
+    try {
+      var uri = java.net.URI.create(value);
+      if (("https".equals(uri.getScheme()) || "http".equals(uri.getScheme()))
+          && StringUtils.isNotBlank(uri.getHost())) {
+        return StringUtils.removeEnd(value, "/");
+      }
+    } catch (IllegalArgumentException e) {
+      // reported below with the variable name
+    }
+    throw new IllegalStateException(
+        baseUrlVariable + " must be an absolute http(s) URL, got: " + value);
+  }
+
+  @Override
+  public boolean isConfigured() {
+    return baseUrl != null;
   }
 
   @Override
@@ -55,6 +84,12 @@ public abstract class OpenAiCompatibleChatClient implements TranslationProviderC
 
   @Override
   public String translateHtml(String apiKey, String sourceLang, String targetLang, String html) {
+    if (!isConfigured()) {
+      throw new TranslationException(
+          TranslationErrorCode.TRANSLATION_NOT_CONFIGURED,
+          getProviderId(),
+          "No base URL configured for provider " + getProviderId() + "; set " + baseUrlVariable);
+    }
     var headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.setBearerAuth(apiKey);

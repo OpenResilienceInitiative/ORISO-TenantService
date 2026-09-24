@@ -13,6 +13,9 @@ public class TenantDataView implements TenantData {
   private final String subdomain;
   private final String address;
   private final String description;
+  private final String legalName;
+  private final String contactEmail;
+  private final String contactPhone;
   private final Integer licensingAllowedNumberOfUsers;
   private final String themingLogo;
   private final String themingAssociationLogo;

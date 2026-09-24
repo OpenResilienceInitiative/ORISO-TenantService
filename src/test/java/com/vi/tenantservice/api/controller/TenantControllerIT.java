@@ -94,6 +94,8 @@ class TenantControllerIT {
 
   @Autowired private com.vi.tenantservice.api.repository.TenantRepository tenantRepository;
 
+  @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
   @Autowired
   private com.vi.tenantservice.api.service.SmtpPasswordEncryptionService
       smtpPasswordEncryptionService;
@@ -1428,5 +1430,213 @@ class TenantControllerIT {
                 .contentType(APPLICATION_JSON)
                 .content("{\"apiKey\":\"sk-or-v1-0123456789abcd\"}"))
         .andExpect(status().isForbidden());
+  }
+
+  // --- Träger legal name and contact (Frank, 2026-09-23): the mail footer names the Träger's own
+  // sender block, so the tenant carries an optional full legal name plus a contact e-mail and
+  // phone.
+
+  private static final String LEGAL_NAME =
+      "Caritasverband für die Erzdiözese Musterstadt e.V. – Fachbereich Online-Beratung";
+
+  private String tenant1RequestWith(String legalNameAndContactJson) {
+    String base =
+        multilingualTenantTestDataBuilder
+            .tenantDTO()
+            .withSubdomain("happylife")
+            .withLicensing(5)
+            .jsonify();
+    return base.substring(0, base.lastIndexOf('}')) + "," + legalNameAndContactJson + "}";
+  }
+
+  private String tenant1RequestWithoutLegalNameAndContact() {
+    return multilingualTenantTestDataBuilder
+        .tenantDTO()
+        .withSubdomain("happylife")
+        .withLicensing(5)
+        .jsonify();
+  }
+
+  @Test
+  void updateTenant_Should_storeLegalNameAndContact_And_serveThemOnTheAdminAndTechnicalReads()
+      throws Exception {
+    putTenant1AsTenantAdmin(
+            tenant1RequestWith(
+                "\"legalName\":\""
+                    + LEGAL_NAME
+                    + "\",\"contactEmail\":\"beratung@caritas-musterstadt.de\","
+                    + "\"contactPhone\":\"+49 761 200-0\""))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.legalName", is(LEGAL_NAME)))
+        .andExpect(jsonPath("$.contactEmail", is("beratung@caritas-musterstadt.de")))
+        .andExpect(jsonPath("$.contactPhone", is("+49 761 200-0")));
+
+    var builder = new AuthenticationMockBuilder();
+    mockMvc
+        .perform(
+            get(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.legalName", is(LEGAL_NAME)))
+        .andExpect(jsonPath("$.contactEmail", is("beratung@caritas-musterstadt.de")))
+        .andExpect(jsonPath("$.contactPhone", is("+49 761 200-0")));
+
+    // GET /tenant/{id} is what UserService reads (as the technical user) for the mail footer.
+    mockMvc
+        .perform(
+            get(EXISTING_TENANT)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.legalName", is(LEGAL_NAME)))
+        .andExpect(jsonPath("$.contactEmail", is("beratung@caritas-musterstadt.de")))
+        .andExpect(jsonPath("$.contactPhone", is("+49 761 200-0")));
+  }
+
+  @Test
+  void updateTenant_Should_keepLegalNameAndContact_When_anOlderClientOmitsThem() throws Exception {
+    putTenant1AsTenantAdmin(
+            tenant1RequestWith(
+                "\"legalName\":\""
+                    + LEGAL_NAME
+                    + "\",\"contactEmail\":\"beratung@caritas-musterstadt.de\","
+                    + "\"contactPhone\":\"+49 761 200-0\""))
+        .andExpect(status().isOk());
+
+    // An Admin build that predates the fields sends the whole tenant without them. Treating
+    // "absent" as "empty" would silently wipe what the Träger entered on every unrelated save.
+    putTenant1AsTenantAdmin(tenant1RequestWithoutLegalNameAndContact())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.legalName", is(LEGAL_NAME)))
+        .andExpect(jsonPath("$.contactEmail", is("beratung@caritas-musterstadt.de")))
+        .andExpect(jsonPath("$.contactPhone", is("+49 761 200-0")));
+  }
+
+  @Test
+  void updateTenant_Should_clearLegalNameAndContact_When_sentBlank() throws Exception {
+    putTenant1AsTenantAdmin(
+            tenant1RequestWith(
+                "\"legalName\":\""
+                    + LEGAL_NAME
+                    + "\",\"contactEmail\":\"beratung@caritas-musterstadt.de\","
+                    + "\"contactPhone\":\"+49 761 200-0\""))
+        .andExpect(status().isOk());
+
+    putTenant1AsTenantAdmin(
+            tenant1RequestWith("\"legalName\":\"  \",\"contactEmail\":\"\",\"contactPhone\":\"\""))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.legalName").doesNotExist())
+        .andExpect(jsonPath("$.contactEmail").doesNotExist())
+        .andExpect(jsonPath("$.contactPhone").doesNotExist());
+
+    // Blank is stored as NULL, so "not entered" has one representation and never overrides the
+    // platform owner's value in a mail footer.
+    org.assertj.core.api.Assertions.assertThat(
+            jdbcTemplate.queryForMap(
+                "SELECT legal_name, contact_email, contact_phone FROM tenant WHERE id = 1"))
+        .containsEntry("LEGAL_NAME", null)
+        .containsEntry("CONTACT_EMAIL", null)
+        .containsEntry("CONTACT_PHONE", null);
+  }
+
+  @Test
+  void updateTenant_Should_letSingleTenantAdminSetOwnLegalNameAndContact() throws Exception {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(1L));
+    when(authorisationService.hasRole(SINGLE_TENANT_ADMIN.getValue())).thenReturn(true);
+    when(consultingTypeService.getConsultingTypesByTenantId(1))
+        .thenReturn(
+            new com.vi.tenantservice.consultingtypeservice.generated.web.model
+                    .FullConsultingTypeResponseDTO()
+                .id(CONSULTING_TYPE_ID));
+    var builder = new AuthenticationMockBuilder();
+
+    mockMvc
+        .perform(
+            put(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(SINGLE_TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    tenant1RequestWith(
+                        "\"legalName\":\""
+                            + LEGAL_NAME
+                            + "\",\"contactEmail\":\"beratung@caritas-musterstadt.de\"")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.legalName", is(LEGAL_NAME)))
+        .andExpect(jsonPath("$.contactEmail", is("beratung@caritas-musterstadt.de")));
+  }
+
+  @Test
+  void updateTenant_Should_rejectSingleTenantAdminSettingLegalNameOfAnotherTenant()
+      throws Exception {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(2L));
+    when(authorisationService.hasRole(SINGLE_TENANT_ADMIN.getValue())).thenReturn(true);
+    var builder = new AuthenticationMockBuilder();
+
+    mockMvc
+        .perform(
+            put(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(SINGLE_TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON)
+                .content(tenant1RequestWith("\"legalName\":\"" + LEGAL_NAME + "\"")))
+        .andExpect(status().isForbidden());
+
+    org.assertj.core.api.Assertions.assertThat(
+            jdbcTemplate.queryForObject("SELECT legal_name FROM tenant WHERE id = 1", String.class))
+        .isNull();
+  }
+
+  @Test
+  void updateTenant_Should_rejectContactEmailThatIsNoEmailAddress() throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWith("\"contactEmail\":\"beratung at caritas\""))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void updateTenant_Should_rejectLegalNameAndPhoneLongerThanTheOperatorFields() throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWith("\"legalName\":\"" + "x".repeat(256) + "\""))
+        .andExpect(status().isBadRequest());
+    putTenant1AsTenantAdmin(tenant1RequestWith("\"contactPhone\":\"" + "1".repeat(65) + "\""))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void updateTenant_Should_stripMarkupFromLegalNameAndContact() throws Exception {
+    putTenant1AsTenantAdmin(
+            tenant1RequestWith(
+                "\"legalName\":\"Caritas e.V."
+                    + SCRIPT_CONTENT
+                    + "\",\"contactPhone\":\"0761 200"
+                    + SCRIPT_CONTENT
+                    + "\""))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.legalName", is("Caritas e.V.")))
+        .andExpect(jsonPath("$.contactPhone", is("0761 200")));
+  }
+
+  @Test
+  void createTenant_Should_storeLegalNameAndContact() throws Exception {
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+    String base =
+        multilingualTenantTestDataBuilder
+            .withId(null)
+            .withName("tenant")
+            .withSubdomain("legalname")
+            .withLicensing()
+            .jsonify();
+    mockMvc
+        .perform(
+            post(TENANTADMIN_RESOURCE)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    base.substring(0, base.lastIndexOf('}'))
+                        + ",\"legalName\":\""
+                        + LEGAL_NAME
+                        + "\",\"contactEmail\":\"beratung@caritas-musterstadt.de\","
+                        + "\"contactPhone\":\"\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.legalName", is(LEGAL_NAME)))
+        .andExpect(jsonPath("$.contactEmail", is("beratung@caritas-musterstadt.de")))
+        .andExpect(jsonPath("$.contactPhone").doesNotExist());
   }
 }
