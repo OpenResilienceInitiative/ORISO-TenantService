@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
+import com.vi.tenantservice.api.facade.TenantLegalDraftFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.model.DpaGateStatusDTO;
@@ -39,6 +40,8 @@ class TenantControllerDpaConfirmTest {
   @Mock private TenantDtoMapper tenantDtoMapper;
   @Mock private TenantDpaService tenantDpaService;
   @Mock private TenantDpaFacade tenantDpaFacade;
+  @Mock private TenantLegalDraftFacade tenantLegalDraftFacade;
+  @Mock private com.vi.tenantservice.api.facade.TenantLegalProposalFacade tenantLegalProposalFacade;
 
   @Mock
   private com.vi.tenantservice.api.service.DpaSignedNoticeHintService dpaSignedNoticeHintService;
@@ -170,11 +173,11 @@ class TenantControllerDpaConfirmTest {
   }
 
   @Test
-  void handleSignLockContention_Should_return503WithRetryAfter_NotAServerError() {
+  void handleLockContention_Should_return503WithRetryAfter_NotAServerError() {
     // a contended confirmation wrote nothing and the token is still valid, so neither 500 nor 410
     // is the truth — the caller should simply come back
     var response =
-        controller.handleSignLockContention(
+        controller.handleLockContention(
             new org.springframework.dao.CannotAcquireLockException("lock wait timeout"));
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);

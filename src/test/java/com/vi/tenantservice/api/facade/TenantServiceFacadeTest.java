@@ -52,6 +52,7 @@ import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
+import com.vi.tenantservice.api.validation.SubdomainValidator;
 import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
@@ -106,6 +107,10 @@ class TenantServiceFacadeTest {
   @Mock private TenantService tenantService;
 
   @Mock private TenantInputSanitizer tenantInputSanitizer;
+
+  // Real instance on purpose: the subdomain format rule is production behaviour of the facade, and
+  // a mocked validator would let a malformed subdomain through every test in this class.
+  @Spy private SubdomainValidator subdomainValidator = new SubdomainValidator();
 
   @Mock private TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
 

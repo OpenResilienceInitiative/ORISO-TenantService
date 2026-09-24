@@ -61,4 +61,9 @@
   <include file="db/changelog/changeset/0030_tenant_erstantwort_texts/0030-changeSet.xml"/>
   <include file="db/changelog/changeset/0032_tenant_permission_policy_schema_repair/0032-changeSet.xml"/>
   <include file="db/changelog/changeset/0033_nullify_empty_theming_seeds/0033-changeSet.xml"/>
+  <include file="db/changelog/changeset/0034_platform_dpia_singleton/0034-changeSet.xml"/>
+  <include file="db/changelog/changeset/0034_tenant_legal_drafts/0034-changeSet.xml"/>
+  <include file="db/changelog/changeset/0035_tenant_legal_proposals/0035-changeSet.xml"/>
+  <include file="db/changelog/changeset/0036_legal_distribution_snapshot/0036-changeSet.xml"/>
+  <include file="db/changelog/changeset/0037_tenant_legal_name_and_contact/0037-changeSet.xml"/>
 </databaseChangeLog>

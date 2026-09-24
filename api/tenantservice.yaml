@@ -244,6 +244,196 @@ paths:
         409:
           description: CONFLICT - reload current settings before saving
 
+  /tenantadmin/{id}/legal-drafts/{kind}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {type: integer, format: int64}
+      - name: kind
+        in: path
+        required: true
+        schema: {type: string, enum: [PRIVACY, IMPRINT]}
+    get:
+      tags: [tenant-controller]
+      summary: Gets a tenant legal draft
+      operationId: getTenantLegalDraft
+      responses:
+        200:
+          description: Successful operation
+          content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalDraftDTO'}}}
+        400: {description: Invalid legal draft kind}
+        404: {description: No saved draft or tenant}
+        403: {description: Forbidden}
+    put:
+      tags: [tenant-controller]
+      summary: Saves a tenant legal draft using its expected revision
+      operationId: updateTenantLegalDraft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TenantLegalDraftUpdateRequest'}
+      responses:
+        200:
+          description: Successful operation
+          content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalDraftDTO'}}}
+        400: {description: Invalid legal draft kind or request body}
+        404: {description: Tenant not found}
+        409: {description: Stale draft revision}
+        403: {description: Forbidden}
+    delete:
+      tags: [tenant-controller]
+      summary: Deletes a tenant legal draft using its expected revision
+      operationId: deleteTenantLegalDraft
+      parameters:
+        - name: revision
+          in: query
+          required: true
+          schema: {type: string, pattern: '^(new|[1-9][0-9]*:[0-9]+)$'}
+      responses:
+        204: {description: Deleted}
+        400: {description: Invalid legal draft kind or revision}
+        404: {description: No saved draft or tenant}
+        409: {description: Stale draft revision}
+        403: {description: Forbidden}
+  /tenantadmin/legal-proposal-distributions:
+    get:
+      tags: [tenant-controller]
+      summary: Lists the template versions the platform has sent for one legal document
+      description: >-
+        Platform administrator only. Newest first. Each entry is one distribution with the exact
+        snapshot every recipient received, so the admin can look back at what went out and to how
+        many Träger.
+      operationId: getTenantLegalTemplateHistory
+      parameters:
+        - {name: kind, in: query, required: true, schema: {type: string, enum: [PRIVACY, IMPRINT]}}
+      responses:
+        200:
+          description: Sent template versions, newest first
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/TenantLegalTemplateVersionDTO'}}}}
+        400: {description: Invalid kind}
+        401: {description: Unauthorized}
+        403: {description: Platform administrator required}
+    post:
+      tags: [tenant-controller]
+      summary: Shares an immutable platform legal draft revision with a fixed tenant audience
+      description: >-
+        Platform administrator only. requestKey makes retries return the original fixed audience,
+        including ALL deliveries after the platform draft or tenant set changes. This never
+        publishes or changes a recipient draft.
+      operationId: distributeTenantLegalProposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TenantLegalProposalDistributionRequest'}
+      responses:
+        200:
+          description: Existing idempotent distribution
+          content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalProposalDistributionDTO'}}}
+        201:
+          description: Created distribution
+          content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalProposalDistributionDTO'}}}
+        400: {description: 'Invalid audience, recipients, kind, or request key'}
+        401: {description: Unauthorized}
+        403: {description: Platform administrator required}
+        404: {description: Platform draft not found}
+        409: {description: Source revision changed or request key reused with different input}
+  /tenantadmin/{id}/legal-proposals:
+    get:
+      tags: [tenant-controller]
+      summary: Lists incoming legal proposal history for a tenant
+      description: Platform sender or exact recipient. Newest proposals sort first; SUPERSEDED entries remain readable history.
+      operationId: getTenantLegalProposals
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: kind, in: query, required: false, schema: {type: string, enum: [PRIVACY, IMPRINT]}}
+      responses:
+        200:
+          description: Proposal history
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/TenantLegalProposalDTO'}}}}
+        400: {description: Invalid tenant or kind}
+        401: {description: Unauthorized}
+        403: {description: Neither platform sender nor exact recipient}
+  /tenantadmin/{id}/legal-proposals/{proposalId}:
+    get:
+      tags: [tenant-controller]
+      summary: Gets one incoming legal proposal snapshot
+      operationId: getTenantLegalProposal
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: proposalId, in: path, required: true, schema: {type: integer, format: int64}}
+      responses:
+        200: {description: Proposal snapshot, content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalProposalDTO'}}}}
+        401: {description: Unauthorized}
+        403: {description: Neither platform sender nor exact recipient}
+        404: {description: Proposal not found within tenant scope}
+  /tenantadmin/{id}/legal-proposals/{proposalId}/dismiss:
+    post:
+      tags: [tenant-controller]
+      summary: Acknowledges the proposal notice without preventing later adoption
+      description: Exact recipient legal editor only. A newer version may later move this entry to SUPERSEDED history.
+      operationId: dismissTenantLegalProposal
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: proposalId, in: path, required: true, schema: {type: integer, format: int64}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalProposalDismissRequest'}}}
+      responses:
+        200: {description: Notice acknowledged, content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalProposalDTO'}}}}
+        401: {description: Unauthorized}
+        403: {description: Exact recipient legal editor required}
+        404: {description: Proposal not found within tenant scope}
+        409: {description: Stale or terminal proposal revision}
+  /tenantadmin/{id}/legal-proposals/{proposalId}/adopt:
+    post:
+      tags: [tenant-controller]
+      summary: Adopts an incoming proposal into the recipient's editable draft
+      description: >-
+        Exact recipient legal editor only. CREATE_IF_EMPTY cannot overwrite. ARCHIVE_AND_REPLACE
+        requires both current proposal and draft revisions, archives the full old draft atomically,
+        and never changes published legal text.
+      operationId: adoptTenantLegalProposal
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: proposalId, in: path, required: true, schema: {type: integer, format: int64}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalProposalAdoptRequest'}}}
+      responses:
+        200: {description: Adopted editable draft, content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalDraftDTO'}}}}
+        400: {description: Invalid adoption mode or revision combination}
+        401: {description: Unauthorized}
+        403: {description: Exact recipient legal editor required}
+        404: {description: Proposal not found within tenant scope}
+        409: {description: 'Existing draft requires confirmation, stale revision, or terminal proposal'}
+  /tenantadmin/{id}/legal-draft-archives:
+    get:
+      tags: [tenant-controller]
+      summary: Lists immutable recipient draft history created by confirmed replacement
+      operationId: getTenantLegalDraftArchives
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: kind, in: query, required: false, schema: {type: string, enum: [PRIVACY, IMPRINT]}}
+      responses:
+        200: {description: Draft archive history, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/TenantLegalDraftArchiveDTO'}}}}}
+        401: {description: Unauthorized}
+        403: {description: Neither platform sender nor exact recipient}
+  /tenantadmin/{id}/legal-draft-archives/{archiveId}:
+    get:
+      tags: [tenant-controller]
+      summary: Gets one immutable archived editable draft
+      operationId: getTenantLegalDraftArchive
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: archiveId, in: path, required: true, schema: {type: integer, format: int64}}
+      responses:
+        200: {description: Archived draft, content: {application/json: {schema: {$ref: '#/components/schemas/TenantLegalDraftArchiveDTO'}}}}
+        401: {description: Unauthorized}
+        403: {description: Neither platform sender nor exact recipient}
+        404: {description: Archive not found within tenant scope}
   /tenantadmin/{id}/permission-policies:
     parameters:
       - name: id
@@ -950,6 +1140,49 @@ paths:
           description: No valid image configured
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenant/public/branding/{tenantId}/{asset}:
+    get:
+      tags:
+        - tenant-controller
+      summary: 'Gets a tenant branding image without cookies [Authorization: no-auth]'
+      description: >-
+        Returns only stored effective logo or favicon bytes for the specified tenant,
+        including inherited platform branding. The URL identifies the tenant so mail
+        clients and image proxies cannot accidentally resolve another tenant's image.
+        Unknown tenants or unsupported assets return 404; no external image is fetched.
+      operationId: getPublicTenantBrandingAsset
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: asset
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [logo, favicon]
+      responses:
+        200:
+          description: Effective tenant branding image
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/x-icon:
+              schema:
+                type: string
+                format: binary
+        404:
+          description: Tenant or valid branding image not found
   /tenant/public/dpa/confirm/{token}:
     summary: 'Public confirmation (signature) of a tenant Data Processing Agreement'
     get:
@@ -1672,6 +1905,26 @@ components:
         description:
           type: string
           example: "Short description of the tenant."
+        legalName:
+          type: string
+          maxLength: 255
+          description: >-
+            Full legal name of the Träger, e.g. "Caritasverband für die Erzdiözese Musterstadt e.V.".
+            Optional; `name` stays the short display name (max 40). Mail footers name this as the
+            sender where it is set. Same limit as the platform operator's `DpiaOperatorDTO.legalName`.
+          example: "Caritasverband für die Erzdiözese Musterstadt e.V."
+        contactEmail:
+          type: string
+          format: email
+          maxLength: 255
+          description: >-
+            Contact e-mail address of the Träger, shown in the mail footer's contact line. Optional.
+          example: "beratung@caritas-musterstadt.de"
+        contactPhone:
+          type: string
+          maxLength: 64
+          description: Contact phone number of the Träger, shown in the mail footer. Optional.
+          example: "+49 761 200-0"
         createDate:
           type: string
         updateDate:
@@ -1702,6 +1955,16 @@ components:
               maxLength: 40
             subdomain:
               type: string
+              description: >-
+                Multitenancy routing key. Must match `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`: lowercase
+                letters, digits and hyphens, starting and ending alphanumeric. Enforced by the
+                service on create, and on update whenever the submitted value differs from the
+                stored one - rows written before the rule existed stay editable. A violation is
+                answered with 400 and `X-Reason: SUBDOMAIN_INVALID`.
+
+                Deliberately not expressed as `pattern`: that would apply the rule to every
+                update of an already-stored value as well, locking admins out of records that
+                predate it.
               example: "companyname"
               maxLength: 100
             address:
@@ -1711,6 +1974,29 @@ components:
             description:
               type: string
               example: "Short description of the tenant."
+            legalName:
+              type: string
+              maxLength: 255
+              description: >-
+                Full legal name of the Träger, e.g. "Caritasverband für die Erzdiözese Musterstadt e.V.".
+                Optional; `name` stays the short display name (max 40). Mail footers name this as the
+                sender where it is set. Same limit as the platform operator's `DpiaOperatorDTO.legalName`.
+                On update, an absent value keeps the stored one and a blank value clears it, so a
+                client that does not know the field cannot wipe it by saving the rest of the tenant.
+                The same applies to `contactEmail` and `contactPhone`.
+              example: "Caritasverband für die Erzdiözese Musterstadt e.V."
+            contactEmail:
+              type: string
+              format: email
+              maxLength: 255
+              description: >-
+                Contact e-mail address of the Träger, shown in the mail footer's contact line. Optional.
+              example: "beratung@caritas-musterstadt.de"
+            contactPhone:
+              type: string
+              maxLength: 64
+              description: Contact phone number of the Träger, shown in the mail footer. Optional.
+              example: "+49 761 200-0"
             adminEmails:
               type: array
               items:
@@ -2644,6 +2930,145 @@ components:
         - featureDisplayNameEditable
         - featureAskerEmailEnabled
         - caseHandoverEnabled
+
+    TenantLegalDraftDTO:
+      type: object
+      required: [kind, content, revision, updatedAt]
+      properties:
+        kind:
+          type: string
+          enum: [PRIVACY, IMPRINT]
+          readOnly: true
+        content:
+          type: object
+          additionalProperties: {type: string}
+        privacyConsent:
+          type: object
+          additionalProperties: {type: string}
+          description: >-
+            Optional privacy consent sentence map by language. Values are plain text. Supported
+            only for PRIVACY drafts; omit for IMPRINT drafts.
+        revision:
+          type: string
+          pattern: '^(new|[1-9][0-9]*:[0-9]+)$'
+          description: Opaque concurrency token. Use new only when no draft exists.
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        originProposalId: {type: integer, format: int64, readOnly: true}
+        originDistributionId: {type: string, format: uuid, readOnly: true}
+        originSourceRevision: {type: string, readOnly: true}
+        originSourceUpdatedAt: {type: string, format: date-time, readOnly: true}
+        originSharedBy: {type: string, readOnly: true}
+
+    TenantLegalDraftUpdateRequest:
+      type: object
+      required: [content, revision]
+      properties:
+        content:
+          type: object
+          additionalProperties: {type: string}
+        privacyConsent:
+          type: object
+          description: >-
+            Optional privacy consent sentence map by language. Every value must be plain text.
+            Supported only for PRIVACY drafts; omit for IMPRINT drafts.
+        revision:
+          type: string
+          pattern: '^(new|[1-9][0-9]*:[0-9]+)$'
+          description: Opaque concurrency token. Use new only when no draft exists.
+
+    TenantLegalProposalDistributionRequest:
+      type: object
+      required: [requestKey, kind, sourceRevision, audience]
+      properties:
+        requestKey: {type: string, minLength: 1, maxLength: 128}
+        kind: {type: string, enum: [PRIVACY, IMPRINT]}
+        sourceRevision: {type: string, pattern: '^[1-9][0-9]*:[0-9]+$'}
+        audience: {type: string, enum: [SELECTED, ALL]}
+        tenantIds:
+          type: array
+          uniqueItems: true
+          items: {type: integer, format: int64, minimum: 1}
+    TenantLegalProposalDistributionDTO:
+      type: object
+      required: [requestKey, recipientTenantIds, proposals]
+      properties:
+        requestKey: {type: string}
+        recipientTenantIds:
+          type: array
+          description: Immutable original audience, including recipients deleted after delivery.
+          items: {type: integer, format: int64}
+        proposals: {type: array, items: {$ref: '#/components/schemas/TenantLegalProposalDTO'}}
+    TenantLegalTemplateVersionDTO:
+      type: object
+      required: [distributionId, sourceRevision, createdAt, recipientCount]
+      properties:
+        distributionId: {type: string, format: uuid}
+        sourceRevision: {type: string, description: 'Platform draft revision (id:version) that was sent'}
+        createdAt: {type: string, format: date-time, description: 'When it was sent (UTC)'}
+        recipientCount: {type: integer, format: int32}
+        content:
+          type: object
+          additionalProperties: {type: string}
+          description: Snapshot that was sent; absent only if it can no longer be recovered.
+        privacyConsent: {type: object, additionalProperties: {type: string}}
+    TenantLegalProposalDTO:
+      type: object
+      required: [id, recipientTenantId, kind, content, status, revision, sourceRevision, sourceUpdatedAt, distributionId, createdBy, createdAt]
+      properties:
+        id: {type: integer, format: int64}
+        recipientTenantId: {type: integer, format: int64}
+        kind: {type: string, enum: [PRIVACY, IMPRINT]}
+        content: {type: object, additionalProperties: {type: string}}
+        privacyConsent: {type: object, additionalProperties: {type: string}}
+        status: {type: string, enum: [PENDING, DISMISSED, SUPERSEDED, ADOPTED]}
+        revision: {type: string}
+        sourceRevision: {type: string}
+        sourceUpdatedAt: {type: string, format: date-time}
+        distributionId:
+          type: string
+          format: uuid
+          description: Distribution that first created this immutable proposal snapshot.
+        audience: {type: string, enum: [SELECTED, ALL]}
+        createdBy: {type: string}
+        createdAt: {type: string, format: date-time}
+        decidedBy: {type: string}
+        decidedAt: {type: string, format: date-time}
+        supersededByProposalId: {type: integer, format: int64}
+        supersededAt: {type: string, format: date-time}
+    TenantLegalProposalDismissRequest:
+      type: object
+      required: [expectedProposalRevision]
+      properties:
+        expectedProposalRevision: {type: string}
+    TenantLegalProposalAdoptRequest:
+      type: object
+      required: [mode, expectedProposalRevision]
+      properties:
+        mode: {type: string, enum: [CREATE_IF_EMPTY, ARCHIVE_AND_REPLACE]}
+        expectedProposalRevision: {type: string}
+        expectedDraftRevision: {type: string}
+    TenantLegalDraftArchiveDTO:
+      type: object
+      required: [id, tenantId, kind, draftRowId, draftRevision, content, draftSavedAt, archivedBy, archivedAt]
+      properties:
+        id: {type: integer, format: int64}
+        tenantId: {type: integer, format: int64}
+        kind: {type: string, enum: [PRIVACY, IMPRINT]}
+        draftRowId: {type: integer, format: int64}
+        draftRevision: {type: string}
+        content: {type: object, additionalProperties: {type: string}}
+        privacyConsent: {type: object, additionalProperties: {type: string}}
+        draftSavedAt: {type: string, format: date-time}
+        originProposalId: {type: integer, format: int64}
+        originDistributionId: {type: string, format: uuid}
+        originSourceRevision: {type: string}
+        originSourceUpdatedAt: {type: string, format: date-time}
+        originSharedBy: {type: string}
+        archivedBy: {type: string}
+        archivedAt: {type: string, format: date-time}
 
     TenantPermissionPolicies:
       type: object

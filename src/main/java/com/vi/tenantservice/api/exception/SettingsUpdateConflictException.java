@@ -11,6 +11,15 @@ public class SettingsUpdateConflictException extends RuntimeException {
             + ". Reload the current values and try again.");
   }
 
+  public SettingsUpdateConflictException(String currentRevision, String submittedRevision) {
+    super(
+        "Stale settings revision: currentRevision="
+            + currentRevision
+            + ", submittedRevision="
+            + submittedRevision
+            + ". Reload the current values and try again.");
+  }
+
   public SettingsUpdateConflictException(Throwable cause) {
     super("Settings changed while saving. Reload the current values and try again.", cause);
   }

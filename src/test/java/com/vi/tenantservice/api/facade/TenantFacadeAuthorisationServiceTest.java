@@ -3,6 +3,8 @@ package com.vi.tenantservice.api.facade;
 import static com.vi.tenantservice.api.authorisation.UserRole.SINGLE_TENANT_ADMIN;
 import static com.vi.tenantservice.api.authorisation.UserRole.TENANT_ADMIN;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -50,6 +52,80 @@ class TenantFacadeAuthorisationServiceTest {
   @Mock TenantAdminControlsService tenantAdminControlsService;
 
   @Mock TenantPermissionPolicyService tenantPermissionPolicyService;
+
+  @Test
+  void platformTenantAdminMayReadButCannotActForARecipient() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertCanReadLegalProposal(7L))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanManageOwnLegalProposal(7L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void exactRecipientWithLegalAuthorityMayReadAndAct() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(7L));
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CHANGE_LEGAL_CONTENT))
+        .thenReturn(true);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertCanReadLegalProposal(7L))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertCanManageOwnLegalProposal(7L))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void exactRecipientWithoutLegalAuthorityMayReadButNotAct() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(7L));
+    when(authorisationService.hasRole("single-tenant-admin")).thenReturn(false);
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CHANGE_LEGAL_CONTENT))
+        .thenReturn(false);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertCanReadLegalProposal(7L))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanManageOwnLegalProposal(7L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void onlyThePlatformAdministratorMaySharePlatformLegalDrafts() {
+    // Sharing writes a proposal into every selected Träger, so the guard on it is the most
+    // privileged rule here. A Träger admin of tenant 7 must not reach it.
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(7L));
+
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanDistributeLegalProposals())
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void theTechnicalPrincipalMayNotSharePlatformLegalDrafts() {
+    when(authorisationService.getUsername()).thenReturn("technical");
+
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanDistributeLegalProposals())
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void thePlatformAdministratorMaySharePlatformLegalDrafts() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertCanDistributeLegalProposals())
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void foreignRecipientAndTechnicalPrincipalAreDeniedBeforeProposalLookup() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(8L));
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanReadLegalProposal(7L))
+        .isInstanceOf(AccessDeniedException.class);
+
+    when(authorisationService.getUsername()).thenReturn("technical");
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanManageOwnLegalProposal(7L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
 
   @Test
   void
@@ -478,5 +554,94 @@ class TenantFacadeAuthorisationServiceTest {
             java.util.Map.of(
                 PermissionFeature.APPEARANCE.apiKey(),
                 new ResolvedPolicyValue<>(allowed, PermissionPolicyMode.ENFORCED, false)));
+  }
+
+  private void platformAllowsTraegerLegalChanges(boolean allowed) {
+    var settings =
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+            .ApplicationSettingsDTO();
+    settings.setLegalContentChangesBySingleTenantAdminsAllowed(
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO()
+            .value(allowed));
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(settings);
+  }
+
+  @Test
+  void assertCanWriteLegalDraft_Should_refuseATraegerAdminWhileThePlatformForbidsLegalChanges() {
+    when(authorisationService.hasRole("single-tenant-admin")).thenReturn(true);
+    platformAllowsTraegerLegalChanges(false);
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CHANGE_LEGAL_CONTENT))
+        .thenReturn(false);
+
+    assertThrows(
+        TenantAuthorisationException.class,
+        () -> tenantFacadeAuthorisationService.assertCanWriteLegalDraft());
+  }
+
+  @Test
+  void assertCanWriteLegalDraft_Should_allowATraegerAdminWhenThePlatformAllowsLegalChanges() {
+    when(authorisationService.hasRole("single-tenant-admin")).thenReturn(true);
+    platformAllowsTraegerLegalChanges(true);
+
+    tenantFacadeAuthorisationService.assertCanWriteLegalDraft();
+  }
+
+  @Test
+  void assertCanWriteLegalDraft_Should_allowAnAdminWhoMayChangeLegalContent() {
+    when(authorisationService.hasRole("single-tenant-admin")).thenReturn(false);
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CHANGE_LEGAL_CONTENT))
+        .thenReturn(true);
+
+    tenantFacadeAuthorisationService.assertCanWriteLegalDraft();
+  }
+
+  @Test
+  void isPlatformAdministrator_Should_rejectTheTechnicalUserEvenWithAPlatformShapedToken() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    when(authorisationService.getUsername()).thenReturn("technical");
+
+    assertThat(tenantFacadeAuthorisationService.isPlatformAdministrator()).isFalse();
+  }
+
+  @Test
+  void isPlatformAdministrator_Should_acceptThePlatformAdministrator() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    when(authorisationService.getUsername()).thenReturn("monty.burns");
+
+    assertThat(tenantFacadeAuthorisationService.isPlatformAdministrator()).isTrue();
+  }
+
+  @Test
+  void assertUserIsAuthorizedToReadTenant_Should_letTheTechnicalReadAuthorityReadAnyTenant() {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.TECHNICAL_READ_TENANT))
+        .thenReturn(true);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(7L))
+        .doesNotThrowAnyException();
+    verify(authorisationService, org.mockito.Mockito.never()).findTenantIdInAccessToken();
+  }
+
+  @Test
+  void assertUserIsAuthorizedToReadTenant_Should_keepTheSingleTenantCheckForEveryoneElse() {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.TECHNICAL_READ_TENANT))
+        .thenReturn(false);
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
+        .thenReturn(false);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(8L));
+
+    assertThatThrownBy(
+            () -> tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(7L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void mayOnlyCreateReservedTenants_Should_dependOnTheFullCreateAuthority() {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT))
+        .thenReturn(true, false);
+
+    assertThat(tenantFacadeAuthorisationService.mayOnlyCreateReservedTenants()).isFalse();
+    assertThat(tenantFacadeAuthorisationService.mayOnlyCreateReservedTenants()).isTrue();
   }
 }

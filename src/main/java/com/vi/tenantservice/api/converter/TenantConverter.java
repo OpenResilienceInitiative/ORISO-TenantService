@@ -69,7 +69,10 @@ public class TenantConverter {
             .name(tenantDTO.getName())
             .subdomain(tenantDTO.getSubdomain())
             .address(tenantDTO.getAddress())
-            .description(tenantDTO.getDescription());
+            .description(tenantDTO.getDescription())
+            .legalName(blankToNull(tenantDTO.getLegalName()))
+            .contactEmail(blankToNull(tenantDTO.getContactEmail()))
+            .contactPhone(blankToNull(tenantDTO.getContactPhone()));
     contentToEntity(tenantDTO, builder);
     licensingToEntity(tenantDTO, builder);
     themingToEntity(tenantDTO, builder);
@@ -183,8 +186,33 @@ public class TenantConverter {
         "contentPrivacyActivationDate",
         "contentTermsAndConditionsActivationDate",
         "contentDataProcessingAgreement",
-        "contentDataProcessingAgreementActivationDate");
+        "contentDataProcessingAgreementActivationDate",
+        "legalName",
+        "contactEmail",
+        "contactPhone");
+    applyLegalNameAndContact(targetEntity, tenantDTO);
     return targetEntity;
+  }
+
+  /**
+   * Absent keeps, blank clears. Every other tenant field is replaced wholesale on update, but these
+   * arrived after the Admin panel and UserService already sent full tenants without them; treating
+   * "absent" as "empty" would let any older client wipe a Träger's sender block by saving the rest.
+   */
+  private void applyLegalNameAndContact(TenantEntity target, MultilingualTenantDTO tenantDTO) {
+    if (tenantDTO.getLegalName() != null) {
+      target.setLegalName(blankToNull(tenantDTO.getLegalName()));
+    }
+    if (tenantDTO.getContactEmail() != null) {
+      target.setContactEmail(blankToNull(tenantDTO.getContactEmail()));
+    }
+    if (tenantDTO.getContactPhone() != null) {
+      target.setContactPhone(blankToNull(tenantDTO.getContactPhone()));
+    }
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value.trim();
   }
 
   private void contentToEntity(
@@ -245,6 +273,9 @@ public class TenantConverter {
             .subdomain(tenant.getSubdomain())
             .address(tenant.getAddress())
             .description(tenant.getDescription())
+            .legalName(tenant.getLegalName())
+            .contactEmail(tenant.getContactEmail())
+            .contactPhone(tenant.getContactPhone())
             .content(toMultilingualContentDTO(tenant))
             .theming(toThemingDTO(tenant))
             .licensing(toLicensingDTO(tenant))
@@ -263,6 +294,9 @@ public class TenantConverter {
         new TenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
             .address(tenant.getAddress())
             .description(tenant.getDescription())
+            .legalName(tenant.getLegalName())
+            .contactEmail(tenant.getContactEmail())
+            .contactPhone(tenant.getContactPhone())
             .content(toContentDTO(tenant, lang))
             .theming(toThemingDTO(tenant))
             .licensing(toLicensingDTO(tenant))
