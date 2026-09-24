@@ -65,6 +65,26 @@ class JwtAuthConverterTest {
         .noneMatch(authority -> authority.startsWith("AUTHORIZATION_TECHNICAL_"));
   }
 
+  /**
+   * The bootstrapped realm admin is a person with both roles: platform rights, no machine rights.
+   */
+  @Test
+  void convert_Should_KeepAdminAuthorities_ButNoTechnicalOnes_ForAForeignSubjectWithBothRoles() {
+    var realmAdmin =
+        jwtAuthConverter.convert(
+            jwtWithClaims(
+                Map.of(
+                    "sub",
+                    "realm-admin-person",
+                    "realm_access",
+                    Map.of("roles", List.of("technical", "tenant-admin")))));
+
+    assertThat(realmAdmin.getAuthorities())
+        .extracting(authority -> authority.getAuthority())
+        .contains("AUTHORIZATION_GET_ALL_TENANTS")
+        .noneMatch(authority -> authority.startsWith("AUTHORIZATION_TECHNICAL_"));
+  }
+
   private Jwt jwtWithClaims(Map<String, Object> claims) {
     Map<String, Object> headers = new HashMap<>();
     headers.put("alg", "none");
