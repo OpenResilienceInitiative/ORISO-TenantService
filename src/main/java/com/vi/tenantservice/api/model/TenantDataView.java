@@ -43,4 +43,5 @@ public class TenantDataView implements TenantData {
   private final String settings;
   private final LocalDateTime createDate;
   private final LocalDateTime updateDate;
+  private final String dataProtectionOfficer;
 }

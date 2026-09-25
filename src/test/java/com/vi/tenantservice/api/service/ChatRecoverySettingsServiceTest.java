@@ -27,7 +27,8 @@ class ChatRecoverySettingsServiceTest {
       new TenantConverter(
           mock(TemplateService.class),
           mock(TemplateRenderer.class),
-          mock(SmtpPasswordEncryptionService.class));
+          mock(SmtpPasswordEncryptionService.class),
+          mock(com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class));
   private final TenantAdminControlsService service =
       new TenantAdminControlsService(
           repository, converter, mock(TranslationApiKeyEncryptionService.class));

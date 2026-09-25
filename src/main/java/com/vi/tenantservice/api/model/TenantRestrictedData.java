@@ -39,4 +39,7 @@ public interface TenantRestrictedData {
   LocalDateTime getContentTermsAndConditionsActivationDate();
 
   String getSettings();
+
+  /** JSON contact object of the Träger's DPO, or {@code null}. Public: a DPO must be published. */
+  String getDataProtectionOfficer();
 }
