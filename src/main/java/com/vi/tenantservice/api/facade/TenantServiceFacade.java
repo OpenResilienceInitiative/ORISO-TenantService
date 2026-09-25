@@ -559,6 +559,9 @@ public class TenantServiceFacade {
     // toEntity mutates existingTenantEntity, so capture the stored settings first
     var existingSettingsJson = existingTenantEntity.getSettings();
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
+    if (sanitizedTenantDTO.getSettings() == null) {
+      updatedEntity.setSettings(existingSettingsJson);
+    }
     preserveStoredSmtpPassword(existingSettingsJson, updatedEntity);
     preserveStoredSmtpMode(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     validateSelectedOwnSmtp(updatedEntity);

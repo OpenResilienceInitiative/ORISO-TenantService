@@ -17,12 +17,13 @@ SELECT id,
          WHEN JSON_UNQUOTE(JSON_EXTRACT(settings, '$.smtpMode')) IN ('PLATFORM', 'OWN')
            THEN 'EXPLICIT_MODE'
          WHEN JSON_EXTRACT(settings, '$.smtp') IS NULL
+              OR JSON_TYPE(JSON_EXTRACT(settings, '$.smtp')) = 'NULL'
            THEN 'NO_OWN_SMTP'
          WHEN JSON_UNQUOTE(JSON_EXTRACT(settings, '$.smtp.enabled')) = 'true'
-              AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(settings, '$.smtp.host')), '') IS NOT NULL
-              AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(settings, '$.smtp.username')), '') IS NOT NULL
-              AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(settings, '$.smtp.password')), '') IS NOT NULL
-              AND NULLIF(JSON_UNQUOTE(JSON_EXTRACT(settings, '$.smtp.from')), '') IS NOT NULL
+              AND NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(settings, '$.smtp.host')), ''), 'null') IS NOT NULL
+              AND NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(settings, '$.smtp.username')), ''), 'null') IS NOT NULL
+              AND NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(settings, '$.smtp.password')), ''), 'null') IS NOT NULL
+              AND NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(settings, '$.smtp.from')), ''), 'null') IS NOT NULL
               AND CAST(JSON_UNQUOTE(JSON_EXTRACT(settings, '$.smtp.port')) AS UNSIGNED)
                   BETWEEN 1 AND 65535
            THEN 'OWN_CANDIDATE_REVIEW'

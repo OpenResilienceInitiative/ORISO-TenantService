@@ -736,6 +736,29 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.settings.smtpMode").value("OWN"));
     org.assertj.core.api.Assertions.assertThat(storedSmtpPasswordOfTenant1Decrypted())
         .isEqualTo("own-secret");
+
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var withoutSmtp =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(tenant1RequestWithSmtpPassword(null));
+    var settingsWithoutSmtp =
+        (com.fasterxml.jackson.databind.node.ObjectNode) withoutSmtp.get("settings");
+    settingsWithoutSmtp.remove("smtp");
+    settingsWithoutSmtp.remove("smtpMode");
+    putTenant1AsTenantAdmin(mapper.writeValueAsString(withoutSmtp))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtpMode").value("OWN"))
+        .andExpect(jsonPath("$.settings.smtp.host").value("smtp.example.org"));
+    org.assertj.core.api.Assertions.assertThat(storedSmtpPasswordOfTenant1Decrypted())
+        .isEqualTo("own-secret");
+
+    withoutSmtp.remove("settings");
+    putTenant1AsTenantAdmin(mapper.writeValueAsString(withoutSmtp))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtpMode").value("OWN"))
+        .andExpect(jsonPath("$.settings.smtp.host").value("smtp.example.org"));
+    org.assertj.core.api.Assertions.assertThat(storedSmtpPasswordOfTenant1Decrypted())
+        .isEqualTo("own-secret");
   }
 
   @Test
