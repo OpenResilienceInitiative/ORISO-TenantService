@@ -14,6 +14,8 @@ import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.web.server.ResponseStatusException;
 
 class SystemEmailDeliveryServiceTest {
@@ -65,6 +67,58 @@ class SystemEmailDeliveryServiceTest {
             eq("test-password"),
             same(request));
     verify(tenants, never()).findById(1L);
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      names = {
+        "NEW_ENQUIRY",
+        "DIRECT_ENQUIRY",
+        "ENQUIRY_ASSIGNED",
+        "DAILY_ENQUIRY_DIGEST",
+        "HANDOVER_REQUESTED",
+        "HANDOVER_CONFIRMED",
+        "FREE_TEXT_NOTICE"
+      })
+  void approvedNotificationPurposeUsesOnlyExplicitOwnTenant(
+      SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
+    when(tenants.findById(40L)).thenReturn(Optional.of(tenant(true, true)));
+    when(cipher.decrypt("ENC:test-fixture")).thenReturn("test-password");
+    var notification =
+        new SystemEmailDeliveryRequest(
+            purpose, "recipient@example.org", "Subject", "<p>Body</p>", "Body", UUID.randomUUID());
+
+    assertThat(service.deliver(40L, notification)).isTrue();
+    verify(transport).send(any(), eq("test-password"), same(notification));
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      names = {
+        "NEW_ENQUIRY",
+        "DIRECT_ENQUIRY",
+        "ENQUIRY_ASSIGNED",
+        "DAILY_ENQUIRY_DIGEST",
+        "HANDOVER_REQUESTED",
+        "HANDOVER_CONFIRMED",
+        "FREE_TEXT_NOTICE"
+      })
+  void notificationPurposeCannotUsePlatformOrUnclassifiedTenantCredentials(
+      SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
+    var platform = tenant(true, true);
+    var settings =
+        (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(platform.getSettings());
+    settings.put("smtpMode", "PLATFORM");
+    platform.setSettings(mapper.writeValueAsString(settings));
+    var notification =
+        new SystemEmailDeliveryRequest(
+            purpose, "recipient@example.org", "Subject", "<p>Body</p>", "Body", UUID.randomUUID());
+    when(tenants.findById(40L)).thenReturn(Optional.of(platform));
+
+    assertThat(service.deliver(40L, notification)).isFalse();
+    verifyNoInteractions(cipher, transport);
   }
 
   @Test
