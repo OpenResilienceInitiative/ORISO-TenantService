@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.2.xsd">
+  <!-- ORISO-Admin#270: publication history of the Träger and platform imprint and privacy policy.
+       No backfill: a guessed publication date would be worse than an honest gap (as AgencyService 0031). -->
+  <changeSet author="oriso" id="createTenantLegalTextVersion">
+    <sqlFile path="db/changelog/changeset/0038_tenant_legal_text_version/createTenantLegalTextVersion.sql" stripComments="true"/>
+    <rollback>
+      <sql>DROP TABLE IF EXISTS tenant_legal_text_version;</sql>
+      <sql>DROP SEQUENCE IF EXISTS sequence_tenant_legal_text_version;</sql>
+    </rollback>
+  </changeSet>
+</databaseChangeLog>

@@ -66,4 +66,5 @@
   <include file="db/changelog/changeset/0035_tenant_legal_proposals/0035-changeSet.xml"/>
   <include file="db/changelog/changeset/0036_legal_distribution_snapshot/0036-changeSet.xml"/>
   <include file="db/changelog/changeset/0037_tenant_legal_name_and_contact/0037-changeSet.xml"/>
+  <include file="db/changelog/changeset/0038_tenant_legal_text_version/0038-changeSet.xml"/>
 </databaseChangeLog>

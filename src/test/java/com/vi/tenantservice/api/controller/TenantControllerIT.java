@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.controller;
 import static com.vi.tenantservice.api.authorisation.UserRole.RESTRICTED_AGENCY_ADMIN;
 import static com.vi.tenantservice.api.authorisation.UserRole.SINGLE_TENANT_ADMIN;
 import static com.vi.tenantservice.api.authorisation.UserRole.TENANT_ADMIN;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
@@ -392,6 +393,16 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.settings.topicsInRegistrationEnabled").value("true"))
         .andExpect(jsonPath("$.content.impressum['de']").value("new impressum"))
         .andExpect(jsonPath("$.settings.featureToolsEnabled").value("true"));
+
+    // ORISO-Admin#270: the publish through the ordinary tenant update is in the history.
+    assertThat(
+            jdbcTemplate.queryForList(
+                "SELECT content FROM tenant_legal_text_version WHERE tenant_id = 1"
+                    + " AND kind = 'IMPRINT' AND superseded_at IS NULL",
+                String.class))
+        .singleElement()
+        .asString()
+        .contains("new impressum");
   }
 
   @Test

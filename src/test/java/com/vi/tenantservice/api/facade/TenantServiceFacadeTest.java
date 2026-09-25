@@ -3,8 +3,10 @@ package com.vi.tenantservice.api.facade;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -44,6 +46,8 @@ import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
+import com.vi.tenantservice.api.service.TenantLegalProposalService;
+import com.vi.tenantservice.api.service.TenantLegalVersionService;
 import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
@@ -63,6 +67,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -152,12 +157,72 @@ class TenantServiceFacadeTest {
   @Mock private SingleDomainTenantOverrideService singleDomainTenantOverrideService;
   @Mock private TenantIdAllocationService tenantIdAllocationService;
   @Mock private TenantPermissionPolicyService tenantPermissionPolicyService;
+  @Mock private TenantLegalVersionService tenantLegalVersionService;
+  @Mock private TenantLegalProposalService tenantLegalProposalService;
 
   @InjectMocks private TenantServiceFacade tenantServiceFacade;
 
   @BeforeEach
   public void initialize() {
     tenantEntity.setId(ID);
+    // The history service wraps the real save; the mock has to run it like the real one does.
+    lenient()
+        .when(tenantLegalVersionService.saveRecordingPublications(any(), any()))
+        .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
+  }
+
+  @Test
+  void createTenant_Should_offerTheLatestPlatformTemplatesAndRecordInitialLegalTexts() {
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    verify(tenantLegalVersionService)
+        .saveRecordingPublications(eq(TenantLegalVersionService.PublishedLegalTexts.NONE), any());
+    verify(tenantLegalProposalService).deliverLatestTemplatesTo(ID);
+  }
+
+  @Test
+  void createTenant_Should_stillSucceed_When_theTemplateOfferFails() {
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+    when(tenantLegalProposalService.deliverLatestTemplatesTo(ID))
+        .thenThrow(new IllegalStateException("database hiccup"));
+
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    verify(tenantService, never()).delete(any());
+  }
+
+  @Test
+  void updateTenant_Should_recordLegalHistoryAgainstTheTextsStoredBeforeTheUpdate() {
+    tenantEntity.setContentImpressum("{\"de\":\"old imprint\"}");
+    tenantEntity.setContentPrivacy("{\"de\":\"old privacy\"}");
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(converter.toEntity(tenantEntity, sanitizedTenantDTO))
+        .thenAnswer(
+            invocation -> {
+              // The real converter mutates the stored entity in place.
+              tenantEntity.setContentPrivacy("{\"de\":\"new privacy\"}");
+              return tenantEntity;
+            });
+    givenConsultingTypeReturnsConsultingTypeByTenantId();
+    when(tenantService.update(tenantEntity)).thenReturn(tenantEntity);
+    when(converter.toMultilingualDTO(tenantEntity)).thenReturn(sanitizedTenantDTO);
+
+    tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO);
+
+    verify(tenantLegalVersionService)
+        .saveRecordingPublications(
+            eq(
+                new TenantLegalVersionService.PublishedLegalTexts(
+                    "{\"de\":\"old imprint\"}", "{\"de\":\"old privacy\"}")),
+            any());
+    verify(tenantService).update(tenantEntity);
   }
 
   @Test

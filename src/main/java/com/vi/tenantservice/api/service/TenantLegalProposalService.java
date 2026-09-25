@@ -193,6 +193,70 @@ public class TenantLegalProposalService {
         .toList();
   }
 
+  /**
+   * Gives a Träger created after a platform send the template the others received (ORISO-Admin
+   * #1070): the newest ALL distribution per kind, as a PENDING copy. A SELECTED send is not handed
+   * on — the platform chose those recipients explicitly. The per-revision unique key keeps this
+   * idempotent; the distribution's fixed recipient list stays what was sent at the time.
+   */
+  @Transactional
+  public List<TenantLegalProposalEntity> deliverLatestTemplatesTo(Long tenantId) {
+    if (tenantId == null || tenantId <= 0) {
+      return List.of();
+    }
+    LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+    List<TenantLegalProposalEntity> delivered = new ArrayList<>();
+    for (TenantLegalDraftKind kind : TenantLegalDraftKind.values()) {
+      distributionRepository
+          .findFirstByKindAndAudienceOrderByCreatedAtDescSourceDraftVersionDescIdDesc(
+              kind, TenantLegalProposalAudience.ALL)
+          .filter(
+              distribution ->
+                  !proposalRepository
+                      .existsBySourceDraftIdAndSourceDraftVersionAndRecipientTenantId(
+                          distribution.getSourceDraftId(),
+                          distribution.getSourceDraftVersion(),
+                          tenantId))
+          .flatMap(distribution -> lateProposal(distribution, tenantId, now))
+          .map(proposalRepository::saveAndFlush)
+          .ifPresent(delivered::add);
+    }
+    return delivered;
+  }
+
+  private Optional<TenantLegalProposalEntity> lateProposal(
+      TenantLegalProposalDistributionEntity distribution, Long recipient, LocalDateTime now) {
+    String content = distribution.getContent();
+    String consent = distribution.getPrivacyConsent();
+    if (content == null) {
+      // Distributions before 0036 carry no own copy; any recipient's proposal is the same snapshot.
+      Optional<TenantLegalProposalEntity> snapshot =
+          proposalRepository
+              .findBySourceDraftIdInOrderByIdAsc(Set.of(distribution.getSourceDraftId()))
+              .stream()
+              .filter(p -> p.getSourceDraftVersion().equals(distribution.getSourceDraftVersion()))
+              .findFirst();
+      if (snapshot.isEmpty()) return Optional.empty();
+      content = snapshot.get().getContent();
+      consent = snapshot.get().getPrivacyConsent();
+    }
+    return Optional.of(
+        TenantLegalProposalEntity.builder()
+            .recipientTenantId(recipient)
+            .kind(distribution.getKind())
+            .distributionId(distribution.getId())
+            .audience(distribution.getAudience())
+            .sourceDraftId(distribution.getSourceDraftId())
+            .sourceDraftVersion(distribution.getSourceDraftVersion())
+            .sourceUpdatedAt(distribution.getSourceUpdatedAt())
+            .content(content)
+            .privacyConsent(consent)
+            .status(TenantLegalProposalStatus.PENDING)
+            .createdBy(distribution.getCreatedBy())
+            .createdAt(now)
+            .build());
+  }
+
   @Transactional(readOnly = true)
   public List<TenantLegalProposalEntity> list(Long tenantId, TenantLegalDraftKind kind) {
     return kind == null
