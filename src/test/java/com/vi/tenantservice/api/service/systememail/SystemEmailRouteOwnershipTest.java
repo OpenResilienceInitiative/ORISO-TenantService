@@ -33,16 +33,9 @@ class SystemEmailRouteOwnershipTest {
     var purpose = (java.util.Map<?, ?>) properties.get("purpose");
     assertThat((java.util.List<String>) purpose.get("enum"))
         .containsExactlyInAnyOrder(
-            "EMAIL_ADDRESS_CHANGED",
-            "SUPERVISOR_ADDED",
-            "SUPERVISOR_REMOVED",
-            "NEW_ENQUIRY",
-            "DIRECT_ENQUIRY",
-            "ENQUIRY_ASSIGNED",
-            "DAILY_ENQUIRY_DIGEST",
-            "HANDOVER_REQUESTED",
-            "HANDOVER_CONFIRMED",
-            "FREE_TEXT_NOTICE");
+            java.util.Arrays.stream(SystemEmailDeliveryRequest.Purpose.values())
+                .map(Enum::name)
+                .toArray(String[]::new));
     assertThat(
             java.util.Arrays.stream(
                     com.vi.tenantservice.generated.api.controller.TenantApi.class.getMethods())
