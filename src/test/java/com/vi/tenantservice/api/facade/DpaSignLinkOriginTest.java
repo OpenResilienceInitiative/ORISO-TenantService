@@ -27,7 +27,9 @@ class DpaSignLinkOriginTest {
           "/app",
           "example.org",
           "ftp://example.org",
+          "http://app.example.org",
           "https://example.org/app",
+          "https://example.org/%2F",
           "https://example.org?redirect=evil"
         }) {
       context

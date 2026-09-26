@@ -44,10 +44,27 @@ class NoHardcodedUrlFallbacksTest {
 
   @Test
   void publicDpaOrigin_hasNoDeployedUrlDefault() throws IOException {
-    assertThat(Files.readString(RESOURCES.resolve("application.properties")))
-        .contains("app.base.url=${APP_BASE_URL:}");
-    assertThat(violations(propertyFiles(false), Pattern.compile("^app\\.base\\.url=https?://")))
-        .isEmpty();
+    assertThat(
+            publicDpaOriginAssignments(
+                Files.readAllLines(RESOURCES.resolve("application.properties"))))
+        .containsExactly("app.base.url=${APP_BASE_URL:}");
+    for (Path profile : propertyFiles(false)) {
+      if (!profile.getFileName().toString().equals("application.properties")) {
+        assertThat(publicDpaOriginAssignments(Files.readAllLines(profile))).isEmpty();
+      }
+    }
+  }
+
+  @Test
+  void publicDpaOriginGuard_detectsSpacedDuplicateAssignment() {
+    assertThat(
+            publicDpaOriginAssignments(
+                List.of("app.base.url=${APP_BASE_URL:}", "app.base.url = https://app.example.org")))
+        .hasSize(2);
+  }
+
+  private static List<String> publicDpaOriginAssignments(List<String> lines) {
+    return lines.stream().filter(line -> line.matches("\\s*app\\.base\\.url\\s*[=:].*")).toList();
   }
 
   private static List<Path> propertyFiles(boolean localOrTesting) throws IOException {

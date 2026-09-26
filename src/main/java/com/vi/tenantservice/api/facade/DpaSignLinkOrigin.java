@@ -15,10 +15,12 @@ public final class DpaSignLinkOrigin {
     String value = configuredOrigin == null ? "" : configuredOrigin.trim();
     try {
       URI uri = new URI(value);
-      if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+      if (!"https".equalsIgnoreCase(uri.getScheme())
           || uri.getHost() == null
           || uri.getUserInfo() != null
-          || (uri.getPath() != null && !uri.getPath().isEmpty() && !"/".equals(uri.getPath()))
+          || (uri.getRawPath() != null
+              && !uri.getRawPath().isEmpty()
+              && !"/".equals(uri.getRawPath()))
           || uri.getQuery() != null
           || uri.getFragment() != null) {
         throw invalidOrigin();
@@ -35,6 +37,6 @@ public final class DpaSignLinkOrigin {
 
   private static IllegalArgumentException invalidOrigin() {
     return new IllegalArgumentException(
-        "APP_BASE_URL must be configured as an absolute http(s) app origin without a path");
+        "APP_BASE_URL must be configured as an absolute HTTPS app origin without a path");
   }
 }
