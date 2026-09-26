@@ -12,6 +12,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -118,6 +119,9 @@ class TenantControllerIT {
   @MockitoBean ConsultingTypeService consultingTypeService;
 
   @MockitoBean UserAdminService userAdminService;
+
+  @MockitoBean
+  com.vi.tenantservice.api.service.systememail.TenantSystemMailTransport tenantMailTransport;
 
   @MockitoBean SubdomainExtractor subdomainExtractor;
 
@@ -753,6 +757,40 @@ class TenantControllerIT {
         .andExpect(status().isOk());
     putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 2525, false, false))
         .andExpect(status().isUnprocessableEntity());
+  }
+
+  @Test
+  void tenantSmtpTest_UsesStoredOwnServerVerifiedRecipientAndPersistentCooldown() throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpMode("own-secret", "OWN"))
+        .andExpect(status().isOk());
+    when(authorisationService.hasRole("single-tenant-admin")).thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(1L));
+    when(authorisationService.getVerifiedEmail()).thenReturn("admin@example.org");
+    when(authorisationService.getPreferredLanguage()).thenReturn("de");
+    var caller =
+        jwt()
+            .jwt(
+                token ->
+                    token
+                        .claim("tenantId", 1)
+                        .claim("email", "admin@example.org")
+                        .claim("email_verified", true)
+                        .claim(
+                            "realm_access",
+                            java.util.Map.of("roles", java.util.List.of("single-tenant-admin"))));
+    mockMvc
+        .perform(post("/tenant/1/smtp-test-deliveries").with(caller))
+        .andExpect(status().isNoContent());
+    org.mockito.Mockito.verify(tenantMailTransport)
+        .send(
+            org.mockito.ArgumentMatchers.argThat(smtp -> smtp.getHost() != null),
+            org.mockito.ArgumentMatchers.eq("own-secret"),
+            org.mockito.ArgumentMatchers.argThat(
+                request -> request.recipient().equals("admin@example.org")));
+    mockMvc
+        .perform(post("/tenant/1/smtp-test-deliveries").with(caller))
+        .andExpect(status().isTooManyRequests())
+        .andExpect(header().string("Retry-After", "60"));
   }
 
   @Test
