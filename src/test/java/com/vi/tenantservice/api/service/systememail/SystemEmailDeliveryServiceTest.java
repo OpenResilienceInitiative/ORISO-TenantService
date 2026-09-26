@@ -78,6 +78,7 @@ class SystemEmailDeliveryServiceTest {
         "ENQUIRY_ASSIGNED",
         "DAILY_ENQUIRY_DIGEST",
         "NEW_MESSAGE",
+        "CONTACT_SHEET",
         "HANDOVER_REQUESTED",
         "HANDOVER_CONFIRMED",
         "FREE_TEXT_NOTICE"
@@ -103,6 +104,7 @@ class SystemEmailDeliveryServiceTest {
         "ENQUIRY_ASSIGNED",
         "DAILY_ENQUIRY_DIGEST",
         "NEW_MESSAGE",
+        "CONTACT_SHEET",
         "HANDOVER_REQUESTED",
         "HANDOVER_CONFIRMED",
         "FREE_TEXT_NOTICE"
