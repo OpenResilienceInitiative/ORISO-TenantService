@@ -170,6 +170,7 @@ class SystemEmailDeliveryControllerTest {
         "DIRECT_ENQUIRY",
         "ENQUIRY_ASSIGNED",
         "DAILY_ENQUIRY_DIGEST",
+        "NEW_MESSAGE",
         "HANDOVER_REQUESTED",
         "HANDOVER_CONFIRMED",
         "FREE_TEXT_NOTICE"
