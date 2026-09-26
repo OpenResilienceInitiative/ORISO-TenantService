@@ -352,6 +352,9 @@ public class TenantServiceFacade {
 
   private void setDefaultTenantSettings(TenantEntity tenant) {
     var defaultTenantSettings = tenantService.getDefaultTenantSettings();
+    if (defaultTenantSettings == null) {
+      defaultTenantSettings = TenantSettings.builder().build();
+    }
     // #251: the platform admin's current preset decides the conversation features of a new Träger
     var settings = newTenantPresetService.applyCurrentPlatformPreset(defaultTenantSettings);
     if (settings == null) {
