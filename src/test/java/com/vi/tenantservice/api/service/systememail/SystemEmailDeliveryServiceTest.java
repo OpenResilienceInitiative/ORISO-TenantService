@@ -83,6 +83,21 @@ class SystemEmailDeliveryServiceTest {
   }
 
   @Test
+  void setupTestUsesStoredOwnCredentialsEvenBeforeNotificationsAreEnabled() throws Exception {
+    when(tenants.findById(40L)).thenReturn(Optional.of(tenant(false, true)));
+    when(cipher.decrypt("ENC:test-fixture")).thenReturn("test-password");
+    assertThat(service.deliverTest(40L, "admin@example.org", "de")).isTrue();
+    verify(transport)
+        .send(
+            argThat(s -> s.getHost().equals("tenant40.example.org")),
+            eq("test-password"),
+            argThat(
+                mail ->
+                    mail.recipient().equals("admin@example.org")
+                        && mail.purpose() == SystemEmailDeliveryRequest.Purpose.SMTP_TEST));
+  }
+
+  @Test
   void unknownPersistedSettingsDoNotDisableExistingTransport() throws Exception {
     var tenant = tenant(true, true);
     var settings =

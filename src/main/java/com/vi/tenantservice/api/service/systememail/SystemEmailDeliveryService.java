@@ -19,6 +19,25 @@ public class SystemEmailDeliveryService {
   private final TenantSystemMailTransport transport;
 
   public boolean deliver(long tenantId, SystemEmailDeliveryRequest request) {
+    return deliver(tenantId, request, true);
+  }
+
+  public boolean deliverTest(long tenantId, String recipient, String language) {
+    var copy = TenantSmtpTestCopy.forLanguage(language);
+    return deliver(
+        tenantId,
+        new SystemEmailDeliveryRequest(
+            SystemEmailDeliveryRequest.Purpose.SMTP_TEST,
+            recipient,
+            copy.subject(),
+            "<p>" + copy.text() + "</p>",
+            copy.text(),
+            java.util.UUID.randomUUID()),
+        false);
+  }
+
+  private boolean deliver(
+      long tenantId, SystemEmailDeliveryRequest request, boolean requireNotificationsEnabled) {
     if (tenantId <= 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "INVALID_TENANT");
     var tenant =
         tenants
@@ -33,7 +52,8 @@ public class SystemEmailDeliveryService {
       throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_INVALID");
     }
     if (settings == null
-        || !Boolean.TRUE.equals(settings.getFeatureSystemNotificationEmailsEnabled())
+        || (requireNotificationsEnabled
+            && !Boolean.TRUE.equals(settings.getFeatureSystemNotificationEmailsEnabled()))
         || settings.getSmtpMode() != TenantSmtpMode.OWN
         || settings.getSmtp() == null
         || !settings.getSmtp().isEnabled()) return false;

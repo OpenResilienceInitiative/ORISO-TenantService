@@ -3,15 +3,22 @@ package com.vi.tenantservice.api.repository;
 import com.vi.tenantservice.api.model.TenantDataView;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedDataView;
+import jakarta.persistence.LockModeType;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT t FROM TenantEntity t WHERE t.id = :id")
+  Optional<TenantEntity> findByIdForSmtpTest(@Param("id") Long id);
 
   TenantEntity findBySubdomain(String subdomain);
 

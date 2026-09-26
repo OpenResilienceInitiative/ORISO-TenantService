@@ -85,6 +85,27 @@ public class AuthorisationService {
     return principal.getSubject();
   }
 
+  public String getVerifiedEmail() {
+    Jwt principal = getPrincipal();
+    Object email = principal.getClaims().get("email");
+    if (!Boolean.TRUE.equals(principal.getClaims().get("email_verified"))
+        || !(email instanceof String address)
+        || address.isBlank()
+        || address.length() > 254
+        || address.indexOf('\r') >= 0
+        || address.indexOf('\n') >= 0
+        || address.indexOf(',') >= 0
+        || address.indexOf(';') >= 0) {
+      throw new AccessDeniedException("Verified email is required for SMTP test");
+    }
+    return address;
+  }
+
+  public String getPreferredLanguage() {
+    Object locale = getPrincipal().getClaims().get("locale");
+    return locale instanceof String language ? language : "de";
+  }
+
   private Authentication getAuthentication() {
     return SecurityContextHolder.getContext().getAuthentication();
   }

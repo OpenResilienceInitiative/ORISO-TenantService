@@ -167,6 +167,9 @@ public class TenantEntity implements TenantData {
   @Column(name = "update_date")
   private LocalDateTime updateDate;
 
+  @Column(name = "smtp_test_requested_at")
+  private LocalDateTime smtpTestRequestedAt;
+
   public interface TenantBase {
 
     Long getId();
