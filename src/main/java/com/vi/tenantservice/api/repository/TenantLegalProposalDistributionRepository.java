@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api.repository;
 
 import com.vi.tenantservice.api.model.TenantLegalDraftKind;
+import com.vi.tenantservice.api.model.TenantLegalProposalAudience;
 import com.vi.tenantservice.api.model.TenantLegalProposalDistributionEntity;
 import jakarta.persistence.LockModeType;
 import java.util.List;
@@ -20,6 +21,11 @@ public interface TenantLegalProposalDistributionRepository
    */
   List<TenantLegalProposalDistributionEntity>
       findByKindOrderByCreatedAtDescSourceDraftVersionDescIdDesc(TenantLegalDraftKind kind);
+
+  /** The template a Träger created after the send should still receive (ORISO-Admin#1070). */
+  Optional<TenantLegalProposalDistributionEntity>
+      findFirstByKindAndAudienceOrderByCreatedAtDescSourceDraftVersionDescIdDesc(
+          TenantLegalDraftKind kind, TenantLegalProposalAudience audience);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select d from TenantLegalProposalDistributionEntity d where d.requestKey = :requestKey")

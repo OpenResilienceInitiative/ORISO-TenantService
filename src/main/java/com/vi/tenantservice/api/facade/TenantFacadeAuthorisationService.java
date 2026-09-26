@@ -26,8 +26,10 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @Slf4j
@@ -91,7 +93,26 @@ public class TenantFacadeAuthorisationService {
   }
 
   private boolean hasSingleTenantAccessAuthority() {
-    return !authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS);
+    return !mayAccessEveryTenant();
+  }
+
+  /**
+   * Every Träger admin holds {@code tenant-admin}, and with it GET_ALL_TENANTS, just like the
+   * platform admin. Only the token's tenant (0 = platform) tells them apart, so both must hold.
+   */
+  public boolean mayAccessEveryTenant() {
+    return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
+        && isSuperAdmin();
+  }
+
+  /**
+   * Platform-wide listings and the platform DPIA are for the platform administrator as a person.
+   * The technical identity keeps its tenant-0 access to single tenants (it mints sign invites for
+   * reserved ids) but must not list every Träger.
+   */
+  public boolean mayListEveryTenant() {
+    return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
+        && isPlatformAdministrator();
   }
 
   void assertUserHasSufficientPermissionsToChangeAttributes(
@@ -366,6 +387,24 @@ public class TenantFacadeAuthorisationService {
     }
     if (isSuperAdmin()) return;
     assertExactRecipient(recipientTenantId);
+  }
+
+  /**
+   * Legal-text history: the platform administrator, or an admin whose token names exactly this
+   * tenant. Deliberately not the GET_ALL_TENANTS shortcut of {@link
+   * #assertUserIsAuthorizedToAccessTenant}, which the tenant-admin role carries for every Träger
+   * admin as well.
+   */
+  public void assertCanReadLegalVersions(Long tenantId) {
+    if (tenantId == null || tenantId < 0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid tenant id");
+    }
+    if (isPlatformAdministrator()) return;
+    if (isTechnicalUser()
+        || tenantId == 0L
+        || !tenantMatching(tenantId, authorisationService.findTenantIdInAccessToken())) {
+      throw new AccessDeniedException("User may not read this tenant's legal text history");
+    }
   }
 
   public void assertCanDistributeLegalProposals() {

@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.controller;
 import static com.vi.tenantservice.api.authorisation.UserRole.RESTRICTED_AGENCY_ADMIN;
 import static com.vi.tenantservice.api.authorisation.UserRole.SINGLE_TENANT_ADMIN;
 import static com.vi.tenantservice.api.authorisation.UserRole.TENANT_ADMIN;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
@@ -142,6 +143,11 @@ class TenantControllerIT {
         .thenAnswer(
             invocation ->
                 Authority.getAuthoritiesByUserRole(userRole).contains(invocation.getArgument(0)));
+    if (userRole == UserRole.TENANT_ADMIN) {
+      // Every Träger admin holds tenant-admin too; the platform admin is the one from tenant 0.
+      when(authorisationService.hasRole(UserRole.TENANT_ADMIN.getValue())).thenReturn(true);
+      when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    }
   }
 
   MultilingualTenantTestDataBuilder multilingualTenantTestDataBuilder =
@@ -392,6 +398,16 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.settings.topicsInRegistrationEnabled").value("true"))
         .andExpect(jsonPath("$.content.impressum['de']").value("new impressum"))
         .andExpect(jsonPath("$.settings.featureToolsEnabled").value("true"));
+
+    // ORISO-Admin#270: the publish through the ordinary tenant update is in the history.
+    assertThat(
+            jdbcTemplate.queryForList(
+                "SELECT content FROM tenant_legal_text_version WHERE tenant_id = 1"
+                    + " AND kind = 'IMPRINT' AND superseded_at IS NULL",
+                String.class))
+        .singleElement()
+        .asString()
+        .contains("new impressum");
   }
 
   @Test
@@ -848,6 +864,7 @@ class TenantControllerIT {
   void
       getAllTenants_Should_returnStatusBasicTenantLicensingData_When_calledForAuthorityThatIsTenantAdmin()
           throws Exception {
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
     var builder = new AuthenticationMockBuilder();
     mockMvc
         .perform(
@@ -1358,6 +1375,7 @@ class TenantControllerIT {
   void
       getAllTenantsWithAdminData_Should_returnAdminTenantDTOs_When_calledForAuthorityThatIsTenantAdmin()
           throws Exception {
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
     var builder = new AuthenticationMockBuilder();
     mockMvc
         .perform(

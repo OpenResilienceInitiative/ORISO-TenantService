@@ -4,6 +4,7 @@ import com.vi.tenantservice.api.facade.PlatformDpiaMasterDataFacade;
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
 import com.vi.tenantservice.api.facade.TenantLegalDraftFacade;
 import com.vi.tenantservice.api.facade.TenantLegalProposalFacade;
+import com.vi.tenantservice.api.facade.TenantLegalVersionFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.model.AccountInactivitySettings;
@@ -38,6 +39,7 @@ import com.vi.tenantservice.api.model.TenantLegalProposalDismissRequest;
 import com.vi.tenantservice.api.model.TenantLegalProposalDistributionDTO;
 import com.vi.tenantservice.api.model.TenantLegalProposalDistributionRequest;
 import com.vi.tenantservice.api.model.TenantLegalTemplateVersionDTO;
+import com.vi.tenantservice.api.model.TenantLegalTextVersionDTO;
 import com.vi.tenantservice.api.model.TenantMediaResponseDTO;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
@@ -107,6 +109,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   private final @NonNull TenantServiceFacade tenantServiceFacade;
   private final @NonNull TenantLegalDraftFacade tenantLegalDraftFacade;
   private final @NonNull TenantLegalProposalFacade tenantLegalProposalFacade;
+  private final @NonNull TenantLegalVersionFacade tenantLegalVersionFacade;
   private final @NonNull PublicBrandingAssetService publicBrandingAssetService;
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TenantDtoMapper tenantDtoMapper;
@@ -291,7 +294,9 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  @PreAuthorize(
+      "hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')"
+          + " and @tenantFacadeAuthorisationService.mayListEveryTenant()")
   public ResponseEntity<List<BasicTenantLicensingDTO>> getAllTenants() {
     var tenants = tenantServiceFacade.getAllTenants();
     return !CollectionUtils.isEmpty(tenants)
@@ -589,6 +594,13 @@ public class TenantController implements TenantApi, TenantadminApi {
     return ResponseEntity.ok(tenantLegalProposalFacade.archive(id, archiveId));
   }
 
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  public ResponseEntity<List<TenantLegalTextVersionDTO>> getTenantLegalTextVersions(
+      Long id, String kind) {
+    return ResponseEntity.ok(tenantLegalVersionFacade.list(id, kind));
+  }
+
   @DeleteMapping("/tenant/{id}")
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<Void> deleteTenant(@PathVariable("id") Long id) {
@@ -639,13 +651,17 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  @PreAuthorize(
+      "hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')"
+          + " and @tenantFacadeAuthorisationService.mayListEveryTenant()")
   public ResponseEntity<PlatformDpiaMasterDataDTO> getPlatformDpiaMasterData() {
     return new ResponseEntity<>(platformDpiaMasterDataFacade.getMasterData(), HttpStatus.OK);
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  @PreAuthorize(
+      "hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')"
+          + " and @tenantFacadeAuthorisationService.mayListEveryTenant()")
   public ResponseEntity<PlatformDpiaMasterDataDTO> updatePlatformDpiaMasterData(
       @Valid PlatformDpiaMasterDataDTO platformDpiaMasterDataDTO) {
     return new ResponseEntity<>(
@@ -727,7 +743,8 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   @PreAuthorize(
-      "hasAuthority('AUTHORIZATION_GET_ALL_TENANTS') AND hasAuthority('AUTHORIZATION_GET_TENANT_ADMIN_DATA')")
+      "hasAuthority('AUTHORIZATION_GET_ALL_TENANTS') AND hasAuthority('AUTHORIZATION_GET_TENANT_ADMIN_DATA')"
+          + " and @tenantFacadeAuthorisationService.mayListEveryTenant()")
   public ResponseEntity<List<AdminTenantDTO>> getAllTenantsWithAdminData() {
     var tenants = tenantServiceFacade.getAllAdminTenantsExceptTechnical();
     return !CollectionUtils.isEmpty(tenants)
