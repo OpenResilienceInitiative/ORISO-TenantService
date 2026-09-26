@@ -1,8 +1,11 @@
 package com.vi.tenantservice.api.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.AccountInactivitySettings;
@@ -42,6 +45,16 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 @RequiredArgsConstructor
 public class TenantAdminControlsService {
+
+  /**
+   * Lenient at every depth, not only at the top level. {@code TenantAdminControlsSettings} carries
+   * {@code @JsonIgnoreProperties(ignoreUnknown = true)}, but the objects nested inside it do not -
+   * so a key a newer build wrote inside, say, {@code allowedPermissionToggles} still threw and
+   * turned into HTTP 500 on every session bootstrap, exactly like the top-level field did on
+   * 2026-08-18. The write path is unaffected: this flag only governs deserialization.
+   */
+  private static final ObjectMapper OBJECT_MAPPER =
+      new ObjectMapper().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
 
   private final @NonNull TenantAdminControlsRepository tenantAdminControlsRepository;
   private final @NonNull TenantConverter tenantConverter;
@@ -299,15 +312,56 @@ public class TenantAdminControlsService {
         .orElseGet(this::createDefaultControlsSettings);
   }
 
+  /**
+   * Writes the settings back into the stored blob <b>without dropping fields this build does not
+   * know</b>.
+   *
+   * <p>{@link TenantAdminControlsSettings} ignores unknown fields on purpose (see its javadoc):
+   * reading leniently is what keeps a rollback from turning into HTTP 500 on every session
+   * bootstrap. Serializing that narrower type back over the column is the same version skew from
+   * the other side - every key a newer build wrote would be silently deleted by the next ordinary
+   * admin save. So the stored document is edited as a JSON tree: the fields this build owns are
+   * overwritten, every other byte is left alone. Same reasoning as {@code
+   * TranslationApiKeyEncryptionMigration}.
+   *
+   * <p>The merge is deliberately top-level only. Going deeper would preserve unknown nested keys
+   * but would also make clearing a known nested field impossible, because a value this build
+   * intentionally removed would keep being merged back in from the stored document.
+   */
   private void saveControlsSettings(
       TenantAdminControlsSettings controlsSettings, TenantAdminControlsEntity entity) {
-    entity.setControls(serializeControlsSettings(controlsSettings));
+    entity.setControls(mergeIntoStoredControls(entity.getControls(), controlsSettings));
     entity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));
     try {
       tenantAdminControlsRepository.saveAndFlush(entity);
     } catch (OptimisticLockingFailureException | DataIntegrityViolationException exception) {
       throw new SettingsUpdateConflictException(exception);
     }
+  }
+
+  private String mergeIntoStoredControls(
+      String storedControlsJson, TenantAdminControlsSettings controlsSettings) {
+    ObjectNode controls = readControlsTree(storedControlsJson);
+    controls.setAll(serializeControlsSettingsToTree(controlsSettings));
+    return controls.toString();
+  }
+
+  private ObjectNode readControlsTree(String controlsJson) {
+    if (StringUtils.isBlank(controlsJson)) {
+      return OBJECT_MAPPER.createObjectNode();
+    }
+    try {
+      JsonNode tree = OBJECT_MAPPER.readTree(controlsJson);
+      // A blob that is not a JSON object is not something this service wrote, and there is nothing
+      // in it to preserve. The read path uses defaults for these roots as well.
+      return tree.isObject() ? (ObjectNode) tree : OBJECT_MAPPER.createObjectNode();
+    } catch (JsonProcessingException unreadableBlob) {
+      return OBJECT_MAPPER.createObjectNode();
+    }
+  }
+
+  private ObjectNode serializeControlsSettingsToTree(TenantAdminControlsSettings controlsSettings) {
+    return OBJECT_MAPPER.valueToTree(controlsSettings);
   }
 
   private Optional<TenantAdminControlsEntity> findExistingControls() {
@@ -319,21 +373,14 @@ public class TenantAdminControlsService {
       return createDefaultControlsSettings();
     }
     try {
-      TenantAdminControlsSettings settings =
-          new ObjectMapper().readValue(controlsJson, TenantAdminControlsSettings.class);
-      if (settings == null) {
+      JsonNode tree = OBJECT_MAPPER.readTree(controlsJson);
+      if (!tree.isObject()) {
         return createDefaultControlsSettings();
       }
+      TenantAdminControlsSettings settings =
+          OBJECT_MAPPER.treeToValue(tree, TenantAdminControlsSettings.class);
       hydrateCanonicalPolicies(settings);
       return settings;
-    } catch (JsonProcessingException exception) {
-      throw new RuntimeJsonMappingException(exception.getMessage());
-    }
-  }
-
-  private String serializeControlsSettings(TenantAdminControlsSettings controlsSettings) {
-    try {
-      return new ObjectMapper().writeValueAsString(controlsSettings);
     } catch (JsonProcessingException exception) {
       throw new RuntimeJsonMappingException(exception.getMessage());
     }
