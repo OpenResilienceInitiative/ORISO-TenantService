@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.validation;
 
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
+import com.vi.tenantservice.api.model.TenantDataProtectionOfficerDTO;
 import com.vi.tenantservice.api.model.Theming;
 import java.util.Map;
 import java.util.function.Function;
@@ -29,9 +30,26 @@ public class TenantInputSanitizer {
     output.setLegalName(inputSanitizer.sanitizePlainText(input.getLegalName()));
     output.setContactEmail(inputSanitizer.sanitizePlainText(input.getContactEmail()));
     output.setContactPhone(inputSanitizer.sanitizePlainText(input.getContactPhone()));
+    output.setDataProtectionOfficer(
+        sanitizeDataProtectionOfficer(input.getDataProtectionOfficer()));
     sanitizeTheming(input, output);
     sanitizeContent(input, output);
     return output;
+  }
+
+  /** Plain text like the sender block; null stays null ("keep" on update). */
+  private TenantDataProtectionOfficerDTO sanitizeDataProtectionOfficer(
+      TenantDataProtectionOfficerDTO input) {
+    if (input == null) {
+      return null;
+    }
+    return new TenantDataProtectionOfficerDTO()
+        .nameAndLegalForm(inputSanitizer.sanitizePlainText(input.getNameAndLegalForm()))
+        .street(inputSanitizer.sanitizePlainText(input.getStreet()))
+        .postcode(inputSanitizer.sanitizePlainText(input.getPostcode()))
+        .city(inputSanitizer.sanitizePlainText(input.getCity()))
+        .phoneNumber(inputSanitizer.sanitizePlainText(input.getPhoneNumber()))
+        .email(inputSanitizer.sanitizePlainText(input.getEmail()));
   }
 
   private MultilingualTenantDTO copyNotSanitizedAttributes(MultilingualTenantDTO input) {

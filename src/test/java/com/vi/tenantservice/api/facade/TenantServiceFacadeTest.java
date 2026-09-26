@@ -904,7 +904,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     Optional<TenantRestrictedData> defaultTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
     Optional<TenantRestrictedData> accessTokenTenantData =
@@ -940,7 +942,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     Optional<TenantRestrictedData> mainTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
     when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
@@ -978,7 +982,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     var settings =
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
@@ -1022,7 +1028,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     var settings =
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model

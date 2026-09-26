@@ -1657,4 +1657,109 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.contactEmail", is("beratung@caritas-musterstadt.de")))
         .andExpect(jsonPath("$.contactPhone").doesNotExist());
   }
+
+  // --- Träger DPO (ORISO-Admin#1067): optional, inherited by the Träger's Beratungsstellen.
+
+  private static final String DPO_JSON =
+      "\"dataProtectionOfficer\":{\"nameAndLegalForm\":\"Dr. Maria Muster\","
+          + "\"street\":\"Musterstraße 1\",\"postcode\":\"79106\",\"city\":\"Freiburg\","
+          + "\"phoneNumber\":\"+49 761 200-0\",\"email\":\"datenschutz@caritas.de\"}";
+
+  @Test
+  void updateTenant_Should_storeDataProtectionOfficer_And_serveItOnAdminAndPublicReads()
+      throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWith(DPO_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer.nameAndLegalForm", is("Dr. Maria Muster")))
+        .andExpect(jsonPath("$.dataProtectionOfficer.phoneNumber", is("+49 761 200-0")));
+
+    var builder = new AuthenticationMockBuilder();
+    mockMvc
+        .perform(
+            get(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer.email", is("datenschutz@caritas.de")));
+
+    // AgencyService reads the Träger DPO from the public restricted read (no token there).
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer.nameAndLegalForm", is("Dr. Maria Muster")))
+        .andExpect(jsonPath("$.dataProtectionOfficer.city", is("Freiburg")));
+  }
+
+  @Test
+  void updateTenant_Should_keepDataProtectionOfficer_When_omitted_And_clearIt_When_allBlank()
+      throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWith(DPO_JSON)).andExpect(status().isOk());
+
+    putTenant1AsTenantAdmin(tenant1RequestWithoutLegalNameAndContact())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer.nameAndLegalForm", is("Dr. Maria Muster")));
+
+    putTenant1AsTenantAdmin(
+            tenant1RequestWith(
+                "\"dataProtectionOfficer\":{\"nameAndLegalForm\":\" \",\"email\":\"\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer").doesNotExist());
+    org.assertj.core.api.Assertions.assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT data_protection_officer FROM tenant WHERE id = 1", String.class))
+        .isNull();
+  }
+
+  @Test
+  void updateTenant_Should_stripMarkupFromDataProtectionOfficer() throws Exception {
+    putTenant1AsTenantAdmin(
+            tenant1RequestWith(
+                "\"dataProtectionOfficer\":{\"nameAndLegalForm\":\"Dr. Muster"
+                    + SCRIPT_CONTENT
+                    + "\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer.nameAndLegalForm", is("Dr. Muster")));
+  }
+
+  @Test
+  void updateTenant_Should_rejectDataProtectionOfficerEmailThatIsNoEmailAddress() throws Exception {
+    putTenant1AsTenantAdmin(
+            tenant1RequestWith("\"dataProtectionOfficer\":{\"email\":\"datenschutz at caritas\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void publicRead_Should_fillPlatformDpoToken_While_authenticatedReadKeepsItForTheEditor()
+      throws Exception {
+    jdbcTemplate.update("DELETE FROM platform_dpia_master_data");
+    jdbcTemplate.update(
+        "INSERT INTO platform_dpia_master_data (id, operator_dpo_name, update_date)"
+            + " VALUES (1, 'Dr. Paula Plattform', CURRENT_TIMESTAMP)");
+    jdbcTemplate.update(
+        "UPDATE tenant SET content_privacy = ? WHERE id = 1",
+        "{\"de\":\"<p>DSB: {<!-- -->{Plattform_Datenschutzbeauftragte}}</p>\"}");
+    try {
+      mockMvc
+          .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.content.privacy", is("<p>DSB: Dr. Paula Plattform</p>")))
+          .andExpect(
+              jsonPath("$.content.privacyLanguages.de", is("<p>DSB: Dr. Paula Plattform</p>")));
+
+      // The Admin editor seeds from GET /tenant/{id}; a filled-in value there would be saved back
+      // over the token on the next publish.
+      var builder = new AuthenticationMockBuilder();
+      giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+      mockMvc
+          .perform(
+              get(EXISTING_TENANT)
+                  .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+          .andExpect(status().isOk())
+          .andExpect(
+              jsonPath(
+                  "$.content.privacy",
+                  is("<p>DSB: {<!-- -->{Plattform_Datenschutzbeauftragte}}</p>")));
+    } finally {
+      jdbcTemplate.update("DELETE FROM platform_dpia_master_data");
+    }
+  }
 }

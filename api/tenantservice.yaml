@@ -1947,6 +1947,8 @@ components:
           maxLength: 64
           description: Contact phone number of the Träger, shown in the mail footer. Optional.
           example: "+49 761 200-0"
+        dataProtectionOfficer:
+          $ref: '#/components/schemas/TenantDataProtectionOfficerDTO'
         createDate:
           type: string
         updateDate:
@@ -2019,6 +2021,8 @@ components:
               maxLength: 64
               description: Contact phone number of the Träger, shown in the mail footer. Optional.
               example: "+49 761 200-0"
+            dataProtectionOfficer:
+              $ref: '#/components/schemas/TenantDataProtectionOfficerDTO'
             adminEmails:
               type: array
               items:
@@ -2139,6 +2143,8 @@ components:
           type: string
           example: "subdomain"
           maxLength: 100
+        dataProtectionOfficer:
+          $ref: '#/components/schemas/TenantDataProtectionOfficerDTO'
         theming:
           $ref:
             '#/components/schemas/Theming'
@@ -3398,6 +3404,41 @@ components:
           additionalProperties:
             $ref: '#/components/schemas/DataProtectionContactTemplateDTO'
 
+    TenantDataProtectionOfficerDTO:
+      type: object
+      description: >-
+        Optional data protection officer (Datenschutzbeauftragte:r) of the Träger, same shape as an
+        agency's `dataProtectionOfficerContact`. Its Beratungsstellen inherit it for the
+        `{{Datenschutzbeauftragte}}` legal-text placeholder unless they enter their own. Never
+        required. On update an absent object keeps the stored one; an object whose fields are all
+        blank clears it. Public on the restricted tenant read on purpose: a DPO's contact details
+        have to be published (Art. 37(7) GDPR).
+      properties:
+        nameAndLegalForm:
+          type: string
+          maxLength: 255
+          example: "Dr. Maria Muster"
+        street:
+          type: string
+          maxLength: 100
+          example: "Musterstraße 1"
+        postcode:
+          type: string
+          maxLength: 10
+          example: "79106"
+        city:
+          type: string
+          maxLength: 100
+          example: "Freiburg"
+        phoneNumber:
+          type: string
+          maxLength: 64
+          example: "+49 761 200-0"
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: "datenschutz@caritas-musterstadt.de"
     DataProtectionContactTemplateDTO:
         type: object
         properties:
