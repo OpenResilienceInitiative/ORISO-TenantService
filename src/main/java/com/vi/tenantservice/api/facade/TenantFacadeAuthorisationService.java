@@ -93,7 +93,26 @@ public class TenantFacadeAuthorisationService {
   }
 
   private boolean hasSingleTenantAccessAuthority() {
-    return !authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS);
+    return !mayAccessEveryTenant();
+  }
+
+  /**
+   * Every Träger admin holds {@code tenant-admin}, and with it GET_ALL_TENANTS, just like the
+   * platform admin. Only the token's tenant (0 = platform) tells them apart, so both must hold.
+   */
+  public boolean mayAccessEveryTenant() {
+    return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
+        && isSuperAdmin();
+  }
+
+  /**
+   * Platform-wide listings and the platform DPIA are for the platform administrator as a person.
+   * The technical identity keeps its tenant-0 access to single tenants (it mints sign invites for
+   * reserved ids) but must not list every Träger.
+   */
+  public boolean mayListEveryTenant() {
+    return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
+        && isPlatformAdministrator();
   }
 
   void assertUserHasSufficientPermissionsToChangeAttributes(

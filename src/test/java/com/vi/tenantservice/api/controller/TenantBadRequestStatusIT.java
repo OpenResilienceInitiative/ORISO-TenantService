@@ -29,6 +29,7 @@ import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -130,6 +131,9 @@ class TenantBadRequestStatusIT {
 
   private RequestPostProcessor platformAdmin() {
     givenAuthoritiesOfRole(TENANT_ADMIN);
+    // The platform admin is tenant-admin from tenant 0; a Träger admin holds the same role.
+    when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
     when(authorisationService.getUserId()).thenReturn("platform-admin-user");
     when(authorisationService.getUsername()).thenReturn("platformadmin");
     return authentication(
