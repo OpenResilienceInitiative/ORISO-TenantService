@@ -15,6 +15,8 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -158,6 +160,33 @@ class SystemEmailDeliveryControllerTest {
         .andExpect(status().isOk())
         .andExpect(header().string("Cache-Control", "no-store"));
     verify(delivery).deliver(eq(40L), any());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      names = {
+        "NEW_ENQUIRY",
+        "DIRECT_ENQUIRY",
+        "ENQUIRY_ASSIGNED",
+        "DAILY_ENQUIRY_DIGEST",
+        "NEW_MESSAGE",
+        "CONTACT_SHEET",
+        "HANDOVER_REQUESTED",
+        "HANDOVER_CONFIRMED",
+        "FREE_TEXT_NOTICE"
+      })
+  void boundIdentityCanSubmitEachApprovedNotificationPurpose(
+      SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
+    when(delivery.deliver(eq(40L), any())).thenReturn(true);
+    mvc.perform(
+            post("/tenant/40/internal/system-email-deliveries")
+                .header("Authorization", "Bearer " + token("valid"))
+                .contentType("application/json")
+                .content(body.replace("EMAIL_ADDRESS_CHANGED", purpose.name())))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Cache-Control", "no-store"));
+    verify(delivery).deliver(eq(40L), argThat(request -> request.purpose() == purpose));
   }
 
   @Test

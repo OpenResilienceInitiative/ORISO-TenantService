@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api.service.systememail;
 
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import com.vi.tenantservice.api.util.JsonConverter;
@@ -33,6 +34,7 @@ public class SystemEmailDeliveryService {
     }
     if (settings == null
         || !Boolean.TRUE.equals(settings.getFeatureSystemNotificationEmailsEnabled())
+        || settings.getSmtpMode() != TenantSmtpMode.OWN
         || settings.getSmtp() == null
         || !settings.getSmtp().isEnabled()) return false;
     var smtp = settings.getSmtp();
