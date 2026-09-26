@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
@@ -47,6 +48,7 @@ class SystemEmailDeliveryServiceTest {
             mapper.writeValueAsString(
                 TenantSettings.builder()
                     .featureSystemNotificationEmailsEnabled(enabled)
+                    .smtpMode(TenantSmtpMode.OWN)
                     .smtp(smtp)
                     .build()))
         .build();
@@ -91,6 +93,25 @@ class SystemEmailDeliveryServiceTest {
     when(cipher.decrypt(anyString())).thenReturn("test-password");
     assertThat(service.deliver(40, request)).isTrue();
     verify(transport).send(any(), eq("test-password"), same(request));
+  }
+
+  @Test
+  void platformAndUnclassifiedLegacyNeverUseTenantCredentials() throws Exception {
+    var platform = tenant(true, true);
+    var platformSettings =
+        (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(platform.getSettings());
+    platformSettings.put("smtpMode", "PLATFORM");
+    platform.setSettings(mapper.writeValueAsString(platformSettings));
+    var legacy = tenant(true, true);
+    var legacySettings =
+        (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(legacy.getSettings());
+    legacySettings.remove("smtpMode");
+    legacy.setSettings(mapper.writeValueAsString(legacySettings));
+    when(tenants.findById(40L)).thenReturn(Optional.of(platform), Optional.of(legacy));
+
+    assertThat(service.deliver(40, request)).isFalse();
+    assertThat(service.deliver(40, request)).isFalse();
+    verifyNoInteractions(cipher, transport);
   }
 
   @Test

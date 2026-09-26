@@ -173,6 +173,7 @@ class TenantControllerIT {
         .andExpect(jsonPath("settings.topicsInRegistrationEnabled", is(true)))
         .andExpect(jsonPath("settings.featureDemographicsEnabled", is(false)))
         .andExpect(jsonPath("settings.featureAppointmentsEnabled", is(false)))
+        .andExpect(jsonPath("settings.smtpMode", is("PLATFORM")))
         // #251: conversation features come from the untouched platform preset, not the file
         .andExpect(jsonPath("settings.featureGroupChatV2Enabled", is(true)))
         .andExpect(jsonPath("settings.featureMediaUploadEnabled", is(false)))
@@ -708,6 +709,104 @@ class TenantControllerIT {
 
   private String tenant1RequestWithSmtpPassword(String password) {
     return multilingualTenantTestDataBuilder.tenantDTO().withSmtp(password).jsonify();
+  }
+
+  private String tenant1RequestWithSmtpMode(String password, String mode) throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var request =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(tenant1RequestWithSmtpPassword(password));
+    ((com.fasterxml.jackson.databind.node.ObjectNode) request.get("settings"))
+        .put("smtpMode", mode);
+    return mapper.writeValueAsString(request);
+  }
+
+  private String tenant1RequestWithTransport(
+      String password, int port, boolean secure, boolean confirmed) throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var request =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(tenant1RequestWithSmtpMode(password, "OWN"));
+    var smtp = (com.fasterxml.jackson.databind.node.ObjectNode) request.get("settings").get("smtp");
+    smtp.put("port", port);
+    smtp.put("secure", secure);
+    if (confirmed) smtp.put("nonstandardTransportConfirmed", true);
+    return mapper.writeValueAsString(request);
+  }
+
+  @Test
+  void updateTenant_ShouldRequireFreshConfirmationForAnUnusualSmtpTransport() throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("own-secret", 465, false, false))
+        .andExpect(status().isUnprocessableEntity());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("own-secret", 465, false, true))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtp.nonstandardTransportConfirmed").doesNotExist());
+    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
+        .doesNotContain("nonstandardTransportConfirmed");
+
+    // The same stored combination survives an unrelated update from an older client.
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 465, false, false))
+        .andExpect(status().isOk());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 587, true, false))
+        .andExpect(status().isUnprocessableEntity());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 587, true, true))
+        .andExpect(status().isOk());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 2525, false, false))
+        .andExpect(status().isUnprocessableEntity());
+  }
+
+  @Test
+  void updateTenant_Should_requireCompleteOwnSmtpAndPreserveExplicitMode() throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpMode(null, "OWN"))
+        .andExpect(status().isUnprocessableEntity());
+    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
+        .doesNotContain("\"smtpMode\":\"OWN\"");
+
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpMode("own-secret", "OWN"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtpMode").value("OWN"));
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpPassword(""))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtpMode").value("OWN"));
+    org.assertj.core.api.Assertions.assertThat(storedSmtpPasswordOfTenant1Decrypted())
+        .isEqualTo("own-secret");
+
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var withoutSmtp =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(tenant1RequestWithSmtpPassword(null));
+    var settingsWithoutSmtp =
+        (com.fasterxml.jackson.databind.node.ObjectNode) withoutSmtp.get("settings");
+    settingsWithoutSmtp.remove("smtp");
+    settingsWithoutSmtp.remove("smtpMode");
+    putTenant1AsTenantAdmin(mapper.writeValueAsString(withoutSmtp))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtpMode").value("OWN"))
+        .andExpect(jsonPath("$.settings.smtp.host").value("smtp.example.org"));
+    org.assertj.core.api.Assertions.assertThat(storedSmtpPasswordOfTenant1Decrypted())
+        .isEqualTo("own-secret");
+
+    withoutSmtp.remove("settings");
+    putTenant1AsTenantAdmin(mapper.writeValueAsString(withoutSmtp))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtpMode").value("OWN"))
+        .andExpect(jsonPath("$.settings.smtp.host").value("smtp.example.org"));
+    org.assertj.core.api.Assertions.assertThat(storedSmtpPasswordOfTenant1Decrypted())
+        .isEqualTo("own-secret");
+  }
+
+  @Test
+  void updateTenant_Should_notClassifyLegacyModeWhenRequestOmitsIt() throws Exception {
+    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
+        .doesNotContain("\"smtpMode\":\"PLATFORM\"")
+        .doesNotContain("\"smtpMode\":\"OWN\"");
+
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpPassword(null))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtpMode").doesNotExist());
+    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
+        .doesNotContain("\"smtpMode\":\"PLATFORM\"")
+        .doesNotContain("\"smtpMode\":\"OWN\"");
   }
 
   @Test

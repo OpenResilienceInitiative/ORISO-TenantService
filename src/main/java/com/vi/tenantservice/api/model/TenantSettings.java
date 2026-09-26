@@ -88,6 +88,7 @@ public class TenantSettings {
   Boolean featureVoiceMessagesGroupChatsEnabled;
   Boolean featureVoiceMessagesSupervisionChatsEnabled;
   Boolean featureSystemNotificationEmailsEnabled;
+  TenantSmtpMode smtpMode;
   TenantSmtpSettings smtp;
   Boolean featureMediaUploadEnabled;
   Boolean featureMediaUploadAnonymousChatsEnabled;
