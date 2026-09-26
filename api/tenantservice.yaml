@@ -2521,6 +2521,10 @@ components:
         featureSystemNotificationEmailsEnabled:
           type: boolean
           example: "false"
+        smtpMode:
+          type: string
+          enum: [PLATFORM, OWN]
+          description: "Explicit mail transport selection. Absent on legacy tenants until audited."
         smtp:
           $ref: '#/components/schemas/SmtpConfig'
         extendedSettings:
@@ -3251,6 +3255,14 @@ components:
         secure:
           type: boolean
           example: "false"
+        nonstandardTransportConfirmed:
+          type: boolean
+          writeOnly: true
+          description:
+            "Write-only acknowledgement when a changed OWN SMTP port and TLS mode
+            are not the usual 465/implicit-TLS or 587/STARTTLS pair. Not stored
+            or returned. An unchanged legacy pair does not require a new acknowledgement."
+          example: false
         username:
           type: string
           example: "notifications@oriso.org"

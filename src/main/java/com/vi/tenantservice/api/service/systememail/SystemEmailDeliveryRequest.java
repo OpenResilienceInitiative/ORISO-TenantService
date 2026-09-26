@@ -15,6 +15,7 @@ public record SystemEmailDeliveryRequest(
     @NotBlank @Size(max = 131072) String text,
     @NotNull java.util.UUID correlationId) {
   public enum Purpose {
+    SMTP_TEST,
     EMAIL_ADDRESS_CHANGED,
     SUPERVISOR_ADDED,
     SUPERVISOR_REMOVED
