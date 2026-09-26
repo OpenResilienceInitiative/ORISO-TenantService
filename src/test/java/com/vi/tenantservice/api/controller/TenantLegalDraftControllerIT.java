@@ -45,6 +45,9 @@ import org.springframework.web.context.WebApplicationContext;
 @Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class TenantLegalDraftControllerIT {
 
+  /** Matches technical.service.subject in application-testing.properties. */
+  private static final String TECHNICAL_SERVICE_SUBJECT = "test-technical-service-subject";
+
   private static final String TENANT_ONE_PRIVACY = "/tenantadmin/1/legal-drafts/PRIVACY";
   private static final String NEW_PRIVACY =
       "{\"content\":{\"de\":\"<p>Draft</p>\"},"
@@ -154,9 +157,10 @@ class TenantLegalDraftControllerIT {
                         .jwt(
                             token ->
                                 token
+                                    .subject(TECHNICAL_SERVICE_SUBJECT)
                                     .claim("tenantId", 0L)
                                     .claim("username", "technical")
-                                    .claim("realm_access", Map.of("roles", List.of())))
+                                    .claim("realm_access", Map.of("roles", List.of("technical"))))
                         .authorities(new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"))))
         .andExpect(status().isForbidden());
   }
@@ -431,6 +435,38 @@ class TenantLegalDraftControllerIT {
         .andExpect(status().isForbidden());
   }
 
+  /**
+   * The bootstrapped realm admin is a person who carries the realm role technical as well. Only the
+   * configured service subject counts as the technical identity, so this caller keeps the platform
+   * admin's legal rights.
+   */
+  @Test
+  void realmAdminPersonWithTechnicalRole_Should_writeThePlatformDraftAndDistributeIt()
+      throws Exception {
+    String response =
+        mvc.perform(
+                put("/tenantadmin/0/legal-drafts/IMPRINT")
+                    .with(realmAdminPerson())
+                    .contentType(APPLICATION_JSON)
+                    .content("{\"content\":{\"de\":\"<p>Impressum</p>\"},\"revision\":\"new\"}"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String revision = objectMapper.readTree(response).get("revision").asText();
+
+    mvc.perform(
+            post("/tenantadmin/legal-proposal-distributions")
+                .with(realmAdminPerson())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    "{\"requestKey\":\"realm-admin-sends\",\"kind\":\"IMPRINT\","
+                        + "\"sourceRevision\":\""
+                        + revision
+                        + "\",\"audience\":\"SELECTED\",\"tenantIds\":[1]}"))
+        .andExpect(status().isCreated());
+  }
+
   @Test
   void traegerAdminWithoutLegalRights_Should_notWriteADraft() throws Exception {
     var settings =
@@ -492,9 +528,10 @@ class TenantLegalDraftControllerIT {
         .jwt(
             token ->
                 token
+                    .subject(TECHNICAL_SERVICE_SUBJECT)
                     .claim("tenantId", tenantId)
                     .claim("username", "technical")
-                    .claim("realm_access", Map.of("roles", List.of())))
+                    .claim("realm_access", Map.of("roles", List.of("technical"))))
         .authorities(
             new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
             new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));
@@ -505,11 +542,27 @@ class TenantLegalDraftControllerIT {
         .jwt(
             token ->
                 token
+                    .subject(TECHNICAL_SERVICE_SUBJECT)
                     .claim("tenantId", 0L)
                     .claim("username", "technical")
-                    .claim("realm_access", Map.of("roles", List.of("tenant-admin"))))
+                    .claim("realm_access", Map.of("roles", List.of("technical", "tenant-admin"))))
         .authorities(
             new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
+            new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));
+  }
+
+  private RequestPostProcessor realmAdminPerson() {
+    return jwt()
+        .jwt(
+            token ->
+                token
+                    .subject("realm-admin-person")
+                    .claim("tenantId", 0L)
+                    .claim("username", "realmadmin")
+                    .claim("realm_access", Map.of("roles", List.of("technical", "tenant-admin"))))
+        .authorities(
+            new SimpleGrantedAuthority("AUTHORIZATION_UPDATE_TENANT"),
+            new SimpleGrantedAuthority("AUTHORIZATION_GET_ALL_TENANTS"),
             new SimpleGrantedAuthority("AUTHORIZATION_CHANGE_LEGAL_CONTENT"));
   }
 
