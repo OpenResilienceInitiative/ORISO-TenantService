@@ -513,6 +513,20 @@ class TenantConverterTest {
   }
 
   @Test
+  void smtpModeRoundTripsAndIsAbsentFromPublicTenant() {
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtpMode(Settings.SmtpModeEnum.OWN);
+
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    assertThat(tenantConverter.toDTO(entity, "de").getSettings().getSmtpMode())
+        .isEqualTo(Settings.SmtpModeEnum.OWN);
+    assertThat(tenantConverter.toRestrictedTenantDTO(entity, "de").getSettings().getSmtpMode())
+        .isNull();
+  }
+
+  @Test
   void toDTO_should_reportPasswordSetFalse_When_noSmtpPasswordStored() {
     // given
     MultilingualTenantDTO tenantDTO =

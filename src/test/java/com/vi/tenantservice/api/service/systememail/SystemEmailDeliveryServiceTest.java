@@ -7,12 +7,15 @@ import static org.mockito.Mockito.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.web.server.ResponseStatusException;
 
 class SystemEmailDeliveryServiceTest {
@@ -47,6 +50,7 @@ class SystemEmailDeliveryServiceTest {
             mapper.writeValueAsString(
                 TenantSettings.builder()
                     .featureSystemNotificationEmailsEnabled(enabled)
+                    .smtpMode(TenantSmtpMode.OWN)
                     .smtp(smtp)
                     .build()))
         .build();
@@ -63,6 +67,70 @@ class SystemEmailDeliveryServiceTest {
             eq("test-password"),
             same(request));
     verify(tenants, never()).findById(1L);
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      names = {
+        "NEW_ENQUIRY",
+        "DIRECT_ENQUIRY",
+        "ENQUIRY_ASSIGNED",
+        "DAILY_ENQUIRY_DIGEST",
+        "NEW_MESSAGE",
+        "CONTACT_SHEET",
+        "SELF_HELP_APPOINTMENT_CONFIRMED",
+        "SELF_HELP_APPOINTMENT_RESCHEDULED",
+        "SELF_HELP_APPOINTMENT_CANCELLED",
+        "SELF_HELP_APPOINTMENT_REMINDER",
+        "HANDOVER_REQUESTED",
+        "HANDOVER_CONFIRMED",
+        "FREE_TEXT_NOTICE"
+      })
+  void approvedNotificationPurposeUsesOnlyExplicitOwnTenant(
+      SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
+    when(tenants.findById(40L)).thenReturn(Optional.of(tenant(true, true)));
+    when(cipher.decrypt("ENC:test-fixture")).thenReturn("test-password");
+    var notification =
+        new SystemEmailDeliveryRequest(
+            purpose, "recipient@example.org", "Subject", "<p>Body</p>", "Body", UUID.randomUUID());
+
+    assertThat(service.deliver(40L, notification)).isTrue();
+    verify(transport).send(any(), eq("test-password"), same(notification));
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      names = {
+        "NEW_ENQUIRY",
+        "DIRECT_ENQUIRY",
+        "ENQUIRY_ASSIGNED",
+        "DAILY_ENQUIRY_DIGEST",
+        "NEW_MESSAGE",
+        "CONTACT_SHEET",
+        "SELF_HELP_APPOINTMENT_CONFIRMED",
+        "SELF_HELP_APPOINTMENT_RESCHEDULED",
+        "SELF_HELP_APPOINTMENT_CANCELLED",
+        "SELF_HELP_APPOINTMENT_REMINDER",
+        "HANDOVER_REQUESTED",
+        "HANDOVER_CONFIRMED",
+        "FREE_TEXT_NOTICE"
+      })
+  void notificationPurposeCannotUsePlatformOrUnclassifiedTenantCredentials(
+      SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
+    var platform = tenant(true, true);
+    var settings =
+        (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(platform.getSettings());
+    settings.put("smtpMode", "PLATFORM");
+    platform.setSettings(mapper.writeValueAsString(settings));
+    var notification =
+        new SystemEmailDeliveryRequest(
+            purpose, "recipient@example.org", "Subject", "<p>Body</p>", "Body", UUID.randomUUID());
+    when(tenants.findById(40L)).thenReturn(Optional.of(platform));
+
+    assertThat(service.deliver(40L, notification)).isFalse();
+    verifyNoInteractions(cipher, transport);
   }
 
   @Test
@@ -91,6 +159,25 @@ class SystemEmailDeliveryServiceTest {
     when(cipher.decrypt(anyString())).thenReturn("test-password");
     assertThat(service.deliver(40, request)).isTrue();
     verify(transport).send(any(), eq("test-password"), same(request));
+  }
+
+  @Test
+  void platformAndUnclassifiedLegacyNeverUseTenantCredentials() throws Exception {
+    var platform = tenant(true, true);
+    var platformSettings =
+        (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(platform.getSettings());
+    platformSettings.put("smtpMode", "PLATFORM");
+    platform.setSettings(mapper.writeValueAsString(platformSettings));
+    var legacy = tenant(true, true);
+    var legacySettings =
+        (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(legacy.getSettings());
+    legacySettings.remove("smtpMode");
+    legacy.setSettings(mapper.writeValueAsString(legacySettings));
+    when(tenants.findById(40L)).thenReturn(Optional.of(platform), Optional.of(legacy));
+
+    assertThat(service.deliver(40, request)).isFalse();
+    assertThat(service.deliver(40, request)).isFalse();
+    verifyNoInteractions(cipher, transport);
   }
 
   @Test

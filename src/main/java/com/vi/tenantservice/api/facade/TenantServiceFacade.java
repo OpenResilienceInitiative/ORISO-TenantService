@@ -39,6 +39,7 @@ import com.vi.tenantservice.api.model.TenantIdAllocationStatus;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
@@ -82,12 +83,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort.Direction;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.server.ResponseStatusException;
 
 /** Facade to encapsulate services and logic needed to manage tenants */
 @Service
@@ -378,9 +381,17 @@ public class TenantServiceFacade {
 
   private void setDefaultTenantSettings(TenantEntity tenant) {
     var defaultTenantSettings = tenantService.getDefaultTenantSettings();
+    if (defaultTenantSettings == null) {
+      defaultTenantSettings = TenantSettings.builder().build();
+    }
     // #251: the platform admin's current preset decides the conversation features of a new Träger
-    tenant.setSettings(
-        convertToJson(newTenantPresetService.applyCurrentPlatformPreset(defaultTenantSettings)));
+    var settings = newTenantPresetService.applyCurrentPlatformPreset(defaultTenantSettings);
+    if (settings == null) {
+      settings = TenantSettings.builder().build();
+    }
+    settings.setSmtpMode(TenantSmtpMode.PLATFORM);
+    settings.setSmtp(null);
+    tenant.setSettings(convertToJson(settings));
   }
 
   private void createDefaultConsultingTypeSettings(TenantEntity createdTenant)
@@ -581,7 +592,12 @@ public class TenantServiceFacade {
     var existingSettingsJson = existingTenantEntity.getSettings();
     var publishedBefore = PublishedLegalTexts.of(existingTenantEntity);
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
+    if (sanitizedTenantDTO.getSettings() == null) {
+      updatedEntity.setSettings(existingSettingsJson);
+    }
     preserveStoredSmtpPassword(existingSettingsJson, updatedEntity);
+    preserveStoredSmtpMode(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
+    validateSelectedOwnSmtp(updatedEntity);
     preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     var entityToSave = updatedEntity;
@@ -602,12 +618,19 @@ public class TenantServiceFacade {
       return;
     }
     TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
-    if (updatedSettings.getSmtp() == null
-        || nonNull(updatedSettings.getSmtp().getPassword())
-            && !updatedSettings.getSmtp().getPassword().isBlank()) {
+    TenantSettings existingSettings = convertFromJson(existingSettingsJson);
+    if (updatedSettings.getSmtp() == null) {
+      if (existingSettings.getSmtpMode() == TenantSmtpMode.OWN
+          && updatedSettings.getSmtpMode() != TenantSmtpMode.PLATFORM) {
+        updatedSettings.setSmtp(existingSettings.getSmtp());
+        updatedEntity.setSettings(convertToJson(updatedSettings));
+      }
       return;
     }
-    TenantSettings existingSettings = convertFromJson(existingSettingsJson);
+    if (nonNull(updatedSettings.getSmtp().getPassword())
+        && !updatedSettings.getSmtp().getPassword().isBlank()) {
+      return;
+    }
     if (existingSettings.getSmtp() == null
         || existingSettings.getSmtp().getPassword() == null
         || existingSettings.getSmtp().getPassword().isBlank()) {
@@ -615,6 +638,45 @@ public class TenantServiceFacade {
     }
     updatedSettings.getSmtp().setPassword(existingSettings.getSmtp().getPassword());
     updatedEntity.setSettings(convertToJson(updatedSettings));
+  }
+
+  private void preserveStoredSmtpMode(
+      String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
+    if (existingSettingsJson == null || updatedEntity.getSettings() == null) {
+      return;
+    }
+    if (tenantDTO.getSettings() != null && tenantDTO.getSettings().getSmtpMode() != null) {
+      return;
+    }
+    TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
+    updatedSettings.setSmtpMode(convertFromJson(existingSettingsJson).getSmtpMode());
+    updatedEntity.setSettings(convertToJson(updatedSettings));
+  }
+
+  private void validateSelectedOwnSmtp(TenantEntity updatedEntity) {
+    if (updatedEntity.getSettings() == null) {
+      return;
+    }
+    TenantSettings settings = convertFromJson(updatedEntity.getSettings());
+    if (settings.getSmtpMode() != TenantSmtpMode.OWN) {
+      return;
+    }
+    var smtp = settings.getSmtp();
+    if (smtp == null
+        || !smtp.isEnabled()
+        || smtp.getHost() == null
+        || smtp.getHost().isBlank()
+        || smtp.getFrom() == null
+        || smtp.getFrom().isBlank()
+        || smtp.getUsername() == null
+        || smtp.getUsername().isBlank()
+        || smtp.getPassword() == null
+        || smtp.getPassword().isBlank()
+        || smtp.getPort() == null
+        || smtp.getPort() < 1
+        || smtp.getPort() > 65535) {
+      throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_INVALID");
+    }
   }
 
   /**
