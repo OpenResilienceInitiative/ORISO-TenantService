@@ -721,6 +721,40 @@ class TenantControllerIT {
     return mapper.writeValueAsString(request);
   }
 
+  private String tenant1RequestWithTransport(
+      String password, int port, boolean secure, boolean confirmed) throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var request =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(tenant1RequestWithSmtpMode(password, "OWN"));
+    var smtp = (com.fasterxml.jackson.databind.node.ObjectNode) request.get("settings").get("smtp");
+    smtp.put("port", port);
+    smtp.put("secure", secure);
+    if (confirmed) smtp.put("nonstandardTransportConfirmed", true);
+    return mapper.writeValueAsString(request);
+  }
+
+  @Test
+  void updateTenant_ShouldRequireFreshConfirmationForAnUnusualSmtpTransport() throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("own-secret", 465, false, false))
+        .andExpect(status().isUnprocessableEntity());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("own-secret", 465, false, true))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtp.nonstandardTransportConfirmed").doesNotExist());
+    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
+        .doesNotContain("nonstandardTransportConfirmed");
+
+    // The same stored combination survives an unrelated update from an older client.
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 465, false, false))
+        .andExpect(status().isOk());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 587, true, false))
+        .andExpect(status().isUnprocessableEntity());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 587, true, true))
+        .andExpect(status().isOk());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 2525, false, false))
+        .andExpect(status().isUnprocessableEntity());
+  }
+
   @Test
   void updateTenant_Should_requireCompleteOwnSmtpAndPreserveExplicitMode() throws Exception {
     putTenant1AsTenantAdmin(tenant1RequestWithSmtpMode(null, "OWN"))
