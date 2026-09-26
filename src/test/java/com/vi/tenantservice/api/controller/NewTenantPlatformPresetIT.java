@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api.controller;
 
 import static com.vi.tenantservice.api.authorisation.UserRole.TENANT_ADMIN;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -58,6 +59,7 @@ class NewTenantPlatformPresetIT {
 
   @Autowired WebApplicationContext context;
   @Autowired TenantAdminControlsRepository platformControlsRepository;
+  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
   @MockitoBean AuthorisationService authorisationService;
   @MockitoBean ApplicationSettingsService applicationSettingsService;
   @MockitoBean ApplicationSettingsApiControllerFactory applicationSettingsApiControllerFactory;
@@ -122,6 +124,61 @@ class NewTenantPlatformPresetIT {
             .getResponse()
             .getContentAsString();
     return "/tenant/public/id/" + JsonPath.<Integer>read(response, "$.id");
+  }
+
+  @Test
+  void newTenant_should_receiveTheLatestTemplateSentToAllTraeger() throws Exception {
+    // ORISO-Admin#1070: two ALL sends and one SELECTED send exist before the Träger is created.
+    insertDistribution("older-all", "ALL", 900L, 1L, "10:00:00", "{\"de\":\"<p>older</p>\"}");
+    insertDistribution("latest-all", "ALL", 900L, 2L, "10:05:00", "{\"de\":\"<p>latest</p>\"}");
+    // Newer, but the platform chose its recipients explicitly: not handed to a later Träger.
+    insertDistribution(
+        "selected", "SELECTED", 901L, 1L, "10:10:00", "{\"de\":\"<p>chosen only</p>\"}");
+    try {
+      String publicUrl = createTenant("latetraeger");
+      long tenantId = Long.parseLong(publicUrl.substring(publicUrl.lastIndexOf('/') + 1));
+
+      assertThat(
+              jdbcTemplate.queryForList(
+                  "SELECT distribution_id FROM tenant_legal_proposal"
+                      + " WHERE recipient_tenant_id = ? AND status = 'PENDING'",
+                  String.class,
+                  tenantId))
+          .containsExactly("latest-all");
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT content FROM tenant_legal_proposal WHERE recipient_tenant_id = ?",
+                  String.class,
+                  tenantId))
+          .contains("latest");
+      // The fixed recipient list of the send is history and does not grow.
+      assertThat(
+              jdbcTemplate.queryForObject(
+                  "SELECT recipient_ids FROM tenant_legal_proposal_distribution WHERE id = ?",
+                  String.class,
+                  "latest-all"))
+          .isEqualTo("1");
+    } finally {
+      jdbcTemplate.update("DELETE FROM tenant_legal_proposal");
+      jdbcTemplate.update("DELETE FROM tenant_legal_proposal_distribution");
+    }
+  }
+
+  private void insertDistribution(
+      String id, String audience, long draftId, long draftVersion, String time, String content) {
+    jdbcTemplate.update(
+        "INSERT INTO tenant_legal_proposal_distribution (id, request_key, kind, audience,"
+            + " source_draft_id, source_draft_version, source_updated_at, request_fingerprint,"
+            + " recipient_ids, content, privacy_consent, created_by, created_at)"
+            + " VALUES (?, ?, 'PRIVACY', ?, ?, ?, ?, 'fp', '1', ?, NULL, 'platform-user', ?)",
+        id,
+        "key-" + id,
+        audience,
+        draftId,
+        draftVersion,
+        java.sql.Timestamp.valueOf("2026-09-20 10:00:00"),
+        content,
+        java.sql.Timestamp.valueOf("2026-09-20 " + time));
   }
 
   @Test

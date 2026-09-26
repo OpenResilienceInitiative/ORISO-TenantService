@@ -434,6 +434,28 @@ paths:
         401: {description: Unauthorized}
         403: {description: Neither platform sender nor exact recipient}
         404: {description: Archive not found within tenant scope}
+  /tenantadmin/{id}/legal-versions:
+    get:
+      tags: [tenant-controller]
+      summary: Publication history of the Träger's (id > 0) or the platform's (id 0) imprint or privacy policy
+      description: >-
+        Newest first, one entry per published wording (ORISO-Admin#270). A save of the tenant's
+        imprint or privacy content is its publication, so every save that changes the stored
+        wording adds an entry; a save that leaves it unchanged does not, and a draft save never
+        does. Texts published before this history existed have no entry (no guessed dates).
+        Same shape as AgencyService's LegalTextVersionDTO. Readable by the platform administrator
+        and by admins whose token names this tenant.
+      operationId: getTenantLegalTextVersions
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: integer, format: int64}}
+        - {name: kind, in: query, required: true, schema: {type: string, enum: [DPP, IMPRINT]}}
+      responses:
+        200:
+          description: Publication history, newest first (empty if never published since the history exists)
+          content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/TenantLegalTextVersionDTO'}}}}
+        400: {description: Invalid tenant id or kind}
+        401: {description: Unauthorized}
+        403: {description: Caller is neither the platform administrator nor an admin of this tenant}
   /tenantadmin/{id}/permission-policies:
     parameters:
       - name: id
@@ -3069,6 +3091,38 @@ components:
         originSharedBy: {type: string}
         archivedBy: {type: string}
         archivedAt: {type: string, format: date-time}
+
+    TenantLegalTextVersionDTO:
+      type: object
+      description: >-
+        One immutable published wording. Identity is the surrogate id, never publishedAt.
+        Mirrors AgencyService LegalTextVersionDTO; ownerLevel adds the two TenantService levels.
+      required: [id, kind, ownerLevel, ownerId, content, publishedAt]
+      properties:
+        id: {type: integer, format: int64}
+        kind: {type: string, enum: [DPP, IMPRINT]}
+        ownerLevel:
+          type: string
+          description: PLATFORM for tenant 0 (platform operator), TENANT for a Träger
+          enum: [PLATFORM, TENANT]
+        ownerId:
+          type: integer
+          format: int64
+          description: The tenant id (0 = platform)
+        content:
+          type: string
+          description: The wording as published, verbatim - a JSON language->HTML map string
+        publishedAt:
+          type: string
+          description: Local date-time (UTC) in the fixed 19-character form yyyy-MM-ddTHH:mm:ss
+          example: "2026-09-25T13:12:08"
+        publishedBy:
+          type: string
+          description: Keycloak user id of the publisher; null when none was known, never guessed
+        supersededAt:
+          type: string
+          description: When a newer publication (or a removal) replaced this one; null = still in force
+          example: "2026-09-26T08:00:00"
 
     TenantPermissionPolicies:
       type: object
