@@ -108,6 +108,30 @@ class TenantFacadeAuthorisationServiceTest {
   }
 
   @Test
+  void theTechnicalPrincipalWithTenantZeroMayNotListEveryTenantButKeepsSingleTenantAccess() {
+    when(authorisationService.getUsername()).thenReturn("technical");
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
+        .thenReturn(true);
+
+    assertThat(tenantFacadeAuthorisationService.mayListEveryTenant()).isFalse();
+    // it still mints sign invites for reserved Träger ids during onboarding
+    assertThat(tenantFacadeAuthorisationService.mayAccessEveryTenant()).isTrue();
+  }
+
+  @Test
+  void thePlatformAdministratorMayListEveryTenant() {
+    when(authorisationService.getUsername()).thenReturn("platform.admin");
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
+        .thenReturn(true);
+
+    assertThat(tenantFacadeAuthorisationService.mayListEveryTenant()).isTrue();
+  }
+
+  @Test
   void thePlatformAdministratorMaySharePlatformLegalDrafts() {
     when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
     when(authorisationService.hasRole("tenant-admin")).thenReturn(true);

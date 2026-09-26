@@ -293,7 +293,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize(
       "hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')"
-          + " and @tenantFacadeAuthorisationService.mayAccessEveryTenant()")
+          + " and @tenantFacadeAuthorisationService.mayListEveryTenant()")
   public ResponseEntity<List<BasicTenantLicensingDTO>> getAllTenants() {
     var tenants = tenantServiceFacade.getAllTenants();
     return !CollectionUtils.isEmpty(tenants)
@@ -643,7 +643,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize(
       "hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')"
-          + " and @tenantFacadeAuthorisationService.mayAccessEveryTenant()")
+          + " and @tenantFacadeAuthorisationService.mayListEveryTenant()")
   public ResponseEntity<PlatformDpiaMasterDataDTO> getPlatformDpiaMasterData() {
     return new ResponseEntity<>(platformDpiaMasterDataFacade.getMasterData(), HttpStatus.OK);
   }
@@ -651,7 +651,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize(
       "hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')"
-          + " and @tenantFacadeAuthorisationService.mayAccessEveryTenant()")
+          + " and @tenantFacadeAuthorisationService.mayListEveryTenant()")
   public ResponseEntity<PlatformDpiaMasterDataDTO> updatePlatformDpiaMasterData(
       @Valid PlatformDpiaMasterDataDTO platformDpiaMasterDataDTO) {
     return new ResponseEntity<>(
@@ -734,7 +734,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize(
       "hasAuthority('AUTHORIZATION_GET_ALL_TENANTS') AND hasAuthority('AUTHORIZATION_GET_TENANT_ADMIN_DATA')"
-          + " and @tenantFacadeAuthorisationService.mayAccessEveryTenant()")
+          + " and @tenantFacadeAuthorisationService.mayListEveryTenant()")
   public ResponseEntity<List<AdminTenantDTO>> getAllTenantsWithAdminData() {
     var tenants = tenantServiceFacade.getAllAdminTenantsExceptTechnical();
     return !CollectionUtils.isEmpty(tenants)

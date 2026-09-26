@@ -103,6 +103,16 @@ public class TenantFacadeAuthorisationService {
         && isSuperAdmin();
   }
 
+  /**
+   * Platform-wide listings and the platform DPIA are for the platform administrator as a person.
+   * The technical identity keeps its tenant-0 access to single tenants (it mints sign invites for
+   * reserved ids) but must not list every Träger.
+   */
+  public boolean mayListEveryTenant() {
+    return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
+        && isPlatformAdministrator();
+  }
+
   void assertUserHasSufficientPermissionsToChangeAttributes(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenant) {
     if (hasSingleTenantAccessAuthority()) {
