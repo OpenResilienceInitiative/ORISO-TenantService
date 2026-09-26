@@ -42,6 +42,14 @@ class NoHardcodedUrlFallbacksTest {
     assertThat(violations(sources, URL_DEFAULT)).isEmpty();
   }
 
+  @Test
+  void publicDpaOrigin_hasNoDeployedUrlDefault() throws IOException {
+    assertThat(Files.readString(RESOURCES.resolve("application.properties")))
+        .contains("app.base.url=${APP_BASE_URL:}");
+    assertThat(violations(propertyFiles(false), Pattern.compile("^app\\.base\\.url=https?://")))
+        .isEmpty();
+  }
+
   private static List<Path> propertyFiles(boolean localOrTesting) throws IOException {
     try (Stream<Path> files = Files.list(RESOURCES)) {
       return files

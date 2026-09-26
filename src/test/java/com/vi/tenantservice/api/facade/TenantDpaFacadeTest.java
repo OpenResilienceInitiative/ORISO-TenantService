@@ -51,6 +51,7 @@ class TenantDpaFacadeTest {
 
   @Mock private InputSanitizer inputSanitizer;
   @Mock private AuthorisationService authorisationService;
+  @Mock private DpaSignLinkOrigin dpaSignLinkOrigin;
   @InjectMocks private TenantDpaFacade tenantDpaFacade;
 
   @Test
@@ -158,6 +159,8 @@ class TenantDpaFacadeTest {
     when(authorisationService.getUserId()).thenReturn("tenant-admin-1");
     when(tenantDpaService.createSignInvite(eq(5L), eq(version), any(), eq("tenant-admin-1")))
         .thenReturn("RAWTOKEN");
+    when(dpaSignLinkOrigin.build("RAWTOKEN"))
+        .thenReturn("https://app.example.org/dpa-sign/RAWTOKEN");
 
     // when
     var result = tenantDpaFacade.createSignInvite(5L);
@@ -165,7 +168,7 @@ class TenantDpaFacadeTest {
     // then
     verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
     assertThat(result.getToken()).isEqualTo("RAWTOKEN");
-    assertThat(result.getSignLink()).endsWith("/dpa-sign/RAWTOKEN");
+    assertThat(result.getSignLink()).isEqualTo("https://app.example.org/dpa-sign/RAWTOKEN");
     assertThat(result.getExpiresAt()).isNotBlank();
     // the authenticated forwarder is stamped on the invite (#179)
     verify(tenantDpaService).createSignInvite(eq(5L), eq(version), any(), eq("tenant-admin-1"));
@@ -194,6 +197,8 @@ class TenantDpaFacadeTest {
         .thenReturn(new GoverningDpaResolver.GoverningDpa(1L, operatorVersion));
     when(tenantDpaService.createSignInvite(eq(5L), eq(operatorVersion), any(), any()))
         .thenReturn("RAWTOKEN");
+    when(dpaSignLinkOrigin.build("RAWTOKEN"))
+        .thenReturn("https://app.example.org/dpa-sign/RAWTOKEN");
 
     var result = tenantDpaFacade.createSignInvite(5L);
 
@@ -239,12 +244,14 @@ class TenantDpaFacadeTest {
     when(tenantDpaService.createSignInvite(
             eq(42L), eq(operatorVersion), any(), eq(null), eq("reservation-token")))
         .thenReturn("RAWTOKEN");
+    when(dpaSignLinkOrigin.build("RAWTOKEN"))
+        .thenReturn("https://app.example.org/dpa-sign/RAWTOKEN");
 
     // when
     var result = tenantDpaFacade.createPublicForwardSignInvite(forwardRequest());
 
     // then: bound to the RESERVED tenant id, no forwarder account, no session assertion
-    assertThat(result.getSignLink()).endsWith("/dpa-sign/RAWTOKEN");
+    assertThat(result.getSignLink()).isEqualTo("https://app.example.org/dpa-sign/RAWTOKEN");
     verify(tenantDpaService)
         .createSignInvite(eq(42L), eq(operatorVersion), any(), eq(null), eq("reservation-token"));
     verifyNoInteractions(tenantFacadeAuthorisationService);
