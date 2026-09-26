@@ -178,6 +178,21 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void createTenant_Should_applyPlatformPresetToEmptySettings_WhenDefaultFileIsNull() {
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+    when(tenantService.getDefaultTenantSettings()).thenReturn(null);
+
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    ArgumentCaptor<com.vi.tenantservice.api.model.TenantSettings> settings =
+        ArgumentCaptor.forClass(com.vi.tenantservice.api.model.TenantSettings.class);
+    verify(newTenantPresetService).applyCurrentPlatformPreset(settings.capture());
+    assertThat(settings.getValue()).isNotNull();
+  }
+
+  @Test
   void
       createTenant_Should_createTenantWithMainTenantSubDomain_When_multitenancyWithSingleDomainAndIsFirstNonTechnicalTenant() {
     // given
