@@ -2521,6 +2521,10 @@ components:
         featureSystemNotificationEmailsEnabled:
           type: boolean
           example: "false"
+        smtpMode:
+          type: string
+          enum: [PLATFORM, OWN]
+          description: "Explicit mail transport selection. Absent on legacy tenants until audited."
         smtp:
           $ref: '#/components/schemas/SmtpConfig'
         extendedSettings:
