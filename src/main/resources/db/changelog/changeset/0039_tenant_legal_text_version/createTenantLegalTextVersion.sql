@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS tenant_legal_text_version (
   published_by VARCHAR(255) NULL,
   superseded_at TIMESTAMP NULL
 );
-CREATE INDEX idx_tenant_legal_text_version_history
+CREATE INDEX IF NOT EXISTS idx_tenant_legal_text_version_history
   ON tenant_legal_text_version (tenant_id, kind, published_at, id);
-CREATE INDEX idx_tenant_legal_text_version_current
+CREATE INDEX IF NOT EXISTS idx_tenant_legal_text_version_current
   ON tenant_legal_text_version (tenant_id, kind, superseded_at);
