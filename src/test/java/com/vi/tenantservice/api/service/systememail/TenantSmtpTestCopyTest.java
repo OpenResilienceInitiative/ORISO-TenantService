@@ -8,12 +8,16 @@ import org.junit.jupiter.api.Test;
 class TenantSmtpTestCopyTest {
   @Test
   void supportsEveryCurrentAppLanguageAndRegionalLocale() {
-    for (String language : List.of("de", "en", "uk", "ru", "tr", "ar", "fa")) {
+    for (String language : List.of("de-sie", "de-du", "en", "fr", "ru", "ti", "tr")) {
       var copy = TenantSmtpTestCopy.forLanguage(language);
       assertThat(copy.subject()).isNotBlank();
       assertThat(copy.text()).isNotBlank();
     }
-    assertThat(TenantSmtpTestCopy.forLanguage("fa-AF"))
-        .isEqualTo(TenantSmtpTestCopy.forLanguage("fa"));
+    assertThat(TenantSmtpTestCopy.forLanguage("fr-FR"))
+        .isEqualTo(TenantSmtpTestCopy.forLanguage("fr"));
+    assertThat(TenantSmtpTestCopy.forLanguage("de"))
+        .isEqualTo(TenantSmtpTestCopy.forLanguage("de-sie"));
+    assertThat(TenantSmtpTestCopy.forLanguage("de-du"))
+        .isNotEqualTo(TenantSmtpTestCopy.forLanguage("de-sie"));
   }
 }
