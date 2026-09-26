@@ -91,7 +91,16 @@ public class TenantFacadeAuthorisationService {
   }
 
   private boolean hasSingleTenantAccessAuthority() {
-    return !authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS);
+    return !mayAccessEveryTenant();
+  }
+
+  /**
+   * Every Träger admin holds {@code tenant-admin}, and with it GET_ALL_TENANTS, just like the
+   * platform admin. Only the token's tenant (0 = platform) tells them apart, so both must hold.
+   */
+  public boolean mayAccessEveryTenant() {
+    return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
+        && isSuperAdmin();
   }
 
   void assertUserHasSufficientPermissionsToChangeAttributes(

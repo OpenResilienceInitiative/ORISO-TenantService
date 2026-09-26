@@ -373,6 +373,76 @@ class TenantFacadeAuthorisationServiceTest {
                     new TenantAdminAllowedPermissionToggles().appearance(appearance)));
   }
 
+  /** tenant-admin from tenant 0, as the platform admin's token carries it. */
+  private void givenPlatformAdmin() {
+    givenTenantAdminOf(0L);
+  }
+
+  /**
+   * Every Träger admin holds tenant-admin, and with it GET_ALL_TENANTS, like the platform admin.
+   */
+  private void givenTenantAdminOf(long tokenTenantId) {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
+        .thenReturn(true);
+    // isSuperAdmin() only asks for the role once the token names tenant 0.
+    org.mockito.Mockito.lenient()
+        .when(authorisationService.hasRole("tenant-admin"))
+        .thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(tokenTenantId));
+  }
+
+  @Test
+  void assertUserIsAuthorizedToAccessTenant_Should_rejectATraegerAdminOnAnotherTraeger() {
+    givenTenantAdminOf(8L);
+
+    assertThatThrownBy(
+            () -> tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(7L))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(
+            () -> tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(7L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void assertUserIsAuthorizedToAccessTenant_Should_letATraegerAdminReachItsOwnTraeger() {
+    givenTenantAdminOf(7L);
+
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(7L);
+  }
+
+  @Test
+  void assertUserIsAuthorizedToAccessTenant_Should_letThePlatformAdminReachEveryTraeger() {
+    givenPlatformAdmin();
+
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(7L);
+    assertThat(tenantFacadeAuthorisationService.mayAccessEveryTenant()).isTrue();
+  }
+
+  @Test
+  void mayAccessEveryTenant_Should_beFalse_When_theTokenCarriesNoTenant() {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
+        .thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken())
+        .thenThrow(new AccessDeniedException("tenantId attribute not found in the access token"));
+
+    assertThat(tenantFacadeAuthorisationService.mayAccessEveryTenant()).isFalse();
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_rejectASubdomainChange_When_aTraegerAdminHoldsTenantAdmin() {
+    givenTenantAdminOf(ID);
+    TenantEntity existing = tenantWithLogo("same-logo");
+    existing.setSubdomain("own");
+
+    assertThatThrownBy(
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(
+                        new MultilingualTenantDTO().subdomain("other"), existing))
+        .isInstanceOf(TenantAuthorisationException.class);
+  }
+
   private TenantEntity tenantWithLogo(String logo) {
     return TenantEntity.builder()
         .id(ID)
@@ -468,8 +538,7 @@ class TenantFacadeAuthorisationServiceTest {
     TenantEntity existing = tenantWithLogo("old-logo");
     MultilingualTenantDTO changed =
         new MultilingualTenantDTO().theming(new Theming().logo("new-logo"));
-    when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
-        .thenReturn(true);
+    givenPlatformAdmin();
 
     // when
     tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(

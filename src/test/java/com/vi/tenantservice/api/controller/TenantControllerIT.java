@@ -142,6 +142,11 @@ class TenantControllerIT {
         .thenAnswer(
             invocation ->
                 Authority.getAuthoritiesByUserRole(userRole).contains(invocation.getArgument(0)));
+    if (userRole == UserRole.TENANT_ADMIN) {
+      // Every Träger admin holds tenant-admin too; the platform admin is the one from tenant 0.
+      when(authorisationService.hasRole(UserRole.TENANT_ADMIN.getValue())).thenReturn(true);
+      when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    }
   }
 
   MultilingualTenantTestDataBuilder multilingualTenantTestDataBuilder =
@@ -848,6 +853,7 @@ class TenantControllerIT {
   void
       getAllTenants_Should_returnStatusBasicTenantLicensingData_When_calledForAuthorityThatIsTenantAdmin()
           throws Exception {
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
     var builder = new AuthenticationMockBuilder();
     mockMvc
         .perform(
@@ -1358,6 +1364,7 @@ class TenantControllerIT {
   void
       getAllTenantsWithAdminData_Should_returnAdminTenantDTOs_When_calledForAuthorityThatIsTenantAdmin()
           throws Exception {
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
     var builder = new AuthenticationMockBuilder();
     mockMvc
         .perform(

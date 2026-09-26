@@ -208,6 +208,9 @@ class TenantControllerDpaStatusIT {
 
   private RequestPostProcessor platformAdmin() {
     givenAuthoritiesOfRole(TENANT_ADMIN);
+    // The platform admin is tenant-admin from tenant 0; a Träger admin holds the same role.
+    when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
     when(authorisationService.getUserId()).thenReturn("platform-admin-user");
     when(authorisationService.getUsername()).thenReturn("platformadmin");
     return authentication(
