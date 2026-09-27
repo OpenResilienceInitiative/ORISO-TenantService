@@ -58,6 +58,11 @@ public class TenantEntity implements TenantData {
   @Column(name = "contact_phone", length = 64)
   private String contactPhone;
 
+  /* Optional DPO of the Träger as a JSON contact object (Admin#1067); inherited by its
+  Beratungsstellen for {{Datenschutzbeauftragte}}. NULL = not entered. */
+  @Column(name = "data_protection_officer", columnDefinition = "TEXT")
+  private String dataProtectionOfficer;
+
   @Column(name = "licensing_allowed_users")
   private Integer licensingAllowedNumberOfUsers;
 

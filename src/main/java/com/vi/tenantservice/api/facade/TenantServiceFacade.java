@@ -48,6 +48,9 @@ import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
+import com.vi.tenantservice.api.service.TenantLegalProposalService;
+import com.vi.tenantservice.api.service.TenantLegalVersionService;
+import com.vi.tenantservice.api.service.TenantLegalVersionService.PublishedLegalTexts;
 import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
@@ -146,6 +149,10 @@ public class TenantServiceFacade {
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
+  private final @NonNull TenantLegalVersionService tenantLegalVersionService;
+
+  private final @NonNull TenantLegalProposalService tenantLegalProposalService;
+
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
 
@@ -175,9 +182,31 @@ public class TenantServiceFacade {
     }
     recordOnboardingDpaAcceptance(
         createdTenant, tenantDTO.getOnboardingDpaAcceptance(), reservationToken);
+    recordInitialLegalState(createdTenant);
     var createdTenantDto = tenantConverter.toMultilingualDTO(createdTenant);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(createdTenantDto);
     return createdTenantDto;
+  }
+
+  /**
+   * The tenant exists at this point; a failed history write or template offer must not undo it. A
+   * missed offer is recoverable — the platform can send again.
+   */
+  private void recordInitialLegalState(TenantEntity createdTenant) {
+    try {
+      tenantLegalVersionService.saveRecordingPublications(
+          PublishedLegalTexts.NONE, () -> createdTenant);
+    } catch (RuntimeException e) {
+      log.error("Could not record the initial legal texts of tenant {}", createdTenant.getId(), e);
+    }
+    try {
+      tenantLegalProposalService.deliverLatestTemplatesTo(createdTenant.getId());
+    } catch (RuntimeException e) {
+      log.error(
+          "Could not offer the latest platform legal templates to tenant {}",
+          createdTenant.getId(),
+          e);
+    }
   }
 
   /**
@@ -562,6 +591,7 @@ public class TenantServiceFacade {
     }
     // toEntity mutates existingTenantEntity, so capture the stored settings first
     var existingSettingsJson = existingTenantEntity.getSettings();
+    var publishedBefore = PublishedLegalTexts.of(existingTenantEntity);
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
     if (sanitizedTenantDTO.getSettings() == null) {
       updatedEntity.setSettings(existingSettingsJson);
@@ -571,7 +601,10 @@ public class TenantServiceFacade {
     validateSelectedOwnSmtp(updatedEntity, existingSettingsJson, sanitizedTenantDTO);
     preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
-    updatedEntity = tenantService.update(updatedEntity);
+    var entityToSave = updatedEntity;
+    updatedEntity =
+        tenantLegalVersionService.saveRecordingPublications(
+            publishedBefore, () -> tenantService.update(entityToSave));
     updateExtendedSettingsAsConsultingType(sanitizedTenantDTO, existingTenantEntity.getId());
     log.info("Tenant with id {} updated", existingTenantEntity.getId());
     return getConvertedAndEnrichedTenant(updatedEntity);
