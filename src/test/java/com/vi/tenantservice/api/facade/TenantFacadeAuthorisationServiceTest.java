@@ -45,6 +45,8 @@ class TenantFacadeAuthorisationServiceTest {
 
   @Mock AuthorisationService authorisationService;
 
+  @Mock com.vi.tenantservice.config.security.TechnicalServiceIdentity technicalServiceIdentity;
+
   @Mock TenantFacadeChangeDetectionService tenantFacadeChangeDetectionService;
 
   @Mock ApplicationSettingsService applicationSettingsService;
@@ -101,7 +103,7 @@ class TenantFacadeAuthorisationServiceTest {
 
   @Test
   void theTechnicalPrincipalMayNotSharePlatformLegalDrafts() {
-    when(authorisationService.getUsername()).thenReturn("technical");
+    when(technicalServiceIdentity.isCurrentCaller()).thenReturn(true);
 
     assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanDistributeLegalProposals())
         .isInstanceOf(AccessDeniedException.class);
@@ -109,7 +111,7 @@ class TenantFacadeAuthorisationServiceTest {
 
   @Test
   void theTechnicalPrincipalWithTenantZeroMayNotListEveryTenantButKeepsSingleTenantAccess() {
-    when(authorisationService.getUsername()).thenReturn("technical");
+    when(technicalServiceIdentity.isCurrentCaller()).thenReturn(true);
     when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
     when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
     when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
@@ -122,7 +124,6 @@ class TenantFacadeAuthorisationServiceTest {
 
   @Test
   void thePlatformAdministratorMayListEveryTenant() {
-    when(authorisationService.getUsername()).thenReturn("platform.admin");
     when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
     when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
     when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
@@ -146,7 +147,7 @@ class TenantFacadeAuthorisationServiceTest {
     assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanReadLegalProposal(7L))
         .isInstanceOf(AccessDeniedException.class);
 
-    when(authorisationService.getUsername()).thenReturn("technical");
+    when(technicalServiceIdentity.isCurrentCaller()).thenReturn(true);
     assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanManageOwnLegalProposal(7L))
         .isInstanceOf(AccessDeniedException.class);
   }
@@ -187,9 +188,6 @@ class TenantFacadeAuthorisationServiceTest {
     // given
     when(authorisationService.findTenantIdInAccessToken())
         .thenThrow(new AccessDeniedException("tenantId attribute not found in the access token"));
-    when(authorisationService.getUsername())
-        .thenThrow(new AccessDeniedException("Invalid encoded username claim in JWT token"));
-
     // when
     boolean canAccessTenant =
         tenantFacadeAuthorisationService.canAccessTenant(
@@ -692,7 +690,7 @@ class TenantFacadeAuthorisationServiceTest {
   void isPlatformAdministrator_Should_rejectTheTechnicalUserEvenWithAPlatformShapedToken() {
     when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
     when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
-    when(authorisationService.getUsername()).thenReturn("technical");
+    when(technicalServiceIdentity.isCurrentCaller()).thenReturn(true);
 
     assertThat(tenantFacadeAuthorisationService.isPlatformAdministrator()).isFalse();
   }
@@ -701,7 +699,34 @@ class TenantFacadeAuthorisationServiceTest {
   void isPlatformAdministrator_Should_acceptThePlatformAdministrator() {
     when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
     when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
-    when(authorisationService.getUsername()).thenReturn("monty.burns");
+
+    assertThat(tenantFacadeAuthorisationService.isPlatformAdministrator()).isTrue();
+  }
+
+  @Test
+  void canAccessTenantById_Should_notGrantTheTechnicalIdentityForeignTenants() {
+    org.mockito.Mockito.lenient().when(authorisationService.getUsername()).thenReturn("technical");
+    org.mockito.Mockito.lenient().when(technicalServiceIdentity.isCurrentCaller()).thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+
+    assertThat(tenantFacadeAuthorisationService.canAccessTenantById(Optional.of(7L))).isFalse();
+  }
+
+  @Test
+  void canAccessTenantById_Should_notGrantAnythingWhenTheTokenHasNoTenant() {
+    org.mockito.Mockito.lenient().when(authorisationService.getUsername()).thenReturn("technical");
+    org.mockito.Mockito.lenient().when(technicalServiceIdentity.isCurrentCaller()).thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken())
+        .thenThrow(new AccessDeniedException("no tenantId"));
+
+    assertThat(tenantFacadeAuthorisationService.canAccessTenantById(Optional.of(7L))).isFalse();
+  }
+
+  @Test
+  void isPlatformAdministrator_Should_neverDecideByUsername() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    org.mockito.Mockito.lenient().when(authorisationService.getUsername()).thenReturn("technical");
 
     assertThat(tenantFacadeAuthorisationService.isPlatformAdministrator()).isTrue();
   }

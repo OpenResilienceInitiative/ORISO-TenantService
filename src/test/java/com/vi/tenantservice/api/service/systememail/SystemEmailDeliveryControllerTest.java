@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.config.security.JwtAuthConverterProperties;
+import com.vi.tenantservice.config.security.TechnicalServiceIdentity;
 import com.vi.tenantservice.config.security.WebSecurityConfig;
 import java.util.List;
 import java.util.Map;
@@ -108,6 +109,11 @@ class SystemEmailDeliveryControllerTest {
     @Bean(name = "tenantSmtpTestIdentity")
     TenantSmtpTestIdentity smtpTestIdentity() {
       return new TenantSmtpTestIdentity();
+    }
+
+    @Bean
+    TechnicalServiceIdentity technicalServiceIdentity() {
+      return new TechnicalServiceIdentity("service-id");
     }
 
     @Bean(name = "systemEmailServiceIdentity")
