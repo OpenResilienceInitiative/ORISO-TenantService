@@ -38,6 +38,8 @@ import org.springframework.web.context.WebApplicationContext;
 @Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class TenantLegalVersionControllerIT {
 
+  private static final String TECHNICAL_SERVICE_SUBJECT = "test-technical-service-subject";
+
   @Autowired private WebApplicationContext context;
   @Autowired private TenantRepository tenantRepository;
   @Autowired private TenantLegalVersionService versionService;
@@ -161,6 +163,7 @@ class TenantLegalVersionControllerIT {
         .jwt(
             token ->
                 token
+                    .subject(TECHNICAL_SERVICE_SUBJECT)
                     .claim("tenantId", tenantId)
                     .claim("username", "technical")
                     .claim("realm_access", Map.of("roles", List.of("technical"))))
