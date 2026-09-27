@@ -111,7 +111,7 @@ class TenantFacadeAuthorisationServiceTest {
 
   @Test
   void theTechnicalPrincipalWithTenantZeroMayNotListEveryTenantButKeepsSingleTenantAccess() {
-    when(authorisationService.getUsername()).thenReturn("technical");
+    when(technicalServiceIdentity.isCurrentCaller()).thenReturn(true);
     when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
     when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
     when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
@@ -124,7 +124,6 @@ class TenantFacadeAuthorisationServiceTest {
 
   @Test
   void thePlatformAdministratorMayListEveryTenant() {
-    when(authorisationService.getUsername()).thenReturn("platform.admin");
     when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
     when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
     when(authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS))
