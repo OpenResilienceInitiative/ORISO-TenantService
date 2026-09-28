@@ -48,6 +48,8 @@ class TenantControllerBrandingAssetTest {
   @Mock private TenantDpaFacade tenantDpaFacade;
   @Mock private TenantLegalDraftFacade tenantLegalDraftFacade;
   @Mock private com.vi.tenantservice.api.facade.TenantLegalProposalFacade tenantLegalProposalFacade;
+
+  @Mock private com.vi.tenantservice.api.facade.TenantLegalVersionFacade tenantLegalVersionFacade;
   @Mock private TranslationFacade translationFacade;
   @Mock private TenantMediaService tenantMediaService;
   @Mock private TenantIdAllocationService tenantIdAllocationService;

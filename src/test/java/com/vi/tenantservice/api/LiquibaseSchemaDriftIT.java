@@ -11,9 +11,12 @@ import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.TenantLegalDraftKind;
 import com.vi.tenantservice.api.model.TenantLegalProposalAdoptionMode;
 import com.vi.tenantservice.api.model.TenantLegalProposalAudience;
+import com.vi.tenantservice.api.model.TenantLegalTextVersionEntity;
 import com.vi.tenantservice.api.repository.TenantLegalProposalRepository;
+import com.vi.tenantservice.api.repository.TenantLegalTextVersionRepository;
 import com.vi.tenantservice.api.service.TenantLegalProposalService;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.*;
@@ -76,6 +79,7 @@ class LiquibaseSchemaDriftIT {
   }
 
   @Autowired private JdbcTemplate jdbcTemplate;
+  @Autowired private TenantLegalTextVersionRepository legalTextVersionRepository;
   @Autowired private TenantLegalProposalService legalProposalService;
   @MockitoSpyBean private TenantLegalProposalRepository legalProposalRepository;
 
@@ -103,7 +107,8 @@ class LiquibaseSchemaDriftIT {
           "sequence_tenant_legal_draft",
           "sequence_tenant_legal_proposal",
           "sequence_tenant_legal_proposal_delivery",
-          "sequence_tenant_legal_draft_archive"
+          "sequence_tenant_legal_draft_archive",
+          "sequence_tenant_legal_text_version"
         }) {
       Integer count =
           jdbcTemplate.queryForObject(
@@ -114,6 +119,23 @@ class LiquibaseSchemaDriftIT {
               sequence);
       assertThat(count).as("lowercase sequence %s", sequence).isEqualTo(1);
     }
+  }
+
+  // The entity names the sequence in upper case; the physical naming strategy must map it to
+  // the lower-case sequence the changeset creates, or the first insert fails on MariaDB.
+  @Test
+  void legalTextVersion_shouldGetItsIdFromTheLowercaseSequence() {
+    TenantLegalTextVersionEntity saved =
+        legalTextVersionRepository.save(
+            TenantLegalTextVersionEntity.builder()
+                .tenantId(424242L)
+                .kind(TenantLegalDraftKind.PRIVACY)
+                .content("<p>Datenschutz</p>")
+                .publishedAt(LocalDateTime.now())
+                .build());
+
+    assertThat(saved.getId()).isNotNull();
+    legalTextVersionRepository.deleteById(saved.getId());
   }
 
   @Test
@@ -129,7 +151,8 @@ class LiquibaseSchemaDriftIT {
           "tenant_legal_proposal_distribution",
           "tenant_legal_proposal",
           "tenant_legal_proposal_delivery",
-          "tenant_legal_draft_archive"
+          "tenant_legal_draft_archive",
+          "tenant_legal_text_version"
         }) {
       Integer count =
           jdbcTemplate.queryForObject(

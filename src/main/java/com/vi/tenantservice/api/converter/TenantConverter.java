@@ -28,6 +28,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantData;
+import com.vi.tenantservice.api.model.TenantDataProtectionOfficerDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantEntity.TenantEntityBuilder;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
@@ -39,9 +40,11 @@ import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
+import com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens;
 import com.vi.tenantservice.api.util.JsonConverter;
 import freemarker.template.TemplateException;
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -62,6 +65,8 @@ public class TenantConverter {
 
   private final @NonNull SmtpPasswordEncryptionService smtpPasswordEncryptionService;
 
+  private final @NonNull PlatformLegalTextTokens platformLegalTextTokens;
+
   public TenantEntity toEntity(MultilingualTenantDTO tenantDTO) {
     var builder =
         TenantEntity.builder()
@@ -72,7 +77,9 @@ public class TenantConverter {
             .description(tenantDTO.getDescription())
             .legalName(blankToNull(tenantDTO.getLegalName()))
             .contactEmail(blankToNull(tenantDTO.getContactEmail()))
-            .contactPhone(blankToNull(tenantDTO.getContactPhone()));
+            .contactPhone(blankToNull(tenantDTO.getContactPhone()))
+            .dataProtectionOfficer(
+                dataProtectionOfficerToJson(tenantDTO.getDataProtectionOfficer()));
     contentToEntity(tenantDTO, builder);
     licensingToEntity(tenantDTO, builder);
     themingToEntity(tenantDTO, builder);
@@ -189,7 +196,8 @@ public class TenantConverter {
         "contentDataProcessingAgreementActivationDate",
         "legalName",
         "contactEmail",
-        "contactPhone");
+        "contactPhone",
+        "dataProtectionOfficer");
     applyLegalNameAndContact(targetEntity, tenantDTO);
     return targetEntity;
   }
@@ -208,6 +216,55 @@ public class TenantConverter {
     }
     if (tenantDTO.getContactPhone() != null) {
       target.setContactPhone(blankToNull(tenantDTO.getContactPhone()));
+    }
+    if (tenantDTO.getDataProtectionOfficer() != null) {
+      target.setDataProtectionOfficer(
+          dataProtectionOfficerToJson(tenantDTO.getDataProtectionOfficer()));
+    }
+  }
+
+  /** Blank fields are dropped; an object without any value is stored as NULL ("not entered"). */
+  static String dataProtectionOfficerToJson(TenantDataProtectionOfficerDTO dpo) {
+    if (dpo == null) {
+      return null;
+    }
+    var fields = new LinkedHashMap<String, String>();
+    putIfPresent(fields, "nameAndLegalForm", dpo.getNameAndLegalForm());
+    putIfPresent(fields, "street", dpo.getStreet());
+    putIfPresent(fields, "postcode", dpo.getPostcode());
+    putIfPresent(fields, "city", dpo.getCity());
+    putIfPresent(fields, "phoneNumber", dpo.getPhoneNumber());
+    putIfPresent(fields, "email", dpo.getEmail());
+    return fields.isEmpty() ? null : convertToJson(fields);
+  }
+
+  private static void putIfPresent(Map<String, String> fields, String key, String value) {
+    var trimmed = blankToNull(value);
+    if (trimmed != null) {
+      fields.put(key, trimmed);
+    }
+  }
+
+  /** A damaged stored value must not break the public tenant read; it reads as "not entered". */
+  static TenantDataProtectionOfficerDTO dataProtectionOfficerFromJson(String json) {
+    if (json == null || json.isBlank()) {
+      return null;
+    }
+    try {
+      var fields = convertMapFromJson(json);
+      if (fields.isEmpty()) {
+        return null;
+      }
+      return new TenantDataProtectionOfficerDTO()
+          .nameAndLegalForm(fields.get("nameAndLegalForm"))
+          .street(fields.get("street"))
+          .postcode(fields.get("postcode"))
+          .city(fields.get("city"))
+          .phoneNumber(fields.get("phoneNumber"))
+          .email(fields.get("email"));
+    } catch (RuntimeException e) {
+      log.warn("Stored data protection officer is not readable JSON; treating it as not entered");
+      return null;
     }
   }
 
@@ -276,6 +333,7 @@ public class TenantConverter {
             .legalName(tenant.getLegalName())
             .contactEmail(tenant.getContactEmail())
             .contactPhone(tenant.getContactPhone())
+            .dataProtectionOfficer(dataProtectionOfficerFromJson(tenant.getDataProtectionOfficer()))
             .content(toMultilingualContentDTO(tenant))
             .theming(toThemingDTO(tenant))
             .licensing(toLicensingDTO(tenant))
@@ -297,6 +355,7 @@ public class TenantConverter {
             .legalName(tenant.getLegalName())
             .contactEmail(tenant.getContactEmail())
             .contactPhone(tenant.getContactPhone())
+            .dataProtectionOfficer(dataProtectionOfficerFromJson(tenant.getDataProtectionOfficer()))
             .content(toContentDTO(tenant, lang))
             .theming(toThemingDTO(tenant))
             .licensing(toLicensingDTO(tenant))
@@ -860,8 +919,12 @@ public class TenantConverter {
   }
 
   public RestrictedTenantDTO toRestrictedTenantDTO(TenantRestrictedData tenant, String lang) {
+    var content = toContentDTO(tenant, lang);
+    // Public reads only: the Admin editor loads /tenant/{id} and must keep the raw token.
+    platformLegalTextTokens.fill(content);
     return new RestrictedTenantDTO(tenant.getId(), tenant.getName())
-        .content(toContentDTO(tenant, lang))
+        .dataProtectionOfficer(dataProtectionOfficerFromJson(tenant.getDataProtectionOfficer()))
+        .content(content)
         .theming(toThemingDTO(tenant))
         .subdomain(tenant.getSubdomain())
         .settings(getRestrictedPublicSettings(tenant));

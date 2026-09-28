@@ -44,6 +44,8 @@ class TenantConverterTest {
 
   @Mock TemplateRenderer templateRenderer;
 
+  @Mock com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens platformLegalTextTokens;
+
   // disabled (no secret): converter unit tests run on plaintext passthrough
   @Spy
   SmtpPasswordEncryptionService smtpPasswordEncryptionService =
@@ -532,7 +534,8 @@ class TenantConverterTest {
     // given
     var encryptionService = new SmtpPasswordEncryptionService("unit-test-secret");
     var encryptingConverter =
-        new TenantConverter(templateService, templateRenderer, encryptionService);
+        new TenantConverter(
+            templateService, templateRenderer, encryptionService, platformLegalTextTokens);
     MultilingualTenantDTO tenantDTO =
         new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
     tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).password("plain-secret"));
@@ -745,5 +748,49 @@ class TenantConverterTest {
       return written;
     }
     return written.loginEffect(Theming.LoginEffectEnum.NONE);
+  }
+
+  // --- Träger DPO (ORISO-Admin#1067)
+
+  @Test
+  void dataProtectionOfficer_Should_roundTripThroughTheEntity_And_dropBlankFields() {
+    var dto = new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    dto.setDataProtectionOfficer(
+        new com.vi.tenantservice.api.model.TenantDataProtectionOfficerDTO()
+            .nameAndLegalForm(" Dr. Maria Muster ")
+            .email("datenschutz@example.org")
+            .street(" "));
+
+    var entity = tenantConverter.toEntity(dto);
+    var back = tenantConverter.toMultilingualDTO(entity).getDataProtectionOfficer();
+
+    assertThat(back.getNameAndLegalForm()).isEqualTo("Dr. Maria Muster");
+    assertThat(back.getEmail()).isEqualTo("datenschutz@example.org");
+    assertThat(back.getStreet()).isNull();
+    assertThat(tenantConverter.toRestrictedTenantDTO(entity, "de").getDataProtectionOfficer())
+        .isEqualTo(back);
+  }
+
+  @Test
+  void dataProtectionOfficer_Should_keepStoredValue_When_absent_And_clear_When_allBlank() {
+    var stored =
+        TenantEntity.builder()
+            .dataProtectionOfficer("{\"nameAndLegalForm\":\"Dr. Maria Muster\"}")
+            .build();
+    var withoutDpo = new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+
+    tenantConverter.toEntity(stored, withoutDpo);
+    assertThat(stored.getDataProtectionOfficer()).contains("Dr. Maria Muster");
+
+    withoutDpo.setDataProtectionOfficer(
+        new com.vi.tenantservice.api.model.TenantDataProtectionOfficerDTO().nameAndLegalForm(" "));
+    tenantConverter.toEntity(stored, withoutDpo);
+    assertThat(stored.getDataProtectionOfficer()).isNull();
+  }
+
+  @Test
+  void dataProtectionOfficer_Should_readAsNotEntered_When_storedJsonIsDamaged() {
+    var stored = TenantEntity.builder().dataProtectionOfficer("{not json").build();
+    assertThat(tenantConverter.toMultilingualDTO(stored).getDataProtectionOfficer()).isNull();
   }
 }
