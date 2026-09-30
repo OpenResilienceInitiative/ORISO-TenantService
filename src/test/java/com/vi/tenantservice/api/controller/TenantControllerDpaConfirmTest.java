@@ -257,11 +257,13 @@ class TenantControllerDpaConfirmTest {
   @Test
   void publishDataProcessingAgreement_Should_returnOkWithGate() {
     // given
-    when(tenantDpaFacade.publishDpa(eq(7L), any()))
+    when(tenantDpaFacade.publishDpa(eq(7L), any(), any()))
         .thenReturn(new DpaGateStatusDTO().dpaPublished(true).dpaSigned(false));
 
     // when
-    var response = controller.publishDataProcessingAgreement(7L, Map.of("de", "<p>x</p>"));
+    var response =
+        controller.publishDataProcessingAgreement(
+            7L, "2099-10-15T15:00:00Z", Map.of("de", "<p>x</p>"));
 
     // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);

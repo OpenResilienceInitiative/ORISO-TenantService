@@ -226,7 +226,8 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  @PreAuthorize(
+      "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')")
   public ResponseEntity<DpaGateStatusDTO> getDataProcessingAgreementGate(@NotNull Long id) {
     return new ResponseEntity<>(tenantDpaFacade.getGateStatus(id), HttpStatus.OK);
   }
@@ -248,8 +249,11 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<DpaGateStatusDTO> publishDataProcessingAgreement(
-      @NotNull Long id, @Valid Map<String, String> requestBody) {
-    return new ResponseEntity<>(tenantDpaFacade.publishDpa(id, requestBody), HttpStatus.OK);
+      @NotNull Long id,
+      @NotNull @Valid String signingDeadlineAt,
+      @Valid Map<String, String> requestBody) {
+    return new ResponseEntity<>(
+        tenantDpaFacade.publishDpa(id, requestBody, signingDeadlineAt), HttpStatus.OK);
   }
 
   @ExceptionHandler(DpaNotPublishedException.class)

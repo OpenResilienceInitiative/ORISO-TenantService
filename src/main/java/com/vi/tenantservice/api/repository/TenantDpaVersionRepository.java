@@ -8,6 +8,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface TenantDpaVersionRepository extends JpaRepository<TenantDpaVersionEntity, Long> {
 
+  Optional<TenantDpaVersionEntity> findFirstByTenantIdOrderByActivationDateDescIdDesc(
+      Long tenantId);
+
   /** Published versions for a tenant, newest first (so the UI can default to the latest). */
   List<TenantDpaVersionEntity> findByTenantIdOrderByActivationDateDesc(Long tenantId);
 

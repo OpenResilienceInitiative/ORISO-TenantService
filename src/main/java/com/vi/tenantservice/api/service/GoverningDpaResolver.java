@@ -3,9 +3,11 @@ package com.vi.tenantservice.api.service;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
 import com.vi.tenantservice.api.repository.TenantRepository;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -42,6 +44,7 @@ public class GoverningDpaResolver {
 
   private final TenantRepository tenantRepository;
   private final TenantDpaVersionRepository versionRepository;
+  private final EntityManager entityManager;
 
   /**
    * Tenant holding the governing operator DPA document; {@code 0} or negative disables the fallback
@@ -107,6 +110,27 @@ public class GoverningDpaResolver {
   public long documentTenantIdFor(Long tenantId) {
     var governing = resolve(tenantId);
     return governing == null ? tenantId : governing.documentTenantId();
+  }
+
+  /** Metadata of this exact document owner; missing legacy history never borrows another owner. */
+  public Optional<TenantDpaVersionEntity> findCurrentPublishedVersion(GoverningDpa governing) {
+    return governing == null
+        ? Optional.empty()
+        : versionRepository.findFirstByTenantIdAndActivationDate(
+            governing.documentTenantId(), governing.version());
+  }
+
+  /** Lock and refresh recipient/owner in one order before resolving a publication or signature. */
+  public void lockForSigning(Long tenantId) {
+    var ids =
+        operatorFallbackApplies(tenantId) ? Set.of(tenantId, operatorTenantId) : Set.of(tenantId);
+    tenantRepository
+        .findForDpaSigning(ids)
+        // OSIV may have loaded these before another request published. A lock alone does not
+        // refresh managed fields. Detach and hydrate with a current locking read: Hibernate's
+        // refresh of an already locked entity uses a snapshot read under MariaDB REPEATABLE_READ.
+        .forEach(entityManager::detach);
+    tenantRepository.findForDpaSigning(ids);
   }
 
   /**

@@ -152,7 +152,8 @@ class TenantDpaSignatureRepositoryTest {
             false,
             "de",
             "FORWARDED_EXTERNAL",
-            now);
+            now,
+            true);
     // and a second consume of the same token affects nothing (single-use)
     int second =
         signatureRepository.consumeSignToken(
@@ -164,7 +165,8 @@ class TenantDpaSignatureRepositoryTest {
             true,
             "en",
             "FORWARDED_EXTERNAL",
-            now);
+            now,
+            true);
     signatureRepository.flush();
 
     // then
