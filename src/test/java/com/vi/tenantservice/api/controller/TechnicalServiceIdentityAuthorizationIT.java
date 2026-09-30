@@ -14,7 +14,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vi.tenantservice.TenantServiceApplication;
-import com.vi.tenantservice.api.authorisation.RoleAuthorizationAuthorityMapper;
 import com.vi.tenantservice.api.config.apiclient.ApplicationSettingsApiControllerFactory;
 import com.vi.tenantservice.api.config.apiclient.ConsultingTypeServiceApiControllerFactory;
 import com.vi.tenantservice.api.model.TenantIdReservationStatus;
@@ -25,6 +24,7 @@ import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.service.httpheader.SecurityHeaderSupplier;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
+import com.vi.tenantservice.config.security.JwtAuthConverter;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -48,8 +48,8 @@ import org.springframework.web.context.WebApplicationContext;
  * no longer depends on the broad {@code tenant-admin} role. A token that carries {@code
  * tenant-admin} in addition (current Staging grant) must keep working exactly as before.
  *
- * <p>Authorities are derived from the realm roles with the production {@link
- * RoleAuthorizationAuthorityMapper}, as {@code JwtAuthConverter} does for a real token.
+ * <p>Authorities come from the production {@link JwtAuthConverter}, so the technical-only
+ * authorities are granted only to the configured service subject, exactly as for a real token.
  */
 @SpringBootTest(classes = TenantServiceApplication.class)
 @TestPropertySource(properties = "spring.profiles.active=testing")
@@ -58,10 +58,14 @@ class TechnicalServiceIdentityAuthorizationIT {
 
   private static final long RESERVED_ID = 500L;
   private static final long FREE_ID = 501L;
+  // technical.service.subject in application-testing.properties
+  private static final String SERVICE_SUBJECT = "test-technical-service-subject";
+  private static final String FOREIGN_SUBJECT = "someone-else-with-the-technical-role";
 
   @Autowired private WebApplicationContext context;
   @Autowired private TenantIdAllocationService tenantIdAllocationService;
   @Autowired private TenantIdReservationRepository reservationRepository;
+  @Autowired private JwtAuthConverter jwtAuthConverter;
 
   @MockitoBean private ApplicationSettingsService applicationSettingsService;
 
@@ -208,6 +212,35 @@ class TechnicalServiceIdentityAuthorizationIT {
         .andExpect(status().isNoContent());
   }
 
+  // ---- the role alone is not the service identity ----
+
+  @Test
+  void foreignSubjectWithTechnicalRole_Should_beForbiddenToRead() throws Exception {
+    var caller = foreignSubjectWithTechnicalRole();
+
+    mvc.perform(get("/tenant/1").with(caller)).andExpect(status().isForbidden());
+    mvc.perform(get("/tenantadmin/1/dpa/versions").with(caller)).andExpect(status().isForbidden());
+    mvc.perform(get("/tenantadmin/1/permission-policies").with(caller))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void foreignSubjectWithTechnicalRole_Should_beForbiddenToReleaseOrConsumeAReservation()
+      throws Exception {
+    String token = reserve(RESERVED_ID);
+    var caller = foreignSubjectWithTechnicalRole();
+
+    mvc.perform(delete("/tenantadmin/tenant-ids/reservations/" + RESERVED_ID).with(caller))
+        .andExpect(status().isForbidden());
+    mvc.perform(createTenant(caller, RESERVED_ID, token, "foreign"))
+        .andExpect(status().isForbidden());
+
+    assertThat(reservationRepository.findById(RESERVED_ID))
+        .get()
+        .extracting(reservation -> reservation.getStatus())
+        .isEqualTo(TenantIdReservationStatus.RESERVED);
+  }
+
   // ---- everything else stays closed to the technical-only identity ----
 
   @Test
@@ -284,24 +317,29 @@ class TechnicalServiceIdentityAuthorizationIT {
         .content(builder.jsonify());
   }
 
-  private static RequestPostProcessor technicalOnly() {
-    return serviceIdentity(Set.of("default-roles-online-beratung", "technical"));
+  private RequestPostProcessor technicalOnly() {
+    return caller(SERVICE_SUBJECT, Set.of("default-roles-online-beratung", "technical"));
   }
 
-  private static RequestPostProcessor technicalWithTenantAdmin() {
-    return serviceIdentity(Set.of("default-roles-online-beratung", "technical", "tenant-admin"));
+  private RequestPostProcessor technicalWithTenantAdmin() {
+    return caller(
+        SERVICE_SUBJECT, Set.of("default-roles-online-beratung", "technical", "tenant-admin"));
   }
 
-  private static RequestPostProcessor serviceIdentity(Set<String> realmRoles) {
+  private RequestPostProcessor foreignSubjectWithTechnicalRole() {
+    return caller(FOREIGN_SUBJECT, Set.of("default-roles-online-beratung", "technical"));
+  }
+
+  private RequestPostProcessor caller(String subject, Set<String> realmRoles) {
     return jwt()
         .jwt(
             token ->
                 token
-                    .subject("technical-service-subject")
+                    .subject(subject)
                     .claim("azp", "app")
                     .claim("tenantId", 0L)
                     .claim("username", "technical")
                     .claim("realm_access", Map.of("roles", List.copyOf(realmRoles))))
-        .authorities(new RoleAuthorizationAuthorityMapper().mapAuthorities(realmRoles));
+        .authorities(token -> jwtAuthConverter.convert(token).getAuthorities());
   }
 }

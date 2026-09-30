@@ -35,7 +35,6 @@ import java.util.Map;
 import java.util.Objects;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -70,9 +69,7 @@ public class TenantDpaFacade {
   private final @NonNull TenantIdReservationRepository tenantIdReservationRepository;
   private final @NonNull InputSanitizer inputSanitizer;
   private final @NonNull AuthorisationService authorisationService;
-
-  @Value("${app.base.url:}")
-  private String appBaseUrl;
+  private final @NonNull DpaSignLinkOrigin dpaSignLinkOrigin;
 
   /**
    * Creates a single-use sign invite for the DPA version currently in force for the tenant and
@@ -99,7 +96,7 @@ public class TenantDpaFacade {
             tenantId, governing.version(), INVITE_TTL, authorisationService.getUserId());
     return new DpaSignInviteDTO()
         .token(rawToken)
-        .signLink(buildSignLink(rawToken))
+        .signLink(dpaSignLinkOrigin.build(rawToken))
         .expiresAt(LocalDateTime.now().plus(INVITE_TTL).toString());
   }
 
@@ -185,7 +182,7 @@ public class TenantDpaFacade {
             tenantId, governing.version(), INVITE_TTL, null, request.getTenantIdReservationToken());
     return new DpaSignInviteDTO()
         .token(rawToken)
-        .signLink(buildSignLink(rawToken))
+        .signLink(dpaSignLinkOrigin.build(rawToken))
         .expiresAt(LocalDateTime.now().plus(INVITE_TTL).toString());
   }
 
@@ -195,10 +192,6 @@ public class TenantDpaFacade {
     }
     return MessageDigest.isEqual(
         expected.getBytes(StandardCharsets.UTF_8), presented.getBytes(StandardCharsets.UTF_8));
-  }
-
-  private String buildSignLink(String rawToken) {
-    return (appBaseUrl == null ? "" : appBaseUrl) + "/dpa-sign/" + rawToken;
   }
 
   /** The tenant's confirmed-DPA audit list (the platform-admin "list of confirmed AVVs"). */
