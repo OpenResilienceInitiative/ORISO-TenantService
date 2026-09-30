@@ -1,7 +1,6 @@
 package com.vi.tenantservice.api.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -257,13 +256,13 @@ class TenantControllerDpaConfirmTest {
   @Test
   void publishDataProcessingAgreement_Should_returnOkWithGate() {
     // given
-    when(tenantDpaFacade.publishDpa(eq(7L), any(), any()))
+    var deadline = "2099-10-15T15:00:00Z";
+    var content = Map.of("de", "<p>x</p>");
+    when(tenantDpaFacade.publishDpa(eq(7L), eq(content), eq(deadline)))
         .thenReturn(new DpaGateStatusDTO().dpaPublished(true).dpaSigned(false));
 
     // when
-    var response =
-        controller.publishDataProcessingAgreementV2(
-            7L, "2099-10-15T15:00:00Z", Map.of("de", "<p>x</p>"));
+    var response = controller.publishDataProcessingAgreementV2(7L, deadline, content);
 
     // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
