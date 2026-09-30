@@ -205,12 +205,36 @@ public class TenantDpaStatusService {
       String signerUserId,
       String signerUsername,
       AdminSignatureForm form) {
+    return acceptDisplayedVersion(
+        tenantId, shownVersion, signerUserId, signerUsername, form, false);
+  }
+
+  /** Genuine compatibility for legacy contracts; adopted deadline policy requires the v2 form. */
+  public DpaStatusView signLegacyVersion(
+      Long tenantId, String signerUserId, String signerUsername, AdminSignatureForm form) {
+    var version = getStatus(tenantId).currentVersion();
+    if (version == null) {
+      throw new DpaNotPublishedException("Tenant has no published DPA to sign yet");
+    }
+    return acceptDisplayedVersion(tenantId, version, signerUserId, signerUsername, form, true);
+  }
+
+  private DpaStatusView acceptDisplayedVersion(
+      Long tenantId,
+      LocalDateTime shownVersion,
+      String signerUserId,
+      String signerUsername,
+      AdminSignatureForm form,
+      boolean legacy) {
     var transaction = new TransactionTemplate(transactionManager);
     transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     try {
       transaction.executeWithoutResult(
           tx -> {
             governingDpaResolver.lockForSigning(tenantId);
+            if (legacy && governingDpaResolver.requiresVersionedDpaMutation(tenantId)) {
+              throw new DpaNotPublishedException("Deadline-managed DPA requires versioned signing");
+            }
             var current = getStatus(tenantId);
             if (!shownVersion.equals(current.currentVersion())) {
               throw new DpaNotPublishedException(

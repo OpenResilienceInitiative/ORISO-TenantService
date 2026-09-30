@@ -78,10 +78,79 @@ class TenantDpaDeadlineIT {
   }
 
   @Test
+  void legacyClientsCanPublishAndSignBeforeDeadlinePolicyRollout() throws Exception {
+    mvc.perform(
+            put("/tenantadmin/1/dpa")
+                .with(caller(0L, "tenant-admin"))
+                .contentType(APPLICATION_JSON)
+                .content("{\"de\":\"<p>Legacy AVV</p>\"}"))
+        .andExpect(status().isOk());
+    mvc.perform(
+            post("/tenantadmin/2/dpa/sign")
+                .with(caller(2L, "single-tenant-admin"))
+                .contentType(APPLICATION_JSON)
+                .content("{\"signerName\":\"Legacy Signer\",\"accepted\":true}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("VALID"))
+        .andExpect(jsonPath("$.renewalGraceActive").value(false));
+  }
+
+  @Test
+  void legacyMutationCannotDowngradeOrSignADeadlineManagedDocument() throws Exception {
+    publish("2026-10-15T15:00:00Z");
+    var version = currentVersion();
+    for (long tenantId : List.of(1L, 2L)) {
+      mvc.perform(
+              put("/tenantadmin/{id}/dpa", tenantId)
+                  .with(caller(0L, "tenant-admin"))
+                  .contentType(APPLICATION_JSON)
+                  .content("{\"de\":\"<p>Must not remove deadline</p>\"}"))
+          .andExpect(status().isConflict());
+    }
+    mvc.perform(
+            post("/tenantadmin/2/dpa/sign")
+                .with(caller(2L, "single-tenant-admin"))
+                .contentType(APPLICATION_JSON)
+                .content("{\"signerName\":\"Legacy Signer\",\"accepted\":true}"))
+        .andExpect(status().isConflict());
+    mvc.perform(get("/tenantadmin/2/dpa/status").with(caller(2L, "single-tenant-admin")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("UNSIGNED"))
+        .andExpect(jsonPath("$.currentDpaVersion").value(version))
+        .andExpect(jsonPath("$.signingDeadlineAt").value("2026-10-15T15:00:00Z"));
+    signCurrent();
+  }
+
+  @Test
+  void aGoverningOwnLegacyDocumentKeepsItsExistingMutationContract() throws Exception {
+    mvc.perform(
+            put("/tenantadmin/2/dpa")
+                .with(caller(2L, "single-tenant-admin"))
+                .contentType(APPLICATION_JSON)
+                .content("{\"de\":\"<p>Own legacy AVV</p>\"}"))
+        .andExpect(status().isOk());
+    publish("2026-10-15T15:00:00Z");
+    mvc.perform(
+            put("/tenantadmin/2/dpa")
+                .with(caller(2L, "single-tenant-admin"))
+                .contentType(APPLICATION_JSON)
+                .content("{\"de\":\"<p>Own legacy update</p>\"}"))
+        .andExpect(status().isOk());
+    mvc.perform(
+            post("/tenantadmin/2/dpa/sign")
+                .with(caller(2L, "single-tenant-admin"))
+                .contentType(APPLICATION_JSON)
+                .content("{\"signerName\":\"Legacy Signer\",\"accepted\":true}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("VALID"))
+        .andExpect(jsonPath("$.signingDeadlineAt").doesNotExist());
+  }
+
+  @Test
   void firstPublicationExposesTheChosenGlobalDeadlineWithoutGrantingInitialAccess()
       throws Exception {
     mvc.perform(
-            put("/tenantadmin/1/dpa")
+            put("/tenantadmin/1/dpa/v2")
                 .with(caller(0L, "tenant-admin"))
                 .queryParam("signingDeadlineAt", "2026-10-15T17:00:00+02:00")
                 .contentType(APPLICATION_JSON)
@@ -131,7 +200,7 @@ class TenantDpaDeadlineIT {
     signCurrent();
     String operatorVersion = currentVersion();
     mvc.perform(
-            put("/tenantadmin/2/dpa")
+            put("/tenantadmin/2/dpa/v2")
                 .with(caller(2L, "single-tenant-admin"))
                 .queryParam("signingDeadlineAt", "2026-10-20T15:00:00Z")
                 .contentType(APPLICATION_JSON)
@@ -140,7 +209,7 @@ class TenantDpaDeadlineIT {
         .andExpect(jsonPath("$.dpaStatus").value("OUTDATED"))
         .andExpect(jsonPath("$.currentDpaVersion").value("2026-10-01T10:00:01"));
     mvc.perform(
-            post("/tenantadmin/2/dpa/sign")
+            post("/tenantadmin/2/dpa/v2/sign")
                 .with(caller(2L, "single-tenant-admin"))
                 .contentType(APPLICATION_JSON)
                 .content(
@@ -171,7 +240,7 @@ class TenantDpaDeadlineIT {
               })
           .get(20, TimeUnit.SECONDS);
       mvc.perform(
-              post("/tenantadmin/2/dpa/sign")
+              post("/tenantadmin/2/dpa/v2/sign")
                   .with(caller(2L, "single-tenant-admin"))
                   .contentType(APPLICATION_JSON)
                   .content(
@@ -219,6 +288,33 @@ class TenantDpaDeadlineIT {
         .andExpect(jsonPath("$.newCounsellingAllowed").value(previouslySigned));
   }
 
+  @Test
+  void aCurrentForwardedSignatureSupportsTheNextRenewalGrace() throws Exception {
+    publish("2026-10-15T15:00:00Z");
+    var invite =
+        mvc.perform(post("/tenantadmin/2/dpa/invite").with(caller(2L, "single-tenant-admin")))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String token = com.jayway.jsonpath.JsonPath.read(invite, "$.token");
+    mvc.perform(
+            post("/tenant/public/dpa/confirm/{token}", token)
+                .contentType(APPLICATION_JSON)
+                .content(
+                    "{\"signerName\":\"External Signer\",\"signerPosition\":\"CEO\",\"signerEmail\":\"signer@example.org\",\"signerOrganisation\":\"Tenant Two\",\"accepted\":true,\"language\":\"de\"}"))
+        .andExpect(status().isOk());
+    mvc.perform(get("/tenantadmin/2/dpa/gate").with(caller(2L, "single-tenant-admin")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dpaStatus").value("VALID"));
+    publish("2026-10-20T15:00:00Z");
+    mvc.perform(get("/tenantadmin/2/dpa/gate").with(caller(2L, "single-tenant-admin")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dpaStatus").value("OUTDATED"))
+        .andExpect(jsonPath("$.renewalGraceActive").value(true))
+        .andExpect(jsonPath("$.newCounsellingAllowed").value(true));
+  }
+
   @ParameterizedTest
   @ValueSource(
       strings = {
@@ -233,7 +329,7 @@ class TenantDpaDeadlineIT {
     publish("2026-10-15T15:00:00Z");
 
     mvc.perform(
-            put("/tenantadmin/1/dpa")
+            put("/tenantadmin/1/dpa/v2")
                 .with(caller(0L, "tenant-admin"))
                 .queryParam("signingDeadlineAt", deadline)
                 .contentType(APPLICATION_JSON)
@@ -261,7 +357,7 @@ class TenantDpaDeadlineIT {
                 .with(caller(0L, "technical", "foreign-technical-role-holder")))
         .andExpect(status().isForbidden());
     mvc.perform(
-            put("/tenantadmin/1/dpa")
+            put("/tenantadmin/1/dpa/v2")
                 .with(caller(0L, "technical", "test-technical-service-subject"))
                 .queryParam("signingDeadlineAt", "2026-10-15T15:00:00Z")
                 .contentType(APPLICATION_JSON)
@@ -299,7 +395,7 @@ class TenantDpaDeadlineIT {
             .content("{\"de\":\"<p>Retained history</p>\"}")
             .build());
     mvc.perform(
-            put("/tenantadmin/2/dpa")
+            put("/tenantadmin/2/dpa/v2")
                 .with(caller(2L, "single-tenant-admin"))
                 .queryParam("signingDeadlineAt", "2026-10-15T15:00:00Z")
                 .contentType(APPLICATION_JSON)
@@ -318,7 +414,7 @@ class TenantDpaDeadlineIT {
     String shownVersion = currentVersion();
     publish("2026-10-20T15:00:00Z");
     mvc.perform(
-            post("/tenantadmin/2/dpa/sign")
+            post("/tenantadmin/2/dpa/v2/sign")
                 .with(caller(2L, "single-tenant-admin"))
                 .contentType(APPLICATION_JSON)
                 .content(
@@ -336,7 +432,7 @@ class TenantDpaDeadlineIT {
   void malformedDisplayedVersionCannotCreateASignature(String shownVersion) throws Exception {
     publish("2026-10-15T15:00:00Z");
     mvc.perform(
-            post("/tenantadmin/2/dpa/sign")
+            post("/tenantadmin/2/dpa/v2/sign")
                 .with(caller(2L, "single-tenant-admin"))
                 .contentType(APPLICATION_JSON)
                 .content(
@@ -352,7 +448,7 @@ class TenantDpaDeadlineIT {
   @Test
   void missingDeadlineAndMissingDisplayedVersionAreRejectedWithoutDefaults() throws Exception {
     mvc.perform(
-            put("/tenantadmin/1/dpa")
+            put("/tenantadmin/1/dpa/v2")
                 .with(caller(0L, "tenant-admin"))
                 .contentType(APPLICATION_JSON)
                 .content("{\"de\":\"<p>Must not publish</p>\"}"))
@@ -362,7 +458,7 @@ class TenantDpaDeadlineIT {
         .andExpect(jsonPath("$.status").value("MISSING"));
     publish("2026-10-15T15:00:00Z");
     mvc.perform(
-            post("/tenantadmin/2/dpa/sign")
+            post("/tenantadmin/2/dpa/v2/sign")
                 .with(caller(2L, "single-tenant-admin"))
                 .contentType(APPLICATION_JSON)
                 .content("{\"signerName\":\"Tenant Signer\",\"accepted\":true}"))
@@ -380,7 +476,7 @@ class TenantDpaDeadlineIT {
     mvc.perform(get("/tenantadmin/1/dpa/gate").with(caller(2L, role)))
         .andExpect(status().isForbidden());
     mvc.perform(
-            post("/tenantadmin/2/dpa/sign")
+            post("/tenantadmin/2/dpa/v2/sign")
                 .with(caller(2L, role))
                 .contentType(APPLICATION_JSON)
                 .content(
@@ -400,7 +496,7 @@ class TenantDpaDeadlineIT {
 
   private void publish(String deadline) throws Exception {
     mvc.perform(
-            put("/tenantadmin/1/dpa")
+            put("/tenantadmin/1/dpa/v2")
                 .with(caller(0L, "tenant-admin"))
                 .queryParam("signingDeadlineAt", deadline)
                 .contentType(APPLICATION_JSON)
@@ -411,7 +507,7 @@ class TenantDpaDeadlineIT {
   private void signCurrent() throws Exception {
     String shownVersion = currentVersion();
     mvc.perform(
-            post("/tenantadmin/2/dpa/sign")
+            post("/tenantadmin/2/dpa/v2/sign")
                 .with(caller(2L, "single-tenant-admin"))
                 .contentType(APPLICATION_JSON)
                 .content(

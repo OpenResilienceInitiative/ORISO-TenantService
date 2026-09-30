@@ -133,6 +133,18 @@ public class GoverningDpaResolver {
     tenantRepository.findForDpaSigning(ids);
   }
 
+  /** Call only after owner/recipient locks: v1 remains available until deadline-policy adoption. */
+  public boolean requiresVersionedDpaMutation(Long tenantId) {
+    var ownerId = documentTenantIdFor(tenantId);
+    return java.util.stream.Stream.of(tenantId, ownerId)
+        .distinct()
+        .sorted()
+        .map(
+            versionRepository
+                ::findFirstByTenantIdAndSigningDeadlineAtIsNotNullOrderByActivationDateDescIdDesc)
+        .anyMatch(Optional::isPresent);
+  }
+
   /**
    * The published snapshot of the given version as it applies to the tenant: its own publish
    * history first, then the governing operator history (a tenant signs and forwards the operator

@@ -387,7 +387,7 @@ class TenantDpaServiceTest {
             any(),
             any(),
             any(LocalDateTime.class),
-            any());
+            eq(false));
     // any successful signature kills every other outstanding link of the tenant (#179)
     verify(signatureRepository).invalidateOutstandingByTenantId(7L);
     assertThat(result.getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
@@ -398,6 +398,7 @@ class TenantDpaServiceTest {
     assertThat(result.getForwardedByUserId()).isEqualTo("tenant-admin-1");
     assertThat(result.getSource()).isEqualTo(TenantDpaService.SOURCE_FORWARDED_EXTERNAL);
     assertThat(result.getSignedAt()).isNotNull();
+    assertThat(result.getCurrentVersionWhenSigned()).isFalse();
     assertThat(result.getTokenHash()).isNull(); // consumed -> single use
   }
 

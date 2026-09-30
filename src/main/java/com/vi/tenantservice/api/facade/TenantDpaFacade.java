@@ -250,26 +250,20 @@ public class TenantDpaFacade {
    * form is persisted verbatim as an append-only, revision-safe audit row. Signing an already-VALID
    * tenant has no duplicate effect and simply returns the current status.
    */
-  public DpaStatusDTO signDpa(Long tenantId, DpaAdminSignRequestDTO request) {
+  public DpaStatusDTO signDpa(
+      Long tenantId, DpaAdminSignRequestDTO request, String displayedVersion) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
     final LocalDateTime shownVersion;
     try {
-      if (request.getDpaVersion() == null || request.getDpaVersion().isBlank()) {
+      if (displayedVersion == null || displayedVersion.isBlank()) {
         throw new ResponseStatusException(
             HttpStatus.BAD_REQUEST, "Displayed DPA version is required");
       }
-      shownVersion = LocalDateTime.parse(request.getDpaVersion());
+      shownVersion = LocalDateTime.parse(displayedVersion);
     } catch (DateTimeException e) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Displayed DPA version is invalid");
     }
-    var form =
-        new TenantDpaStatusService.AdminSignatureForm(
-            request.getSignerName(),
-            request.getSignerPosition(),
-            request.getSignerEmail(),
-            request.getSignerOrganisation(),
-            request.getLanguage(),
-            buildFormDataJson(request));
+    var form = signatureForm(request, displayedVersion);
     return toStatusDto(
         tenantDpaStatusService.signDisplayedVersion(
             tenantId,
@@ -279,8 +273,29 @@ public class TenantDpaFacade {
             form));
   }
 
+  public DpaStatusDTO signLegacyDpa(Long tenantId, DpaAdminSignRequestDTO request) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    return toStatusDto(
+        tenantDpaStatusService.signLegacyVersion(
+            tenantId,
+            authorisationService.getUserId(),
+            authorisationService.getUsername(),
+            signatureForm(request, null)));
+  }
+
+  private static TenantDpaStatusService.AdminSignatureForm signatureForm(
+      DpaAdminSignRequestDTO request, String displayedVersion) {
+    return new TenantDpaStatusService.AdminSignatureForm(
+        request.getSignerName(),
+        request.getSignerPosition(),
+        request.getSignerEmail(),
+        request.getSignerOrganisation(),
+        request.getLanguage(),
+        buildFormDataJson(request, displayedVersion));
+  }
+
   /** Verbatim JSON snapshot of the submitted sign form for the audit row. */
-  private static String buildFormDataJson(DpaAdminSignRequestDTO request) {
+  private static String buildFormDataJson(DpaAdminSignRequestDTO request, String displayedVersion) {
     var formData = new LinkedHashMap<String, Object>();
     formData.put("signerName", request.getSignerName());
     formData.put("signerPosition", request.getSignerPosition());
@@ -288,7 +303,7 @@ public class TenantDpaFacade {
     formData.put("signerOrganisation", request.getSignerOrganisation());
     formData.put("language", request.getLanguage());
     formData.put("accepted", request.getAccepted());
-    formData.put("dpaVersion", request.getDpaVersion());
+    formData.put("dpaVersion", displayedVersion);
     return JsonConverter.convertToJson(formData);
   }
 
@@ -327,9 +342,27 @@ public class TenantDpaFacade {
       Long tenantId, Map<String, String> contentByLanguage, String signingDeadlineAt) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
     var deadline = requireFutureSigningDeadline(signingDeadlineAt);
+    return persistPublication(tenantId, contentByLanguage, deadline, false);
+  }
+
+  @Transactional
+  public DpaGateStatusDTO publishLegacyDpa(Long tenantId, Map<String, String> contentByLanguage) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    return persistPublication(tenantId, contentByLanguage, null, true);
+  }
+
+  private DpaGateStatusDTO persistPublication(
+      Long tenantId,
+      Map<String, String> contentByLanguage,
+      LocalDateTime deadline,
+      boolean legacy) {
     // Use the same ordered owner/recipient locks as signing before reading the governing version.
     // Otherwise a first own publication could reuse the previously signed operator timestamp.
     governingDpaResolver.lockForSigning(tenantId);
+    if (legacy && governingDpaResolver.requiresVersionedDpaMutation(tenantId)) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "Deadline-managed DPA requires versioned publication");
+    }
     var previouslyGoverning = governingDpaResolver.resolve(tenantId);
     var tenant =
         tenantService

@@ -262,7 +262,7 @@ class TenantControllerDpaConfirmTest {
 
     // when
     var response =
-        controller.publishDataProcessingAgreement(
+        controller.publishDataProcessingAgreementV2(
             7L, "2099-10-15T15:00:00Z", Map.of("de", "<p>x</p>"));
 
     // then
