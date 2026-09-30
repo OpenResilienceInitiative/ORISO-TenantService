@@ -11,7 +11,7 @@ paths:
       tags:
         - internal-system-email-controller
       operationId: deliverTenantSystemEmail
-      summary: Deliver one existing system notification using tenant-owned SMTP
+      summary: Deliver one approved system or counselling notification using tenant-owned SMTP
       description: >-
         Requires a validated JWT with technical role and configured exact subject/client pins.
         Pins default empty (deny all). No SMTP override or secret response. No automatic retries
@@ -56,7 +56,23 @@ components:
       properties:
         purpose:
           type: string
-          enum: [EMAIL_ADDRESS_CHANGED, SUPERVISOR_ADDED, SUPERVISOR_REMOVED]
+          enum:
+            - EMAIL_ADDRESS_CHANGED
+            - SUPERVISOR_ADDED
+            - SUPERVISOR_REMOVED
+            - NEW_ENQUIRY
+            - DIRECT_ENQUIRY
+            - ENQUIRY_ASSIGNED
+            - DAILY_ENQUIRY_DIGEST
+            - NEW_MESSAGE
+            - CONTACT_SHEET
+            - SELF_HELP_APPOINTMENT_CONFIRMED
+            - SELF_HELP_APPOINTMENT_RESCHEDULED
+            - SELF_HELP_APPOINTMENT_CANCELLED
+            - SELF_HELP_APPOINTMENT_REMINDER
+            - HANDOVER_REQUESTED
+            - HANDOVER_CONFIRMED
+            - FREE_TEXT_NOTICE
         recipient:
           type: string
           format: email
