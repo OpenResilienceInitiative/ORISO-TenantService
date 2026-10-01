@@ -200,6 +200,7 @@ class SystemEmailDeliveryControllerTest {
         List.of(
             body.replace("recipient@example.org", "one@example.org,two@example.org"),
             body.replace("EMAIL_ADDRESS_CHANGED", "FREE_FORM"),
+            body.replace("EMAIL_ADDRESS_CHANGED", "SMTP_TEST"),
             body.replace("Subject", "S".repeat(257)),
             body.replace("\"purpose\"", "\"host\":\"override.example.org\",\"purpose\"")))
       mvc.perform(

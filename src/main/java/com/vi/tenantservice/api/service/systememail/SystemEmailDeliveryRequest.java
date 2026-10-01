@@ -13,9 +13,9 @@ public record SystemEmailDeliveryRequest(
     @NotBlank @Size(max = 256) @Pattern(regexp = "[^\\r\\n]+") String subject,
     @NotBlank @Size(max = 262144) String html,
     @NotBlank @Size(max = 131072) String text,
-    @NotNull java.util.UUID correlationId) {
+    @NotNull java.util.UUID correlationId)
+    implements TenantSystemMail {
   public enum Purpose {
-    SMTP_TEST,
     EMAIL_ADDRESS_CHANGED,
     SUPERVISOR_ADDED,
     SUPERVISOR_REMOVED

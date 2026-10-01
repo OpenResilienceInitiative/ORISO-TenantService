@@ -94,7 +94,7 @@ class SystemEmailDeliveryServiceTest {
             argThat(
                 mail ->
                     mail.recipient().equals("admin@example.org")
-                        && mail.purpose() == SystemEmailDeliveryRequest.Purpose.SMTP_TEST));
+                        && !(mail instanceof SystemEmailDeliveryRequest)));
   }
 
   @Test
