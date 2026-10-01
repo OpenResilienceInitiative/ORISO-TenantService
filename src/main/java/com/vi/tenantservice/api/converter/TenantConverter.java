@@ -33,6 +33,7 @@ import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantEntity.TenantEntityBuilder;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.policy.PolicyValue;
@@ -144,6 +145,10 @@ public class TenantConverter {
             settings.getFeatureVoiceMessagesSupervisionChatsEnabled())
         .featureSystemNotificationEmailsEnabled(
             settings.getFeatureSystemNotificationEmailsEnabled())
+        .smtpMode(
+            settings.getSmtpMode() == null
+                ? null
+                : TenantSmtpMode.valueOf(settings.getSmtpMode().getValue()))
         .smtp(toTenantSmtpSettings(settings.getSmtp()))
         .featureToolsOIDCToken(settings.getFeatureToolsOICDToken())
         .featureMediaUploadEnabled(settings.getFeatureMediaUploadEnabled())
@@ -434,6 +439,10 @@ public class TenantConverter {
             tenantSettings.getFeatureVoiceMessagesSupervisionChatsEnabled())
         .featureSystemNotificationEmailsEnabled(
             tenantSettings.getFeatureSystemNotificationEmailsEnabled())
+        .smtpMode(
+            tenantSettings.getSmtpMode() == null
+                ? null
+                : Settings.SmtpModeEnum.fromValue(tenantSettings.getSmtpMode().name()))
         .smtp(toSmtpConfig(tenantSettings.getSmtp()))
         .featureMediaUploadEnabled(tenantSettings.getFeatureMediaUploadEnabled())
         .featureMediaUploadAnonymousChatsEnabled(
@@ -933,6 +942,7 @@ public class TenantConverter {
   private Settings getRestrictedPublicSettings(TenantRestrictedData tenant) {
     Settings settings = getSettings(tenant);
     settings.setFeatureToolsOICDToken(null);
+    settings.setSmtpMode(null);
     settings.setSmtp(toPublicSmtpConfig(settings.getSmtp()));
     return settings;
   }
