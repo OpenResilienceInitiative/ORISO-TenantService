@@ -19,6 +19,7 @@ import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaSignatureRequestDTO;
 import com.vi.tenantservice.api.model.DpaStatusDTO;
 import com.vi.tenantservice.api.model.DpaVersionDTO;
+import com.vi.tenantservice.api.model.DpaVersionedAdminSignRequestDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NextFreeTenantIdDTO;
 import com.vi.tenantservice.api.model.PlatformDpiaMasterDataDTO;
@@ -226,7 +227,8 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  @PreAuthorize(
+      "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')")
   public ResponseEntity<DpaGateStatusDTO> getDataProcessingAgreementGate(@NotNull Long id) {
     return new ResponseEntity<>(tenantDpaFacade.getGateStatus(id), HttpStatus.OK);
   }
@@ -249,7 +251,17 @@ public class TenantController implements TenantApi, TenantadminApi {
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<DpaGateStatusDTO> publishDataProcessingAgreement(
       @NotNull Long id, @Valid Map<String, String> requestBody) {
-    return new ResponseEntity<>(tenantDpaFacade.publishDpa(id, requestBody), HttpStatus.OK);
+    return new ResponseEntity<>(tenantDpaFacade.publishLegacyDpa(id, requestBody), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<DpaGateStatusDTO> publishDataProcessingAgreementV2(
+      @NotNull Long id,
+      @NotNull @Valid String signingDeadlineAt,
+      @Valid Map<String, String> requestBody) {
+    return new ResponseEntity<>(
+        tenantDpaFacade.publishDpa(id, requestBody, signingDeadlineAt), HttpStatus.OK);
   }
 
   @ExceptionHandler(DpaNotPublishedException.class)
@@ -279,7 +291,26 @@ public class TenantController implements TenantApi, TenantadminApi {
     if (!Boolean.TRUE.equals(request.getAccepted())) {
       return ResponseEntity.badRequest().build();
     }
-    return new ResponseEntity<>(tenantDpaFacade.signDpa(id, request), HttpStatus.OK);
+    return new ResponseEntity<>(tenantDpaFacade.signLegacyDpa(id, request), HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<DpaStatusDTO> signDataProcessingAgreementV2(
+      @NotNull Long id, @Valid DpaVersionedAdminSignRequestDTO request) {
+    if (!Boolean.TRUE.equals(request.getAccepted())) {
+      return ResponseEntity.badRequest().build();
+    }
+    var form =
+        new DpaAdminSignRequestDTO()
+            .signerName(request.getSignerName())
+            .signerPosition(request.getSignerPosition())
+            .signerEmail(request.getSignerEmail())
+            .signerOrganisation(request.getSignerOrganisation())
+            .language(request.getLanguage())
+            .accepted(request.getAccepted());
+    return new ResponseEntity<>(
+        tenantDpaFacade.signDpa(id, form, request.getDpaVersion()), HttpStatus.OK);
   }
 
   @Override
