@@ -20,6 +20,14 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
   @Query("SELECT t FROM TenantEntity t WHERE t.id = :id")
   Optional<TenantEntity> findByIdForSmtpTest(@Param("id") Long id);
 
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT t FROM TenantEntity t WHERE t.id = :id")
+  Optional<TenantEntity> findForDpaPublication(@Param("id") Long id);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT t FROM TenantEntity t WHERE t.id IN :ids ORDER BY t.id")
+  List<TenantEntity> findForDpaSigning(@Param("ids") Set<Long> ids);
+
   TenantEntity findBySubdomain(String subdomain);
 
   @Query("SELECT t.id FROM TenantEntity t WHERE t.subdomain = :subdomain")
