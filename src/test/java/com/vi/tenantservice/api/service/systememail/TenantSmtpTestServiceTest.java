@@ -10,13 +10,15 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.web.server.ResponseStatusException;
 
 class TenantSmtpTestServiceTest {
   final AuthorisationService auth = mock(AuthorisationService.class);
   final TenantRepository tenants = mock(TenantRepository.class);
   final SystemEmailDeliveryService delivery = mock(SystemEmailDeliveryService.class);
-  final TenantSmtpTestService test = new TenantSmtpTestService(auth, tenants, delivery);
+  final PlatformTransactionManager txManager = mock(PlatformTransactionManager.class);
+  final TenantSmtpTestService test = new TenantSmtpTestService(auth, tenants, delivery, txManager);
   final TenantEntity tenant = TenantEntity.builder().id(40L).build();
 
   @BeforeEach
@@ -54,5 +56,13 @@ class TenantSmtpTestServiceTest {
     assertThatThrownBy(() -> test.send(40L))
         .isInstanceOf(ResponseStatusException.class)
         .hasMessageContaining("TENANT_SMTP_NOT_SELECTED");
+  }
+
+  @Test
+  void cooldownTransactionIsCommittedBeforeTheSmtpRoundTrip() {
+    test.send(40L);
+    var order = inOrder(txManager, delivery);
+    order.verify(txManager).commit(any());
+    order.verify(delivery).deliverTest(40L, "admin@example.org", "de");
   }
 }
