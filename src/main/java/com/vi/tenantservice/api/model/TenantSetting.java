@@ -89,7 +89,8 @@ public enum TenantSetting {
       List.of(UserRole.TENANT_ADMIN, UserRole.SINGLE_TENANT_ADMIN)),
   FEATURE_MEDIA_AI_SCAN_SUPERVISION_CHATS_ENABLED(
       List.of(UserRole.TENANT_ADMIN, UserRole.SINGLE_TENANT_ADMIN)),
-  FEATURE_ACTIVE_LANGUAGES(List.of(UserRole.TENANT_ADMIN, UserRole.SINGLE_TENANT_ADMIN));
+  FEATURE_ACTIVE_LANGUAGES(List.of(UserRole.TENANT_ADMIN, UserRole.SINGLE_TENANT_ADMIN)),
+  SMTP_MODE(List.of(UserRole.TENANT_ADMIN, UserRole.SINGLE_TENANT_ADMIN));
 
   private List<UserRole> rolesAuthorisedToChange;
 }
