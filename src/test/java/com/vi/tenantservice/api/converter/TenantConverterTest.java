@@ -514,16 +514,28 @@ class TenantConverterTest {
 
   @Test
   void smtpModeRoundTripsAndIsAbsentFromPublicTenant() {
+    for (Settings.SmtpModeEnum mode : Settings.SmtpModeEnum.values()) {
+      MultilingualTenantDTO tenantDTO =
+          new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+      tenantDTO.getSettings().smtpMode(mode);
+
+      TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+      assertThat(tenantConverter.toDTO(entity, "de").getSettings().getSmtpMode()).isEqualTo(mode);
+      assertThat(tenantConverter.toRestrictedTenantDTO(entity, "de").getSettings().getSmtpMode())
+          .isNull();
+    }
+  }
+
+  @Test
+  void toDTO_should_returnNoSmtpMode_When_storedSettingsHaveNone() {
     MultilingualTenantDTO tenantDTO =
         new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
-    tenantDTO.getSettings().smtpMode(Settings.SmtpModeEnum.OWN);
+    tenantDTO.getSettings().smtpMode(null);
 
     TenantEntity entity = tenantConverter.toEntity(tenantDTO);
 
-    assertThat(tenantConverter.toDTO(entity, "de").getSettings().getSmtpMode())
-        .isEqualTo(Settings.SmtpModeEnum.OWN);
-    assertThat(tenantConverter.toRestrictedTenantDTO(entity, "de").getSettings().getSmtpMode())
-        .isNull();
+    assertThat(tenantConverter.toDTO(entity, "de").getSettings().getSmtpMode()).isNull();
   }
 
   @Test
