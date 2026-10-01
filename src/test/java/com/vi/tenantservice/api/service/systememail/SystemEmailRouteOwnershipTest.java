@@ -36,6 +36,14 @@ class SystemEmailRouteOwnershipTest {
             java.util.Arrays.stream(SystemEmailDeliveryRequest.Purpose.values())
                 .map(Enum::name)
                 .toArray(String[]::new));
+    var notificationExempt =
+        java.util.Arrays.stream(SystemEmailDeliveryRequest.Purpose.values())
+            .filter(value -> !value.isNotification())
+            .map(Enum::name)
+            .toList();
+    assertThat(notificationExempt)
+        .containsExactlyInAnyOrder("ACCOUNT_INVITE", "DPA_SIGNING_REQUEST", "DPA_SIGNED_NOTICE");
+    assertThat((String) purpose.get("description")).contains(notificationExempt);
     assertThat(
             java.util.Arrays.stream(
                     com.vi.tenantservice.generated.api.controller.TenantApi.class.getMethods())

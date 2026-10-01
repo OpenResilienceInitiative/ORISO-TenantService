@@ -19,6 +19,11 @@ public class SystemEmailDeliveryService {
   private final TenantSystemMailTransport transport;
 
   public boolean deliver(long tenantId, SystemEmailDeliveryRequest request) {
+    return deliver(tenantId, request, request.purpose().isNotification());
+  }
+
+  private boolean deliver(
+      long tenantId, SystemEmailDeliveryRequest request, boolean requireNotificationsEnabled) {
     if (tenantId <= 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "INVALID_TENANT");
     var tenant =
         tenants
@@ -33,7 +38,8 @@ public class SystemEmailDeliveryService {
       throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_INVALID");
     }
     if (settings == null
-        || !Boolean.TRUE.equals(settings.getFeatureSystemNotificationEmailsEnabled())
+        || (requireNotificationsEnabled
+            && !Boolean.TRUE.equals(settings.getFeatureSystemNotificationEmailsEnabled()))
         || settings.getSmtpMode() != TenantSmtpMode.OWN
         || settings.getSmtp() == null
         || !settings.getSmtp().isEnabled()) return false;
