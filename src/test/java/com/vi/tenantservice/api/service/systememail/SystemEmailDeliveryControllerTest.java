@@ -223,6 +223,23 @@ class SystemEmailDeliveryControllerTest {
     verify(delivery).deliver(eq(40L), argThat(request -> request.purpose() == purpose));
   }
 
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      names = {"ACCOUNT_INVITE", "DPA_SIGNING_REQUEST", "DPA_SIGNED_NOTICE"})
+  void boundIdentityCanSubmitAccountAndContractPurposes(SystemEmailDeliveryRequest.Purpose purpose)
+      throws Exception {
+    when(delivery.deliver(eq(40L), any())).thenReturn(true);
+    mvc.perform(
+            post("/tenant/40/internal/system-email-deliveries")
+                .header("Authorization", "Bearer " + token("valid"))
+                .contentType("application/json")
+                .content(body.replace("EMAIL_ADDRESS_CHANGED", purpose.name())))
+        .andExpect(status().isOk())
+        .andExpect(header().string("Cache-Control", "no-store"));
+    verify(delivery).deliver(eq(40L), argThat(request -> request.purpose() == purpose));
+  }
+
   @Test
   void invalidRecipientPurposeAndTransportOverridesRejected() throws Exception {
     for (String invalid :

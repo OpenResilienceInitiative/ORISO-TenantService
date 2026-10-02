@@ -125,6 +125,61 @@ class SystemEmailDeliveryServiceTest {
     verifyNoInteractions(cipher, transport);
   }
 
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      names = {"ACCOUNT_INVITE", "DPA_SIGNING_REQUEST", "DPA_SIGNED_NOTICE"})
+  void accountAndContractMailUsesOwnTenantEvenWithNotificationsSwitchedOff(
+      SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
+    when(tenants.findById(40L)).thenReturn(Optional.of(tenant(false, true)));
+    when(cipher.decrypt("ENC:test-fixture")).thenReturn("test-password");
+    var mail =
+        new SystemEmailDeliveryRequest(
+            purpose, "recipient@example.org", "Subject", "<p>Body</p>", "Body", UUID.randomUUID());
+
+    assertThat(service.deliver(40L, mail)).isTrue();
+    verify(transport).send(any(), eq("test-password"), same(mail));
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      names = {"ACCOUNT_INVITE", "DPA_SIGNING_REQUEST", "DPA_SIGNED_NOTICE"})
+  void accountAndContractMailStillNeedsEnabledOwnSmtp(SystemEmailDeliveryRequest.Purpose purpose)
+      throws Exception {
+    var platform = tenant(false, true);
+    var settings =
+        (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(platform.getSettings());
+    settings.put("smtpMode", "PLATFORM");
+    platform.setSettings(mapper.writeValueAsString(settings));
+    var mail =
+        new SystemEmailDeliveryRequest(
+            purpose, "recipient@example.org", "Subject", "<p>Body</p>", "Body", UUID.randomUUID());
+    when(tenants.findById(40L))
+        .thenReturn(Optional.of(platform), Optional.of(tenant(false, false)));
+
+    assertThat(service.deliver(40L, mail)).isFalse();
+    assertThat(service.deliver(40L, mail)).isFalse();
+    verifyNoInteractions(cipher, transport);
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      mode = EnumSource.Mode.EXCLUDE,
+      names = {"ACCOUNT_INVITE", "DPA_SIGNING_REQUEST", "DPA_SIGNED_NOTICE"})
+  void notificationPurposeStaysSilentWhileNotificationsAreSwitchedOff(
+      SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
+    when(tenants.findById(40L)).thenReturn(Optional.of(tenant(false, true)));
+    var notification =
+        new SystemEmailDeliveryRequest(
+            purpose, "recipient@example.org", "Subject", "<p>Body</p>", "Body", UUID.randomUUID());
+
+    assertThat(purpose.isNotification()).isTrue();
+    assertThat(service.deliver(40L, notification)).isFalse();
+    verifyNoInteractions(cipher, transport);
+  }
+
   @Test
   void disabledOrRemovedSettingsAreReadFreshWithoutDecrypting() throws Exception {
     when(tenants.findById(40L))

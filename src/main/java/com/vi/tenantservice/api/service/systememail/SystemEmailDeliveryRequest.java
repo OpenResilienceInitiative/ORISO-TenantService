@@ -27,7 +27,25 @@ public record SystemEmailDeliveryRequest(
     CONTACT_SHEET,
     HANDOVER_REQUESTED,
     HANDOVER_CONFIRMED,
-    FREE_TEXT_NOTICE
+    FREE_TEXT_NOTICE,
+    // Account and contract mails, not notifications: the notification switch must not stop them.
+    ACCOUNT_INVITE(false),
+    DPA_SIGNING_REQUEST(false),
+    DPA_SIGNED_NOTICE(false);
+
+    private final boolean notification;
+
+    Purpose() {
+      this(true);
+    }
+
+    Purpose(boolean notification) {
+      this.notification = notification;
+    }
+
+    public boolean isNotification() {
+      return notification;
+    }
   }
 
   @JsonAnySetter

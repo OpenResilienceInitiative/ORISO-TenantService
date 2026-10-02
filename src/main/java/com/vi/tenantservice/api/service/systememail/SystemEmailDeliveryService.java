@@ -19,7 +19,7 @@ public class SystemEmailDeliveryService {
   private final TenantSystemMailTransport transport;
 
   public boolean deliver(long tenantId, SystemEmailDeliveryRequest request) {
-    return deliver(tenantId, request, true);
+    return deliver(tenantId, request, request.purpose().isNotification());
   }
 
   public boolean deliverTest(long tenantId, String recipient, String language) {
