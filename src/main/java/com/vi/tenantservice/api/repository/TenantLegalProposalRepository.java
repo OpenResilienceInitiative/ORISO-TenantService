@@ -34,6 +34,9 @@ public interface TenantLegalProposalRepository
 
   List<TenantLegalProposalEntity> findByRecipientTenantIdOrderByCreatedAtDescIdDesc(Long tenantId);
 
+  boolean existsBySourceDraftIdAndSourceDraftVersionAndRecipientTenantId(
+      Long sourceDraftId, Long sourceDraftVersion, Long recipientTenantId);
+
   /** Fallback snapshots for distributions written before changeset 0036, in one query. */
   List<TenantLegalProposalEntity> findBySourceDraftIdInOrderByIdAsc(
       Collection<Long> sourceDraftIds);

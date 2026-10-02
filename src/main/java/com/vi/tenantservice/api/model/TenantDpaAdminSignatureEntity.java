@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api.model;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -15,6 +16,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.type.NumericBooleanConverter;
 
 /**
  * Audit-proof record of an authenticated tenant admin signing the tenant's currently published Data
@@ -85,6 +87,11 @@ public class TenantDpaAdminSignatureEntity {
 
   @Column(name = "signed_at", nullable = false, updatable = false)
   private LocalDateTime signedAt;
+
+  /** Whether this contract was still governing when signed; null retains legacy audit semantics. */
+  @Column(name = "current_version_when_signed", updatable = false)
+  @Convert(converter = NumericBooleanConverter.class)
+  private Boolean currentVersionWhenSigned;
 
   @Column(name = "create_date", nullable = false, updatable = false)
   private LocalDateTime createDate;
