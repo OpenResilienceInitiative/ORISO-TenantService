@@ -164,6 +164,13 @@ class TenantInputSanitizerTest {
     verify(inputSanitizer).sanitizePlainText(tenantDTO.getLegalName());
     verify(inputSanitizer).sanitizePlainText(tenantDTO.getContactEmail());
     verify(inputSanitizer).sanitizePlainText(tenantDTO.getContactPhone());
+    var dpo = tenantDTO.getDataProtectionOfficer();
+    verify(inputSanitizer).sanitizePlainText(dpo.getNameAndLegalForm());
+    verify(inputSanitizer).sanitizePlainText(dpo.getStreet());
+    verify(inputSanitizer).sanitizePlainText(dpo.getPostcode());
+    verify(inputSanitizer).sanitizePlainText(dpo.getCity());
+    verify(inputSanitizer).sanitizePlainText(dpo.getPhoneNumber());
+    verify(inputSanitizer).sanitizePlainText(dpo.getEmail());
     // Assets go through the URL whitelist, NOT the HTML sanitizer — the latter
     // encoded their base64 payload and broke every stored logo/favicon.
     verify(inputSanitizer).sanitizeAssetUrl(tenantDTO.getTheming().getLogo());

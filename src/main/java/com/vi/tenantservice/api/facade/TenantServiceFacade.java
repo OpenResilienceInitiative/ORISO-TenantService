@@ -48,6 +48,9 @@ import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
+import com.vi.tenantservice.api.service.TenantLegalProposalService;
+import com.vi.tenantservice.api.service.TenantLegalVersionService;
+import com.vi.tenantservice.api.service.TenantLegalVersionService.PublishedLegalTexts;
 import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
@@ -146,6 +149,10 @@ public class TenantServiceFacade {
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
+  private final @NonNull TenantLegalVersionService tenantLegalVersionService;
+
+  private final @NonNull TenantLegalProposalService tenantLegalProposalService;
+
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
 
@@ -161,6 +168,7 @@ public class TenantServiceFacade {
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
+    validateSelectedOwnSmtp(entity, null, sanitizedTenantDTO);
     String reservationToken = tenantDTO.getTenantIdReservationToken();
     TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
@@ -174,9 +182,31 @@ public class TenantServiceFacade {
     }
     recordOnboardingDpaAcceptance(
         createdTenant, tenantDTO.getOnboardingDpaAcceptance(), reservationToken);
+    recordInitialLegalState(createdTenant);
     var createdTenantDto = tenantConverter.toMultilingualDTO(createdTenant);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(createdTenantDto);
     return createdTenantDto;
+  }
+
+  /**
+   * The tenant exists at this point; a failed history write or template offer must not undo it. A
+   * missed offer is recoverable — the platform can send again.
+   */
+  private void recordInitialLegalState(TenantEntity createdTenant) {
+    try {
+      tenantLegalVersionService.saveRecordingPublications(
+          PublishedLegalTexts.NONE, () -> createdTenant);
+    } catch (RuntimeException e) {
+      log.error("Could not record the initial legal texts of tenant {}", createdTenant.getId(), e);
+    }
+    try {
+      tenantLegalProposalService.deliverLatestTemplatesTo(createdTenant.getId());
+    } catch (RuntimeException e) {
+      log.error(
+          "Could not offer the latest platform legal templates to tenant {}",
+          createdTenant.getId(),
+          e);
+    }
   }
 
   /**
@@ -561,16 +591,20 @@ public class TenantServiceFacade {
     }
     // toEntity mutates existingTenantEntity, so capture the stored settings first
     var existingSettingsJson = existingTenantEntity.getSettings();
+    var publishedBefore = PublishedLegalTexts.of(existingTenantEntity);
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
     if (sanitizedTenantDTO.getSettings() == null) {
       updatedEntity.setSettings(existingSettingsJson);
     }
     preserveStoredSmtpPassword(existingSettingsJson, updatedEntity);
     preserveStoredSmtpMode(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
-    validateSelectedOwnSmtp(updatedEntity);
+    validateSelectedOwnSmtp(updatedEntity, existingSettingsJson, sanitizedTenantDTO);
     preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
-    updatedEntity = tenantService.update(updatedEntity);
+    var entityToSave = updatedEntity;
+    updatedEntity =
+        tenantLegalVersionService.saveRecordingPublications(
+            publishedBefore, () -> tenantService.update(entityToSave));
     updateExtendedSettingsAsConsultingType(sanitizedTenantDTO, existingTenantEntity.getId());
     log.info("Tenant with id {} updated", existingTenantEntity.getId());
     return getConvertedAndEnrichedTenant(updatedEntity);
@@ -620,7 +654,8 @@ public class TenantServiceFacade {
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }
 
-  private void validateSelectedOwnSmtp(TenantEntity updatedEntity) {
+  private void validateSelectedOwnSmtp(
+      TenantEntity updatedEntity, String existingSettingsJson, MultilingualTenantDTO tenantDTO) {
     if (updatedEntity.getSettings() == null) {
       return;
     }
@@ -643,6 +678,29 @@ public class TenantServiceFacade {
         || smtp.getPort() < 1
         || smtp.getPort() > 65535) {
       throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_INVALID");
+    }
+    boolean standardTransport =
+        (smtp.getPort() == 465 && smtp.isSecure()) || (smtp.getPort() == 587 && !smtp.isSecure());
+    if (standardTransport) {
+      return;
+    }
+    boolean unchangedOwnTransport = false;
+    if (existingSettingsJson != null) {
+      TenantSettings existing = convertFromJson(existingSettingsJson);
+      unchangedOwnTransport =
+          existing.getSmtpMode() == TenantSmtpMode.OWN
+              && existing.getSmtp() != null
+              && smtp.getPort().equals(existing.getSmtp().getPort())
+              && smtp.isSecure() == existing.getSmtp().isSecure();
+    }
+    boolean confirmed =
+        tenantDTO.getSettings() != null
+            && tenantDTO.getSettings().getSmtp() != null
+            && Boolean.TRUE.equals(
+                tenantDTO.getSettings().getSmtp().getNonstandardTransportConfirmed());
+    if (!unchangedOwnTransport && !confirmed) {
+      throw new ResponseStatusException(
+          HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_TRANSPORT_CONFIRMATION_REQUIRED");
     }
   }
 
