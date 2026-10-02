@@ -28,6 +28,8 @@ public record SystemEmailDeliveryRequest(
     HANDOVER_REQUESTED,
     HANDOVER_CONFIRMED,
     FREE_TEXT_NOTICE,
+    // Planned maintenance is a switchable system notice (ADR-024): it keeps the notification gate.
+    SERVICE_NOTICE,
     // Account and contract mails, not notifications: the notification switch must not stop them.
     ACCOUNT_INVITE(false),
     DPA_SIGNING_REQUEST(false),

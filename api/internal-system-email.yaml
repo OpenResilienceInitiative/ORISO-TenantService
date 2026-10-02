@@ -61,7 +61,8 @@ components:
           description: >-
             ACCOUNT_INVITE, DPA_SIGNING_REQUEST and DPA_SIGNED_NOTICE are account and contract
             mails, not notifications: they are sent even when the tenant has system notification
-            emails switched off. All other purposes require that switch. Every purpose requires
+            emails switched off. All other purposes require that switch, including SERVICE_NOTICE
+            (planned maintenance notice to counselling-centre admins). Every purpose requires
             OWN SMTP mode.
           enum:
             - EMAIL_ADDRESS_CHANGED
@@ -76,6 +77,7 @@ components:
             - HANDOVER_REQUESTED
             - HANDOVER_CONFIRMED
             - FREE_TEXT_NOTICE
+            - SERVICE_NOTICE
             - ACCOUNT_INVITE
             - DPA_SIGNING_REQUEST
             - DPA_SIGNED_NOTICE

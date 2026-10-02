@@ -44,6 +44,9 @@ class SystemEmailRouteOwnershipTest {
     assertThat(notificationExempt)
         .containsExactlyInAnyOrder("ACCOUNT_INVITE", "DPA_SIGNING_REQUEST", "DPA_SIGNED_NOTICE");
     assertThat((String) purpose.get("description")).contains(notificationExempt);
+    // UserService sends the planned maintenance notice with exactly this name (Frontend#876).
+    assertThat((java.util.List<String>) purpose.get("enum")).contains("SERVICE_NOTICE");
+    assertThat((String) purpose.get("description")).contains("SERVICE_NOTICE");
     assertThat(
             java.util.Arrays.stream(
                     com.vi.tenantservice.generated.api.controller.TenantApi.class.getMethods())
