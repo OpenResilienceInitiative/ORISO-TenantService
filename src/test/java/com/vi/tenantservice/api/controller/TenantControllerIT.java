@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.controller;
 import static com.vi.tenantservice.api.authorisation.UserRole.RESTRICTED_AGENCY_ADMIN;
 import static com.vi.tenantservice.api.authorisation.UserRole.SINGLE_TENANT_ADMIN;
 import static com.vi.tenantservice.api.authorisation.UserRole.TENANT_ADMIN;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
@@ -12,6 +13,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -119,6 +121,9 @@ class TenantControllerIT {
 
   @MockitoBean UserAdminService userAdminService;
 
+  @MockitoBean
+  com.vi.tenantservice.api.service.systememail.TenantSystemMailTransport tenantMailTransport;
+
   @MockitoBean SubdomainExtractor subdomainExtractor;
 
   private MockMvc mockMvc;
@@ -142,6 +147,11 @@ class TenantControllerIT {
         .thenAnswer(
             invocation ->
                 Authority.getAuthoritiesByUserRole(userRole).contains(invocation.getArgument(0)));
+    if (userRole == UserRole.TENANT_ADMIN) {
+      // Every Träger admin holds tenant-admin too; the platform admin is the one from tenant 0.
+      when(authorisationService.hasRole(UserRole.TENANT_ADMIN.getValue())).thenReturn(true);
+      when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    }
   }
 
   MultilingualTenantTestDataBuilder multilingualTenantTestDataBuilder =
@@ -393,6 +403,16 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.settings.topicsInRegistrationEnabled").value("true"))
         .andExpect(jsonPath("$.content.impressum['de']").value("new impressum"))
         .andExpect(jsonPath("$.settings.featureToolsEnabled").value("true"));
+
+    // ORISO-Admin#270: the publish through the ordinary tenant update is in the history.
+    assertThat(
+            jdbcTemplate.queryForList(
+                "SELECT content FROM tenant_legal_text_version WHERE tenant_id = 1"
+                    + " AND kind = 'IMPRINT' AND superseded_at IS NULL",
+                String.class))
+        .singleElement()
+        .asString()
+        .contains("new impressum");
   }
 
   @Test
@@ -756,6 +776,40 @@ class TenantControllerIT {
   }
 
   @Test
+  void tenantSmtpTest_UsesStoredOwnServerVerifiedRecipientAndPersistentCooldown() throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpMode("own-secret", "OWN"))
+        .andExpect(status().isOk());
+    when(authorisationService.hasRole("single-tenant-admin")).thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(1L));
+    when(authorisationService.getVerifiedEmail()).thenReturn("admin@example.org");
+    when(authorisationService.getPreferredLanguage()).thenReturn("de");
+    var caller =
+        jwt()
+            .jwt(
+                token ->
+                    token
+                        .claim("tenantId", 1)
+                        .claim("email", "admin@example.org")
+                        .claim("email_verified", true)
+                        .claim(
+                            "realm_access",
+                            java.util.Map.of("roles", java.util.List.of("single-tenant-admin"))));
+    mockMvc
+        .perform(post("/tenant/1/smtp-test-deliveries").with(caller))
+        .andExpect(status().isNoContent());
+    org.mockito.Mockito.verify(tenantMailTransport)
+        .send(
+            org.mockito.ArgumentMatchers.argThat(smtp -> smtp.getHost() != null),
+            org.mockito.ArgumentMatchers.eq("own-secret"),
+            org.mockito.ArgumentMatchers.argThat(
+                request -> request.recipient().equals("admin@example.org")));
+    mockMvc
+        .perform(post("/tenant/1/smtp-test-deliveries").with(caller))
+        .andExpect(status().isTooManyRequests())
+        .andExpect(header().string("Retry-After", "60"));
+  }
+
+  @Test
   void updateTenant_Should_requireCompleteOwnSmtpAndPreserveExplicitMode() throws Exception {
     putTenant1AsTenantAdmin(tenant1RequestWithSmtpMode(null, "OWN"))
         .andExpect(status().isUnprocessableEntity());
@@ -947,6 +1001,7 @@ class TenantControllerIT {
   void
       getAllTenants_Should_returnStatusBasicTenantLicensingData_When_calledForAuthorityThatIsTenantAdmin()
           throws Exception {
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
     var builder = new AuthenticationMockBuilder();
     mockMvc
         .perform(
@@ -1457,6 +1512,7 @@ class TenantControllerIT {
   void
       getAllTenantsWithAdminData_Should_returnAdminTenantDTOs_When_calledForAuthorityThatIsTenantAdmin()
           throws Exception {
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
     var builder = new AuthenticationMockBuilder();
     mockMvc
         .perform(
@@ -1737,5 +1793,110 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.legalName", is(LEGAL_NAME)))
         .andExpect(jsonPath("$.contactEmail", is("beratung@caritas-musterstadt.de")))
         .andExpect(jsonPath("$.contactPhone").doesNotExist());
+  }
+
+  // --- Träger DPO (ORISO-Admin#1067): optional, inherited by the Träger's Beratungsstellen.
+
+  private static final String DPO_JSON =
+      "\"dataProtectionOfficer\":{\"nameAndLegalForm\":\"Dr. Maria Muster\","
+          + "\"street\":\"Musterstraße 1\",\"postcode\":\"79106\",\"city\":\"Freiburg\","
+          + "\"phoneNumber\":\"+49 761 200-0\",\"email\":\"datenschutz@caritas.de\"}";
+
+  @Test
+  void updateTenant_Should_storeDataProtectionOfficer_And_serveItOnAdminAndPublicReads()
+      throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWith(DPO_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer.nameAndLegalForm", is("Dr. Maria Muster")))
+        .andExpect(jsonPath("$.dataProtectionOfficer.phoneNumber", is("+49 761 200-0")));
+
+    var builder = new AuthenticationMockBuilder();
+    mockMvc
+        .perform(
+            get(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer.email", is("datenschutz@caritas.de")));
+
+    // AgencyService reads the Träger DPO from the public restricted read (no token there).
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer.nameAndLegalForm", is("Dr. Maria Muster")))
+        .andExpect(jsonPath("$.dataProtectionOfficer.city", is("Freiburg")));
+  }
+
+  @Test
+  void updateTenant_Should_keepDataProtectionOfficer_When_omitted_And_clearIt_When_allBlank()
+      throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWith(DPO_JSON)).andExpect(status().isOk());
+
+    putTenant1AsTenantAdmin(tenant1RequestWithoutLegalNameAndContact())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer.nameAndLegalForm", is("Dr. Maria Muster")));
+
+    putTenant1AsTenantAdmin(
+            tenant1RequestWith(
+                "\"dataProtectionOfficer\":{\"nameAndLegalForm\":\" \",\"email\":\"\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer").doesNotExist());
+    org.assertj.core.api.Assertions.assertThat(
+            jdbcTemplate.queryForObject(
+                "SELECT data_protection_officer FROM tenant WHERE id = 1", String.class))
+        .isNull();
+  }
+
+  @Test
+  void updateTenant_Should_stripMarkupFromDataProtectionOfficer() throws Exception {
+    putTenant1AsTenantAdmin(
+            tenant1RequestWith(
+                "\"dataProtectionOfficer\":{\"nameAndLegalForm\":\"Dr. Muster"
+                    + SCRIPT_CONTENT
+                    + "\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dataProtectionOfficer.nameAndLegalForm", is("Dr. Muster")));
+  }
+
+  @Test
+  void updateTenant_Should_rejectDataProtectionOfficerEmailThatIsNoEmailAddress() throws Exception {
+    putTenant1AsTenantAdmin(
+            tenant1RequestWith("\"dataProtectionOfficer\":{\"email\":\"datenschutz at caritas\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void publicRead_Should_fillPlatformDpoToken_While_authenticatedReadKeepsItForTheEditor()
+      throws Exception {
+    jdbcTemplate.update("DELETE FROM platform_dpia_master_data");
+    jdbcTemplate.update(
+        "INSERT INTO platform_dpia_master_data (id, operator_dpo_name, update_date)"
+            + " VALUES (1, 'Dr. Paula Plattform', CURRENT_TIMESTAMP)");
+    jdbcTemplate.update(
+        "UPDATE tenant SET content_privacy = ? WHERE id = 1",
+        "{\"de\":\"<p>DSB: {<!-- -->{Plattform_Datenschutzbeauftragte}}</p>\"}");
+    try {
+      mockMvc
+          .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.content.privacy", is("<p>DSB: Dr. Paula Plattform</p>")))
+          .andExpect(
+              jsonPath("$.content.privacyLanguages.de", is("<p>DSB: Dr. Paula Plattform</p>")));
+
+      // The Admin editor seeds from GET /tenant/{id}; a filled-in value there would be saved back
+      // over the token on the next publish.
+      var builder = new AuthenticationMockBuilder();
+      giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+      mockMvc
+          .perform(
+              get(EXISTING_TENANT)
+                  .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+          .andExpect(status().isOk())
+          .andExpect(
+              jsonPath(
+                  "$.content.privacy",
+                  is("<p>DSB: {<!-- -->{Plattform_Datenschutzbeauftragte}}</p>")));
+    } finally {
+      jdbcTemplate.update("DELETE FROM platform_dpia_master_data");
+    }
   }
 }

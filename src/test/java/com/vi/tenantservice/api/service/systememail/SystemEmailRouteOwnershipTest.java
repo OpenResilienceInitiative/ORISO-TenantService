@@ -29,11 +29,55 @@ class SystemEmailRouteOwnershipTest {
             java.util.Arrays.stream(SystemEmailDeliveryRequest.class.getRecordComponents())
                 .map(java.lang.reflect.RecordComponent::getName)
                 .toArray(String[]::new));
+    var properties = (java.util.Map<?, ?>) schema.get("properties");
+    var purpose = (java.util.Map<?, ?>) properties.get("purpose");
+    assertThat((java.util.List<String>) purpose.get("enum"))
+        .containsExactlyInAnyOrder(
+            java.util.Arrays.stream(SystemEmailDeliveryRequest.Purpose.values())
+                .map(Enum::name)
+                .toArray(String[]::new));
+    var notificationExempt =
+        java.util.Arrays.stream(SystemEmailDeliveryRequest.Purpose.values())
+            .filter(value -> !value.isNotification())
+            .map(Enum::name)
+            .toList();
+    assertThat(notificationExempt)
+        .containsExactlyInAnyOrder("ACCOUNT_INVITE", "DPA_SIGNING_REQUEST", "DPA_SIGNED_NOTICE");
+    assertThat((String) purpose.get("description")).contains(notificationExempt);
+    // UserService sends the planned maintenance notice with exactly this name (Frontend#876).
+    assertThat((java.util.List<String>) purpose.get("enum")).contains("SERVICE_NOTICE");
+    assertThat((String) purpose.get("description")).contains("SERVICE_NOTICE");
     assertThat(
             java.util.Arrays.stream(
                     com.vi.tenantservice.generated.api.controller.TenantApi.class.getMethods())
                 .map(java.lang.reflect.Method::getName))
         .doesNotContain("deliverTenantSystemEmail");
+  }
+
+  @Test
+  void smtpTestContractMatchesTheManualRoute() throws Exception {
+    java.util.Map<String, Object> api;
+    try (var input =
+        java.nio.file.Files.newInputStream(java.nio.file.Path.of("api/tenant-smtp-test.yaml"))) {
+      api = new org.yaml.snakeyaml.Yaml().load(input);
+    }
+    assertThat(api.get("openapi")).isEqualTo("3.0.1");
+    var route =
+        TenantSmtpTestController.class
+            .getMethod("send", long.class, String.class)
+            .getAnnotation(org.springframework.web.bind.annotation.PostMapping.class)
+            .value();
+    var paths = (java.util.Map<String, java.util.Map<String, Object>>) api.get("paths");
+    assertThat(paths.keySet()).containsExactly(route[0]);
+    var post = (java.util.Map<String, Object>) paths.get(route[0]).get("post");
+    assertThat(post).doesNotContainKey("requestBody");
+    assertThat(((java.util.Map<String, Object>) post.get("responses")).keySet())
+        .contains("204", "400", "401", "403", "404", "422", "429", "502");
+    assertThat(
+            java.util.Arrays.stream(
+                    com.vi.tenantservice.generated.api.controller.TenantApi.class.getMethods())
+                .map(java.lang.reflect.Method::getName))
+        .doesNotContain((String) post.get("operationId"));
   }
 
   @Test
