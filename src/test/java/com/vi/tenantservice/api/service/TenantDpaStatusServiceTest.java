@@ -64,14 +64,19 @@ class TenantDpaStatusServiceTest {
   @BeforeEach
   void setUp() {
     // operatorTenantId stays 0 (fallback disabled) unless a test opts in via givenOperatorDpa
-    governingDpaResolver = new GoverningDpaResolver(tenantRepository, versionRepository);
+    governingDpaResolver =
+        new GoverningDpaResolver(
+            tenantRepository,
+            versionRepository,
+            org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class));
     service =
         new TenantDpaStatusService(
             adminSignatureRepository,
             signatureRepository,
             new DpaSignatureOwnership(tenantIdReservationRepository),
             governingDpaResolver,
-            transactionManager);
+            transactionManager,
+            java.time.Clock.systemUTC());
   }
 
   private void givenTenantWithEmbeddedVersion(LocalDateTime version) {
@@ -514,6 +519,8 @@ class TenantDpaStatusServiceTest {
     givenOperatorDpa(VERSION_2);
     givenTenantWithoutOwnDpa();
     givenNoSignatures();
+    when(versionRepository.findFirstByTenantIdAndActivationDate(OPERATOR_TENANT_ID, VERSION_2))
+        .thenReturn(Optional.empty());
     when(versionRepository.findFirstByTenantIdAndActivationDate(TENANT_ID, VERSION_1))
         .thenReturn(Optional.empty());
     when(versionRepository.findFirstByTenantIdAndActivationDate(OPERATOR_TENANT_ID, VERSION_1))
@@ -542,6 +549,8 @@ class TenantDpaStatusServiceTest {
     givenOperatorDpa(VERSION_2);
     givenTenantWithoutOwnDpa();
     givenNoSignatures();
+    when(versionRepository.findFirstByTenantIdAndActivationDate(OPERATOR_TENANT_ID, VERSION_2))
+        .thenReturn(Optional.empty());
     when(versionRepository.findFirstByTenantIdAndActivationDate(TENANT_ID, VERSION_1))
         .thenReturn(Optional.empty());
     when(versionRepository.findFirstByTenantIdAndActivationDate(OPERATOR_TENANT_ID, VERSION_1))

@@ -454,6 +454,118 @@ class TenantLegalProposalServiceTest {
     verifyNoInteractions(draftRepository, tenantRepository);
   }
 
+  @Test
+  void lateTraegerReceivesTheLatestAllTemplateOfEachKindAsPendingSnapshot() {
+    TenantLegalProposalDistributionEntity privacy =
+        sentDistribution("privacy-dist", TenantLegalDraftKind.PRIVACY, 10L, 4L);
+    when(distributionRepository
+            .findFirstByKindAndAudienceOrderByCreatedAtDescSourceDraftVersionDescIdDesc(
+                TenantLegalDraftKind.PRIVACY, TenantLegalProposalAudience.ALL))
+        .thenReturn(Optional.of(privacy));
+    when(distributionRepository
+            .findFirstByKindAndAudienceOrderByCreatedAtDescSourceDraftVersionDescIdDesc(
+                TenantLegalDraftKind.IMPRINT, TenantLegalProposalAudience.ALL))
+        .thenReturn(Optional.empty());
+    when(proposalRepository.existsBySourceDraftIdAndSourceDraftVersionAndRecipientTenantId(
+            10L, 4L, 42L))
+        .thenReturn(false);
+    when(proposalRepository.saveAndFlush(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    List<TenantLegalProposalEntity> delivered = service.deliverLatestTemplatesTo(42L);
+
+    assertThat(delivered).hasSize(1);
+    TenantLegalProposalEntity proposal = delivered.get(0);
+    assertThat(proposal.getRecipientTenantId()).isEqualTo(42L);
+    assertThat(proposal.getKind()).isEqualTo(TenantLegalDraftKind.PRIVACY);
+    assertThat(proposal.getDistributionId()).isEqualTo("privacy-dist");
+    assertThat(proposal.getAudience()).isEqualTo(TenantLegalProposalAudience.ALL);
+    assertThat(proposal.getSourceDraftId()).isEqualTo(10L);
+    assertThat(proposal.getSourceDraftVersion()).isEqualTo(4L);
+    assertThat(proposal.getContent()).isEqualTo("{\"de\":\"sent\"}");
+    assertThat(proposal.getPrivacyConsent()).isEqualTo("{\"de\":\"sent consent\"}");
+    assertThat(proposal.getStatus()).isEqualTo(TenantLegalProposalStatus.PENDING);
+    assertThat(proposal.getCreatedBy()).isEqualTo("platform-user");
+    verifyNoInteractions(draftRepository, deliveryRepository);
+  }
+
+  @Test
+  void lateTraegerDeliveryIsIdempotentForAnAlreadyHeldRevision() {
+    when(distributionRepository
+            .findFirstByKindAndAudienceOrderByCreatedAtDescSourceDraftVersionDescIdDesc(
+                TenantLegalDraftKind.PRIVACY, TenantLegalProposalAudience.ALL))
+        .thenReturn(
+            Optional.of(sentDistribution("privacy-dist", TenantLegalDraftKind.PRIVACY, 10L, 4L)));
+    when(distributionRepository
+            .findFirstByKindAndAudienceOrderByCreatedAtDescSourceDraftVersionDescIdDesc(
+                TenantLegalDraftKind.IMPRINT, TenantLegalProposalAudience.ALL))
+        .thenReturn(Optional.empty());
+    when(proposalRepository.existsBySourceDraftIdAndSourceDraftVersionAndRecipientTenantId(
+            10L, 4L, 42L))
+        .thenReturn(true);
+
+    assertThat(service.deliverLatestTemplatesTo(42L)).isEmpty();
+    verify(proposalRepository, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void lateTraegerFallsBackToTheFirstProposalForDistributionsWithoutOwnSnapshot() {
+    TenantLegalProposalDistributionEntity legacy =
+        sentDistribution("legacy-dist", TenantLegalDraftKind.IMPRINT, 11L, 2L);
+    legacy.setContent(null);
+    legacy.setPrivacyConsent(null);
+    TenantLegalDraftEntity source = sourceDraft(11L, 2L, TenantLegalDraftKind.IMPRINT);
+    TenantLegalProposalEntity otherRevision =
+        proposal(1L, 0L, 3L, sourceDraft(11L, 1L, source.getKind()));
+    otherRevision.setContent("{\"de\":\"older\"}");
+    TenantLegalProposalEntity sameRevision = proposal(2L, 0L, 3L, source);
+    when(distributionRepository
+            .findFirstByKindAndAudienceOrderByCreatedAtDescSourceDraftVersionDescIdDesc(
+                TenantLegalDraftKind.PRIVACY, TenantLegalProposalAudience.ALL))
+        .thenReturn(Optional.empty());
+    when(distributionRepository
+            .findFirstByKindAndAudienceOrderByCreatedAtDescSourceDraftVersionDescIdDesc(
+                TenantLegalDraftKind.IMPRINT, TenantLegalProposalAudience.ALL))
+        .thenReturn(Optional.of(legacy));
+    when(proposalRepository.existsBySourceDraftIdAndSourceDraftVersionAndRecipientTenantId(
+            11L, 2L, 42L))
+        .thenReturn(false);
+    when(proposalRepository.findBySourceDraftIdInOrderByIdAsc(Set.of(11L)))
+        .thenReturn(List.of(otherRevision, sameRevision));
+    when(proposalRepository.saveAndFlush(any()))
+        .thenAnswer(invocation -> invocation.getArgument(0));
+
+    assertThat(service.deliverLatestTemplatesTo(42L))
+        .singleElement()
+        .extracting(TenantLegalProposalEntity::getContent)
+        .isEqualTo("{\"de\":\"source\"}");
+  }
+
+  @Test
+  void lateTraegerDeliveryIgnoresThePlatformItself() {
+    assertThat(service.deliverLatestTemplatesTo(0L)).isEmpty();
+    verifyNoInteractions(distributionRepository, proposalRepository);
+  }
+
+  private TenantLegalProposalDistributionEntity sentDistribution(
+      String id, TenantLegalDraftKind kind, Long draftId, Long draftVersion) {
+    return TenantLegalProposalDistributionEntity.builder()
+        .id(id)
+        .requestKey("key-" + id)
+        .kind(kind)
+        .audience(TenantLegalProposalAudience.ALL)
+        .sourceDraftId(draftId)
+        .sourceDraftVersion(draftVersion)
+        .sourceUpdatedAt(LocalDateTime.parse("2026-09-17T10:00:00"))
+        .requestFingerprint("fingerprint")
+        .recipientIds("3,8")
+        .content("{\"de\":\"sent\"}")
+        .privacyConsent("{\"de\":\"sent consent\"}")
+        .createdBy("platform-user")
+        .createdAt(LocalDateTime.parse("2026-09-17T12:00:00"))
+        .build();
+  }
+
   private TenantLegalDraftEntity sourceDraft(Long id, Long version, TenantLegalDraftKind kind) {
     return TenantLegalDraftEntity.builder()
         .id(id)
