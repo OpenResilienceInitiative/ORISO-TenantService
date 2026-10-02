@@ -19,6 +19,22 @@ public class SystemEmailDeliveryService {
   private final TenantSystemMailTransport transport;
 
   public boolean deliver(long tenantId, SystemEmailDeliveryRequest request) {
+    return deliver(tenantId, request, true);
+  }
+
+  public boolean deliverTest(long tenantId, String recipient, String language) {
+    var copy = TenantSmtpTestCopy.forLanguage(language);
+    return deliver(
+        tenantId,
+        new TestMail(recipient, copy.subject(), "<p>" + copy.text() + "</p>", copy.text()),
+        false);
+  }
+
+  private record TestMail(String recipient, String subject, String html, String text)
+      implements TenantSystemMail {}
+
+  private boolean deliver(
+      long tenantId, TenantSystemMail mail, boolean requireNotificationsEnabled) {
     if (tenantId <= 0) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "INVALID_TENANT");
     var tenant =
         tenants
@@ -33,7 +49,8 @@ public class SystemEmailDeliveryService {
       throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_INVALID");
     }
     if (settings == null
-        || !Boolean.TRUE.equals(settings.getFeatureSystemNotificationEmailsEnabled())
+        || (requireNotificationsEnabled
+            && !Boolean.TRUE.equals(settings.getFeatureSystemNotificationEmailsEnabled()))
         || settings.getSmtpMode() != TenantSmtpMode.OWN
         || settings.getSmtp() == null
         || !settings.getSmtp().isEnabled()) return false;
@@ -55,7 +72,7 @@ public class SystemEmailDeliveryService {
       throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_INVALID");
     }
     try {
-      transport.send(smtp, password, request);
+      transport.send(smtp, password, mail);
     } catch (jakarta.mail.MessagingException ignored) {
       // Never attach SMTP exceptions: they can contain server replies, recipient or credentials.
       throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "SMTP_DELIVERY_UNCONFIRMED");

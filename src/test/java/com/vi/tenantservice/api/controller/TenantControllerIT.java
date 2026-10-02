@@ -13,6 +13,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -119,6 +120,9 @@ class TenantControllerIT {
   @MockitoBean ConsultingTypeService consultingTypeService;
 
   @MockitoBean UserAdminService userAdminService;
+
+  @MockitoBean
+  com.vi.tenantservice.api.service.systememail.TenantSystemMailTransport tenantMailTransport;
 
   @MockitoBean SubdomainExtractor subdomainExtractor;
 
@@ -735,6 +739,74 @@ class TenantControllerIT {
     ((com.fasterxml.jackson.databind.node.ObjectNode) request.get("settings"))
         .put("smtpMode", mode);
     return mapper.writeValueAsString(request);
+  }
+
+  private String tenant1RequestWithTransport(
+      String password, int port, boolean secure, boolean confirmed) throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var request =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(tenant1RequestWithSmtpMode(password, "OWN"));
+    var smtp = (com.fasterxml.jackson.databind.node.ObjectNode) request.get("settings").get("smtp");
+    smtp.put("port", port);
+    smtp.put("secure", secure);
+    if (confirmed) smtp.put("nonstandardTransportConfirmed", true);
+    return mapper.writeValueAsString(request);
+  }
+
+  @Test
+  void updateTenant_ShouldRequireFreshConfirmationForAnUnusualSmtpTransport() throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("own-secret", 465, false, false))
+        .andExpect(status().isUnprocessableEntity());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("own-secret", 465, false, true))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.smtp.nonstandardTransportConfirmed").doesNotExist());
+    org.assertj.core.api.Assertions.assertThat(storedSettingsOfTenant1())
+        .doesNotContain("nonstandardTransportConfirmed");
+
+    // The same stored combination survives an unrelated update from an older client.
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 465, false, false))
+        .andExpect(status().isOk());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 587, true, false))
+        .andExpect(status().isUnprocessableEntity());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 587, true, true))
+        .andExpect(status().isOk());
+    putTenant1AsTenantAdmin(tenant1RequestWithTransport("", 2525, false, false))
+        .andExpect(status().isUnprocessableEntity());
+  }
+
+  @Test
+  void tenantSmtpTest_UsesStoredOwnServerVerifiedRecipientAndPersistentCooldown() throws Exception {
+    putTenant1AsTenantAdmin(tenant1RequestWithSmtpMode("own-secret", "OWN"))
+        .andExpect(status().isOk());
+    when(authorisationService.hasRole("single-tenant-admin")).thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(1L));
+    when(authorisationService.getVerifiedEmail()).thenReturn("admin@example.org");
+    when(authorisationService.getPreferredLanguage()).thenReturn("de");
+    var caller =
+        jwt()
+            .jwt(
+                token ->
+                    token
+                        .claim("tenantId", 1)
+                        .claim("email", "admin@example.org")
+                        .claim("email_verified", true)
+                        .claim(
+                            "realm_access",
+                            java.util.Map.of("roles", java.util.List.of("single-tenant-admin"))));
+    mockMvc
+        .perform(post("/tenant/1/smtp-test-deliveries").with(caller))
+        .andExpect(status().isNoContent());
+    org.mockito.Mockito.verify(tenantMailTransport)
+        .send(
+            org.mockito.ArgumentMatchers.argThat(smtp -> smtp.getHost() != null),
+            org.mockito.ArgumentMatchers.eq("own-secret"),
+            org.mockito.ArgumentMatchers.argThat(
+                request -> request.recipient().equals("admin@example.org")));
+    mockMvc
+        .perform(post("/tenant/1/smtp-test-deliveries").with(caller))
+        .andExpect(status().isTooManyRequests())
+        .andExpect(header().string("Retry-After", "60"));
   }
 
   @Test

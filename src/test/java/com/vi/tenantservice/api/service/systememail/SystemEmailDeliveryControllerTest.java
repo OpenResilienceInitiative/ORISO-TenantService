@@ -56,9 +56,21 @@ class SystemEmailDeliveryControllerTest {
             .expirationTime(
                 java.util.Date.from(now.plusSeconds(variant.equals("expired") ? -180 : 120)))
             .claim("azp", variant.equals("other-client") ? "other" : "app")
+            .claim("tenantId", variant.equals("wrong-tenant") ? 41 : 40)
+            .claim("email", "admin@example.org")
+            .claim("email_verified", !variant.equals("unverified"))
             .claim(
                 "realm_access",
-                Map.of("roles", List.of(variant.equals("admin") ? "tenant-admin" : "technical")))
+                Map.of(
+                    "roles",
+                    List.of(
+                        variant.equals("admin")
+                            ? "tenant-admin"
+                            : variant.equals("single-admin")
+                                    || variant.equals("wrong-tenant")
+                                    || variant.equals("unverified")
+                                ? "single-tenant-admin"
+                                : "technical")))
             .build();
     var signed =
         new com.nimbusds.jwt.SignedJWT(
@@ -85,6 +97,21 @@ class SystemEmailDeliveryControllerTest {
     }
 
     @Bean
+    TenantSmtpTestService smtpTest() {
+      return mock(TenantSmtpTestService.class);
+    }
+
+    @Bean
+    TenantSmtpTestController smtpTestController(TenantSmtpTestService service) {
+      return new TenantSmtpTestController(service);
+    }
+
+    @Bean(name = "tenantSmtpTestIdentity")
+    TenantSmtpTestIdentity smtpTestIdentity() {
+      return new TenantSmtpTestIdentity();
+    }
+
+    @Bean
     TechnicalServiceIdentity technicalServiceIdentity() {
       return new TechnicalServiceIdentity("service-id");
     }
@@ -106,13 +133,14 @@ class SystemEmailDeliveryControllerTest {
 
   @Autowired WebApplicationContext context;
   @Autowired SystemEmailDeliveryService delivery;
+  @Autowired TenantSmtpTestService smtpTest;
   MockMvc mvc;
   final String body =
       "{\"purpose\":\"EMAIL_ADDRESS_CHANGED\",\"recipient\":\"recipient@example.org\",\"subject\":\"Subject\",\"html\":\"<p>Body</p>\",\"text\":\"Body\",\"correlationId\":\"123e4567-e89b-12d3-a456-426614174000\"}";
 
   @BeforeEach
   void setup() {
-    reset(delivery);
+    reset(delivery, smtpTest);
     mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
   }
 
@@ -172,6 +200,7 @@ class SystemEmailDeliveryControllerTest {
         List.of(
             body.replace("recipient@example.org", "one@example.org,two@example.org"),
             body.replace("EMAIL_ADDRESS_CHANGED", "FREE_FORM"),
+            body.replace("EMAIL_ADDRESS_CHANGED", "SMTP_TEST"),
             body.replace("Subject", "S".repeat(257)),
             body.replace("\"purpose\"", "\"host\":\"override.example.org\",\"purpose\"")))
       mvc.perform(
@@ -183,5 +212,28 @@ class SystemEmailDeliveryControllerTest {
           .andExpect(content().string(""))
           .andExpect(header().string("Cache-Control", "no-store"));
     verifyNoInteractions(delivery);
+  }
+
+  @Test
+  void onlySingleTenantAdminCanStartABodylessTest() throws Exception {
+    for (String variant : List.of("valid", "admin", "wrong-tenant", "unverified")) {
+      mvc.perform(
+              post("/tenant/40/smtp-test-deliveries")
+                  .header("Authorization", "Bearer " + token(variant)))
+          .andExpect(status().isForbidden());
+    }
+    mvc.perform(post("/tenant/40/smtp-test-deliveries")).andExpect(status().isUnauthorized());
+    mvc.perform(
+            post("/tenant/40/smtp-test-deliveries")
+                .header("Authorization", "Bearer " + token("single-admin"))
+                .contentType("application/json")
+                .content("{\"recipient\":\"other@example.org\"}"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(
+            post("/tenant/40/smtp-test-deliveries")
+                .header("Authorization", "Bearer " + token("single-admin")))
+        .andExpect(status().isNoContent())
+        .andExpect(header().string("Cache-Control", "no-store"));
+    verify(smtpTest).send(40L);
   }
 }
