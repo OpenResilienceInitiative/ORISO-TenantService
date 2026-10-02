@@ -174,7 +174,8 @@ class SystemEmailDeliveryControllerTest {
         "CONTACT_SHEET",
         "HANDOVER_REQUESTED",
         "HANDOVER_CONFIRMED",
-        "FREE_TEXT_NOTICE"
+        "FREE_TEXT_NOTICE",
+        "SERVICE_NOTICE"
       })
   void boundIdentityCanSubmitEachApprovedNotificationPurpose(
       SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
