@@ -31,16 +31,17 @@ public class PublicBrandingAssetService {
       return Optional.empty();
     }
     Optional<RestrictedTenantDTO> tenant = tenantServiceFacade.findRestrictedTenantById(tenantId);
-    if (tenant.isEmpty()) {
+    // The technical tenant may have no row (#300); its route then serves the platform branding.
+    if (tenant.isEmpty() && tenantId != 0L) {
       return Optional.empty();
     }
     // Like Admin -> Appearance (EffectiveThemingApplier): an unset image is inherited
-    // from the platform tenant, so the mail shows what the Träger admin sees.
-    String stored = select(tenant.get().getTheming(), asset);
+    // from the platform branding, so the mail shows what the Träger admin sees.
+    String stored = tenant.map(found -> select(found.getTheming(), asset)).orElse(null);
     if (stored == null || stored.isBlank()) {
       stored =
           tenantServiceFacade
-              .getPlatformTenant()
+              .getPlatformBrandingTenant()
               .map(platform -> select(platform.getTheming(), asset))
               .orElse(null);
     }

@@ -172,6 +172,16 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void getPlatformBrandingTenant_Should_notConsultTheMainTenant_When_singleDomainIsDisabled() {
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+
+    verifyNoInteractions(applicationSettingsService);
+  }
+
+  @Test
   void createTenant_Should_offerTheLatestPlatformTemplatesAndRecordInitialLegalTexts() {
     when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
     when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);

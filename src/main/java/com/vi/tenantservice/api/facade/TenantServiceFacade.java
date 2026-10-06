@@ -1013,11 +1013,77 @@ public class TenantServiceFacade {
     return dto;
   }
 
+  /**
+   * The branding every Träger without its own image inherits (#300). The technical tenant 0 is the
+   * source where it carries a value. On a single-domain installation the platform admin edits the
+   * platform branding on the <em>main tenant</em> instead, which is what Admin → Appearance shows
+   * as inherited; tenant 0 then has no row or no image. Its image gaps are filled from there.
+   */
   private Theming getPlatformTheming(String lang) {
-    return tenantService
-        .findRestrictedTenantDataById((long) TECHNICAL_TENANT_ID)
-        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
-        .orElse(null);
+    Theming technical =
+        tenantService
+            .findRestrictedTenantDataById((long) TECHNICAL_TENANT_ID)
+            .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
+            .orElse(null);
+    if (technical != null && hasAllImages(technical)) {
+      return technical;
+    }
+    Theming mainTenantImages = getMainTenantImages(lang);
+    if (mainTenantImages == null) {
+      return technical;
+    }
+    Theming platform = technical == null ? new Theming() : technical;
+    effectiveThemingApplier.applyTo(platform, mainTenantImages);
+    return platform;
+  }
+
+  private static boolean hasAllImages(Theming theming) {
+    return !isBlank(theming.getLogo())
+        && !isBlank(theming.getAssociationLogo())
+        && !isBlank(theming.getFavicon());
+  }
+
+  /**
+   * Only the images of the main tenant, never its colours or login effect: this widens the
+   * inheritance for the assets Admin already shows as inherited, not for the rest of the theme.
+   * Best effort -- an unreachable settings service must not break a public tenant lookup.
+   */
+  private Theming getMainTenantImages(String lang) {
+    if (!multitenancyWithSingleDomain) {
+      return null;
+    }
+    try {
+      String mainTenantSubdomain =
+          applicationSettingsService
+              .getApplicationSettings()
+              .getMainTenantSubdomainForSingleDomainMultitenancy()
+              .getValue();
+      if (isBlank(mainTenantSubdomain)) {
+        return null;
+      }
+      return tenantService
+          .findRestrictedTenantDataBySubdomain(mainTenantSubdomain)
+          .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
+          .filter(theming -> theming != null)
+          .map(
+              theming ->
+                  new Theming()
+                      .logo(theming.getLogo())
+                      .associationLogo(theming.getAssociationLogo())
+                      .favicon(theming.getFavicon()))
+          .orElse(null);
+    } catch (RuntimeException exception) {
+      log.warn(
+          "Main tenant branding unavailable, platform images are not inherited ({})",
+          exception.getClass().getSimpleName());
+      return null;
+    }
+  }
+
+  /** Platform branding for mail and public image routes, see {@link #getPlatformTheming}. */
+  public Optional<RestrictedTenantDTO> getPlatformBrandingTenant() {
+    return Optional.ofNullable(getPlatformTheming(translationService.getCurrentLanguageContext()))
+        .map(theming -> new RestrictedTenantDTO().theming(theming));
   }
 
   public Optional<RestrictedTenantDTO> getPlatformTenant() {

@@ -77,7 +77,7 @@ class PublicBrandingAssetServiceTest {
     var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
     when(tenants.findRestrictedTenantById(7L))
         .thenReturn(Optional.of(new RestrictedTenantDTO().theming(new Theming())));
-    when(tenants.getPlatformTenant()).thenReturn(Optional.of(tenant("platform-logo")));
+    when(tenants.getPlatformBrandingTenant()).thenReturn(Optional.of(tenant("platform-logo")));
 
     assertThat(service.find(7L, "logo").orElseThrow().bytes())
         .isEqualTo("platform-logo".getBytes(StandardCharsets.UTF_8));
@@ -87,7 +87,7 @@ class PublicBrandingAssetServiceTest {
   void tenantWithoutThemingShowsThePlatformLogo() {
     var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
     when(tenants.findRestrictedTenantById(7L)).thenReturn(Optional.of(new RestrictedTenantDTO()));
-    when(tenants.getPlatformTenant()).thenReturn(Optional.of(tenant("platform-logo")));
+    when(tenants.getPlatformBrandingTenant()).thenReturn(Optional.of(tenant("platform-logo")));
 
     assertThat(service.find(7L, "logo").orElseThrow().bytes())
         .isEqualTo("platform-logo".getBytes(StandardCharsets.UTF_8));
@@ -98,10 +98,20 @@ class PublicBrandingAssetServiceTest {
     var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
     when(tenants.findRestrictedTenantById(7L))
         .thenReturn(Optional.of(new RestrictedTenantDTO().theming(new Theming())));
-    when(tenants.getPlatformTenant())
+    when(tenants.getPlatformBrandingTenant())
         .thenReturn(Optional.of(new RestrictedTenantDTO().theming(new Theming())));
 
     assertThat(service.find(7L, "logo")).isEmpty();
+  }
+
+  @Test
+  void technicalTenantWithoutRowServesThePlatformBrandingLogo() {
+    var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
+    when(tenants.findRestrictedTenantById(0L)).thenReturn(Optional.empty());
+    when(tenants.getPlatformBrandingTenant()).thenReturn(Optional.of(tenant("platform-logo")));
+
+    assertThat(service.find(0L, "logo").orElseThrow().bytes())
+        .isEqualTo("platform-logo".getBytes(StandardCharsets.UTF_8));
   }
 
   private RestrictedTenantDTO tenant(String logo) {
