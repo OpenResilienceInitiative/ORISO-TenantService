@@ -1076,30 +1076,47 @@ public class TenantServiceFacade {
   }
 
   private Theming loadMainTenantImages(String lang) {
+    String mainTenantSubdomain = readMainTenantSubdomain();
+    if (isBlank(mainTenantSubdomain)) {
+      return null;
+    }
+    return tenantService
+        .findRestrictedTenantDataBySubdomain(mainTenantSubdomain)
+        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
+        .filter(theming -> theming != null)
+        .map(
+            theming ->
+                new Theming()
+                    .logo(theming.getLogo())
+                    .associationLogo(theming.getAssociationLogo())
+                    .favicon(theming.getFavicon()))
+        .orElse(null);
+  }
+
+  /** The only best-effort step: a missing or unreachable setting means "no main tenant". */
+  private String readMainTenantSubdomain() {
     try {
       var settings = applicationSettingsService.getApplicationSettings();
-      String mainTenantSubdomain =
-          settings.getMainTenantSubdomainForSingleDomainMultitenancy().getValue();
-      if (isBlank(mainTenantSubdomain)) {
-        return null;
-      }
-      return tenantService
-          .findRestrictedTenantDataBySubdomain(mainTenantSubdomain)
-          .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
-          .filter(theming -> theming != null)
-          .map(
-              theming ->
-                  new Theming()
-                      .logo(theming.getLogo())
-                      .associationLogo(theming.getAssociationLogo())
-                      .favicon(theming.getFavicon()))
-          .orElse(null);
+      var setting =
+          settings == null ? null : settings.getMainTenantSubdomainForSingleDomainMultitenancy();
+      return setting == null ? null : setting.getValue();
     } catch (RuntimeException exception) {
       log.warn(
-          "Main tenant branding unavailable, platform images are not inherited ({})",
+          "Main tenant setting unavailable, platform images are not inherited ({})",
           exception.getClass().getSimpleName());
       return null;
     }
+  }
+
+  /**
+   * The tenant exactly as stored, without platform inheritance: public image routes must prefer a
+   * Träger's own association logo over an inherited platform logo.
+   */
+  public Optional<RestrictedTenantDTO> findOwnRestrictedTenantById(Long id) {
+    String lang = translationService.getCurrentLanguageContext();
+    return tenantService
+        .findRestrictedTenantDataById(id)
+        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang));
   }
 
   /** Platform branding for mail and public image routes, see {@link #getPlatformTheming}. */

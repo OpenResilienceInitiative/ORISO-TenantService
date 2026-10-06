@@ -110,6 +110,31 @@ class PlatformLogoFromMainTenantIT {
   }
 
   @Test
+  void theTechnicalTenantRouteWorksWithoutAnyTechnicalTenantRow() throws Exception {
+    setLogo(2, png("platform-logo"));
+    jdbc.update("DELETE FROM TENANT WHERE id = 0");
+
+    mvc.perform(get("/tenant/public/branding/0/logo"))
+        .andExpect(status().isOk())
+        .andExpect(content().bytes("platform-logo".getBytes(UTF_8)));
+    mvc.perform(get("/tenant/public/branding/1/logo"))
+        .andExpect(status().isOk())
+        .andExpect(content().bytes("platform-logo".getBytes(UTF_8)));
+  }
+
+  @Test
+  void traegerOwnAssociationLogoWinsOverTheInheritedPlatformLogo() throws Exception {
+    setLogo(2, png("platform-logo"));
+    jdbc.update(
+        "UPDATE TENANT SET theming_logo = NULL, theming_association_logo = ? WHERE id = 1",
+        png("own-association"));
+
+    mvc.perform(get("/tenant/public/branding/1/logo"))
+        .andExpect(status().isOk())
+        .andExpect(content().bytes("own-association".getBytes(UTF_8)));
+  }
+
+  @Test
   void traegerOwnLogoWinsOverThePlatformLogo() throws Exception {
     setLogo(2, png("platform-logo"));
     setLogo(1, png("own-logo"));
