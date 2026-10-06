@@ -152,7 +152,8 @@ class TenantDpaSignatureRepositoryTest {
             false,
             "de",
             "FORWARDED_EXTERNAL",
-            now);
+            now,
+            true);
     // and a second consume of the same token affects nothing (single-use)
     int second =
         signatureRepository.consumeSignToken(
@@ -164,7 +165,8 @@ class TenantDpaSignatureRepositoryTest {
             true,
             "en",
             "FORWARDED_EXTERNAL",
-            now);
+            now,
+            false);
     signatureRepository.flush();
 
     // then
@@ -172,6 +174,7 @@ class TenantDpaSignatureRepositoryTest {
     assertThat(second).isZero();
     var reloaded = signatureRepository.findById(pending.getId()).orElseThrow();
     assertThat(reloaded.getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
+    assertThat(reloaded.getCurrentVersionWhenSigned()).isTrue();
     assertThat(reloaded.getSignerName()).isEqualTo("Erika"); // not overwritten by the 2nd attempt
     assertThat(reloaded.getSignerEmail()).isEqualTo("e@example.org");
     assertThat(reloaded.getSignerOrganisation()).isEqualTo("Caritas");

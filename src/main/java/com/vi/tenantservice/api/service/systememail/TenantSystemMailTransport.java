@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class TenantSystemMailTransport {
-  public void send(TenantSmtpSettings settings, String password, SystemEmailDeliveryRequest request)
+  public void send(TenantSmtpSettings settings, String password, TenantSystemMail request)
       throws MessagingException {
     InternetAddress[] recipients = InternetAddress.parse(request.recipient(), true);
     if (recipients.length != 1 || recipients[0].isGroup())

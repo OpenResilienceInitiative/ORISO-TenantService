@@ -81,7 +81,8 @@ class SystemEmailDeliveryServiceTest {
         "CONTACT_SHEET",
         "HANDOVER_REQUESTED",
         "HANDOVER_CONFIRMED",
-        "FREE_TEXT_NOTICE"
+        "FREE_TEXT_NOTICE",
+        "SERVICE_NOTICE"
       })
   void approvedNotificationPurposeUsesOnlyExplicitOwnTenant(
       SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
@@ -107,7 +108,8 @@ class SystemEmailDeliveryServiceTest {
         "CONTACT_SHEET",
         "HANDOVER_REQUESTED",
         "HANDOVER_CONFIRMED",
-        "FREE_TEXT_NOTICE"
+        "FREE_TEXT_NOTICE",
+        "SERVICE_NOTICE"
       })
   void notificationPurposeCannotUsePlatformOrUnclassifiedTenantCredentials(
       SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
@@ -125,6 +127,84 @@ class SystemEmailDeliveryServiceTest {
     verifyNoInteractions(cipher, transport);
   }
 
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      names = {"ACCOUNT_INVITE", "DPA_SIGNING_REQUEST", "DPA_SIGNED_NOTICE"})
+  void accountAndContractMailUsesOwnTenantEvenWithNotificationsSwitchedOff(
+      SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
+    when(tenants.findById(40L)).thenReturn(Optional.of(tenant(false, true)));
+    when(cipher.decrypt("ENC:test-fixture")).thenReturn("test-password");
+    var mail =
+        new SystemEmailDeliveryRequest(
+            purpose, "recipient@example.org", "Subject", "<p>Body</p>", "Body", UUID.randomUUID());
+
+    assertThat(service.deliver(40L, mail)).isTrue();
+    verify(transport).send(any(), eq("test-password"), same(mail));
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      names = {"ACCOUNT_INVITE", "DPA_SIGNING_REQUEST", "DPA_SIGNED_NOTICE"})
+  void accountAndContractMailStillNeedsEnabledOwnSmtp(SystemEmailDeliveryRequest.Purpose purpose)
+      throws Exception {
+    var platform = tenant(false, true);
+    var settings =
+        (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(platform.getSettings());
+    settings.put("smtpMode", "PLATFORM");
+    platform.setSettings(mapper.writeValueAsString(settings));
+    var mail =
+        new SystemEmailDeliveryRequest(
+            purpose, "recipient@example.org", "Subject", "<p>Body</p>", "Body", UUID.randomUUID());
+    when(tenants.findById(40L))
+        .thenReturn(Optional.of(platform), Optional.of(tenant(false, false)));
+
+    assertThat(service.deliver(40L, mail)).isFalse();
+    assertThat(service.deliver(40L, mail)).isFalse();
+    verifyNoInteractions(cipher, transport);
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = SystemEmailDeliveryRequest.Purpose.class,
+      mode = EnumSource.Mode.EXCLUDE,
+      names = {"ACCOUNT_INVITE", "DPA_SIGNING_REQUEST", "DPA_SIGNED_NOTICE"})
+  void notificationPurposeStaysSilentWhileNotificationsAreSwitchedOff(
+      SystemEmailDeliveryRequest.Purpose purpose) throws Exception {
+    when(tenants.findById(40L)).thenReturn(Optional.of(tenant(false, true)));
+    var notification =
+        new SystemEmailDeliveryRequest(
+            purpose, "recipient@example.org", "Subject", "<p>Body</p>", "Body", UUID.randomUUID());
+
+    assertThat(purpose.isNotification()).isTrue();
+    assertThat(service.deliver(40L, notification)).isFalse();
+    verifyNoInteractions(cipher, transport);
+  }
+
+  // Planned maintenance is a switchable system notice (ADR-024), so a tenant that switched its
+  // system notification mails off gets none through its own server either.
+  @Test
+  void plannedServiceNoticeFollowsTheTenantNotificationSwitch() throws Exception {
+    when(tenants.findById(40L))
+        .thenReturn(Optional.of(tenant(false, true)), Optional.of(tenant(true, true)));
+    when(cipher.decrypt("ENC:test-fixture")).thenReturn("test-password");
+    var notice =
+        new SystemEmailDeliveryRequest(
+            SystemEmailDeliveryRequest.Purpose.SERVICE_NOTICE,
+            "agency-admin@example.org",
+            "Planned maintenance",
+            "<p>Body</p>",
+            "Body",
+            UUID.randomUUID());
+
+    assertThat(service.deliver(40L, notice)).isFalse();
+    verifyNoInteractions(cipher, transport);
+
+    assertThat(service.deliver(40L, notice)).isTrue();
+    verify(transport).send(any(), eq("test-password"), same(notice));
+  }
+
   @Test
   void disabledOrRemovedSettingsAreReadFreshWithoutDecrypting() throws Exception {
     when(tenants.findById(40L))
@@ -138,6 +218,21 @@ class SystemEmailDeliveryServiceTest {
     assertThat(service.deliver(40, request)).isFalse();
     verify(transport, times(1)).send(any(), anyString(), any());
     verify(cipher, times(1)).decrypt(anyString());
+  }
+
+  @Test
+  void setupTestUsesStoredOwnCredentialsEvenBeforeNotificationsAreEnabled() throws Exception {
+    when(tenants.findById(40L)).thenReturn(Optional.of(tenant(false, true)));
+    when(cipher.decrypt("ENC:test-fixture")).thenReturn("test-password");
+    assertThat(service.deliverTest(40L, "admin@example.org", "de")).isTrue();
+    verify(transport)
+        .send(
+            argThat(s -> s.getHost().equals("tenant40.example.org")),
+            eq("test-password"),
+            argThat(
+                mail ->
+                    mail.recipient().equals("admin@example.org")
+                        && !(mail instanceof SystemEmailDeliveryRequest)));
   }
 
   @Test

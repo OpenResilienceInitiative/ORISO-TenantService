@@ -1,0 +1,25 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Optional data protection officer of the Träger (ORISO-Admin#1067, Frank 2026-09-25), inherited
+      by its Beratungsstellen for the {{Datenschutzbeauftragte}} placeholder. Stored as the same JSON
+      contact object an agency keeps in data_protection_officer_contact. Nullable; NULL = not entered.
+      columnExists guard for clusters that ran with Liquibase switched off.
+    -->
+    <changeSet author="oriso" id="tenantAddDataProtectionOfficer">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant" columnName="data_protection_officer"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="tenant">
+            <column name="data_protection_officer" type="TEXT">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tenant" columnName="data_protection_officer"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>
