@@ -22,8 +22,8 @@ class PublicBrandingAssetServiceTest {
   @Test
   void explicitTenantImagesDoNotDependOnMailClientCookies() {
     var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
-    when(tenants.findRestrictedTenantById(7L)).thenReturn(Optional.of(tenant("first-logo")));
-    when(tenants.findRestrictedTenantById(8L)).thenReturn(Optional.of(tenant("second-logo")));
+    when(tenants.findOwnRestrictedTenantById(7L)).thenReturn(Optional.of(tenant("first-logo")));
+    when(tenants.findOwnRestrictedTenantById(8L)).thenReturn(Optional.of(tenant("second-logo")));
 
     assertThat(service.find(7L, "logo").orElseThrow().bytes())
         .isEqualTo("first-logo".getBytes(StandardCharsets.UTF_8));
@@ -35,7 +35,7 @@ class PublicBrandingAssetServiceTest {
   @Test
   void unknownTenantDoesNotSilentlyDisplayAnotherTenantsLogo() {
     var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
-    when(tenants.findRestrictedTenantById(99L)).thenReturn(Optional.empty());
+    when(tenants.findOwnRestrictedTenantById(99L)).thenReturn(Optional.empty());
     assertThat(service.find(99L, "logo")).isEmpty();
     verifyNoMoreInteractions(tenants);
   }
@@ -55,7 +55,7 @@ class PublicBrandingAssetServiceTest {
     theming.setFavicon(
         "data:image/png;base64,"
             + Base64.getEncoder().encodeToString("icon".getBytes(StandardCharsets.UTF_8)));
-    when(tenants.findRestrictedTenantById(12L))
+    when(tenants.findOwnRestrictedTenantById(12L))
         .thenReturn(Optional.of(new RestrictedTenantDTO().theming(theming)));
 
     assertThat(service.find(12L, "favicon").orElseThrow().bytes())
@@ -75,9 +75,9 @@ class PublicBrandingAssetServiceTest {
     // Admin -> Appearance shows a Träger without its own logo the inherited platform
     // logo (EffectiveThemingApplier); the mail image must match what Admin shows.
     var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
-    when(tenants.findRestrictedTenantById(7L))
+    when(tenants.findOwnRestrictedTenantById(7L))
         .thenReturn(Optional.of(new RestrictedTenantDTO().theming(new Theming())));
-    when(tenants.getPlatformTenant()).thenReturn(Optional.of(tenant("platform-logo")));
+    when(tenants.getPlatformBrandingTenant()).thenReturn(Optional.of(tenant("platform-logo")));
 
     assertThat(service.find(7L, "logo").orElseThrow().bytes())
         .isEqualTo("platform-logo".getBytes(StandardCharsets.UTF_8));
@@ -86,8 +86,9 @@ class PublicBrandingAssetServiceTest {
   @Test
   void tenantWithoutThemingShowsThePlatformLogo() {
     var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
-    when(tenants.findRestrictedTenantById(7L)).thenReturn(Optional.of(new RestrictedTenantDTO()));
-    when(tenants.getPlatformTenant()).thenReturn(Optional.of(tenant("platform-logo")));
+    when(tenants.findOwnRestrictedTenantById(7L))
+        .thenReturn(Optional.of(new RestrictedTenantDTO()));
+    when(tenants.getPlatformBrandingTenant()).thenReturn(Optional.of(tenant("platform-logo")));
 
     assertThat(service.find(7L, "logo").orElseThrow().bytes())
         .isEqualTo("platform-logo".getBytes(StandardCharsets.UTF_8));
@@ -96,12 +97,39 @@ class PublicBrandingAssetServiceTest {
   @Test
   void neitherTenantNorPlatformLogoMeansNoImage() {
     var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
-    when(tenants.findRestrictedTenantById(7L))
+    when(tenants.findOwnRestrictedTenantById(7L))
         .thenReturn(Optional.of(new RestrictedTenantDTO().theming(new Theming())));
-    when(tenants.getPlatformTenant())
+    when(tenants.getPlatformBrandingTenant())
         .thenReturn(Optional.of(new RestrictedTenantDTO().theming(new Theming())));
 
     assertThat(service.find(7L, "logo")).isEmpty();
+  }
+
+  @Test
+  void ownAssociationLogoBeatsTheInheritedLogoWhenTheOwnLogoIsBlank() {
+    var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
+    var own = new Theming();
+    own.setLogo("   ");
+    own.setAssociationLogo(
+        "data:image/png;base64,"
+            + Base64.getEncoder()
+                .encodeToString("own-association".getBytes(StandardCharsets.UTF_8)));
+    when(tenants.findOwnRestrictedTenantById(7L))
+        .thenReturn(Optional.of(new RestrictedTenantDTO().theming(own)));
+
+    assertThat(service.find(7L, "logo").orElseThrow().bytes())
+        .isEqualTo("own-association".getBytes(StandardCharsets.UTF_8));
+    verifyNoMoreInteractions(tenants);
+  }
+
+  @Test
+  void technicalTenantWithoutRowServesThePlatformBrandingLogo() {
+    var service = new PublicBrandingAssetService(tenants, new BrandingAssetDecoder());
+    when(tenants.findOwnRestrictedTenantById(0L)).thenReturn(Optional.empty());
+    when(tenants.getPlatformBrandingTenant()).thenReturn(Optional.of(tenant("platform-logo")));
+
+    assertThat(service.find(0L, "logo").orElseThrow().bytes())
+        .isEqualTo("platform-logo".getBytes(StandardCharsets.UTF_8));
   }
 
   private RestrictedTenantDTO tenant(String logo) {

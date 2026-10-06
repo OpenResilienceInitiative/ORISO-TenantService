@@ -38,6 +38,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
+import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
@@ -169,6 +170,115 @@ class TenantServiceFacadeTest {
     lenient()
         .when(tenantLegalVersionService.saveRecordingPublications(any(), any()))
         .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_notConsultTheMainTenant_When_singleDomainIsDisabled() {
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+
+    verifyNoInteractions(applicationSettingsService);
+  }
+
+  private void givenSingleDomainWithMainTenant(String subdomain) {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    var settings =
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+            .ApplicationSettingsDTO();
+    settings.setMainTenantSubdomainForSingleDomainMultitenancy(
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO()
+            .value(subdomain));
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(settings);
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+  }
+
+  private TenantRestrictedData tenantDataWithTheming(Theming theming) {
+    TenantRestrictedData data = mock(TenantRestrictedData.class);
+    when(converter.toRestrictedTenantDTO(data, DE))
+        .thenReturn(new RestrictedTenantDTO().theming(theming));
+    return data;
+  }
+
+  @Test
+  void
+      getPlatformBrandingTenant_Should_fillOnlyTheImageGapsOfTheTechnicalTenantFromTheMainTenant() {
+    givenSingleDomainWithMainTenant("app");
+    var technical = new Theming().logo("technical-logo");
+    var main =
+        new Theming()
+            .logo("main-logo")
+            .favicon("main-icon")
+            .associationLogo("main-association")
+            .primaryColor("#123456");
+    var technicalData = tenantDataWithTheming(technical);
+    var mainData = tenantDataWithTheming(main);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.of(technicalData));
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    Theming platform = tenantServiceFacade.getPlatformBrandingTenant().orElseThrow().getTheming();
+
+    assertThat(platform.getLogo()).isEqualTo("technical-logo");
+    assertThat(platform.getFavicon()).isEqualTo("main-icon");
+    assertThat(platform.getAssociationLogo()).isEqualTo("main-association");
+    assertThat(platform.getPrimaryColor()).isNull();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_useTheMainTenantImages_When_theTechnicalTenantHasNoRow() {
+    givenSingleDomainWithMainTenant("app");
+    var mainData = tenantDataWithTheming(new Theming().logo("main-logo"));
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant().orElseThrow().getTheming().getLogo())
+        .isEqualTo("main-logo");
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_inheritNothing_When_theMainSubdomainIsBlank() {
+    givenSingleDomainWithMainTenant(" ");
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+    verify(tenantService, never()).findRestrictedTenantDataBySubdomain(any());
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_inheritNothing_When_theMainTenantDoesNotExist() {
+    givenSingleDomainWithMainTenant("gone");
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("gone")).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_degrade_When_theSettingsServiceReturnsNothing() {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(null);
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_askTheSettingsServiceOnlyOncePerCacheWindow() {
+    givenSingleDomainWithMainTenant("app");
+    ReflectionTestUtils.setField(tenantServiceFacade, "mainTenantImagesCacheSeconds", 10L);
+    var mainData = tenantDataWithTheming(new Theming().logo("main-logo"));
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    tenantServiceFacade.getPlatformBrandingTenant();
+    tenantServiceFacade.getPlatformBrandingTenant();
+
+    verify(applicationSettingsService, times(1)).getApplicationSettings();
   }
 
   @Test
