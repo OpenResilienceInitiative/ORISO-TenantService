@@ -5,6 +5,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vi.tenantservice.TenantServiceApplication;
@@ -45,7 +46,8 @@ import org.springframework.web.context.WebApplicationContext;
 @TestPropertySource(
     properties = {
       "spring.profiles.active=testing",
-      "feature.multitenancy.with.single.domain.enabled=true"
+      "feature.multitenancy.with.single.domain.enabled=true",
+      "branding.main-tenant-images.cache-seconds=0"
     })
 @Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class PlatformLogoFromMainTenantIT {
@@ -141,6 +143,44 @@ class PlatformLogoFromMainTenantIT {
   }
 
   @Test
+  void traegerWithoutOwnFaviconInheritsTheFaviconOfTheMainTenant() throws Exception {
+    jdbc.update("UPDATE TENANT SET theming_favicon = ? WHERE id = 2", png("platform-icon"));
+    jdbc.update("UPDATE TENANT SET theming_favicon = NULL WHERE id IN (0, 1)");
+
+    mvc.perform(get("/tenant/public/branding/1/favicon"))
+        .andExpect(status().isOk())
+        .andExpect(content().bytes("platform-icon".getBytes(UTF_8)));
+  }
+
+  @Test
+  void theAssociationLogoOfTheMainTenantIsInheritedInTheTenantData() throws Exception {
+    jdbc.update(
+        "UPDATE TENANT SET theming_association_logo = ? WHERE id = 2", png("platform-association"));
+
+    mvc.perform(get("/tenant/public/id/1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.associationLogo").value(png("platform-association")));
+  }
+
+  @Test
+  void onlyImagesAreInheritedFromTheMainTenantNeverItsColours() throws Exception {
+    setLogo(2, png("platform-logo"));
+    jdbc.update(
+        "UPDATE TENANT SET theming_primary_color = '#123456', theming_accent = '#abcdef',"
+            + " theming_secondary_color = '#654321' WHERE id = 2");
+    jdbc.update(
+        "UPDATE TENANT SET theming_primary_color = NULL, theming_accent = NULL,"
+            + " theming_secondary_color = NULL WHERE id IN (0, 1)");
+
+    mvc.perform(get("/tenant/public/id/1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.logo").value(png("platform-logo")))
+        .andExpect(jsonPath("$.theming.primaryColor").doesNotExist())
+        .andExpect(jsonPath("$.theming.accent").doesNotExist())
+        .andExpect(jsonPath("$.theming.secondaryColor").doesNotExist());
+  }
+
+  @Test
   void anUnreachableSettingsServiceDegradesToNoInheritanceInsteadOfFailingTheLookup()
       throws Exception {
     setLogo(2, png("platform-logo"));
@@ -159,9 +199,6 @@ class PlatformLogoFromMainTenantIT {
     // already carries a logo, so the inheritance must also show up in the JSON, not only in bytes.
     mvc.perform(get("/tenant/public/id/1"))
         .andExpect(status().isOk())
-        .andExpect(
-            org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath(
-                    "$.theming.logo")
-                .value(png("platform-logo")));
+        .andExpect(jsonPath("$.theming.logo").value(png("platform-logo")));
   }
 }

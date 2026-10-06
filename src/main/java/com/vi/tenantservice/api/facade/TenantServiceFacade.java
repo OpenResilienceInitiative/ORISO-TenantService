@@ -156,6 +156,19 @@ public class TenantServiceFacade {
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
 
+  /**
+   * How long the main tenant's images are reused, so a public tenant lookup does not call the
+   * settings service every time. Short on purpose: a logo the platform admin just uploaded shows up
+   * in the next mail within this window. 0 disables the cache.
+   */
+  @Value("${branding.main-tenant-images.cache-seconds:10}")
+  private long mainTenantImagesCacheSeconds;
+
+  private record MainTenantImages(Theming images, long loadedAtNanos) {}
+
+  private final java.util.concurrent.atomic.AtomicReference<MainTenantImages> mainTenantImages =
+      new java.util.concurrent.atomic.AtomicReference<>();
+
   public MultilingualTenantDTO createTenant(MultilingualTenantDTO tenantDTO) {
     log.info("Creating new tenant");
     assertCallerMayCreateThisTenant(tenantDTO);
@@ -1052,12 +1065,21 @@ public class TenantServiceFacade {
     if (!multitenancyWithSingleDomain) {
       return null;
     }
+    long ttlNanos = java.util.concurrent.TimeUnit.SECONDS.toNanos(mainTenantImagesCacheSeconds);
+    MainTenantImages cached = mainTenantImages.get();
+    if (ttlNanos > 0 && cached != null && System.nanoTime() - cached.loadedAtNanos() < ttlNanos) {
+      return cached.images();
+    }
+    Theming loaded = loadMainTenantImages(lang);
+    mainTenantImages.set(new MainTenantImages(loaded, System.nanoTime()));
+    return loaded;
+  }
+
+  private Theming loadMainTenantImages(String lang) {
     try {
+      var settings = applicationSettingsService.getApplicationSettings();
       String mainTenantSubdomain =
-          applicationSettingsService
-              .getApplicationSettings()
-              .getMainTenantSubdomainForSingleDomainMultitenancy()
-              .getValue();
+          settings.getMainTenantSubdomainForSingleDomainMultitenancy().getValue();
       if (isBlank(mainTenantSubdomain)) {
         return null;
       }
