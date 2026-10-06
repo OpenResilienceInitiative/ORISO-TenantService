@@ -26,11 +26,17 @@ public class SystemEmailDeliveryService {
     var copy = TenantSmtpTestCopy.forLanguage(language);
     return deliver(
         tenantId,
-        new TestMail(recipient, copy.subject(), "<p>" + copy.text() + "</p>", copy.text()),
+        new TestMail(
+            recipient,
+            copy.subject(),
+            "<p>" + copy.text() + "</p>",
+            copy.text(),
+            java.util.UUID.randomUUID()),
         false);
   }
 
-  private record TestMail(String recipient, String subject, String html, String text)
+  private record TestMail(
+      String recipient, String subject, String html, String text, java.util.UUID correlationId)
       implements TenantSystemMail {}
 
   private boolean deliver(

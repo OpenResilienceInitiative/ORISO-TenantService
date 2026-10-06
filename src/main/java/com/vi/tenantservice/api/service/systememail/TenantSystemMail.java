@@ -10,4 +10,6 @@ public interface TenantSystemMail {
   String html();
 
   String text();
+
+  java.util.UUID correlationId();
 }
