@@ -762,4 +762,19 @@ class TenantFacadeAuthorisationServiceTest {
     assertThat(tenantFacadeAuthorisationService.mayOnlyCreateReservedTenants()).isFalse();
     assertThat(tenantFacadeAuthorisationService.mayOnlyCreateReservedTenants()).isTrue();
   }
+
+  @Test
+  void restrictedTenantAdministratorCannotChangeAssistantIdentity() {
+    TenantEntity existing = tenantWithLogo(null);
+    MultilingualTenantDTO changed =
+        new MultilingualTenantDTO()
+            .theming(new Theming().assistantName("New helper").assistantIcon("robot-7341990"));
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(false);
+    assertThrows(
+        TenantAuthorisationException.class,
+        () ->
+            tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+                changed, existing));
+  }
 }

@@ -483,6 +483,7 @@ public class TenantServiceFacade {
     var isoCountries = Arrays.stream(Locale.getISOLanguages()).toList();
     validateContent(tenantDTO, isoCountries);
     validateSettings(tenantDTO.getSettings());
+    com.vi.tenantservice.api.service.AssistantIdentityValidator.validate(tenantDTO.getTheming());
   }
 
   private void validateSettings(Settings settings) {
@@ -587,6 +588,8 @@ public class TenantServiceFacade {
 
   private MultilingualTenantDTO updateExistingTenant(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenantEntity) {
+    com.vi.tenantservice.api.service.AssistantIdentityValidator.validate(
+        sanitizedTenantDTO.getTheming());
     subdomainValidator.validateOnUpdate(
         sanitizedTenantDTO.getSubdomain(), existingTenantEntity.getSubdomain());
     tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
@@ -1089,7 +1092,9 @@ public class TenantServiceFacade {
                 new Theming()
                     .logo(theming.getLogo())
                     .associationLogo(theming.getAssociationLogo())
-                    .favicon(theming.getFavicon()))
+                    .favicon(theming.getFavicon())
+                    .assistantName(theming.getAssistantName())
+                    .assistantIcon(theming.getAssistantIcon()))
         .orElse(null);
   }
 

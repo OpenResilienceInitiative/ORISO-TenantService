@@ -70,4 +70,5 @@
   <include file="db/changelog/changeset/0039_tenant_legal_text_version/0039-changeSet.xml"/>
   <include file="db/changelog/changeset/0040_tenant_smtp_test_cooldown/0040-changeSet.xml"/>
   <include file="db/changelog/changeset/0040_dpa_signing_deadline/0040-changeSet.xml"/>
+  <include file="db/changelog/changeset/0041_assistant_identity/0041-changeSet.xml"/>
 </databaseChangeLog>

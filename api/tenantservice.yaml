@@ -2312,6 +2312,13 @@ components:
         and `accent` is the LIGHT accent. Which one a surface uses depends on the surface's
         background, not on the user's theme preference alone — see the field descriptions.
       properties:
+        assistantName:
+          type: string
+          maxLength: 80
+          description: Tenant assistant name; absent uses the established Carimat default.
+        assistantIcon:
+          type: string
+          description: Predefined robot identifier or validated SVG/PNG data URI.
         logo:
           type: string
           example: "base64 encoded image"

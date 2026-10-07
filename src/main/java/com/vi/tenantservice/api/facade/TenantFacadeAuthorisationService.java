@@ -264,7 +264,9 @@ public class TenantFacadeAuthorisationService {
       return false;
     }
 
-    return !Objects.equals(theming.getLogo(), existing.getThemingLogo())
+    return !Objects.equals(theming.getAssistantName(), existing.getThemingAssistantName())
+        || !Objects.equals(theming.getAssistantIcon(), existing.getThemingAssistantIcon())
+        || !Objects.equals(theming.getLogo(), existing.getThemingLogo())
         || !Objects.equals(theming.getFavicon(), existing.getThemingFavicon())
         || !Objects.equals(theming.getAssociationLogo(), existing.getThemingAssociationLogo())
         || !Objects.equals(theming.getPrimaryColor(), existing.getThemingPrimaryColor())

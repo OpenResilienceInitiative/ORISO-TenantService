@@ -2,8 +2,10 @@ package com.vi.tenantservice.api.controller;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -225,5 +227,136 @@ class PlatformLogoFromMainTenantIT {
     mvc.perform(get("/tenant/public/id/1"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.theming.logo").value(png("platform-logo")));
+  }
+
+  @Test
+  void publicChatReceivesTheTenantAssistantIdentityWithoutChangingOtherTenants() throws Exception {
+    jdbc.update(
+        "UPDATE TENANT SET theming_assistant_name = ?, theming_assistant_icon = ? WHERE id = 1",
+        "Help companion",
+        "robot-7341990");
+    mvc.perform(get("/tenant/public/id/1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.assistantName").value("Help companion"))
+        .andExpect(jsonPath("$.theming.assistantIcon").value("robot-7341990"));
+    mvc.perform(get("/tenant/public/id/2"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.assistantName").doesNotExist());
+  }
+
+  @Test
+  void assistantIdentitySurvivesTheRealAdminSaveAndPublicReload() throws Exception {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(java.util.Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    when(authorisationService.hasAuthority(org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn(true);
+    var admin =
+        jwt()
+            .authorities(
+                new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                    "AUTHORIZATION_UPDATE_TENANT"),
+                new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                    "AUTHORIZATION_GET_TENANT"));
+    String original =
+        mvc.perform(get("/tenantadmin/1").with(admin))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var body = mapper.readTree(original);
+    var theming = (com.fasterxml.jackson.databind.node.ObjectNode) body.get("theming");
+    theming.put("assistantName", "Help companion");
+    theming.put("assistantIcon", "robot-5475944");
+    mvc.perform(
+            put("/tenantadmin/1")
+                .with(admin)
+                .contentType("application/json")
+                .content(mapper.writeValueAsString(body)))
+        .andExpect(status().isOk());
+    mvc.perform(get("/tenant/public/id/1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.assistantName").value("Help companion"))
+        .andExpect(jsonPath("$.theming.assistantIcon").value("robot-5475944"));
+  }
+
+  @Test
+  void passiveCustomSvgSurvivesAdminSaveAndPublicReload() throws Exception {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(java.util.Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    when(authorisationService.hasAuthority(org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn(true);
+    var admin =
+        jwt()
+            .authorities(
+                new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                    "AUTHORIZATION_UPDATE_TENANT"),
+                new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                    "AUTHORIZATION_GET_TENANT"));
+    var original =
+        mvc.perform(get("/tenantadmin/1").with(admin))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var body = mapper.readTree(original);
+    var icon =
+        "data:image/svg+xml;base64,"
+            + Base64.getEncoder()
+                .encodeToString(
+                    "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"10\" fill=\"currentColor\"/></svg>"
+                        .getBytes(UTF_8));
+    ((com.fasterxml.jackson.databind.node.ObjectNode) body.get("theming"))
+        .put("assistantIcon", icon);
+    mvc.perform(
+            put("/tenantadmin/1")
+                .with(admin)
+                .contentType("application/json")
+                .content(mapper.writeValueAsString(body)))
+        .andExpect(status().isOk());
+    mvc.perform(get("/tenant/public/id/1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.assistantIcon").value(icon));
+  }
+
+  @Test
+  void singleTenantAdministratorCannotWriteAnotherTenantsAssistantIdentity() throws Exception {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(java.util.Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    when(authorisationService.hasAuthority(org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn(true);
+    var admin =
+        jwt()
+            .authorities(
+                new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                    "AUTHORIZATION_GET_TENANT"));
+    var original =
+        mvc.perform(get("/tenantadmin/1").with(admin))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var payload = mapper.readTree(original);
+    ((com.fasterxml.jackson.databind.node.ObjectNode) payload.get("theming"))
+        .put("assistantName", "Wrong tenant");
+    var body = mapper.writeValueAsString(payload);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(java.util.Optional.of(2L));
+    when(authorisationService.hasAuthority(org.mockito.ArgumentMatchers.anyString()))
+        .thenReturn(false);
+    mvc.perform(
+            put("/tenantadmin/1")
+                .with(
+                    jwt()
+                        .authorities(
+                            new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                                "AUTHORIZATION_UPDATE_TENANT")))
+                .contentType("application/json")
+                .content(body))
+        .andExpect(status().isForbidden());
+    mvc.perform(get("/tenant/public/id/1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.assistantName").doesNotExist());
   }
 }

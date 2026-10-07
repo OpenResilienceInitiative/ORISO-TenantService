@@ -20,6 +20,8 @@ public class TenantDataView implements TenantData {
   private final String themingLogo;
   private final String themingAssociationLogo;
   private final String themingFavicon;
+  private final String themingAssistantName;
+  private final String themingAssistantIcon;
   private final String themingPrimaryColor;
   private final String themingSecondaryColor;
   private final String themingAccent;
