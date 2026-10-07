@@ -52,7 +52,21 @@ import org.springframework.web.context.WebApplicationContext;
  * authorities are granted only to the configured service subject, exactly as for a real token.
  */
 @SpringBootTest(classes = TenantServiceApplication.class)
-@TestPropertySource(properties = "spring.profiles.active=testing")
+@TestPropertySource(
+    properties = {
+      "spring.profiles.active=testing",
+      "TASK_IDENTITY_AUDIENCE=tenantservice",
+      "ORISO_WIZARD_POLICY_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "ORISO_TENANT_CREATION_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "IDENTITY_CONFIG_WIZARD_CLIENT_ID=backend-config-wizard",
+      "IDENTITY_CONFIG_WIZARD_SERVICE_SUBJECT=wizard-subject",
+      "IDENTITY_INVITE_RESERVATIONS_CLIENT_ID=backend-invite-reservations",
+      "IDENTITY_INVITE_RESERVATIONS_SERVICE_SUBJECT=reservation-subject",
+      "IDENTITY_RUNTIME_POLICY_CLIENT_ID=backend-runtime-policy",
+      "IDENTITY_RUNTIME_POLICY_SERVICE_SUBJECT=policy-subject",
+      "IDENTITY_NOTIFICATION_DISPATCH_CLIENT_ID=backend-notification-dispatch",
+      "IDENTITY_NOTIFICATION_DISPATCH_SERVICE_SUBJECT=dispatch-subject"
+    })
 @Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class TechnicalServiceIdentityAuthorizationIT {
 
@@ -299,6 +313,195 @@ class TechnicalServiceIdentityAuthorizationIT {
     mvc.perform(delete("/tenant/1").with(caller)).andExpect(status().isForbidden());
   }
 
+  @Test
+  void wizardCreatesOnlyItsReservedTenantAndCannotReleaseOrList() throws Exception {
+    var wizard = task("wizard-subject", "backend-config-wizard", "config-wizard", "tenantservice");
+    String token = reserve(RESERVED_ID);
+    mvc.perform(createTenant(wizard, RESERVED_ID, token, "wizardtenant"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(RESERVED_ID));
+    mvc.perform(createTenant(wizard, FREE_ID, null, "unreserved"))
+        .andExpect(status().isForbidden());
+    mvc.perform(get("/tenant").with(wizard)).andExpect(status().isForbidden());
+    mvc.perform(delete("/tenantadmin/tenant-ids/reservations/501").with(wizard))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void runtimePolicyReadsOnlyGateAndPolicies() throws Exception {
+    var policy =
+        task("policy-subject", "backend-runtime-policy", "runtime-policy", "tenantservice");
+    mvc.perform(get("/tenantadmin/1/dpa/gate").with(policy)).andExpect(status().isOk());
+    mvc.perform(get("/tenantadmin/1/permission-policies").with(policy)).andExpect(status().isOk());
+    mvc.perform(get("/tenantadmin/1/dpa/signatures").with(policy))
+        .andExpect(status().isForbidden());
+    mvc.perform(get("/tenant/1").with(policy)).andExpect(status().isForbidden());
+    mvc.perform(
+            get("/tenantadmin/1/dpa/gate")
+                .with(task("foreign", "backend-runtime-policy", "runtime-policy", "tenantservice")))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            get("/tenantadmin/1/dpa/gate")
+                .with(task("policy-subject", "wrong-client", "runtime-policy", "tenantservice")))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            get("/tenantadmin/1/dpa/gate")
+                .with(
+                    task(
+                        "policy-subject",
+                        "backend-runtime-policy",
+                        "runtime-policy",
+                        "agencyservice")))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void reservationWorkerReleasesOnlyMatchingProofAndCannotReserveOrCreate() throws Exception {
+    String own = reserve(RESERVED_ID);
+    reserve(FREE_ID);
+    var caller =
+        task(
+            "reservation-subject",
+            "backend-invite-reservations",
+            "invitation-reservations",
+            "tenantservice");
+    mvc.perform(get("/tenantadmin/tenant-ids/" + RESERVED_ID + "/availability").with(caller))
+        .andExpect(status().isOk());
+    mvc.perform(
+            delete("/tenantadmin/tenant-ids/reservations/" + FREE_ID)
+                .param("reservationToken", own)
+                .with(caller))
+        .andExpect(status().isForbidden());
+    mvc.perform(delete("/tenantadmin/tenant-ids/reservations/" + RESERVED_ID).with(caller))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            delete("/tenantadmin/tenant-ids/reservations/" + RESERVED_ID)
+                .param("reservationToken", own)
+                .with(caller))
+        .andExpect(status().isNoContent());
+    assertThat(reservationRepository.findById(FREE_ID)).isPresent();
+    mvc.perform(
+            post("/tenantadmin/tenant-ids/reservations")
+                .with(caller)
+                .contentType(APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isForbidden());
+    mvc.perform(createTenant(caller, FREE_ID, own, "invalidworker"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void wizardReadsOnlyOperatorDpaAndDispatcherReceivesLimitedMailContext() throws Exception {
+    var wizard = task("wizard-subject", "backend-config-wizard", "config-wizard", "tenantservice");
+    mvc.perform(get("/tenantadmin/1/dpa/versions").with(wizard)).andExpect(status().isOk());
+    mvc.perform(get("/tenantadmin/2/dpa/versions").with(wizard)).andExpect(status().isForbidden());
+    var dispatch =
+        task(
+            "dispatch-subject",
+            "backend-notification-dispatch",
+            "notification-dispatch",
+            "tenantservice");
+    mvc.perform(get("/internal/tenants/2/system-email-context").with(dispatch))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(2))
+        .andExpect(jsonPath("$.settings.featureSystemNotificationEmailsEnabled").exists())
+        .andExpect(jsonPath("$.settings.smtpMode").exists())
+        .andExpect(jsonPath("$.settings.smtp.password").doesNotExist())
+        .andExpect(jsonPath("$.settings.smtp.username").doesNotExist())
+        .andExpect(jsonPath("$.settings.smtp.host").doesNotExist())
+        .andExpect(jsonPath("$.settings.featureAppointmentsEnabled").doesNotExist());
+    mvc.perform(get("/tenant/2").with(dispatch)).andExpect(status().isForbidden());
+    mvc.perform(get("/tenantadmin/2/dpa/signatures").with(dispatch)).andExpect(status().isOk());
+    mvc.perform(get("/tenantadmin/2/dpa/gate").with(dispatch)).andExpect(status().isForbidden());
+    mvc.perform(get("/internal/tenants/2/system-email-context").with(wizard))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void taskTokenWithInheritedHumanOrTechnicalRoleCannotUseLegacyBranches() throws Exception {
+    for (String role : List.of("config-wizard,tenant-admin", "config-wizard,technical")) {
+      var caller = task("wizard-subject", "backend-config-wizard", role, "tenantservice");
+      mvc.perform(get("/tenant/2").with(caller)).andExpect(status().isForbidden());
+      mvc.perform(createTenant(caller, null, null, "inherited")).andExpect(status().isForbidden());
+    }
+  }
+
+  private RequestPostProcessor task(String subject, String client, String role, String audience) {
+    return jwt()
+        .jwt(
+            token ->
+                token
+                    .issuer("https://identity.example/realms/test")
+                    .subject(subject)
+                    .claim("azp", client)
+                    .audience(List.of(audience))
+                    .issuedAt(java.time.Instant.now().minusSeconds(10))
+                    .expiresAt(java.time.Instant.now().plusSeconds(60))
+                    .claim("tenantId", 0L)
+                    .claim(
+                        "realm_access", Map.of("roles", java.util.Arrays.asList(role.split(",")))))
+        .authorities(token -> jwtAuthConverter.convert(token).getAuthorities());
+  }
+
+  @Test
+  void wizardPolicyRequiresSignedOwnedTargetAndExcludesOtherTenantData() throws Exception {
+    var wizard = task("wizard-subject", "backend-config-wizard", "config-wizard", "tenantservice");
+    String path = "/internal/tenants/1/account-provisioning-policy";
+    mvc.perform(get(path).with(wizard).header("X-ORISO-Wizard-Policy-Context", policyProof(1, 0)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(1))
+        .andExpect(jsonPath("$.name").doesNotExist())
+        .andExpect(jsonPath("$.settings").doesNotExist());
+    mvc.perform(get(path).with(wizard).header("tenantId", "1")).andExpect(status().isForbidden());
+    mvc.perform(get(path).with(wizard).header("X-ORISO-Wizard-Policy-Context", policyProof(2, 0)))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            get(path).with(wizard).header("X-ORISO-Wizard-Policy-Context", policyProof(1, -120)))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            get(path).with(wizard).header("X-ORISO-Wizard-Policy-Context", policyProof(1, 0) + "x"))
+        .andExpect(status().isForbidden());
+    mvc.perform(
+            get(path)
+                .with(
+                    task(
+                        "dispatch-subject",
+                        "backend-notification-dispatch",
+                        "notification-dispatch",
+                        "tenantservice"))
+                .header("X-ORISO-Wizard-Policy-Context", policyProof(1, 0)))
+        .andExpect(status().isForbidden());
+  }
+
+  private String policyProof(long tenantId, long timeOffset) throws Exception {
+    long issued = java.time.Instant.now().getEpochSecond() + timeOffset;
+    var claims = new java.util.TreeMap<String, Object>();
+    claims.put("aud", "tenantservice");
+    claims.put("azp", "backend-config-wizard");
+    claims.put("exp", issued + 60);
+    claims.put("iat", issued);
+    claims.put("iss", "oriso-userservice");
+    claims.put("nonce", java.util.UUID.randomUUID().toString());
+    claims.put("operation", "wizard.account-policy.read");
+    claims.put("sub", "wizard-subject");
+    claims.put("tenantId", tenantId);
+    claims.put("tokenIssuer", "https://identity.example/realms/test");
+    claims.put("v", 1);
+    String payload =
+        java.util.Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(
+                new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(claims));
+    var mac = javax.crypto.Mac.getInstance("HmacSHA256");
+    mac.init(new javax.crypto.spec.SecretKeySpec(new byte[32], "HmacSHA256"));
+    return payload
+        + "."
+        + java.util.Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(
+                mac.doFinal(payload.getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+  }
+
   private String reserve(long tenantId) {
     return tenantIdAllocationService.reserve(tenantId, "test").getToken();
   }
@@ -340,6 +543,7 @@ class TechnicalServiceIdentityAuthorizationIT {
         .jwt(
             token ->
                 token
+                    .issuer("https://identity.example/realms/test")
                     .subject(subject)
                     .claim("azp", "app")
                     .claim("tenantId", 0L)

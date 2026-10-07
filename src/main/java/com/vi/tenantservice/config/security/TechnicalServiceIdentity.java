@@ -22,13 +22,7 @@ public class TechnicalServiceIdentity {
   private final String subject;
 
   public TechnicalServiceIdentity(@Value("${technical.service.subject:}") String subject) {
-    if (subject == null || subject.isBlank()) {
-      throw new IllegalStateException(
-          SUBJECT_VARIABLE
-              + " must be set to the Keycloak subject (sub) of the UserService's technical"
-              + " service identity");
-    }
-    this.subject = subject.trim();
+    this.subject = subject == null ? "" : subject.trim();
   }
 
   public boolean isCurrentCaller() {
@@ -39,7 +33,8 @@ public class TechnicalServiceIdentity {
   }
 
   public boolean isServiceIdentity(Jwt jwt) {
-    return subject.equals(jwt.getSubject())
+    return !subject.isBlank()
+        && subject.equals(jwt.getSubject())
         && jwt.getClaims().get("realm_access") instanceof Map<?, ?> access
         && access.get("roles") instanceof Collection<?> roles
         && roles.contains(TECHNICAL_ROLE);
