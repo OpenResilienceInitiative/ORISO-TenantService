@@ -91,6 +91,11 @@ public class TenantDpaSignatureEntity {
   @Column(name = "signed_at")
   private LocalDateTime signedAt;
 
+  /** Whether this contract was still governing when signed; null retains legacy audit semantics. */
+  @Column(name = "current_version_when_signed")
+  @Convert(converter = NumericBooleanConverter.class)
+  private Boolean currentVersionWhenSigned;
+
   /** SHA-256 hash of the single-use sign-link token while PENDING; nulled once consumed. */
   @Column(name = "token_hash")
   private String tokenHash;

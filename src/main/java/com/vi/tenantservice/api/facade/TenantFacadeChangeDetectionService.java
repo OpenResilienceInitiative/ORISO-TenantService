@@ -63,6 +63,16 @@ public class TenantFacadeChangeDetectionService {
   private List<TenantSetting> getChangedTenantSettings(
       Settings inputSettings, TenantSettings existingSettingsToCompare) {
     List<TenantSetting> resultList = Lists.newArrayList();
+    if (inputSettings.getSmtpMode() != null
+        && !inputSettings
+            .getSmtpMode()
+            .getValue()
+            .equals(
+                existingSettingsToCompare.getSmtpMode() == null
+                    ? null
+                    : existingSettingsToCompare.getSmtpMode().name())) {
+      resultList.add(TenantSetting.SMTP_MODE);
+    }
     if (isChanged(
         inputSettings.getFeatureDemographicsEnabled(),
         existingSettingsToCompare.getFeatureDemographicsEnabled())) {
