@@ -1,7 +1,6 @@
 package com.vi.tenantservice.config.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.List;
@@ -29,10 +28,9 @@ class TechnicalServiceIdentityTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"", "  "})
-  void missingSubject_Should_failStartup_andNameTheVariable(String subject) {
-    assertThatThrownBy(() -> new TechnicalServiceIdentity(subject))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessageContaining("TECHNICAL_SERVICE_SUBJECT");
+  void missingSubjectDisablesLegacyIdentityWithoutBlockingFreshInstall(String subject) {
+    authenticate(SERVICE_SUBJECT, "technical", List.of("technical"));
+    assertThat(new TechnicalServiceIdentity(subject).isCurrentCaller()).isFalse();
   }
 
   @Test

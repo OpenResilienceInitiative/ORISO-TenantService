@@ -201,7 +201,8 @@ public class TenantDpaFacade {
 
   /** The tenant's confirmed-DPA audit list (the platform-admin "list of confirmed AVVs"). */
   public List<DpaSignatureDTO> getSignatures(Long tenantId) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(
+        tenantId, "NOTIFICATION_DISPATCH");
     return tenantDpaService.getSignatures(tenantId).stream().map(TenantDpaFacade::toDto).toList();
   }
 
@@ -214,7 +215,7 @@ public class TenantDpaFacade {
    * nothing left to sign.
    */
   public DpaGateStatusDTO getGateStatus(Long tenantId) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId, "RUNTIME_POLICY");
     var status = tenantDpaStatusService.getStatus(tenantId);
     return new DpaGateStatusDTO()
         .dpaPublished(status.currentVersion() != null)
@@ -466,7 +467,7 @@ public class TenantDpaFacade {
    * language. Signatures stay strictly per-tenant — only the CONTENT is shared.
    */
   public List<DpaVersionDTO> getVersions(Long tenantId) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId, "CONFIG_WIZARD");
     var documentTenantId = governingDpaResolver.documentTenantIdFor(tenantId);
     return tenantDpaService.getVersions(documentTenantId).stream()
         .map(TenantDpaFacade::toVersionDto)
