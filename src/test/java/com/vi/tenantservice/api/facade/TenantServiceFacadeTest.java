@@ -22,6 +22,7 @@ import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.EffectiveThemingApplier;
 import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
@@ -1218,5 +1219,30 @@ class TenantServiceFacadeTest {
     defaultTenantEntity.setContentPrivacy(contentPrivacy);
     Optional<TenantRestrictedData> defaultTenant = Optional.of(defaultTenantEntity);
     return defaultTenant;
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><foreignObject/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><path onload='alert(1)'/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><path fill='url(https://example.org)'/></svg>",
+        "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><svg>&x;</svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><use href='https://example.org'/></svg>"
+      })
+  void updateRejectsActiveAssistantArtworkWithoutSaving(String svg) {
+    sanitizedTenantDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming()
+            .assistantIcon(
+                "data:image/svg+xml;base64,"
+                    + java.util.Base64.getEncoder()
+                        .encodeToString(svg.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
   }
 }

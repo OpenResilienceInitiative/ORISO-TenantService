@@ -314,6 +314,8 @@ public class TenantConverter {
     if (tenantDTO.getTheming() != null) {
       builder
           .themingFavicon(tenantDTO.getTheming().getFavicon())
+          .themingAssistantName(tenantDTO.getTheming().getAssistantName())
+          .themingAssistantIcon(tenantDTO.getTheming().getAssistantIcon())
           .themingLogo(tenantDTO.getTheming().getLogo())
           .themingAssociationLogo(tenantDTO.getTheming().getAssociationLogo())
           .themingPrimaryColor(tenantDTO.getTheming().getPrimaryColor())
@@ -981,6 +983,8 @@ public class TenantConverter {
   private Theming toThemingDTO(TenantRestrictedData tenant) {
     return new Theming()
         .favicon(tenant.getThemingFavicon())
+        .assistantName(tenant.getThemingAssistantName())
+        .assistantIcon(tenant.getThemingAssistantIcon())
         .logo(tenant.getThemingLogo())
         .associationLogo(tenant.getThemingAssociationLogo())
         .primaryColor(tenant.getThemingPrimaryColor())
