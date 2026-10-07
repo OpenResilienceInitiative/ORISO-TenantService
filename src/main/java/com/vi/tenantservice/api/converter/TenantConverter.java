@@ -110,6 +110,14 @@ public class TenantConverter {
         .featureAnonymousChatEnabled(settings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(settings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(settings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailAgencyCounsellingEnabled(
+            settings.getFeatureAskerEmailAgencyCounsellingEnabled())
+        .featureAskerEmailLiveChatEnabled(settings.getFeatureAskerEmailLiveChatEnabled())
+        .featureAskerEmailSelfHelpEnabled(settings.getFeatureAskerEmailSelfHelpEnabled())
+        .featureAskerBrowserAgencyCounsellingEnabled(
+            settings.getFeatureAskerBrowserAgencyCounsellingEnabled())
+        .featureAskerBrowserLiveChatEnabled(settings.getFeatureAskerBrowserLiveChatEnabled())
+        .featureAskerBrowserSelfHelpEnabled(settings.getFeatureAskerBrowserSelfHelpEnabled())
         .featureCallsEnabled(settings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(settings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -401,6 +409,14 @@ public class TenantConverter {
         .featureAnonymousChatEnabled(tenantSettings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(tenantSettings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(tenantSettings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailAgencyCounsellingEnabled(
+            tenantSettings.getFeatureAskerEmailAgencyCounsellingEnabled())
+        .featureAskerEmailLiveChatEnabled(tenantSettings.getFeatureAskerEmailLiveChatEnabled())
+        .featureAskerEmailSelfHelpEnabled(tenantSettings.getFeatureAskerEmailSelfHelpEnabled())
+        .featureAskerBrowserAgencyCounsellingEnabled(
+            tenantSettings.getFeatureAskerBrowserAgencyCounsellingEnabled())
+        .featureAskerBrowserLiveChatEnabled(tenantSettings.getFeatureAskerBrowserLiveChatEnabled())
+        .featureAskerBrowserSelfHelpEnabled(tenantSettings.getFeatureAskerBrowserSelfHelpEnabled())
         .featureCallsEnabled(tenantSettings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(tenantSettings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(

@@ -2519,6 +2519,30 @@ components:
           type: boolean
           example: "true"
           description: "ORISO-Admin#602 switch 2. Whether an advice seeker may leave an e-mail address at all. When false it must silence both the in-chat Erstantwort Baustein and the profile e-mail field. Opt-out: defaults to true."
+        featureAskerEmailAgencyCounsellingEnabled:
+          type: boolean
+          default: true
+          description: "Effective advice-seeker notification channel permission for EmailAgencyCounselling. Email additionally requires featureAskerEmailEnabled."
+        featureAskerEmailLiveChatEnabled:
+          type: boolean
+          default: false
+          description: "Effective advice-seeker notification channel permission for EmailLiveChat. Email additionally requires featureAskerEmailEnabled."
+        featureAskerEmailSelfHelpEnabled:
+          type: boolean
+          default: true
+          description: "Effective advice-seeker notification channel permission for EmailSelfHelp. Email additionally requires featureAskerEmailEnabled."
+        featureAskerBrowserAgencyCounsellingEnabled:
+          type: boolean
+          default: true
+          description: "Effective advice-seeker notification channel permission for BrowserAgencyCounselling. Email additionally requires featureAskerEmailEnabled."
+        featureAskerBrowserLiveChatEnabled:
+          type: boolean
+          default: true
+          description: "Effective advice-seeker notification channel permission for BrowserLiveChat. Email additionally requires featureAskerEmailEnabled."
+        featureAskerBrowserSelfHelpEnabled:
+          type: boolean
+          default: true
+          description: "Effective advice-seeker notification channel permission for BrowserSelfHelp. Email additionally requires featureAskerEmailEnabled."
         featureCallsEnabled:
           type: boolean
           example: "true"
