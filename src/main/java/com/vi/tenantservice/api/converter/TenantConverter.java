@@ -110,6 +110,14 @@ public class TenantConverter {
         .featureAnonymousChatEnabled(settings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(settings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(settings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailAgencyCounsellingEnabled(
+            settings.getFeatureAskerEmailAgencyCounsellingEnabled())
+        .featureAskerEmailLiveChatEnabled(settings.getFeatureAskerEmailLiveChatEnabled())
+        .featureAskerEmailSelfHelpEnabled(settings.getFeatureAskerEmailSelfHelpEnabled())
+        .featureAskerBrowserAgencyCounsellingEnabled(
+            settings.getFeatureAskerBrowserAgencyCounsellingEnabled())
+        .featureAskerBrowserLiveChatEnabled(settings.getFeatureAskerBrowserLiveChatEnabled())
+        .featureAskerBrowserSelfHelpEnabled(settings.getFeatureAskerBrowserSelfHelpEnabled())
         .featureCallsEnabled(settings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(settings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -314,6 +322,8 @@ public class TenantConverter {
     if (tenantDTO.getTheming() != null) {
       builder
           .themingFavicon(tenantDTO.getTheming().getFavicon())
+          .themingAssistantName(tenantDTO.getTheming().getAssistantName())
+          .themingAssistantIcon(tenantDTO.getTheming().getAssistantIcon())
           .themingLogo(tenantDTO.getTheming().getLogo())
           .themingAssociationLogo(tenantDTO.getTheming().getAssociationLogo())
           .themingPrimaryColor(tenantDTO.getTheming().getPrimaryColor())
@@ -399,6 +409,14 @@ public class TenantConverter {
         .featureAnonymousChatEnabled(tenantSettings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(tenantSettings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(tenantSettings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailAgencyCounsellingEnabled(
+            tenantSettings.getFeatureAskerEmailAgencyCounsellingEnabled())
+        .featureAskerEmailLiveChatEnabled(tenantSettings.getFeatureAskerEmailLiveChatEnabled())
+        .featureAskerEmailSelfHelpEnabled(tenantSettings.getFeatureAskerEmailSelfHelpEnabled())
+        .featureAskerBrowserAgencyCounsellingEnabled(
+            tenantSettings.getFeatureAskerBrowserAgencyCounsellingEnabled())
+        .featureAskerBrowserLiveChatEnabled(tenantSettings.getFeatureAskerBrowserLiveChatEnabled())
+        .featureAskerBrowserSelfHelpEnabled(tenantSettings.getFeatureAskerBrowserSelfHelpEnabled())
         .featureCallsEnabled(tenantSettings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(tenantSettings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -981,6 +999,8 @@ public class TenantConverter {
   private Theming toThemingDTO(TenantRestrictedData tenant) {
     return new Theming()
         .favicon(tenant.getThemingFavicon())
+        .assistantName(tenant.getThemingAssistantName())
+        .assistantIcon(tenant.getThemingAssistantIcon())
         .logo(tenant.getThemingLogo())
         .associationLogo(tenant.getThemingAssociationLogo())
         .primaryColor(tenant.getThemingPrimaryColor())

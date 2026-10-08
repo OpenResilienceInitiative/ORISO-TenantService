@@ -67,6 +67,8 @@ public class TenantInputSanitizer {
   private void sanitizeTheming(MultilingualTenantDTO input, MultilingualTenantDTO output) {
     Theming theming = input.getTheming();
     if (theming != null) {
+      output.getTheming().setAssistantName(theming.getAssistantName());
+      output.getTheming().setAssistantIcon(theming.getAssistantIcon());
       // Assets are URLs, not markup — HTML-sanitizing them encoded the base64
       // payload ("+" -> "&#43;") and left an undecodable data URL behind, which
       // is what made the tenant logo and favicon disappear from every public

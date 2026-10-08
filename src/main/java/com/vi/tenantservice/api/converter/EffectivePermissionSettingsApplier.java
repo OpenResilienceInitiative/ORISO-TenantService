@@ -126,7 +126,23 @@ public class EffectivePermissionSettingsApplier {
               "featureMediaAiScanSupervisionChatsEnabled",
               Settings::setFeatureMediaAiScanSupervisionChatsEnabled),
           Map.entry("featureDisplayNameEditable", Settings::setFeatureDisplayNameEditable),
-          Map.entry("featureAskerEmailEnabled", Settings::setFeatureAskerEmailEnabled));
+          Map.entry("featureAskerEmailEnabled", Settings::setFeatureAskerEmailEnabled),
+          Map.entry(
+              "featureAskerEmailAgencyCounsellingEnabled",
+              Settings::setFeatureAskerEmailAgencyCounsellingEnabled),
+          Map.entry(
+              "featureAskerEmailLiveChatEnabled", Settings::setFeatureAskerEmailLiveChatEnabled),
+          Map.entry(
+              "featureAskerEmailSelfHelpEnabled", Settings::setFeatureAskerEmailSelfHelpEnabled),
+          Map.entry(
+              "featureAskerBrowserAgencyCounsellingEnabled",
+              Settings::setFeatureAskerBrowserAgencyCounsellingEnabled),
+          Map.entry(
+              "featureAskerBrowserLiveChatEnabled",
+              Settings::setFeatureAskerBrowserLiveChatEnabled),
+          Map.entry(
+              "featureAskerBrowserSelfHelpEnabled",
+              Settings::setFeatureAskerBrowserSelfHelpEnabled));
 
   private record ToggleBinding(
       Function<TenantAdminAllowedPermissionToggles, Boolean> getter,

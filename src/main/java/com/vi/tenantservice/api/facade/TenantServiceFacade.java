@@ -41,6 +41,7 @@ import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.AssistantIdentityValidator;
 import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
@@ -483,6 +484,7 @@ public class TenantServiceFacade {
     var isoCountries = Arrays.stream(Locale.getISOLanguages()).toList();
     validateContent(tenantDTO, isoCountries);
     validateSettings(tenantDTO.getSettings());
+    AssistantIdentityValidator.validate(tenantDTO.getTheming());
   }
 
   private void validateSettings(Settings settings) {
