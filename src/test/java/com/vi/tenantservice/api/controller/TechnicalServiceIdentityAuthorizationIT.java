@@ -280,7 +280,12 @@ class TechnicalServiceIdentityAuthorizationIT {
                 .contentType(APPLICATION_JSON)
                 .content("{\"content\":{\"de\":\"<p>x</p>\"},\"revision\":\"new\"}"))
         .andExpect(status().isForbidden());
-    mvc.perform(put("/tenantadmin/1/dpa").with(caller).contentType(APPLICATION_JSON).content("{}"))
+    mvc.perform(
+            put("/tenantadmin/1/dpa")
+                .with(caller)
+                .queryParam("signingDeadlineAt", "2099-10-15T15:00:00Z")
+                .contentType(APPLICATION_JSON)
+                .content("{}"))
         .andExpect(status().isForbidden());
     mvc.perform(
             post("/tenantadmin/tenant-ids/reservations")

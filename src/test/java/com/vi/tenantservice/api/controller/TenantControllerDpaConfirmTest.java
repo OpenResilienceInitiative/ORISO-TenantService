@@ -1,7 +1,6 @@
 package com.vi.tenantservice.api.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -135,6 +134,70 @@ class TenantControllerDpaConfirmTest {
     org.mockito.Mockito.verify(dpaSignedNoticeHintService).notifySignatureRecorded(7L);
   }
 
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"de", "en"})
+  void confirmDataProcessingAgreement_Should_returnPersistedConfirmationLanguage(String language) {
+    var signatures =
+        org.mockito.Mockito.mock(
+            com.vi.tenantservice.api.repository.TenantDpaSignatureRepository.class);
+    var tenants =
+        org.mockito.Mockito.mock(com.vi.tenantservice.api.repository.TenantRepository.class);
+    var reservations =
+        org.mockito.Mockito.mock(
+            com.vi.tenantservice.api.repository.TenantIdReservationRepository.class);
+    var resolver =
+        new com.vi.tenantservice.api.service.GoverningDpaResolver(
+            tenants, null, org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class));
+    var service = new TenantDpaService(signatures, null, tenants, reservations, null, resolver);
+    org.springframework.test.util.ReflectionTestUtils.setField(
+        controller, "tenantDpaService", service);
+    var version = LocalDateTime.of(2026, 7, 20, 12, 30);
+    var pending =
+        TenantDpaSignatureEntity.builder()
+            .tenantId(7L)
+            .dpaVersion(version)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenExpiresAt(LocalDateTime.now().plusDays(1))
+            .source("FORWARDED_EXTERNAL")
+            .build();
+    when(signatures.findByTokenHashAndStatus(
+            org.mockito.ArgumentMatchers.anyString(), eq(DpaSignatureStatus.PENDING)))
+        .thenReturn(java.util.Optional.of(pending));
+    when(tenants.findById(7L))
+        .thenReturn(
+            java.util.Optional.of(
+                com.vi.tenantservice.api.model.TenantEntity.builder()
+                    .id(7L)
+                    .name("Träger Nord")
+                    .contentDataProcessingAgreementActivationDate(version)
+                    .build()));
+    when(signatures.consumeSignToken(
+            org.mockito.ArgumentMatchers.anyString(),
+            eq("Erika M"),
+            eq("Geschäftsführerin"),
+            eq("erika@example.org"),
+            eq("Caritas Beispiel"),
+            eq(false),
+            eq(language),
+            eq("FORWARDED_EXTERNAL"),
+            org.mockito.ArgumentMatchers.any(),
+            eq(true)))
+        .thenReturn(1);
+    var request =
+        new DpaSignatureRequestDTO()
+            .signerName("Erika M")
+            .signerPosition("Geschäftsführerin")
+            .signerEmail("erika@example.org")
+            .signerOrganisation("Caritas Beispiel")
+            .accepted(true)
+            .language(language);
+
+    var response = controller.confirmDataProcessingAgreement("tok", request);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().getLanguage()).isEqualTo(language);
+  }
+
   @Test
   void createPublicDpaForwardInvite_Should_delegateToFacade() {
     // given
@@ -257,11 +320,13 @@ class TenantControllerDpaConfirmTest {
   @Test
   void publishDataProcessingAgreement_Should_returnOkWithGate() {
     // given
-    when(tenantDpaFacade.publishDpa(eq(7L), any()))
+    var deadline = "2099-10-15T15:00:00Z";
+    var content = Map.of("de", "<p>x</p>");
+    when(tenantDpaFacade.publishDpa(eq(7L), eq(content), eq(deadline)))
         .thenReturn(new DpaGateStatusDTO().dpaPublished(true).dpaSigned(false));
 
     // when
-    var response = controller.publishDataProcessingAgreement(7L, Map.of("de", "<p>x</p>"));
+    var response = controller.publishDataProcessingAgreementV2(7L, deadline, content);
 
     // then
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);

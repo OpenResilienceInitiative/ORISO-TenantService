@@ -13,7 +13,8 @@ public record SystemEmailDeliveryRequest(
     @NotBlank @Size(max = 256) @Pattern(regexp = "[^\\r\\n]+") String subject,
     @NotBlank @Size(max = 262144) String html,
     @NotBlank @Size(max = 131072) String text,
-    @NotNull java.util.UUID correlationId) {
+    @NotNull java.util.UUID correlationId)
+    implements TenantSystemMail {
   public enum Purpose {
     EMAIL_ADDRESS_CHANGED,
     SUPERVISOR_ADDED,
@@ -30,7 +31,27 @@ public record SystemEmailDeliveryRequest(
     SELF_HELP_APPOINTMENT_REMINDER,
     HANDOVER_REQUESTED,
     HANDOVER_CONFIRMED,
-    FREE_TEXT_NOTICE
+    FREE_TEXT_NOTICE,
+    // Planned maintenance is a switchable system notice (ADR-024): it keeps the notification gate.
+    SERVICE_NOTICE,
+    // Account and contract mails, not notifications: the notification switch must not stop them.
+    ACCOUNT_INVITE(false),
+    DPA_SIGNING_REQUEST(false),
+    DPA_SIGNED_NOTICE(false);
+
+    private final boolean notification;
+
+    Purpose() {
+      this(true);
+    }
+
+    Purpose(boolean notification) {
+      this.notification = notification;
+    }
+
+    public boolean isNotification() {
+      return notification;
+    }
   }
 
   @JsonAnySetter

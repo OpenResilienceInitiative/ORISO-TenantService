@@ -1395,6 +1395,7 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}/dpa:
     summary: 'Publish a tenant Data Processing Agreement (multilingual)'
+    description: 'Legacy publication. After this document adopts deadline policy, use /dpa/v2; legacy writes return 409.'
     put:
       tags:
         - tenant-controller
@@ -1432,6 +1433,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DpaGateStatusDTO'
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        404:
+          description: NOT FOUND - tenant does not exist
+        409:
+          description: CONFLICT - this document requires deadline-managed publication through /dpa/v2
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/v2:
+    summary: 'Publish a tenant Data Processing Agreement (multilingual)'
+    put:
+      tags:
+        - tenant-controller
+      summary: 'Publishes the tenant DPA text and stamps a new version [Authorization: Authority.UPDATE_TENANT]'
+      operationId: publishDataProcessingAgreementV2
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: signingDeadlineAt
+          in: query
+          required: true
+          description: 'Global signing deadline for this publication, including the first AVV.
+            Must be a future instant with an explicit offset. No default duration is applied.'
+          schema:
+            type: string
+      requestBody:
+        required: true
+        description: 'Per-language DPA HTML content (language code -> HTML). Supports the
+          machine-translation metadata convention: next to a translated language (e.g. "en") the
+          map may carry a parallel "en__meta" key whose value is the strict JSON string
+          {"mt":true,"src":"de","at":"<ISO-timestamp>"} marking the language as machine
+          translated. Meta values are validated as strict JSON with only these fields and stored
+          unsanitized; all other values are HTML-sanitized. When the HTML of a language is changed
+          manually (i.e. the content changed but the resent meta is the previously stored one),
+          the meta key for that language is removed - a manual edit clears the
+          machine-translated tag.'
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: string
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaGateStatusDTO'
+        400:
+          description: BAD REQUEST - missing, invalid or nonfuture signing deadline
         403:
           description: FORBIDDEN - not authorized to access this tenant
         404:
@@ -1503,6 +1560,7 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/{id}/dpa/sign:
     summary: 'Sign the currently published DPA version as an authenticated tenant admin'
+    description: 'Legacy signing for documents without deadline policy. Deadline-managed documents require /dpa/v2/sign and an exact displayed version; legacy signing returns 409.'
     post:
       tags:
         - tenant-controller
@@ -1536,7 +1594,45 @@ paths:
         403:
           description: FORBIDDEN - not authorized to access this tenant
         409:
-          description: CONFLICT - the tenant has no published DPA to sign yet
+          description: CONFLICT - no published DPA, or deadline-managed document requires /dpa/v2/sign
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/dpa/v2/sign:
+    summary: 'Sign the currently published DPA version as an authenticated tenant admin'
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Signs the current DPA version; persists signer identity, version, timestamp and
+        form data append-only. Idempotent for an already-VALID tenant.
+        [Authorization: Authority.UPDATE_TENANT]'
+      operationId: signDataProcessingAgreementV2
+      parameters:
+        - name: id
+          in: path
+          description: Tenant ID
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DpaVersionedAdminSignRequestDTO'
+      responses:
+        200:
+          description: Successful operation - returns the resulting authoritative DPA status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DpaStatusDTO'
+        400:
+          description: BAD REQUEST - missing or malformed displayed version, or agreement checkbox not accepted
+        403:
+          description: FORBIDDEN - not authorized to access this tenant
+        409:
+          description: CONFLICT - no published DPA or displayed version is outdated
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/media:
@@ -1685,6 +1781,9 @@ components:
     DpaVersionDTO:
       type: object
       properties:
+        signingDeadlineAt:
+          type: string
+          description: 'UTC deadline of the governing publication. Absent on legacy snapshots.'
         activationDate:
           type: string
         content:
@@ -1740,6 +1839,20 @@ components:
     DpaGateStatusDTO:
       type: object
       properties:
+        signingDeadlineAt:
+          type: string
+          description: 'UTC deadline of the governing publication. Absent on legacy snapshots.'
+        renewalGraceActive:
+          type: boolean
+          description: 'True only for a previously signed, outdated renewal before its deadline. Never grants initial unsigned access.'
+        dpaStatus:
+          type: string
+          description: 'Authoritative legal state, separate from renewal grace.'
+        currentDpaVersion:
+          type: string
+        newCounsellingAllowed:
+          type: boolean
+          description: 'Current signature or active renewal grace. Begun counselling continuation is evaluated separately by its owner.'
         dpaPublished:
           type: boolean
         dpaSigned:
@@ -1755,6 +1868,15 @@ components:
         - tenantId
         - status
       properties:
+        newCounsellingAllowed:
+          type: boolean
+          description: 'Current signature or active renewal grace. Route access for begun counselling and signing recovery is separate.'
+        signingDeadlineAt:
+          type: string
+          description: 'UTC deadline of the governing publication. Absent on legacy snapshots.'
+        renewalGraceActive:
+          type: boolean
+          description: 'True only for a previously signed, outdated renewal before its deadline. Never grants initial unsigned access.'
         tenantId:
           type: integer
           format: int64
@@ -1821,6 +1943,17 @@ components:
           type: string
           maxLength: 10
           example: "de"
+    DpaVersionedAdminSignRequestDTO:
+      allOf:
+        - $ref: '#/components/schemas/DpaAdminSignRequestDTO'
+        - type: object
+          required:
+            - dpaVersion
+          properties:
+            dpaVersion:
+              type: string
+              maxLength: 40
+              description: 'Exact activationDate/currentDpaVersion of the contract displayed to the signer. Missing/malformed input is rejected; an outdated displayed version returns 409 without signing the unseen renewal.'
     DpaSignatureRequestDTO:
       type: object
       required:
@@ -1901,6 +2034,10 @@ components:
           type: string
         signedAt:
           type: string
+        language:
+          type: string
+          description: Optional stored confirmation language; absent for legacy signatures.
+          example: "de"
     TenantDTO:
       type: object
       required:
@@ -3315,6 +3452,14 @@ components:
         secure:
           type: boolean
           example: "false"
+        nonstandardTransportConfirmed:
+          type: boolean
+          writeOnly: true
+          description:
+            "Write-only acknowledgement when a changed OWN SMTP port and TLS mode
+            are not the usual 465/implicit-TLS or 587/STARTTLS pair. Not stored
+            or returned. An unchanged legacy pair does not require a new acknowledgement."
+          example: false
         username:
           type: string
           example: "notifications@oriso.org"
