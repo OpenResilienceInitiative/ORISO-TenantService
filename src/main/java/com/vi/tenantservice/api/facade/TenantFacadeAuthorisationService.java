@@ -19,6 +19,7 @@ import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import com.vi.tenantservice.config.security.AuthorisationService;
+import com.vi.tenantservice.config.security.TaskServiceIdentity;
 import com.vi.tenantservice.config.security.TechnicalServiceIdentity;
 import java.util.List;
 import java.util.Objects;
@@ -47,6 +48,7 @@ public class TenantFacadeAuthorisationService {
   private final @NonNull TenantPermissionPolicyService tenantPermissionPolicyService;
 
   private final @NonNull TechnicalServiceIdentity technicalServiceIdentity;
+  private final @NonNull TaskServiceIdentity taskServiceIdentity;
 
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
@@ -85,6 +87,11 @@ public class TenantFacadeAuthorisationService {
       return;
     }
     assertUserIsAuthorizedToAccessTenant(tenantId);
+  }
+
+  void assertUserIsAuthorizedToReadTenant(Long tenantId, String task) {
+    if (taskServiceIdentity.current(task)) return;
+    assertUserIsAuthorizedToReadTenant(tenantId);
   }
 
   /**

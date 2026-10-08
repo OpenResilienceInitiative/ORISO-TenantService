@@ -24,10 +24,15 @@ public class WebSecurityConfig {
 
   @Autowired TechnicalServiceIdentity technicalServiceIdentity;
 
+  @Autowired TaskServiceIdentity taskServiceIdentity;
+
   @Bean
   public JwtAuthConverter jwtAuthConverter() {
     return new JwtAuthConverter(
-        jwtAuthConverterProperties, authorisationService, technicalServiceIdentity);
+        jwtAuthConverterProperties,
+        authorisationService,
+        technicalServiceIdentity,
+        taskServiceIdentity);
   }
 
   @Bean

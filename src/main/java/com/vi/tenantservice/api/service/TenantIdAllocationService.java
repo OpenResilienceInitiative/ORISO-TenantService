@@ -156,6 +156,19 @@ public class TenantIdAllocationService {
         > 0;
   }
 
+  @Transactional
+  public boolean releaseWithProof(long tenantId, String token) {
+    if (token == null
+        || token.isBlank()
+        || reservationRepository.deleteWithProof(
+                tenantId, TenantIdReservationStatus.RESERVED, token)
+            == 0) {
+      throw new org.springframework.security.access.AccessDeniedException(
+          "Reservation ownership proof required");
+    }
+    return true;
+  }
+
   /**
    * Assigns the definitive ID to a tenant that is about to be created, inside the creating
    * transaction (atomic consumption).

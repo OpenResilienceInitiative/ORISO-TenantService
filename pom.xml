@@ -604,6 +604,10 @@
                             <includes>
                                 <include>**/*IT.*</include>
                             </includes>
+                            <!-- Native fixture suite runs explicitly in the joined real-token CI gate. -->
+                            <excludes>
+                                <exclude>**/RealTaskTokenAuthorizationIT.java</exclude>
+                            </excludes>
                         </configuration>
                     </execution>
                 </executions>

@@ -46,6 +46,7 @@ class TenantFacadeAuthorisationServiceTest {
   @Mock AuthorisationService authorisationService;
 
   @Mock com.vi.tenantservice.config.security.TechnicalServiceIdentity technicalServiceIdentity;
+  @Mock com.vi.tenantservice.config.security.TaskServiceIdentity taskServiceIdentity;
 
   @Mock TenantFacadeChangeDetectionService tenantFacadeChangeDetectionService;
 
