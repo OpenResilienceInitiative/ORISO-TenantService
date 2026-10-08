@@ -495,6 +495,7 @@ public class TenantDpaFacade {
         .signerOrganisation(entity.getSignerOrganisation())
         .forwardedByUserId(entity.getForwardedByUserId())
         .source(entity.getSource())
+        .language(entity.getLanguage())
         .signedAt(entity.getSignedAt() == null ? null : entity.getSignedAt().toString());
   }
 }

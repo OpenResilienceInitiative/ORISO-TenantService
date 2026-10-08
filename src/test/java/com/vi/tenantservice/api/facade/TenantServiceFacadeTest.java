@@ -22,6 +22,7 @@ import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.EffectiveThemingApplier;
 import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
@@ -38,6 +39,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
+import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
@@ -169,6 +171,115 @@ class TenantServiceFacadeTest {
     lenient()
         .when(tenantLegalVersionService.saveRecordingPublications(any(), any()))
         .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_notConsultTheMainTenant_When_singleDomainIsDisabled() {
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+
+    verifyNoInteractions(applicationSettingsService);
+  }
+
+  private void givenSingleDomainWithMainTenant(String subdomain) {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    var settings =
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+            .ApplicationSettingsDTO();
+    settings.setMainTenantSubdomainForSingleDomainMultitenancy(
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO()
+            .value(subdomain));
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(settings);
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+  }
+
+  private TenantRestrictedData tenantDataWithTheming(Theming theming) {
+    TenantRestrictedData data = mock(TenantRestrictedData.class);
+    when(converter.toRestrictedTenantDTO(data, DE))
+        .thenReturn(new RestrictedTenantDTO().theming(theming));
+    return data;
+  }
+
+  @Test
+  void
+      getPlatformBrandingTenant_Should_fillOnlyTheImageGapsOfTheTechnicalTenantFromTheMainTenant() {
+    givenSingleDomainWithMainTenant("app");
+    var technical = new Theming().logo("technical-logo");
+    var main =
+        new Theming()
+            .logo("main-logo")
+            .favicon("main-icon")
+            .associationLogo("main-association")
+            .primaryColor("#123456");
+    var technicalData = tenantDataWithTheming(technical);
+    var mainData = tenantDataWithTheming(main);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.of(technicalData));
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    Theming platform = tenantServiceFacade.getPlatformBrandingTenant().orElseThrow().getTheming();
+
+    assertThat(platform.getLogo()).isEqualTo("technical-logo");
+    assertThat(platform.getFavicon()).isEqualTo("main-icon");
+    assertThat(platform.getAssociationLogo()).isEqualTo("main-association");
+    assertThat(platform.getPrimaryColor()).isNull();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_useTheMainTenantImages_When_theTechnicalTenantHasNoRow() {
+    givenSingleDomainWithMainTenant("app");
+    var mainData = tenantDataWithTheming(new Theming().logo("main-logo"));
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant().orElseThrow().getTheming().getLogo())
+        .isEqualTo("main-logo");
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_inheritNothing_When_theMainSubdomainIsBlank() {
+    givenSingleDomainWithMainTenant(" ");
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+    verify(tenantService, never()).findRestrictedTenantDataBySubdomain(any());
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_inheritNothing_When_theMainTenantDoesNotExist() {
+    givenSingleDomainWithMainTenant("gone");
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("gone")).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_degrade_When_theSettingsServiceReturnsNothing() {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(null);
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_askTheSettingsServiceOnlyOncePerCacheWindow() {
+    givenSingleDomainWithMainTenant("app");
+    ReflectionTestUtils.setField(tenantServiceFacade, "mainTenantImagesCacheSeconds", 10L);
+    var mainData = tenantDataWithTheming(new Theming().logo("main-logo"));
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    tenantServiceFacade.getPlatformBrandingTenant();
+    tenantServiceFacade.getPlatformBrandingTenant();
+
+    verify(applicationSettingsService, times(1)).getApplicationSettings();
   }
 
   @Test
@@ -1108,5 +1219,85 @@ class TenantServiceFacadeTest {
     defaultTenantEntity.setContentPrivacy(contentPrivacy);
     Optional<TenantRestrictedData> defaultTenant = Optional.of(defaultTenantEntity);
     return defaultTenant;
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "<svg xmlns='urn:other'/>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><g xmlns='urn:other'/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><foreignObject/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><path onload='alert(1)'/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><path fill='url(https://example.org)'/></svg>",
+        "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><svg>&x;</svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><use href='https://example.org'/></svg>"
+      })
+  void updateRejectsActiveAssistantArtworkWithoutSaving(String svg) {
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming()
+            .assistantIcon(
+                "data:image/svg+xml;base64,"
+                    + java.util.Base64.getEncoder()
+                        .encodeToString(svg.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {"data:image/jpeg;base64,", "data:image/png;base64,%%%"})
+  void invalidIconEncodingNeverSaves(String icon) {
+    if (icon.startsWith("data:image/jpeg")) {
+      // Valid passive artwork isolates the unsupported MIME prefix from content validation.
+      icon +=
+          java.util.Base64.getEncoder()
+              .encodeToString(
+                  "<svg xmlns='http://www.w3.org/2000/svg'><circle r='1'/></svg>"
+                      .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantIcon(icon));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"<Helper", "Helper>"})
+  void markupInAssistantNameNeverSaves(String name) {
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantName(name));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @Test
+  void oversizedAssistantNameNeverSaves() {
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantName("x".repeat(81)));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @Test
+  void decodedIconBeyondLimitNeverSaves() {
+    byte[] bytes = new byte[512 * 1024 + 1];
+    byte[] signature = {(byte) 137, 80, 78, 71, 13, 10, 26, 10};
+    System.arraycopy(signature, 0, bytes, 0, signature.length);
+    String icon = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(bytes);
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantIcon(icon));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
   }
 }

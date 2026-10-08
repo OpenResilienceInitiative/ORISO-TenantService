@@ -41,6 +41,7 @@ import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.AssistantIdentityValidator;
 import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
@@ -156,6 +157,19 @@ public class TenantServiceFacade {
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
 
+  /**
+   * How long the main tenant's images are reused, so a public tenant lookup does not call the
+   * settings service every time. Short on purpose: a logo the platform admin just uploaded shows up
+   * in the next mail within this window. 0 disables the cache.
+   */
+  @Value("${branding.main-tenant-images.cache-seconds:10}")
+  private long mainTenantImagesCacheSeconds;
+
+  private record MainTenantImages(Theming images, long loadedAtNanos) {}
+
+  private final java.util.concurrent.atomic.AtomicReference<MainTenantImages> mainTenantImages =
+      new java.util.concurrent.atomic.AtomicReference<>();
+
   public MultilingualTenantDTO createTenant(MultilingualTenantDTO tenantDTO) {
     log.info("Creating new tenant");
     assertCallerMayCreateThisTenant(tenantDTO);
@@ -168,6 +182,7 @@ public class TenantServiceFacade {
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
+    validateSelectedOwnSmtp(entity, null, sanitizedTenantDTO);
     String reservationToken = tenantDTO.getTenantIdReservationToken();
     TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
@@ -469,6 +484,7 @@ public class TenantServiceFacade {
     var isoCountries = Arrays.stream(Locale.getISOLanguages()).toList();
     validateContent(tenantDTO, isoCountries);
     validateSettings(tenantDTO.getSettings());
+    AssistantIdentityValidator.validate(tenantDTO.getTheming());
   }
 
   private void validateSettings(Settings settings) {
@@ -597,7 +613,7 @@ public class TenantServiceFacade {
     }
     preserveStoredSmtpPassword(existingSettingsJson, updatedEntity);
     preserveStoredSmtpMode(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
-    validateSelectedOwnSmtp(updatedEntity);
+    validateSelectedOwnSmtp(updatedEntity, existingSettingsJson, sanitizedTenantDTO);
     preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     var entityToSave = updatedEntity;
@@ -653,7 +669,8 @@ public class TenantServiceFacade {
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }
 
-  private void validateSelectedOwnSmtp(TenantEntity updatedEntity) {
+  private void validateSelectedOwnSmtp(
+      TenantEntity updatedEntity, String existingSettingsJson, MultilingualTenantDTO tenantDTO) {
     if (updatedEntity.getSettings() == null) {
       return;
     }
@@ -676,6 +693,29 @@ public class TenantServiceFacade {
         || smtp.getPort() < 1
         || smtp.getPort() > 65535) {
       throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_INVALID");
+    }
+    boolean standardTransport =
+        (smtp.getPort() == 465 && smtp.isSecure()) || (smtp.getPort() == 587 && !smtp.isSecure());
+    if (standardTransport) {
+      return;
+    }
+    boolean unchangedOwnTransport = false;
+    if (existingSettingsJson != null) {
+      TenantSettings existing = convertFromJson(existingSettingsJson);
+      unchangedOwnTransport =
+          existing.getSmtpMode() == TenantSmtpMode.OWN
+              && existing.getSmtp() != null
+              && smtp.getPort().equals(existing.getSmtp().getPort())
+              && smtp.isSecure() == existing.getSmtp().isSecure();
+    }
+    boolean confirmed =
+        tenantDTO.getSettings() != null
+            && tenantDTO.getSettings().getSmtp() != null
+            && Boolean.TRUE.equals(
+                tenantDTO.getSettings().getSmtp().getNonstandardTransportConfirmed());
+    if (!unchangedOwnTransport && !confirmed) {
+      throw new ResponseStatusException(
+          HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_TRANSPORT_CONFIRMATION_REQUIRED");
     }
   }
 
@@ -988,11 +1028,103 @@ public class TenantServiceFacade {
     return dto;
   }
 
+  /**
+   * The branding every Träger without its own image inherits (#300). The technical tenant 0 is the
+   * source where it carries a value. On a single-domain installation the platform admin edits the
+   * platform branding on the <em>main tenant</em> instead, which is what Admin → Appearance shows
+   * as inherited; tenant 0 then has no row or no image. Its image gaps are filled from there.
+   */
   private Theming getPlatformTheming(String lang) {
+    Theming technical =
+        tenantService
+            .findRestrictedTenantDataById((long) TECHNICAL_TENANT_ID)
+            .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
+            .orElse(null);
+    if (technical != null && hasAllImages(technical)) {
+      return technical;
+    }
+    Theming mainTenantImages = getMainTenantImages(lang);
+    if (mainTenantImages == null) {
+      return technical;
+    }
+    Theming platform = technical == null ? new Theming() : technical;
+    effectiveThemingApplier.applyTo(platform, mainTenantImages);
+    return platform;
+  }
+
+  private static boolean hasAllImages(Theming theming) {
+    return !isBlank(theming.getLogo())
+        && !isBlank(theming.getAssociationLogo())
+        && !isBlank(theming.getFavicon());
+  }
+
+  /**
+   * Only the images of the main tenant, never its colours or login effect: this widens the
+   * inheritance for the assets Admin already shows as inherited, not for the rest of the theme.
+   * Best effort -- an unreachable settings service must not break a public tenant lookup.
+   */
+  private Theming getMainTenantImages(String lang) {
+    if (!multitenancyWithSingleDomain) {
+      return null;
+    }
+    long ttlNanos = java.util.concurrent.TimeUnit.SECONDS.toNanos(mainTenantImagesCacheSeconds);
+    MainTenantImages cached = mainTenantImages.get();
+    if (ttlNanos > 0 && cached != null && System.nanoTime() - cached.loadedAtNanos() < ttlNanos) {
+      return cached.images();
+    }
+    Theming loaded = loadMainTenantImages(lang);
+    mainTenantImages.set(new MainTenantImages(loaded, System.nanoTime()));
+    return loaded;
+  }
+
+  private Theming loadMainTenantImages(String lang) {
+    String mainTenantSubdomain = readMainTenantSubdomain();
+    if (isBlank(mainTenantSubdomain)) {
+      return null;
+    }
     return tenantService
-        .findRestrictedTenantDataById((long) TECHNICAL_TENANT_ID)
+        .findRestrictedTenantDataBySubdomain(mainTenantSubdomain)
         .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
+        .filter(theming -> theming != null)
+        .map(
+            theming ->
+                new Theming()
+                    .logo(theming.getLogo())
+                    .associationLogo(theming.getAssociationLogo())
+                    .favicon(theming.getFavicon()))
         .orElse(null);
+  }
+
+  /** The only best-effort step: a missing or unreachable setting means "no main tenant". */
+  private String readMainTenantSubdomain() {
+    try {
+      var settings = applicationSettingsService.getApplicationSettings();
+      var setting =
+          settings == null ? null : settings.getMainTenantSubdomainForSingleDomainMultitenancy();
+      return setting == null ? null : setting.getValue();
+    } catch (RuntimeException exception) {
+      log.warn(
+          "Main tenant setting unavailable, platform images are not inherited ({})",
+          exception.getClass().getSimpleName());
+      return null;
+    }
+  }
+
+  /**
+   * The tenant exactly as stored, without platform inheritance: public image routes must prefer a
+   * Träger's own association logo over an inherited platform logo.
+   */
+  public Optional<RestrictedTenantDTO> findOwnRestrictedTenantById(Long id) {
+    String lang = translationService.getCurrentLanguageContext();
+    return tenantService
+        .findRestrictedTenantDataById(id)
+        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang));
+  }
+
+  /** Platform branding for mail and public image routes, see {@link #getPlatformTheming}. */
+  public Optional<RestrictedTenantDTO> getPlatformBrandingTenant() {
+    return Optional.ofNullable(getPlatformTheming(translationService.getCurrentLanguageContext()))
+        .map(theming -> new RestrictedTenantDTO().theming(theming));
   }
 
   public Optional<RestrictedTenantDTO> getPlatformTenant() {

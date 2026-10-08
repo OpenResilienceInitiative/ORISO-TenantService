@@ -16,6 +16,10 @@ public interface TenantRestrictedData {
 
   String getThemingFavicon();
 
+  String getThemingAssistantName();
+
+  String getThemingAssistantIcon();
+
   String getThemingPrimaryColor();
 
   String getThemingSecondaryColor();
