@@ -188,10 +188,16 @@ public class TenantServiceFacade {
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
     validateSelectedOwnSmtp(entity, null, sanitizedTenantDTO);
+    if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
+      creationContext.validateConfiguration();
+    }
     String reservationToken = tenantDTO.getTenantIdReservationToken();
     TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
       createDefaultConsultingTypeSettings(createdTenant);
+    } catch (com.vi.tenantservice.config.security.TenantCreationContext.IssuanceException ex) {
+      performRollback(createdTenant, reservationToken);
+      throw ex;
     } catch (ConsultingTypeCreationException ex) {
       performRollback(createdTenant, reservationToken);
       log.error(

@@ -42,13 +42,25 @@ public class TenantCreationContext {
     }
   }
 
-  private byte[] signature(String payload) throws Exception {
+  /** Checks the signing prerequisite before a Wizard tenant/reservation transaction begins. */
+  public void validateConfiguration() {
+    try {
+      signingKey();
+    } catch (IllegalArgumentException ex) {
+      throw new AccessDeniedException("Tenant creation context key is not configured", ex);
+    }
+  }
+
+  private byte[] signingKey() {
     byte[] key =
         Base64.getDecoder()
             .decode(environment.getProperty("ORISO_TENANT_CREATION_CONTEXT_KEY", ""));
-    if (key.length < 32) {
-      throw new AccessDeniedException("Tenant creation context key is not configured");
-    }
+    if (key.length < 32) throw new IllegalArgumentException("Invalid tenant creation context key");
+    return key;
+  }
+
+  private byte[] signature(String payload) throws Exception {
+    byte[] key = signingKey();
     Mac mac = Mac.getInstance("HmacSHA256");
     mac.init(new SecretKeySpec(key, "HmacSHA256"));
     return mac.doFinal(payload.getBytes(StandardCharsets.US_ASCII));
@@ -83,7 +95,14 @@ public class TenantCreationContext {
           + "."
           + Base64.getUrlEncoder().withoutPadding().encodeToString(signature(payload));
     } catch (Exception ex) {
-      throw new AccessDeniedException("Tenant bootstrap proof could not be issued");
+      throw new IssuanceException(ex);
+    }
+  }
+
+  /** A signing/configuration failure after creation, distinct from caller authorization denial. */
+  public static class IssuanceException extends AccessDeniedException {
+    public IssuanceException(Exception cause) {
+      super("Tenant bootstrap proof could not be issued", cause);
     }
   }
 }
