@@ -264,8 +264,12 @@ public class TenantFacadeAuthorisationService {
       return false;
     }
 
-    return !Objects.equals(theming.getAssistantName(), existing.getThemingAssistantName())
-        || !Objects.equals(theming.getAssistantIcon(), existing.getThemingAssistantIcon())
+    return !Objects.equals(
+            blankToNull(theming.getAssistantName()),
+            blankToNull(existing.getThemingAssistantName()))
+        || !Objects.equals(
+            blankToNull(theming.getAssistantIcon()),
+            blankToNull(existing.getThemingAssistantIcon()))
         || !Objects.equals(theming.getLogo(), existing.getThemingLogo())
         || !Objects.equals(theming.getFavicon(), existing.getThemingFavicon())
         || !Objects.equals(theming.getAssociationLogo(), existing.getThemingAssociationLogo())
@@ -274,6 +278,10 @@ public class TenantFacadeAuthorisationService {
         || !Objects.equals(theming.getAccent(), existing.getThemingAccent())
         || !Objects.equals(theming.getSignal(), existing.getThemingSignal())
         || !Objects.equals(loginEffectValue(theming), existing.getThemingLoginEffect());
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value;
   }
 
   /** Mirrors TenantConverter: the effect is stored as the enum name, null stays null. */

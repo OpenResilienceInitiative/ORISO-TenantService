@@ -41,6 +41,7 @@ import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.AssistantIdentityValidator;
 import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
@@ -483,7 +484,7 @@ public class TenantServiceFacade {
     var isoCountries = Arrays.stream(Locale.getISOLanguages()).toList();
     validateContent(tenantDTO, isoCountries);
     validateSettings(tenantDTO.getSettings());
-    com.vi.tenantservice.api.service.AssistantIdentityValidator.validate(tenantDTO.getTheming());
+    AssistantIdentityValidator.validate(tenantDTO.getTheming());
   }
 
   private void validateSettings(Settings settings) {
@@ -588,8 +589,6 @@ public class TenantServiceFacade {
 
   private MultilingualTenantDTO updateExistingTenant(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenantEntity) {
-    com.vi.tenantservice.api.service.AssistantIdentityValidator.validate(
-        sanitizedTenantDTO.getTheming());
     subdomainValidator.validateOnUpdate(
         sanitizedTenantDTO.getSubdomain(), existingTenantEntity.getSubdomain());
     tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
@@ -1092,9 +1091,7 @@ public class TenantServiceFacade {
                 new Theming()
                     .logo(theming.getLogo())
                     .associationLogo(theming.getAssociationLogo())
-                    .favicon(theming.getFavicon())
-                    .assistantName(theming.getAssistantName())
-                    .assistantIcon(theming.getAssistantIcon()))
+                    .favicon(theming.getFavicon()))
         .orElse(null);
   }
 

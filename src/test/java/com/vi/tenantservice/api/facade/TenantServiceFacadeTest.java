@@ -1224,6 +1224,8 @@ class TenantServiceFacadeTest {
   @org.junit.jupiter.params.ParameterizedTest
   @org.junit.jupiter.params.provider.ValueSource(
       strings = {
+        "<svg xmlns='urn:other'/>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><g xmlns='urn:other'/></svg>",
         "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
         "<svg xmlns='http://www.w3.org/2000/svg'><foreignObject/></svg>",
         "<svg xmlns='http://www.w3.org/2000/svg'><path onload='alert(1)'/></svg>",
@@ -1232,14 +1234,67 @@ class TenantServiceFacadeTest {
         "<svg xmlns='http://www.w3.org/2000/svg'><use href='https://example.org'/></svg>"
       })
   void updateRejectsActiveAssistantArtworkWithoutSaving(String svg) {
-    sanitizedTenantDTO.setTheming(
+    tenantMultilingualDTO.setTheming(
         new com.vi.tenantservice.api.model.Theming()
             .assistantIcon(
                 "data:image/svg+xml;base64,"
                     + java.util.Base64.getEncoder()
                         .encodeToString(svg.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
-    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
-    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {"data:image/jpeg;base64,", "data:image/png;base64,%%%"})
+  void invalidIconEncodingNeverSaves(String icon) {
+    if (icon.startsWith("data:image/jpeg")) {
+      // Valid passive artwork isolates the unsupported MIME prefix from content validation.
+      icon +=
+          java.util.Base64.getEncoder()
+              .encodeToString(
+                  "<svg xmlns='http://www.w3.org/2000/svg'><circle r='1'/></svg>"
+                      .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantIcon(icon));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"<Helper", "Helper>"})
+  void markupInAssistantNameNeverSaves(String name) {
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantName(name));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @Test
+  void oversizedAssistantNameNeverSaves() {
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantName("x".repeat(81)));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @Test
+  void decodedIconBeyondLimitNeverSaves() {
+    byte[] bytes = new byte[512 * 1024 + 1];
+    byte[] signature = {(byte) 137, 80, 78, 71, 13, 10, 26, 10};
+    System.arraycopy(signature, 0, bytes, 0, signature.length);
+    String icon = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(bytes);
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantIcon(icon));
     assertThrows(
         TenantBadRequestException.class,
         () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));

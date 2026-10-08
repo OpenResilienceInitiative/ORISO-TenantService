@@ -12,6 +12,9 @@ import org.w3c.dom.Node;
 
 /** Assistant-only image validation; does not widen the legacy branding upload contract. */
 public final class AssistantIdentityValidator {
+  private static final int MAX_DECODED_ICON_BYTES = 512 * 1024;
+  private static final int MAX_ENCODED_ICON_CHARACTERS = 700000;
+  private static final String SVG_NAMESPACE = "http://www.w3.org/2000/svg";
   private static final Set<String> PRESETS =
       Set.of("default", "robot-7341990", "robot-1184077", "robot-3548536", "robot-5475944");
   private static final Set<String> ELEMENTS =
@@ -72,19 +75,20 @@ public final class AssistantIdentityValidator {
             || name.codePoints().anyMatch(Character::isISOControl))) invalid();
     String icon = theming.getAssistantIcon();
     if (icon == null || icon.isBlank() || PRESETS.contains(icon)) return;
-    if (icon.length() > 700000) invalid();
+    if (icon.length() > MAX_ENCODED_ICON_CHARACTERS) invalid();
     boolean svg = icon.startsWith("data:image/svg+xml;base64,");
     boolean png = icon.startsWith("data:image/png;base64,");
     if (!svg && !png) invalid();
     try {
       byte[] bytes = Base64.getDecoder().decode(icon.substring(icon.indexOf(',') + 1));
-      if (bytes.length == 0 || bytes.length > 512 * 1024) invalid();
+      if (bytes.length == 0 || bytes.length > MAX_DECODED_ICON_BYTES) invalid();
       if (png) {
         byte[] signature = {(byte) 137, 80, 78, 71, 13, 10, 26, 10};
         if (bytes.length < 24) invalid();
         for (int i = 0; i < signature.length; i++) if (bytes[i] != signature[i]) invalid();
       } else {
         var factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
         factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
         factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
         factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
@@ -102,7 +106,9 @@ public final class AssistantIdentityValidator {
   }
 
   private static void validateElement(Element element, int depth) {
-    if (depth > 64 || !ELEMENTS.contains(element.getTagName())) invalid();
+    if (depth > 64
+        || !SVG_NAMESPACE.equals(element.getNamespaceURI())
+        || !ELEMENTS.contains(element.getTagName())) invalid();
     var attributes = element.getAttributes();
     for (int i = 0; i < attributes.getLength(); i++) {
       Node attr = attributes.item(i);

@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
- <changeSet id="tenant-assistant-identity" author="oriso">
-  <addColumn tableName="tenant">
-   <column name="theming_assistant_name" type="VARCHAR(80)"/>
-   <column name="theming_assistant_icon" type="LONGTEXT"/>
-  </addColumn>
-  <rollback><dropColumn tableName="tenant" columnName="theming_assistant_name"/><dropColumn tableName="tenant" columnName="theming_assistant_icon"/></rollback>
+ <changeSet id="tenant-assistant-name" author="oriso">
+  <preConditions onFail="CONTINUE"><not><columnExists tableName="tenant" columnName="theming_assistant_name"/></not></preConditions>
+  <addColumn tableName="tenant"><column name="theming_assistant_name" type="VARCHAR(80)"/></addColumn>
+  <rollback><dropColumn tableName="tenant" columnName="theming_assistant_name"/></rollback>
+ </changeSet>
+ <changeSet id="tenant-assistant-icon" author="oriso">
+  <preConditions onFail="CONTINUE"><not><columnExists tableName="tenant" columnName="theming_assistant_icon"/></not></preConditions>
+  <addColumn tableName="tenant"><column name="theming_assistant_icon" type="LONGTEXT"/></addColumn>
+  <rollback><dropColumn tableName="tenant" columnName="theming_assistant_icon"/></rollback>
  </changeSet>
 </databaseChangeLog>

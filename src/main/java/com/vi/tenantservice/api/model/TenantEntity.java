@@ -75,6 +75,7 @@ public class TenantEntity implements TenantData {
   @Column(name = "theming_favicon")
   private String themingFavicon;
 
+  @Column(length = 80)
   private String themingAssistantName;
 
   @Column(columnDefinition = "LONGTEXT")

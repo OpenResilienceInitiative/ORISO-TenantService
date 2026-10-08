@@ -771,10 +771,65 @@ class TenantFacadeAuthorisationServiceTest {
             .theming(new Theming().assistantName("New helper").assistantIcon("robot-7341990"));
     givenSingleTenantAdmin();
     givenResolvedAppearancePolicy(false);
-    assertThrows(
-        TenantAuthorisationException.class,
-        () ->
-            tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
-                changed, existing));
+    var denied =
+        assertThrows(
+            TenantAuthorisationException.class,
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(changed, existing));
+    assertThat(denied.getCustomHttpHeaders().getFirst("X-Reason"))
+        .isEqualTo(HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE.name());
+  }
+
+  @Test
+  void restrictedAdministratorCanRoundTripBlankUnsetIdentity() {
+    TenantEntity existing = tenantWithLogo(null);
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(false);
+    assertThatCode(
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(
+                        new MultilingualTenantDTO()
+                            .theming(new Theming().assistantName(" ").assistantIcon("")),
+                        existing))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void restrictedAdministratorCanKeepOwnIdentity() {
+    TenantEntity existing = tenantWithLogo(null);
+    existing.setThemingAssistantName("Helper");
+    existing.setThemingAssistantIcon("robot-7341990");
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(false);
+    assertThatCode(
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(
+                        new MultilingualTenantDTO()
+                            .theming(
+                                new Theming()
+                                    .assistantName("Helper")
+                                    .assistantIcon("robot-7341990")),
+                        existing))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void administratorCanChangeIdentityWhenAppearanceAllowed() {
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(true);
+    assertThatCode(
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(
+                        new MultilingualTenantDTO()
+                            .theming(
+                                new Theming()
+                                    .assistantName("Helper")
+                                    .assistantIcon("robot-7341990")),
+                        tenantWithLogo(null)))
+        .doesNotThrowAnyException();
   }
 }

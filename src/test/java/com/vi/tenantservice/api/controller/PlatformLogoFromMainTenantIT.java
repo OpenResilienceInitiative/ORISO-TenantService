@@ -278,6 +278,43 @@ class PlatformLogoFromMainTenantIT {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.theming.assistantName").value("Help companion"))
         .andExpect(jsonPath("$.theming.assistantIcon").value("robot-5475944"));
+    theming.put("assistantName", "x".repeat(80));
+    mvc.perform(
+            put("/tenantadmin/1")
+                .with(admin)
+                .contentType("application/json")
+                .content(mapper.writeValueAsString(body)))
+        .andExpect(status().isOk());
+    mvc.perform(get("/tenant/public/id/1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.assistantName").value("x".repeat(80)));
+    theming.put("assistantName", "x".repeat(81));
+    mvc.perform(
+            put("/tenantadmin/1")
+                .with(admin)
+                .contentType("application/json")
+                .content(mapper.writeValueAsString(body)))
+        .andExpect(status().isBadRequest());
+    jdbc.update(
+        "UPDATE TENANT SET theming_assistant_name = ?, theming_assistant_icon = ? WHERE id = 0",
+        "Platform helper",
+        "robot-1184077");
+    theming.putNull("assistantName");
+    theming.putNull("assistantIcon");
+    mvc.perform(
+            put("/tenantadmin/1")
+                .with(admin)
+                .contentType("application/json")
+                .content(mapper.writeValueAsString(body)))
+        .andExpect(status().isOk());
+    mvc.perform(get("/tenant/public/id/1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.assistantName").value("Platform helper"))
+        .andExpect(jsonPath("$.theming.assistantIcon").value("robot-1184077"));
+    mvc.perform(get("/tenantadmin/1").with(admin))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.assistantName").doesNotExist())
+        .andExpect(jsonPath("$.theming.assistantIcon").doesNotExist());
   }
 
   @Test
@@ -358,5 +395,19 @@ class PlatformLogoFromMainTenantIT {
     mvc.perform(get("/tenant/public/id/1"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.theming.assistantName").doesNotExist());
+  }
+
+  @Test
+  void mainTenantImageFallbackDoesNotLeakAssistantIdentity() throws Exception {
+    jdbc.update(
+        "UPDATE TENANT SET theming_assistant_name = NULL, theming_assistant_icon = NULL WHERE id IN (0,1)");
+    jdbc.update(
+        "UPDATE TENANT SET theming_assistant_name = ?, theming_assistant_icon = ? WHERE id = 2",
+        "Main helper",
+        "robot-1184077");
+    mvc.perform(get("/tenant/public/id/1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.assistantName").doesNotExist())
+        .andExpect(jsonPath("$.theming.assistantIcon").doesNotExist());
   }
 }
