@@ -73,7 +73,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.settings, "
               + "t.createDate, "
               + "t.updateDate, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t WHERE t.id = :id")
   TenantDataView findTenantDataById(@Param("id") Long id);
 
@@ -114,7 +114,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.settings, "
               + "t.createDate, "
               + "t.updateDate, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t")
   List<TenantDataView> findAllTenantData();
 
@@ -155,7 +155,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.settings, "
               + "t.createDate, "
               + "t.updateDate, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t "
               + "WHERE"
               + "  t.id != 0L "
@@ -189,7 +189,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.contentTermsAndConditions, "
               + "t.contentTermsAndConditionsActivationDate, "
               + "t.settings, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t WHERE t.subdomain = :subdomain")
   TenantRestrictedDataView findRestrictedDataBySubdomain(@Param("subdomain") String subdomain);
 
@@ -216,7 +216,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.contentTermsAndConditions, "
               + "t.contentTermsAndConditionsActivationDate, "
               + "t.settings, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t WHERE t.id = :id")
   TenantRestrictedDataView findRestrictedDataById(@Param("id") Long id);
 
@@ -243,7 +243,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.contentTermsAndConditions, "
               + "t.contentTermsAndConditionsActivationDate, "
               + "t.settings, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t WHERE t.id IN :ids")
   List<TenantRestrictedDataView> findRestrictedDataByIdIn(@Param("ids") Set<Long> ids);
 

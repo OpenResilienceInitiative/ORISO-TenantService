@@ -178,6 +178,11 @@ public class TenantServiceFacade {
   public MultilingualTenantDTO createTenant(MultilingualTenantDTO tenantDTO) {
     log.info("Creating new tenant");
     assertCallerMayCreateThisTenant(tenantDTO);
+    if (Boolean.FALSE.equals(tenantDTO.getActive())) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "New tenants start active; the assigned Träger administrator may pause them after creation");
+    }
     MultilingualTenantDTO sanitizedTenantDTO = tenantInputSanitizer.sanitize(tenantDTO);
     validateCreateTenantInput(tenantDTO);
     // The sanitized value is the one that would be stored, so that is the one that is checked.
@@ -1351,6 +1356,7 @@ public class TenantServiceFacade {
     Map<String, Object> map = new HashMap<>();
     map.put("id", tenantData.getId());
     map.put("name", tenantData.getName());
+    map.put("active", tenantData.getActive());
     map.put("subdomain", tenantData.getSubdomain());
     map.put("beraterCount", tenantData.getLicensingAllowedNumberOfUsers());
     List<AdminResponseDTO> tenantAdmins = new ArrayList<>();

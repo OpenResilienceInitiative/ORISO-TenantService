@@ -2051,6 +2051,9 @@ components:
         - name
         - subdomain
       properties:
+        active:
+          type: boolean
+          description: Operational status of this Träger. Existing and new tenants start active; omission on update preserves the stored status. Only the matching Träger-admin may change status after creation. Independent of legal agreement state.
         id:
           type: integer
           format: int64
@@ -2112,6 +2115,9 @@ components:
           required:
             - name
           properties:
+            active:
+              type: boolean
+              description: Operational status of this Träger. Existing and new tenants start active; omission on update preserves the stored status. Only the matching Träger-admin may change status after creation. Independent of legal agreement state.
             id:
               type: integer
               format: int64
@@ -2274,6 +2280,9 @@ components:
         - id
         - name
       properties:
+        active:
+          type: boolean
+          description: Operational status of this Träger. Existing and new tenants start active; omission on update preserves the stored status. Only the matching Träger-admin may change status after creation. Independent of legal agreement state.
         id:
           type: integer
           format: int64
@@ -3673,6 +3682,9 @@ components:
         - name
         - subdomain
       properties:
+        active:
+          type: boolean
+          description: Operational status of this Träger. Existing and new tenants start active; omission on update preserves the stored status. Only the matching Träger-admin may change status after creation. Independent of legal agreement state.
         id:
           type: integer
           format: int64

@@ -127,6 +127,7 @@ public class TenantFacadeAuthorisationService {
 
   void assertUserHasSufficientPermissionsToChangeAttributes(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenant) {
+    assertOperationalStatusChangeAllowed(sanitizedTenantDTO, existingTenant);
     if (hasSingleTenantAccessAuthority()) {
       assertSingleTenantAdminHasPermissionsToChangeAttributes(sanitizedTenantDTO, existingTenant);
     }
@@ -140,6 +141,24 @@ public class TenantFacadeAuthorisationService {
             sanitizedTenantDTO, existingTenant);
     log.info("Detected the following changes in content attributes: " + changedContentTypes);
     assertUserHasPermissionsToChangeContent(changedContentTypes);
+  }
+
+  private void assertOperationalStatusChangeAllowed(
+      MultilingualTenantDTO submitted, TenantEntity existing) {
+    if (submitted.getActive() == null
+        || Objects.equals(submitted.getActive(), existing.getActive())) {
+      return;
+    }
+    boolean tenantAdmin =
+        authorisationService.hasRole("tenant-admin")
+            || authorisationService.hasRole("single-tenant-admin");
+    if (!tenantAdmin
+        || isTechnicalUser()
+        || existing.getId() == 0L
+        || !tenantMatching(existing.getId(), authorisationService.findTenantIdInAccessToken())) {
+      throw new AccessDeniedException(
+          "Only the matching Träger administrator may change operational status");
+    }
   }
 
   private void assertUserHasPermissionsToChangeContent(List<TenantContent> changedContentTypes) {

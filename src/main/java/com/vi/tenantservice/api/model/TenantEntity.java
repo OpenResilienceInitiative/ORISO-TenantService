@@ -11,6 +11,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.Parameter;
 
@@ -34,6 +35,12 @@ public class TenantEntity implements TenantData {
       })
   @Column(name = "id", updatable = false, nullable = false)
   private Long id;
+
+  /** Operational status; legal prerequisites and descendant status remain independent. */
+  @Builder.Default
+  @ColumnDefault("true")
+  @Column(name = "active", nullable = false)
+  private Boolean active = true;
 
   @Column(name = "name", nullable = false)
   private String name;
