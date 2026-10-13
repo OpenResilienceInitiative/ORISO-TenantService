@@ -210,9 +210,46 @@ public class TenantConverter {
         "legalName",
         "contactEmail",
         "contactPhone",
-        "dataProtectionOfficer");
+        "dataProtectionOfficer",
+        "contentErstantwortGreeting",
+        "contentErstantwortWhoReadsAlong",
+        "contentErstantwortEmergencyAddition",
+        "contentErstantwortFreeNotice",
+        "contentErstantwortClosing",
+        "erstantwortResponseDeadlineDays");
     applyLegalNameAndContact(targetEntity, tenantDTO);
+    applyErstantwort(targetEntity, sourceEntity);
     return targetEntity;
+  }
+
+  /** Absent keeps: a DTO without Erstantwort data (older client) must not wipe stored Bausteine. */
+  private void applyErstantwort(TenantEntity target, TenantEntity source) {
+    if (hasJson(source.getContentErstantwortGreeting())) {
+      target.setContentErstantwortGreeting(source.getContentErstantwortGreeting());
+    }
+    if (hasJson(source.getContentErstantwortWhoReadsAlong())) {
+      target.setContentErstantwortWhoReadsAlong(source.getContentErstantwortWhoReadsAlong());
+    }
+    if (hasJson(source.getContentErstantwortEmergencyAddition())) {
+      target.setContentErstantwortEmergencyAddition(
+          source.getContentErstantwortEmergencyAddition());
+    }
+    if (hasJson(source.getContentErstantwortFreeNotice())) {
+      target.setContentErstantwortFreeNotice(source.getContentErstantwortFreeNotice());
+    }
+    if (hasJson(source.getContentErstantwortClosing())) {
+      target.setContentErstantwortClosing(source.getContentErstantwortClosing());
+    }
+    if (source.getErstantwortResponseDeadlineDays() != null) {
+      target.setErstantwortResponseDeadlineDays(source.getErstantwortResponseDeadlineDays());
+    }
+  }
+
+  private static boolean hasJson(String json) {
+    return json != null
+        && !json.isBlank()
+        && !"{}".equals(json.trim())
+        && !"null".equals(json.trim());
   }
 
   /**

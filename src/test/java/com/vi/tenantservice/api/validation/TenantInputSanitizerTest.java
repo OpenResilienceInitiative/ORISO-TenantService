@@ -177,6 +177,27 @@ class TenantInputSanitizerTest {
     assertThat(sanitized.getContent().getErstantwortResponseDeadlineDays()).isEqualTo(5);
   }
 
+  @Test
+  void sanitize_Should_keepMetaKeysVerbatimAndSanitizeBausteinHtml() {
+    // given
+    String meta = "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-10-14T10:00:00Z\"}";
+    MultilingualTenantDTO tenantDTO = new MultilingualTenantDTO();
+    tenantDTO.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    tenantDTO
+        .getContent()
+        .setErstantwortGreeting(Map.of("de", "<p>hi</p><script>x</script>", "en__meta", meta));
+    when(inputSanitizer.sanitizeAllowingFormattingAndLinks(anyString()))
+        .thenAnswer(i -> ((String) i.getArgument(0)).replace("<script>x</script>", ""));
+
+    // when
+    MultilingualTenantDTO sanitized = tenantInputSanitizer.sanitize(tenantDTO);
+
+    // then
+    assertThat(sanitized.getContent().getErstantwortGreeting())
+        .isEqualTo(Map.of("de", "<p>hi</p>", "en__meta", meta));
+    verify(inputSanitizer, never()).sanitizeAllowingFormattingAndLinks(meta);
+  }
+
   private void verifyNeededSanitizationsAreCalled(MultilingualTenantDTO tenantDTO) {
     verify(inputSanitizer).sanitize(tenantDTO.getName());
     verify(inputSanitizer).sanitize(tenantDTO.getSubdomain());

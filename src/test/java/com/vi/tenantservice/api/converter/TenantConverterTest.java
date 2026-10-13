@@ -836,4 +836,40 @@ class TenantConverterTest {
     assertThat(result.getContentErstantwortClosing()).isEqualTo("{\"de\":\"<p>x</p>\"}");
     assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(5);
   }
+
+  @Test
+  void toEntity_withExistingEntity_Should_replaceErstantwortWhenDtoHasValues() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"old\"}");
+    existing.setErstantwortResponseDeadlineDays(5);
+    MultilingualTenantDTO dto = new MultilingualTenantDTO();
+    dto.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    dto.getContent().setErstantwortClosing(java.util.Map.of("de", "new"));
+    dto.getContent().setErstantwortResponseDeadlineDays(7);
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{\"de\":\"new\"}");
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(7);
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_keepStoredDeadlineWhenDtoDeadlineIsNull() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setErstantwortResponseDeadlineDays(5);
+    MultilingualTenantDTO dto = new MultilingualTenantDTO();
+    dto.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    dto.getContent().setErstantwortGreeting(java.util.Map.of("de", "hi"));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(5);
+    assertThat(result.getContentErstantwortGreeting()).isEqualTo("{\"de\":\"hi\"}");
+  }
 }
