@@ -84,6 +84,38 @@ class TenantDpaFacadeTest {
     assertThat(result.get(0).getSource()).isEqualTo("PUBLIC_SIGN_LINK");
   }
 
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"de", "en"})
+  @org.junit.jupiter.params.provider.NullSource
+  void getSignatures_Should_exposeStoredLanguage_WithoutInventingLegacyLanguage(String language) {
+    var repository =
+        org.mockito.Mockito.mock(
+            com.vi.tenantservice.api.repository.TenantDpaSignatureRepository.class);
+    var service =
+        new TenantDpaService(
+            repository,
+            null,
+            null,
+            null,
+            new com.vi.tenantservice.api.service.DpaSignatureOwnership(null),
+            null);
+    org.springframework.test.util.ReflectionTestUtils.setField(
+        tenantDpaFacade, "tenantDpaService", service);
+    when(repository.findByTenantId(5L))
+        .thenReturn(
+            List.of(
+                TenantDpaSignatureEntity.builder()
+                    .tenantId(5L)
+                    .status(DpaSignatureStatus.SIGNED)
+                    .language(language)
+                    .build()));
+
+    var response = tenantDpaFacade.getSignatures(5L);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(response.getFirst());
+
+    assertThat(json.path("language").asText(null)).isEqualTo(language);
+  }
+
   @Test
   void getSignatures_Should_throw_andNotQueryService_When_notAuthorizedForTenant() {
     // given

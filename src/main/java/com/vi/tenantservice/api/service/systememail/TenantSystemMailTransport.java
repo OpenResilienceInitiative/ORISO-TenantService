@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class TenantSystemMailTransport {
-  public void send(TenantSmtpSettings settings, String password, SystemEmailDeliveryRequest request)
+  public void send(TenantSmtpSettings settings, String password, TenantSystemMail request)
       throws MessagingException {
     InternetAddress[] recipients = InternetAddress.parse(request.recipient(), true);
     if (recipients.length != 1 || recipients[0].isGroup())
@@ -27,6 +27,7 @@ public class TenantSystemMailTransport {
     message.setFrom(new InternetAddress(settings.getFrom(), true));
     message.setRecipients(Message.RecipientType.TO, recipients);
     message.setSubject(request.subject(), "UTF-8");
+    message.setHeader("X-ORISO-Delivery-ID", request.correlationId().toString());
     var text = new MimeBodyPart();
     text.setText(request.text(), "UTF-8");
     var html = new MimeBodyPart();

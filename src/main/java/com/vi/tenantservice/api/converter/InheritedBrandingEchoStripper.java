@@ -16,6 +16,18 @@ public class InheritedBrandingEchoStripper {
     }
     stripEcho(
         submitted,
+        existing.getThemingAssistantName(),
+        platform.getThemingAssistantName(),
+        Theming::getAssistantName,
+        Theming::setAssistantName);
+    stripEcho(
+        submitted,
+        existing.getThemingAssistantIcon(),
+        platform.getThemingAssistantIcon(),
+        Theming::getAssistantIcon,
+        Theming::setAssistantIcon);
+    stripEcho(
+        submitted,
         existing.getThemingLogo(),
         platform.getThemingLogo(),
         Theming::getLogo,

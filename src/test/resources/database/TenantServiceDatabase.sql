@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS TENANT
     theming_logo longtext,
     theming_association_logo longtext,
     theming_favicon longtext,
+    theming_assistant_name varchar(80),
+    theming_assistant_icon longtext,
     theming_primary_color varchar(15),
     theming_secondary_color varchar(15),
     theming_accent varchar(15),

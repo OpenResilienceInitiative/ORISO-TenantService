@@ -60,7 +60,10 @@ public final class LegacyPermissionPolicyMapper {
       Boolean legacyEnforced = legacyValue(enforcedValues, feature);
       policies.put(
           feature.apiKey(),
-          fromLegacy(legacyAllowed, legacyEnforced, !Boolean.FALSE.equals(legacyAllowed)));
+          fromLegacy(
+              legacyAllowed,
+              legacyEnforced,
+              feature.defaultValue() && !Boolean.FALSE.equals(legacyAllowed)));
     }
     return Map.copyOf(policies);
   }

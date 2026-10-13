@@ -174,6 +174,7 @@ public class TenantController implements TenantApi, TenantadminApi {
             .signerOrganisation(signature.getSignerOrganisation())
             .forwardedByUserId(signature.getForwardedByUserId())
             .source(signature.getSource())
+            .language(signature.getLanguage())
             .signedAt(signature.getSignedAt() == null ? null : signature.getSignedAt().toString());
     return ResponseEntity.ok(dto);
   }

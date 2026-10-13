@@ -2034,6 +2034,10 @@ components:
           type: string
         signedAt:
           type: string
+        language:
+          type: string
+          description: Optional stored confirmation language; absent for legacy signatures.
+          example: "de"
     TenantDTO:
       type: object
       required:
@@ -2308,6 +2312,13 @@ components:
         and `accent` is the LIGHT accent. Which one a surface uses depends on the surface's
         background, not on the user's theme preference alone — see the field descriptions.
       properties:
+        assistantName:
+          type: string
+          maxLength: 80
+          description: Tenant assistant name; absent uses the established Carimat default.
+        assistantIcon:
+          type: string
+          description: Predefined robot identifier or validated SVG/PNG data URI.
         logo:
           type: string
           example: "base64 encoded image"
@@ -2508,6 +2519,30 @@ components:
           type: boolean
           example: "true"
           description: "ORISO-Admin#602 switch 2. Whether an advice seeker may leave an e-mail address at all. When false it must silence both the in-chat Erstantwort Baustein and the profile e-mail field. Opt-out: defaults to true."
+        featureAskerEmailAgencyCounsellingEnabled:
+          type: boolean
+          default: true
+          description: "Effective advice-seeker notification channel permission for EmailAgencyCounselling. Email additionally requires featureAskerEmailEnabled."
+        featureAskerEmailLiveChatEnabled:
+          type: boolean
+          default: false
+          description: "Effective advice-seeker notification channel permission for EmailLiveChat. Email additionally requires featureAskerEmailEnabled."
+        featureAskerEmailSelfHelpEnabled:
+          type: boolean
+          default: true
+          description: "Effective advice-seeker notification channel permission for EmailSelfHelp. Email additionally requires featureAskerEmailEnabled."
+        featureAskerBrowserAgencyCounsellingEnabled:
+          type: boolean
+          default: true
+          description: "Effective advice-seeker notification channel permission for BrowserAgencyCounselling. Email additionally requires featureAskerEmailEnabled."
+        featureAskerBrowserLiveChatEnabled:
+          type: boolean
+          default: true
+          description: "Effective advice-seeker notification channel permission for BrowserLiveChat. Email additionally requires featureAskerEmailEnabled."
+        featureAskerBrowserSelfHelpEnabled:
+          type: boolean
+          default: true
+          description: "Effective advice-seeker notification channel permission for BrowserSelfHelp. Email additionally requires featureAskerEmailEnabled."
         featureCallsEnabled:
           type: boolean
           example: "true"
@@ -3094,6 +3129,12 @@ components:
         - featureMediaAiScanSupervisionChatsEnabled
         - featureDisplayNameEditable
         - featureAskerEmailEnabled
+        - featureAskerEmailAgencyCounsellingEnabled
+        - featureAskerEmailLiveChatEnabled
+        - featureAskerEmailSelfHelpEnabled
+        - featureAskerBrowserAgencyCounsellingEnabled
+        - featureAskerBrowserLiveChatEnabled
+        - featureAskerBrowserSelfHelpEnabled
         - caseHandoverEnabled
 
     TenantLegalDraftDTO:
@@ -3448,6 +3489,14 @@ components:
         secure:
           type: boolean
           example: "false"
+        nonstandardTransportConfirmed:
+          type: boolean
+          writeOnly: true
+          description:
+            "Write-only acknowledgement when a changed OWN SMTP port and TLS mode
+            are not the usual 465/implicit-TLS or 587/STARTTLS pair. Not stored
+            or returned. An unchanged legacy pair does not require a new acknowledgement."
+          example: false
         username:
           type: string
           example: "notifications@oriso.org"

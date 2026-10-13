@@ -75,6 +75,12 @@ public class TenantEntity implements TenantData {
   @Column(name = "theming_favicon")
   private String themingFavicon;
 
+  @Column(length = 80)
+  private String themingAssistantName;
+
+  @Column(columnDefinition = "LONGTEXT")
+  private String themingAssistantIcon;
+
   @Column(name = "theming_primary_color")
   private String themingPrimaryColor;
 
@@ -171,6 +177,9 @@ public class TenantEntity implements TenantData {
 
   @Column(name = "update_date")
   private LocalDateTime updateDate;
+
+  @Column(name = "smtp_test_requested_at")
+  private LocalDateTime smtpTestRequestedAt;
 
   public interface TenantBase {
 

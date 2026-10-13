@@ -72,6 +72,13 @@ public enum PermissionFeature {
       "featureMediaAiScanSupervisionChatsEnabled", "mediaAiScanSupervisionChats"),
   ASKER_DISPLAY_NAME("featureDisplayNameEditable", null),
   ASKER_EMAIL("featureAskerEmailEnabled", null),
+  ASKER_EMAIL_AGENCY_COUNSELLING("featureAskerEmailAgencyCounsellingEnabled", null),
+  ASKER_EMAIL_LIVE_CHAT("featureAskerEmailLiveChatEnabled", null),
+  ASKER_EMAIL_SELF_HELP("featureAskerEmailSelfHelpEnabled", null),
+  ASKER_BROWSER_AGENCY_COUNSELLING("featureAskerBrowserAgencyCounsellingEnabled", null),
+  ASKER_BROWSER_LIVE_CHAT("featureAskerBrowserLiveChatEnabled", null),
+  ASKER_BROWSER_SELF_HELP("featureAskerBrowserSelfHelpEnabled", null),
+
   CASE_HANDOVER("caseHandoverEnabled", null);
 
   private static final Map<String, PermissionFeature> BY_API_KEY =
@@ -84,6 +91,10 @@ public enum PermissionFeature {
   PermissionFeature(String apiKey, String legacyToggleKey) {
     this.apiKey = apiKey;
     this.legacyToggleKey = legacyToggleKey;
+  }
+
+  public boolean defaultValue() {
+    return this != ASKER_EMAIL_LIVE_CHAT;
   }
 
   public String apiKey() {

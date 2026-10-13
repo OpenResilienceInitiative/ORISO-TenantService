@@ -162,4 +162,25 @@ class EffectivePermissionSettingsApplierTest {
 
     assertThat(settings.getFeatureGroupChatV2Enabled()).isFalse();
   }
+
+  @Test
+  void publicChannelSettingsRespectIndependentInheritedPolicies() {
+    var settings =
+        new Settings()
+            .featureAskerEmailAgencyCounsellingEnabled(true)
+            .featureAskerBrowserAgencyCounsellingEnabled(true)
+            .featureAskerEmailLiveChatEnabled(false);
+    applier.applyPolicies(
+        settings,
+        Map.of(
+            "featureAskerEmailAgencyCounsellingEnabled",
+                new BooleanPermissionPolicy(false, PermissionPolicyMode.ENFORCED),
+            "featureAskerBrowserAgencyCounsellingEnabled",
+                new BooleanPermissionPolicy(false, PermissionPolicyMode.SUGGESTED).inherited(true),
+            "featureAskerEmailLiveChatEnabled",
+                new BooleanPermissionPolicy(true, PermissionPolicyMode.ENFORCED)));
+    assertThat(settings.getFeatureAskerEmailAgencyCounsellingEnabled()).isFalse();
+    assertThat(settings.getFeatureAskerBrowserAgencyCounsellingEnabled()).isTrue();
+    assertThat(settings.getFeatureAskerEmailLiveChatEnabled()).isTrue();
+  }
 }
