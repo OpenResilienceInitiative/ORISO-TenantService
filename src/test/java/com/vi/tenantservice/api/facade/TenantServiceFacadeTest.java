@@ -112,6 +112,7 @@ class TenantServiceFacadeTest {
   @Mock private ConsultingTypePatchDTOConverter consultingTypePatchDTOConverter;
 
   @Mock private TenantService tenantService;
+  @Mock private jakarta.persistence.EntityManager entityManager;
 
   @Mock private TenantInputSanitizer tenantInputSanitizer;
 
@@ -166,6 +167,7 @@ class TenantServiceFacadeTest {
 
   @BeforeEach
   public void initialize() {
+    ReflectionTestUtils.setField(tenantServiceFacade, "entityManager", entityManager);
     tenantEntity.setId(ID);
     // The history service wraps the real save; the mock has to run it like the real one does.
     lenient()

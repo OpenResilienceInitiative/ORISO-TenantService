@@ -42,6 +42,8 @@ import com.vi.tenantservice.api.model.TenantLegalProposalDistributionRequest;
 import com.vi.tenantservice.api.model.TenantLegalTemplateVersionDTO;
 import com.vi.tenantservice.api.model.TenantLegalTextVersionDTO;
 import com.vi.tenantservice.api.model.TenantMediaResponseDTO;
+import com.vi.tenantservice.api.model.TenantOperationalStatusDTO;
+import com.vi.tenantservice.api.model.TenantOperationalStatusUpdateDTO;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeyUpdateDTO;
@@ -544,6 +546,13 @@ public class TenantController implements TenantApi, TenantadminApi {
     log.info("Creating tenant by user {} ", authorisationService.getUsername());
     var tenant = tenantServiceFacade.createTenant(tenantMultilingualDTO);
     return new ResponseEntity<>(tenant, HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
+  public ResponseEntity<TenantOperationalStatusDTO> updateTenantOperationalStatus(
+      @NotNull @Min(1) Long id, @Valid TenantOperationalStatusUpdateDTO request) {
+    return ResponseEntity.ok(tenantServiceFacade.updateOperationalStatus(id, request.getActive()));
   }
 
   @Override
