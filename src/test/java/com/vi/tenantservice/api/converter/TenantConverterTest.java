@@ -819,4 +819,21 @@ class TenantConverterTest {
     var stored = TenantEntity.builder().dataProtectionOfficer("{not json").build();
     assertThat(tenantConverter.toMultilingualDTO(stored).getDataProtectionOfficer()).isNull();
   }
+
+  @Test
+  void toEntity_withExistingEntity_Should_keepErstantwortWhenDtoHasNone() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"<p>x</p>\"}");
+    existing.setErstantwortResponseDeadlineDays(5);
+    MultilingualTenantDTO dto = new MultilingualTenantDTO();
+    dto.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{\"de\":\"<p>x</p>\"}");
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(5);
+  }
 }

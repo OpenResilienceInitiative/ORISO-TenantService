@@ -155,6 +155,28 @@ class TenantInputSanitizerTest {
         .isEqualTo(getDefaultTranslationsAsMap(IMAGE_CONTENT));
   }
 
+  @Test
+  void sanitize_Should_keepErstantwortBausteineAndDeadline() {
+    // given
+    MultilingualTenantDTO tenantDTO = new MultilingualTenantDTO();
+    tenantDTO.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    tenantDTO.getContent().setErstantwortClosing(Map.of("de", "<p>x</p>"));
+    tenantDTO.getContent().setErstantwortResponseDeadlineDays(5);
+    lenient()
+        .when(inputSanitizer.sanitizeAllowingFormatting(anyString()))
+        .thenAnswer(i -> i.getArgument(0));
+    lenient()
+        .when(inputSanitizer.sanitizeAllowingFormattingAndLinks(anyString()))
+        .thenAnswer(i -> i.getArgument(0));
+
+    // when
+    MultilingualTenantDTO sanitized = tenantInputSanitizer.sanitize(tenantDTO);
+
+    // then
+    assertThat(sanitized.getContent().getErstantwortClosing()).isEqualTo(Map.of("de", "<p>x</p>"));
+    assertThat(sanitized.getContent().getErstantwortResponseDeadlineDays()).isEqualTo(5);
+  }
+
   private void verifyNeededSanitizationsAreCalled(MultilingualTenantDTO tenantDTO) {
     verify(inputSanitizer).sanitize(tenantDTO.getName());
     verify(inputSanitizer).sanitize(tenantDTO.getSubdomain());
