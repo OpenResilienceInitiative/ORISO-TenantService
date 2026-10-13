@@ -122,6 +122,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantInputSanitizer tenantInputSanitizer;
 
   private final @NonNull SubdomainValidator subdomainValidator;
+  @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
+
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TranslationService translationService;
@@ -465,6 +467,7 @@ public class TenantServiceFacade {
     return new TenantOperationalStatusDTO(saved.getId(), saved.getActive());
   }
 
+  @Transactional
   public MultilingualTenantDTO updateTenant(Long id, MultilingualTenantDTO tenantDTO) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
     validateTenantInput(tenantDTO);
@@ -581,6 +584,9 @@ public class TenantServiceFacade {
       Long id, MultilingualTenantDTO sanitizedTenantDTO) {
     var tenantById = tenantService.findTenantById(id);
     if (tenantById.isPresent()) {
+      // A request may already hold an old instance. Locking alone does not reread its fields.
+      // Refresh before applying metadata so an omitted status keeps the latest committed value.
+      entityManager.refresh(tenantById.get(), jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
       return updateExistingTenant(sanitizedTenantDTO, tenantById.get());
     } else {
       throw new TenantNotFoundException("Tenant with given id could not be found : " + id);

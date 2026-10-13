@@ -123,6 +123,8 @@ public class TenantService {
     return tenantRepository.save(tenantEntity);
   }
 
+  // Keep loaded entities managed through the save: detached merge can copy a stale own status.
+  @Transactional
   public void updateTenantSettingsBatch(Map<Long, String> settingsByTenantId) {
     if (settingsByTenantId == null || settingsByTenantId.isEmpty()) {
       return;

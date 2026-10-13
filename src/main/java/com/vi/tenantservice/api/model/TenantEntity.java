@@ -16,6 +16,7 @@ import org.hibernate.annotations.GenericGenerator;
 import org.hibernate.annotations.Parameter;
 
 @Entity
+@org.hibernate.annotations.DynamicUpdate
 @Table(name = "tenant")
 @Data
 @Builder

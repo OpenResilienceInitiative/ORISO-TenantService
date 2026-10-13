@@ -56,6 +56,7 @@ class TraegerAdminTenantIsolationIT {
 
   @Autowired private WebApplicationContext context;
   @Autowired private TenantRepository tenantRepository;
+  @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
   @MockitoBean private ApplicationSettingsService applicationSettingsService;
 
@@ -228,6 +229,55 @@ class TraegerAdminTenantIsolationIT {
     mvc.perform(get("/tenantadmin/" + OWN_TENANT).with(caller))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.active").value(true));
+  }
+
+  @Test
+  void staleMetadataRequest_Should_preserveSeparatelyCommittedPauseWhenActiveIsOmitted()
+      throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var json =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(readTenant(OWN_TENANT, platformAdmin()));
+    json.remove("active");
+    json.put("name", "Metadata after pause");
+    var payload = mapper.writeValueAsString(json);
+    var metadata =
+        new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+    var narrowStatus =
+        new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+    narrowStatus.setPropagationBehavior(
+        org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    metadata.executeWithoutResult(
+        transaction -> {
+          assertThat(tenantRepository.findById(OWN_TENANT).orElseThrow().getActive()).isTrue();
+          narrowStatus.executeWithoutResult(
+              other -> {
+                try {
+                  mvc.perform(
+                          put("/tenantadmin/" + OWN_TENANT + "/status")
+                              .with(traegerAdminOf(OWN_TENANT))
+                              .contentType(APPLICATION_JSON)
+                              .content("{\"active\":false}"))
+                      .andExpect(status().isOk());
+                } catch (Exception e) {
+                  throw new IllegalStateException(e);
+                }
+              });
+          try {
+            mvc.perform(
+                    put("/tenantadmin/" + OWN_TENANT)
+                        .with(platformAdmin())
+                        .contentType(APPLICATION_JSON)
+                        .content(payload))
+                .andExpect(status().isOk());
+          } catch (Exception e) {
+            throw new IllegalStateException(e);
+          }
+        });
+    mvc.perform(get("/tenantadmin/" + OWN_TENANT).with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.active").value(false))
+        .andExpect(jsonPath("$.name").value("Metadata after pause"));
   }
 
   @Test
