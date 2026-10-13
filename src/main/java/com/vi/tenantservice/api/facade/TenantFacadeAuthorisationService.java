@@ -149,13 +149,18 @@ public class TenantFacadeAuthorisationService {
         || Objects.equals(submitted.getActive(), existing.getActive())) {
       return;
     }
+    assertUserCanManageOperationalStatus(existing.getId());
+  }
+
+  void assertUserCanManageOperationalStatus(Long tenantId) {
     boolean tenantAdmin =
         authorisationService.hasRole("tenant-admin")
             || authorisationService.hasRole("single-tenant-admin");
     if (!tenantAdmin
         || isTechnicalUser()
-        || existing.getId() == 0L
-        || !tenantMatching(existing.getId(), authorisationService.findTenantIdInAccessToken())) {
+        || tenantId == null
+        || tenantId <= 0L
+        || !tenantMatching(tenantId, authorisationService.findTenantIdInAccessToken())) {
       throw new AccessDeniedException(
           "Only the matching Träger administrator may change operational status");
     }

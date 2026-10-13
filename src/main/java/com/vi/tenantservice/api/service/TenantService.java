@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.service;
 import static com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason.SUBDOMAIN_NOT_UNIQUE;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
@@ -102,6 +103,17 @@ public class TenantService {
   private boolean tenantWithSuchSubdomainAlreadyExists(
       TenantEntity tenantEntity, Long existingTenantId) {
     return existingTenantId != null && !existingTenantId.equals(tenantEntity.getId());
+  }
+
+  @Transactional
+  public TenantEntity updateOperationalStatus(Long id, boolean active) {
+    if (tenantRepository.updateOperationalStatus(id, active, LocalDateTime.now(ZoneOffset.UTC))
+        == 0) {
+      throw new TenantNotFoundException("Tenant not found: " + id);
+    }
+    return tenantRepository
+        .findById(id)
+        .orElseThrow(() -> new TenantNotFoundException("Tenant not found: " + id));
   }
 
   public TenantEntity update(TenantEntity tenantEntity) {

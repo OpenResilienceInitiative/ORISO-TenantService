@@ -36,6 +36,7 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantIdAllocationStatus;
+import com.vi.tenantservice.api.model.TenantOperationalStatusDTO;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
@@ -456,6 +457,12 @@ public class TenantServiceFacade {
       throw new TenantValidationException(
           HttpStatusExceptionReason.SUBDOMAIN_IN_REQUEST_BODY_NOT_EQUAL_TO_SUBDOMAIN_IN_URL);
     }
+  }
+
+  public TenantOperationalStatusDTO updateOperationalStatus(Long id, boolean active) {
+    tenantFacadeAuthorisationService.assertUserCanManageOperationalStatus(id);
+    var saved = tenantService.updateOperationalStatus(id, active);
+    return new TenantOperationalStatusDTO(saved.getId(), saved.getActive());
   }
 
   public MultilingualTenantDTO updateTenant(Long id, MultilingualTenantDTO tenantDTO) {

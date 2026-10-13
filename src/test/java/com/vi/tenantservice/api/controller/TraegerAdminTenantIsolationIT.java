@@ -323,6 +323,76 @@ class TraegerAdminTenantIsolationIT {
     mvc.perform(get("/tenant/public/paused-tenant")).andExpect(status().isNotFound());
   }
 
+  @Test
+  void operationalStatusCommand_Should_changeOnlyStatusAndPreserveTenantMetadata()
+      throws Exception {
+    var owner = traegerAdminOf(OWN_TENANT);
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var before =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(readTenant(OWN_TENANT, owner));
+    mvc.perform(
+            put("/tenantadmin/" + OWN_TENANT + "/status")
+                .with(owner)
+                .contentType(APPLICATION_JSON)
+                .content("{\"active\":false}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(OWN_TENANT))
+        .andExpect(jsonPath("$.active").value(false));
+    var after =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(readTenant(OWN_TENANT, owner));
+    assertThat(after.get("active").booleanValue()).isFalse();
+    before.remove(List.of("active", "updateDate"));
+    after.remove(List.of("active", "updateDate"));
+    assertThat(after).isEqualTo(before);
+    mvc.perform(get("/tenant/public/id/" + OWN_TENANT))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.active").value(false));
+  }
+
+  @Test
+  void operationalStatusCommand_Should_rejectUnscopedActorsWithoutChangingSavedStatus()
+      throws Exception {
+    for (var caller : List.of(platformAdmin(), traegerAdminOf(FOREIGN_TENANT))) {
+      mvc.perform(
+              put("/tenantadmin/" + OWN_TENANT + "/status")
+                  .with(caller)
+                  .contentType(APPLICATION_JSON)
+                  .content("{\"active\":false}"))
+          .andExpect(status().isForbidden());
+      mvc.perform(get("/tenant/public/id/" + OWN_TENANT))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.active").value(true));
+    }
+  }
+
+  @Test
+  void operationalStatusCommand_Should_requireBooleanAndPermitOwnTenantReactivation()
+      throws Exception {
+    var owner = traegerAdminOf(OWN_TENANT);
+    for (String invalid : List.of("{}", "{\"active\":null}")) {
+      mvc.perform(
+              put("/tenantadmin/" + OWN_TENANT + "/status")
+                  .with(owner)
+                  .contentType(APPLICATION_JSON)
+                  .content(invalid))
+          .andExpect(status().isBadRequest());
+    }
+    for (boolean active : List.of(false, true)) {
+      mvc.perform(
+              put("/tenantadmin/" + OWN_TENANT + "/status")
+                  .with(owner)
+                  .contentType(APPLICATION_JSON)
+                  .content("{\"active\":" + active + "}"))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.active").value(active));
+      mvc.perform(get("/tenantadmin/" + OWN_TENANT).with(owner))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.active").value(active));
+    }
+  }
+
   private String readTenant(long tenantId, RequestPostProcessor caller) throws Exception {
     return mvc.perform(get("/tenantadmin/" + tenantId).with(caller))
         .andExpect(status().isOk())
