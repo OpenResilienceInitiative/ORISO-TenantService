@@ -178,6 +178,35 @@ class TenantInputSanitizerTest {
   }
 
   @Test
+  void sanitize_Should_keepBlankAndNullBausteinValuesAsClearSignal() {
+    // given
+    MultilingualTenantDTO tenantDTO = new MultilingualTenantDTO();
+    tenantDTO.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    Map<String, String> closing = new java.util.HashMap<>();
+    closing.put("de", "");
+    closing.put("en", null);
+    closing.put("fr", "<p>x</p>");
+    tenantDTO.getContent().setErstantwortClosing(closing);
+    tenantDTO.getContent().setErstantwortResponseDeadlineDays(0);
+    lenient()
+        .when(inputSanitizer.sanitizeAllowingFormatting(anyString()))
+        .thenAnswer(i -> i.getArgument(0));
+    lenient()
+        .when(inputSanitizer.sanitizeAllowingFormattingAndLinks(anyString()))
+        .thenAnswer(i -> i.getArgument(0));
+
+    // when
+    MultilingualTenantDTO sanitized = tenantInputSanitizer.sanitize(tenantDTO);
+
+    // then
+    assertThat(sanitized.getContent().getErstantwortClosing())
+        .containsEntry("de", "")
+        .containsEntry("en", "")
+        .containsEntry("fr", "<p>x</p>");
+    assertThat(sanitized.getContent().getErstantwortResponseDeadlineDays()).isZero();
+  }
+
+  @Test
   void sanitize_Should_keepMetaKeysVerbatimAndSanitizeBausteinHtml() {
     // given
     String meta = "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-10-14T10:00:00Z\"}";
