@@ -86,7 +86,12 @@ class SystemEmailDeliveryControllerTest {
 
   @Configuration
   @EnableWebMvc
-  @Import({WebSecurityConfig.class, AuthorisationService.class, JwtAuthConverterProperties.class})
+  @Import({
+    WebSecurityConfig.class,
+    AuthorisationService.class,
+    JwtAuthConverterProperties.class,
+    com.vi.tenantservice.config.security.TaskServiceIdentity.class
+  })
   static class Config {
     @Bean
     SystemEmailDeliveryService delivery() {

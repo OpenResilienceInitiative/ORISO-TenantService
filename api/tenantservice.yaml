@@ -877,6 +877,12 @@ paths:
             type: integer
             format: int64
             minimum: 1
+        - name: reservationToken
+          in: query
+          required: false
+          description: Original reservation proof, required for invitation-reservations task callers.
+          schema:
+            type: string
       responses:
         204:
           description: NO CONTENT - reservation released
