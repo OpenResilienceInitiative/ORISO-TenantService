@@ -135,9 +135,15 @@ public class TenantInputSanitizer {
     }
   }
 
+  /** Null values become "" (the clear signal) instead of failing the whole save. */
   private Map<String, String> sanitizeBaustein(Map<String, String> translations) {
+    if (translations == null) {
+      return null;
+    }
+    var blankSafe = new java.util.LinkedHashMap<String, String>();
+    translations.forEach((key, value) -> blankSafe.put(key, value == null ? "" : value));
     return sanitizeAllTranslations(
-        translations,
+        blankSafe,
         inputSanitizer::sanitizeAllowingFormattingAndLinks,
         TranslationMetaUtil::isMetaKey);
   }

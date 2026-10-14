@@ -195,6 +195,9 @@ public class TenantConverter {
         .build();
   }
 
+  /** Explicit "no Antwortfrist" signal for erstantwortResponseDeadlineDays (valid range 0-30). */
+  private static final int ERSTANTWORT_DEADLINE_CLEAR = 0;
+
   public TenantEntity toEntity(TenantEntity targetEntity, MultilingualTenantDTO tenantDTO) {
     var sourceEntity = toEntity(tenantDTO);
     BeanUtils.copyProperties(
@@ -218,31 +221,54 @@ public class TenantConverter {
         "contentErstantwortClosing",
         "erstantwortResponseDeadlineDays");
     applyLegalNameAndContact(targetEntity, tenantDTO);
-    applyErstantwort(targetEntity, sourceEntity);
+    applyErstantwort(targetEntity, tenantDTO);
     return targetEntity;
   }
 
-  /** Absent keeps: a DTO without Erstantwort data (older client) must not wipe stored Bausteine. */
-  private void applyErstantwort(TenantEntity target, TenantEntity source) {
-    if (hasJson(source.getContentErstantwortGreeting())) {
-      target.setContentErstantwortGreeting(source.getContentErstantwortGreeting());
+  /**
+   * Absent keeps: a DTO without Erstantwort data (older client) must not wipe stored Bausteine.
+   * Clearing is explicit: a language whose value is blank is removed (with its {@code <lang>__meta}
+   * key unless a non-blank meta is sent), so {"de":""} clears German and an all-blank map stores
+   * "{}". An empty or null map keeps. Deadline 0 clears the Antwortfrist; null keeps.
+   */
+  private void applyErstantwort(TenantEntity target, MultilingualTenantDTO tenantDTO) {
+    var content = tenantDTO.getContent();
+    if (content == null) {
+      return;
     }
-    if (hasJson(source.getContentErstantwortWhoReadsAlong())) {
-      target.setContentErstantwortWhoReadsAlong(source.getContentErstantwortWhoReadsAlong());
+    target.setContentErstantwortGreeting(
+        applyBaustein(target.getContentErstantwortGreeting(), content.getErstantwortGreeting()));
+    target.setContentErstantwortWhoReadsAlong(
+        applyBaustein(
+            target.getContentErstantwortWhoReadsAlong(), content.getErstantwortWhoReadsAlong()));
+    target.setContentErstantwortEmergencyAddition(
+        applyBaustein(
+            target.getContentErstantwortEmergencyAddition(),
+            content.getErstantwortEmergencyAddition()));
+    target.setContentErstantwortFreeNotice(
+        applyBaustein(
+            target.getContentErstantwortFreeNotice(), content.getErstantwortFreeNotice()));
+    target.setContentErstantwortClosing(
+        applyBaustein(target.getContentErstantwortClosing(), content.getErstantwortClosing()));
+    var deadline = content.getErstantwortResponseDeadlineDays();
+    if (deadline != null) {
+      target.setErstantwortResponseDeadlineDays(
+          deadline == ERSTANTWORT_DEADLINE_CLEAR ? null : deadline);
     }
-    if (hasJson(source.getContentErstantwortEmergencyAddition())) {
-      target.setContentErstantwortEmergencyAddition(
-          source.getContentErstantwortEmergencyAddition());
+  }
+
+  private String applyBaustein(String stored, Map<String, String> incoming) {
+    if (incoming == null || incoming.isEmpty()) {
+      return stored;
     }
-    if (hasJson(source.getContentErstantwortFreeNotice())) {
-      target.setContentErstantwortFreeNotice(source.getContentErstantwortFreeNotice());
-    }
-    if (hasJson(source.getContentErstantwortClosing())) {
-      target.setContentErstantwortClosing(source.getContentErstantwortClosing());
-    }
-    if (source.getErstantwortResponseDeadlineDays() != null) {
-      target.setErstantwortResponseDeadlineDays(source.getErstantwortResponseDeadlineDays());
-    }
+    var kept = new java.util.LinkedHashMap<String, String>();
+    incoming.forEach(
+        (key, value) -> {
+          if (key != null && value != null && !value.isBlank()) {
+            kept.put(key, value);
+          }
+        });
+    return convertToJson(kept);
   }
 
   private static boolean hasJson(String json) {
