@@ -740,6 +740,56 @@
                 <activeSpringProfile>prod</activeSpringProfile>
             </properties>
         </profile>
+        <profile>
+            <id>native-permission-matrix</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-enforcer-plugin</artifactId>
+                        <version>3.6.3</version>
+                        <executions>
+                            <execution>
+                                <id>require-native-task-token-fixture</id>
+                                <phase>validate</phase>
+                                <goals>
+                                    <goal>enforce</goal>
+                                </goals>
+                                <configuration>
+                                    <rules>
+                                        <requireEnvironmentVariable>
+                                            <variableName>ORISO_TASK_TOKEN_FIXTURE</variableName>
+                                            <regex>.+</regex>
+                                            <message>The native permission matrix requires a disposable task token fixture.</message>
+                                            <regexMessage>ORISO_TASK_TOKEN_FIXTURE must name the disposable fixture file.</regexMessage>
+                                        </requireEnvironmentVariable>
+                                        <requireFilesExist>
+                                            <files>
+                                                <file>${env.ORISO_TASK_TOKEN_FIXTURE}</file>
+                                            </files>
+                                        </requireFilesExist>
+                                    </rules>
+                                    <fail>true</fail>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <!-- Spring Boot manages the version and integration-test/verify goals. -->
+                        <configuration>
+                            <skipTests>false</skipTests>
+                            <skipITs>false</skipITs>
+                            <failIfNoTests>true</failIfNoTests>
+                            <includes>
+                                <include>**/RealTaskTokenAuthorizationIT.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
     </profiles>
 
 </project>
