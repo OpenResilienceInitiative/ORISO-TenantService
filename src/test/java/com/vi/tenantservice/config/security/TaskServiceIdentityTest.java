@@ -12,6 +12,188 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 class TaskServiceIdentityTest {
+  @Test
+  void differentActorsCannotShareClientOrSubjectEvenForOptionalBindings() {
+    assertThatThrownBy(
+            () ->
+                new TaskServiceIdentity(
+                    groupedBindings("CONFIG_WIZARD")
+                        .withProperty("IDENTITY_MAIL_CLIENT_ID", "backend-setup")
+                        .withProperty("IDENTITY_MAIL_SERVICE_SUBJECT", "mail-subject")))
+        .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(
+            () ->
+                new TaskServiceIdentity(
+                    groupedBindings("CONFIG_WIZARD")
+                        .withProperty("IDENTITY_ACCOUNT_CREATE_CLIENT_ID", "backend-account-create")
+                        .withProperty("IDENTITY_ACCOUNT_CREATE_SERVICE_SUBJECT", "setup-subject")))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
+  void groupedModeRequiresActorBindingsAndCannotFallBackToOldTaskKeys() {
+    assertThatThrownBy(
+            () ->
+                new TaskServiceIdentity(
+                    bindings()
+                        .withProperty("TASK_IDENTITY_MODEL", "FIVE_ACTORS")
+                        .withProperty("TASK_IDENTITY_REQUIRED_TASKS", "CONFIG_WIZARD")))
+        .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(
+            () ->
+                new TaskServiceIdentity(
+                    groupedBindings("CONFIG_WIZARD")
+                        .withProperty("IDENTITY_RUNTIME_CLIENT_ID", "backend-runtime")))
+        .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(() -> new TaskServiceIdentity(groupedBindings("UNKNOWN_PURPOSE")))
+        .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(
+            () ->
+                new TaskServiceIdentity(
+                    groupedBindings("CONFIG_WIZARD").withProperty("TASK_IDENTITY_AUDIENCE", "")))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
+  void completeGroupedSetupCannotAddHumanDefaultOrNativeAdministratorGrants() {
+    var identity = new TaskServiceIdentity(groupedBindings("CONFIG_WIZARD"));
+    for (String grant :
+        List.of(
+            "technical",
+            "tenant-admin",
+            "default-roles-online-beratung",
+            "manage-users",
+            "manage-realm",
+            "view-users",
+            "query-users",
+            "realm-admin")) {
+      assertThat(
+              identity.allows(
+                  groupedCaller(
+                      List.of(
+                          "config-wizard", "invitation-reservations", "consultant-import", grant)),
+                  "CONFIG_WIZARD"))
+          .isFalse();
+    }
+  }
+
+  @Test
+  void configuredAccountActorWithHumanGrantsIsStillClassifiedAsMachineToken() {
+    var identity =
+        new TaskServiceIdentity(
+            groupedBindings("CONFIG_WIZARD")
+                .withProperty("IDENTITY_ACCOUNT_ADMIN_CLIENT_ID", "backend-account-admin")
+                .withProperty("IDENTITY_ACCOUNT_ADMIN_SERVICE_SUBJECT", "account-admin-subject"));
+    var jwt =
+        Jwt.withTokenValue("fixture")
+            .header("alg", "none")
+            .subject("account-admin-subject")
+            .claim("azp", "backend-account-admin")
+            .audience(List.of("receiver"))
+            .expiresAt(Instant.now().plusSeconds(60))
+            .claim("realm_access", Map.of("roles", List.of("tenant-admin")))
+            .build();
+
+    assertThat(identity.isTaskToken(jwt)).isTrue();
+    assertThat(identity.allows(new JwtAuthenticationToken(jwt, List.of()), "CONFIG_WIZARD"))
+        .isFalse();
+  }
+
+  @Test
+  void groupedActorCannotInheritDefaultClientRoles() {
+    var identity = new TaskServiceIdentity(groupedBindings("CONFIG_WIZARD"));
+    var actor =
+        groupedCaller(List.of("config-wizard", "invitation-reservations", "consultant-import"));
+    var jwt =
+        Jwt.withTokenValue("fixture")
+            .headers(headers -> headers.putAll(actor.getToken().getHeaders()))
+            .claims(claims -> claims.putAll(actor.getToken().getClaims()))
+            .claim("resource_access", Map.of("account", Map.of("roles", List.of("manage-account"))))
+            .build();
+
+    assertThat(identity.allows(new JwtAuthenticationToken(jwt, List.of()), "CONFIG_WIZARD"))
+        .isFalse();
+  }
+
+  @Test
+  void groupedSetupRequiresItsCompleteRoleUnion() {
+    var identity = new TaskServiceIdentity(groupedBindings("CONFIG_WIZARD"));
+    var incomplete = groupedCaller(List.of("config-wizard", "invitation-reservations"));
+
+    assertThat(identity.allows(incomplete, "CONFIG_WIZARD")).isFalse();
+  }
+
+  @Test
+  void misspelledOrBlankIdentityModelCannotFallBackToLegacyBindings() {
+    for (String model : List.of("", " FIVE_ACTORS", "five_actors", "FOUR_ACTORS")) {
+      assertThatThrownBy(
+              () -> new TaskServiceIdentity(bindings().withProperty("TASK_IDENTITY_MODEL", model)))
+          .isInstanceOf(IllegalStateException.class);
+    }
+  }
+
+  @Test
+  void groupedActorCannotActivateAnUndeclaredReceiverPurpose() {
+    var identity = new TaskServiceIdentity(groupedBindings("CONFIG_WIZARD"));
+    var caller =
+        groupedCaller(List.of("config-wizard", "invitation-reservations", "consultant-import"));
+
+    assertThat(identity.allows(caller, "CONFIG_WIZARD")).isTrue();
+    assertThat(identity.allows(caller, "INVITE_RESERVATIONS")).isFalse();
+  }
+
+  private MockEnvironment groupedBindings(String purposes) {
+    return new MockEnvironment()
+        .withProperty("TASK_IDENTITY_MODEL", "FIVE_ACTORS")
+        .withProperty("TASK_IDENTITY_REQUIRED_TASKS", purposes)
+        .withProperty("TASK_IDENTITY_AUDIENCE", "receiver")
+        .withProperty("IDENTITY_SETUP_CLIENT_ID", "backend-setup")
+        .withProperty("IDENTITY_SETUP_SERVICE_SUBJECT", "setup-subject");
+  }
+
+  private JwtAuthenticationToken groupedCaller(List<String> roles) {
+    return new JwtAuthenticationToken(
+        Jwt.withTokenValue("fixture")
+            .header("alg", "none")
+            .subject("setup-subject")
+            .claim("azp", "backend-setup")
+            .audience(List.of("receiver"))
+            .expiresAt(Instant.now().plusSeconds(60))
+            .claim("realm_access", Map.of("roles", roles))
+            .build(),
+        List.of());
+  }
+
+  @Test
+  void groupedSetupUsesOneBindingForDeclaredWizardAndReservationPurposes() {
+    var identity =
+        new TaskServiceIdentity(
+            new MockEnvironment()
+                .withProperty("TASK_IDENTITY_MODEL", "FIVE_ACTORS")
+                .withProperty("TASK_IDENTITY_REQUIRED_TASKS", "CONFIG_WIZARD,INVITE_RESERVATIONS")
+                .withProperty("TASK_IDENTITY_AUDIENCE", "receiver")
+                .withProperty("IDENTITY_SETUP_CLIENT_ID", "backend-setup")
+                .withProperty("IDENTITY_SETUP_SERVICE_SUBJECT", "setup-subject"));
+    var actor =
+        Jwt.withTokenValue("fixture")
+            .header("alg", "none")
+            .subject("setup-subject")
+            .claim("azp", "backend-setup")
+            .audience(List.of("receiver"))
+            .expiresAt(Instant.now().plusSeconds(60))
+            .claim(
+                "realm_access",
+                Map.of(
+                    "roles",
+                    List.of("config-wizard", "invitation-reservations", "consultant-import")))
+            .build();
+    var caller = new JwtAuthenticationToken(actor, List.of());
+
+    assertThat(identity.allows(caller, "CONFIG_WIZARD")).isTrue();
+    assertThat(identity.allows(caller, "INVITE_RESERVATIONS")).isTrue();
+    assertThat(identity.allows(caller, "RUNTIME_POLICY")).isFalse();
+  }
+
   private MockEnvironment bindings() {
     return new MockEnvironment()
         .withProperty("TASK_IDENTITY_AUDIENCE", "receiver")
