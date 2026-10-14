@@ -776,6 +776,27 @@
                     </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <skipTests>true</skipTests>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>default-test</id>
+                                <configuration><skipTests>true</skipTests></configuration>
+                            </execution>
+                            <execution>
+                                <id>unit-tests</id>
+                                <configuration><skipTests>true</skipTests></configuration>
+                            </execution>
+                            <execution>
+                                <id>integration-tests</id>
+                                <configuration><skipTests>true</skipTests></configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-failsafe-plugin</artifactId>
                         <!-- Spring Boot manages the version and integration-test/verify goals. -->
                         <configuration>
