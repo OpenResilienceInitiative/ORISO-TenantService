@@ -78,4 +78,55 @@ class PermissionPolicyOpenApiContractTest {
     assertThat(durationValue).doesNotContainKey("maximum");
     assertThat(paths).containsKey("/tenantadmin/{id}/permission-policies");
   }
+
+  /**
+   * #319 - consumer contract for the internal group chat recipient scope. UserService (scope
+   * check), Admin (setting UI) and Frontend (picker) build against exactly these names and values.
+   */
+  @Test
+  @SuppressWarnings("unchecked")
+  void openApi_shouldExposeTheInternalGroupChatRecipientScopeContract() throws IOException {
+    Map<String, Object> specification =
+        new Yaml().load(Files.readString(Path.of("api/tenantservice.yaml")));
+    var schemas =
+        (Map<String, Object>)
+            ((Map<String, Object>) specification.get("components")).get("schemas");
+
+    var scope = (Map<String, Object>) schemas.get("InternalGroupChatRecipientScope");
+    assertThat((List<String>) scope.get("enum")).containsExactly("PLATFORM", "TENANT", "AGENCY");
+
+    var scopePolicy = (Map<String, Object>) schemas.get("RecipientScopePermissionPolicy");
+    assertThat((List<String>) scopePolicy.get("required")).containsExactly("value", "mode");
+    var scopePolicyProperties = (Map<String, Object>) scopePolicy.get("properties");
+    assertThat((Map<String, Object>) scopePolicyProperties.get("value"))
+        .containsEntry("$ref", "#/components/schemas/InternalGroupChatRecipientScope");
+    assertThat((Map<String, Object>) scopePolicyProperties.get("mode"))
+        .containsEntry("$ref", "#/components/schemas/PermissionPolicyMode");
+    assertThat((Map<String, Object>) scopePolicyProperties.get("inherited"))
+        .containsEntry("readOnly", true);
+
+    var group = (Map<String, Object>) schemas.get("InternalGroupChatPolicies");
+    var groupProperties = (Map<String, Object>) group.get("properties");
+    assertThat((Map<String, Object>) groupProperties.get("recipientScope"))
+        .containsEntry("$ref", "#/components/schemas/RecipientScopePermissionPolicy");
+
+    // platform preset, Traeger-resolved read/write and the public payload the Frontend reads
+    for (String carrier :
+        List.of("TenantAdminControls", "TenantPermissionPolicies", "RestrictedTenantDTO")) {
+      var properties =
+          (Map<String, Object>) ((Map<String, Object>) schemas.get(carrier)).get("properties");
+      assertThat(refOf((Map<String, Object>) properties.get("internalGroupChat")))
+          .as(carrier + ".internalGroupChat")
+          .containsEntry("$ref", "#/components/schemas/InternalGroupChatPolicies");
+    }
+  }
+
+  /** The property's own {@code $ref}, or the first entry of its {@code allOf} wrapper. */
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> refOf(Map<String, Object> property) {
+    if (property.containsKey("allOf")) {
+      return ((List<Map<String, Object>>) property.get("allOf")).get(0);
+    }
+    return property;
+  }
 }

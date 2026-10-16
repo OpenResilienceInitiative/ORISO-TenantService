@@ -4,19 +4,24 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
 import com.vi.tenantservice.api.model.CaseHandoverPolicies;
 import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
 import com.vi.tenantservice.api.model.ConsentPermissionPolicy;
 import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
+import com.vi.tenantservice.api.model.InternalGroupChatPolicies;
+import com.vi.tenantservice.api.model.InternalGroupChatRecipientScope;
 import com.vi.tenantservice.api.model.MultilingualTextPermissionPolicy;
 import com.vi.tenantservice.api.model.PermissionPolicyMode;
+import com.vi.tenantservice.api.model.RecipientScopePermissionPolicy;
 import com.vi.tenantservice.api.model.StringListPermissionPolicy;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantPermissionPolicyEntity;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
+import com.vi.tenantservice.api.policy.InternalGroupChatPolicyRules;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
 import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PermissionPolicyResolver;
@@ -110,6 +115,20 @@ public class TenantPermissionPolicyService {
       Long tenantId,
       Map<String, PolicyValue<Boolean>> overrides,
       CaseHandoverPolicies caseHandoverOverrides) {
+    saveOverrides(tenantId, overrides, caseHandoverOverrides, null);
+  }
+
+  /**
+   * Saves the Traeger's overrides. A {@code null} {@code caseHandoverOverrides} or {@code
+   * internalGroupChatOverrides} leaves what is stored untouched (#319); a platform requirement
+   * (ENFORCED) rejects any change and discards an unchanged echo.
+   */
+  @Transactional
+  public void saveOverrides(
+      Long tenantId,
+      Map<String, PolicyValue<Boolean>> overrides,
+      CaseHandoverPolicies caseHandoverOverrides,
+      InternalGroupChatPolicies internalGroupChatOverrides) {
     overrides.keySet().forEach(this::assertKnownFeature);
     CaseHandoverPolicyRules.validate(caseHandoverOverrides);
     TenantAdminControls platform = platformControls.getControls();
@@ -121,12 +140,18 @@ public class TenantPermissionPolicyService {
     }
     CaseHandoverPolicies writableCaseHandoverOverrides =
         sanitizeCaseHandoverOverrides(parentCaseHandover, caseHandoverOverrides);
+    InternalGroupChatPolicies writableInternalGroupChat =
+        sanitizeInternalGroupChatOverrides(
+            platformInternalGroupChat(platform), internalGroupChatOverrides);
     TenantPermissionPolicyEntity entity =
         repository.findByTenantId(tenantId).orElseGet(TenantPermissionPolicyEntity::new);
     entity.setTenantId(tenantId);
     entity.setPolicies(serialize(writableOverrides));
     if (caseHandoverOverrides != null) {
       entity.setCaseHandoverPolicies(serializeCaseHandover(writableCaseHandoverOverrides));
+    }
+    if (internalGroupChatOverrides != null) {
+      entity.setInternalGroupChatPolicies(serializeInternalGroupChat(writableInternalGroupChat));
     }
     entity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));
     try {
@@ -155,6 +180,100 @@ public class TenantPermissionPolicyService {
       resolved.put(entry.getKey(), resolveReason(entry.getValue(), localReason));
     }
     return new CaseHandoverPolicies(Map.copyOf(resolved));
+  }
+
+  /** The Traeger's internal group chat policies: platform preset, Traeger override on top. */
+  public InternalGroupChatPolicies getResolvedInternalGroupChatPolicies(Long tenantId) {
+    InternalGroupChatPolicies parent = platformInternalGroupChat(platformControls.getControls());
+    InternalGroupChatPolicies local =
+        repository.findByTenantId(tenantId).map(this::deserializeInternalGroupChat).orElse(null);
+    return resolveInternalGroupChat(parent, local);
+  }
+
+  public Map<Long, InternalGroupChatPolicies> getResolvedInternalGroupChatPolicies(
+      Set<Long> tenantIds) {
+    if (tenantIds.isEmpty()) {
+      return Map.of();
+    }
+    InternalGroupChatPolicies parent = platformInternalGroupChat(platformControls.getControls());
+    Map<Long, InternalGroupChatPolicies> localByTenant = new LinkedHashMap<>();
+    repository
+        .findByTenantIdIn(tenantIds)
+        .forEach(
+            entity ->
+                localByTenant.put(entity.getTenantId(), deserializeInternalGroupChat(entity)));
+    Map<Long, InternalGroupChatPolicies> resolvedByTenant = new LinkedHashMap<>();
+    tenantIds.forEach(
+        tenantId ->
+            resolvedByTenant.put(
+                tenantId, resolveInternalGroupChat(parent, localByTenant.get(tenantId))));
+    return Map.copyOf(resolvedByTenant);
+  }
+
+  private InternalGroupChatPolicies platformInternalGroupChat(TenantAdminControls platform) {
+    return InternalGroupChatPolicyRules.normalize(platform.getInternalGroupChat());
+  }
+
+  private InternalGroupChatPolicies resolveInternalGroupChat(
+      InternalGroupChatPolicies parent, InternalGroupChatPolicies local) {
+    ResolvedPolicyValue<InternalGroupChatRecipientScope> scope =
+        PermissionPolicyResolver.resolveWithOrigin(
+            toDomain(parent.getRecipientScope()),
+            local == null ? null : toDomain(local.getRecipientScope()));
+    return new InternalGroupChatPolicies()
+        .recipientScope(
+            new RecipientScopePermissionPolicy(
+                    scope.value(), PermissionPolicyMode.valueOf(scope.mode().name()))
+                .inherited(scope.inherited()));
+  }
+
+  private InternalGroupChatPolicies sanitizeInternalGroupChatOverrides(
+      InternalGroupChatPolicies parent, InternalGroupChatPolicies local) {
+    if (local == null) {
+      return null;
+    }
+    PolicyValue<InternalGroupChatRecipientScope> parentScope = toDomain(parent.getRecipientScope());
+    PolicyValue<InternalGroupChatRecipientScope> localScope = toDomain(local.getRecipientScope());
+    if (localScope != null
+        && parentScope.mode() == com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED) {
+      if (!Objects.equals(parentScope, localScope)) {
+        throw new TenantBadRequestException(
+            "Cannot override enforced policy: internalGroupChat.recipientScope");
+      }
+      return new InternalGroupChatPolicies();
+    }
+    return new InternalGroupChatPolicies()
+        .recipientScope(
+            local.getRecipientScope() == null
+                ? null
+                : new RecipientScopePermissionPolicy(
+                    local.getRecipientScope().getValue(), local.getRecipientScope().getMode()));
+  }
+
+  private InternalGroupChatPolicies deserializeInternalGroupChat(
+      TenantPermissionPolicyEntity entity) {
+    String json = entity.getInternalGroupChatPolicies();
+    if (json == null || json.isBlank()) {
+      return null;
+    }
+    try {
+      return objectMapper.readValue(json, InternalGroupChatPolicies.class);
+    } catch (JsonProcessingException exception) {
+      throw mappingFailure("deserialize internal group chat policies", exception);
+    }
+  }
+
+  private String serializeInternalGroupChat(InternalGroupChatPolicies policies) {
+    try {
+      return objectMapper.writeValueAsString(policies);
+    } catch (JsonProcessingException exception) {
+      throw mappingFailure("serialize internal group chat policies", exception);
+    }
+  }
+
+  private PolicyValue<InternalGroupChatRecipientScope> toDomain(
+      RecipientScopePermissionPolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
   }
 
   private Map<String, PolicyValue<Boolean>> toDomain(
