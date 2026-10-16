@@ -959,4 +959,50 @@ class TenantConverterTest {
     assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(5);
     assertThat(result.getContentErstantwortGreeting()).isEqualTo("{\"de\":\"hi\"}");
   }
+
+  @Test
+  void toEntity_withExistingEntity_Should_dropNonBlankMetaOfClearedLanguage() {
+    // given
+    String meta = "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-10-14T10:00:00Z\"}";
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"a\",\"en\":\"b\",\"en__meta\":\"old\"}");
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent()
+        .setErstantwortClosing(Map.of("de", "a", "en", "", "en__meta", meta, "de__meta", meta));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing())
+        .doesNotContain("en__meta")
+        .doesNotContain("\"en\"")
+        .contains("de__meta");
+  }
+
+  @Test
+  void toEntity_forCreate_Should_storeNullDeadlineWhenZero() {
+    // given
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortResponseDeadlineDays(0);
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(dto);
+
+    // then
+    assertThat(result.getErstantwortResponseDeadlineDays()).isNull();
+  }
+
+  @Test
+  void toEntity_forCreate_Should_keepPositiveDeadline() {
+    // given
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortResponseDeadlineDays(4);
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(dto);
+
+    // then
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(4);
+  }
 }

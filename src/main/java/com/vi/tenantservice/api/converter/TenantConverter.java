@@ -43,6 +43,7 @@ import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
 import com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens;
 import com.vi.tenantservice.api.util.JsonConverter;
+import com.vi.tenantservice.api.util.TranslationMetaUtil;
 import freemarker.template.TemplateException;
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -227,9 +228,10 @@ public class TenantConverter {
 
   /**
    * Absent keeps: a DTO without Erstantwort data (older client) must not wipe stored Bausteine.
-   * Clearing is explicit: a language whose value is blank is removed (with its {@code <lang>__meta}
-   * key unless a non-blank meta is sent), so {"de":""} clears German and an all-blank map stores
-   * "{}". An empty or null map keeps. Deadline 0 clears the Antwortfrist; null keeps.
+   * Clearing is explicit: a language whose value is blank is removed together with its {@code
+   * <lang>__meta} key (meta survives only for retained languages), so {"de":""} clears German and
+   * an all-blank map stores "{}". An empty or null map keeps. Deadline 0 clears the Antwortfrist;
+   * null keeps.
    */
   private void applyErstantwort(TenantEntity target, MultilingualTenantDTO tenantDTO) {
     var content = tenantDTO.getContent();
@@ -252,9 +254,13 @@ public class TenantConverter {
         applyBaustein(target.getContentErstantwortClosing(), content.getErstantwortClosing()));
     var deadline = content.getErstantwortResponseDeadlineDays();
     if (deadline != null) {
-      target.setErstantwortResponseDeadlineDays(
-          deadline == ERSTANTWORT_DEADLINE_CLEAR ? null : deadline);
+      target.setErstantwortResponseDeadlineDays(normalizeDeadline(deadline));
     }
+  }
+
+  /** 0 (or below) is the clear signal and is stored as null; null stays null. */
+  private static Integer normalizeDeadline(Integer deadline) {
+    return deadline == null || deadline <= ERSTANTWORT_DEADLINE_CLEAR ? null : deadline;
   }
 
   private String applyBaustein(String stored, Map<String, String> incoming) {
@@ -264,7 +270,21 @@ public class TenantConverter {
     var kept = new java.util.LinkedHashMap<String, String>();
     incoming.forEach(
         (key, value) -> {
-          if (key != null && value != null && !value.isBlank()) {
+          if (key != null
+              && !TranslationMetaUtil.isMetaKey(key)
+              && value != null
+              && !value.isBlank()) {
+            kept.put(key, value);
+          }
+        });
+    // Meta is kept only for retained languages: an orphan meta of a cleared language is dropped.
+    incoming.forEach(
+        (key, value) -> {
+          if (key != null
+              && TranslationMetaUtil.isMetaKey(key)
+              && value != null
+              && !value.isBlank()
+              && kept.containsKey(TranslationMetaUtil.languageOf(key))) {
             kept.put(key, value);
           }
         });
@@ -369,7 +389,7 @@ public class TenantConverter {
               convertToJson(tenantDTO.getContent().getErstantwortFreeNotice()))
           .contentErstantwortClosing(convertToJson(tenantDTO.getContent().getErstantwortClosing()))
           .erstantwortResponseDeadlineDays(
-              tenantDTO.getContent().getErstantwortResponseDeadlineDays());
+              normalizeDeadline(tenantDTO.getContent().getErstantwortResponseDeadlineDays()));
     }
   }
 

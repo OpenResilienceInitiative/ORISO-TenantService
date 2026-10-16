@@ -266,4 +266,18 @@ class TenantInputSanitizerTest {
     assertThat(tenantDTO.getLicensing().getAllowedNumberOfUsers())
         .isEqualTo(sanitized.getLicensing().getAllowedNumberOfUsers());
   }
+
+  @Test
+  void sanitize_Should_preserveNullDeadlineDistinctFromZero() {
+    // given
+    MultilingualTenantDTO tenantDTO = new MultilingualTenantDTO();
+    tenantDTO.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    tenantDTO.getContent().setErstantwortResponseDeadlineDays(null);
+
+    // when
+    MultilingualTenantDTO sanitized = tenantInputSanitizer.sanitize(tenantDTO);
+
+    // then
+    assertThat(sanitized.getContent().getErstantwortResponseDeadlineDays()).isNull();
+  }
 }
