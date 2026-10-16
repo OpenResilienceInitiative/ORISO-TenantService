@@ -4,6 +4,7 @@ import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.TenantDataProtectionOfficerDTO;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.util.TranslationMetaUtil;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -119,9 +120,50 @@ public class TenantInputSanitizer {
               sanitizeAllTranslations(
                   content.getTermsAndConditions(),
                   inputSanitizer::sanitizeAllowingFormattingAndLinks));
+      var out = output.getContent();
+      // Erstantwort Bausteine: same HTML policy as the legal texts. `<lang>__meta` keys are strict
+      // JSON (machine-translation provenance) and must survive verbatim.
+      out.setErstantwortGreeting(sanitizeBaustein(content.getErstantwortGreeting()));
+      out.setErstantwortWhoReadsAlong(sanitizeBaustein(content.getErstantwortWhoReadsAlong()));
+      out.setErstantwortEmergencyAddition(
+          sanitizeBaustein(content.getErstantwortEmergencyAddition()));
+      out.setErstantwortFreeNotice(sanitizeBaustein(content.getErstantwortFreeNotice()));
+      out.setErstantwortClosing(sanitizeBaustein(content.getErstantwortClosing()));
+      out.setErstantwortResponseDeadlineDays(content.getErstantwortResponseDeadlineDays());
       output.getContent().setConfirmPrivacy(content.getConfirmPrivacy());
       output.getContent().setConfirmTermsAndConditions(content.getConfirmTermsAndConditions());
     }
+  }
+
+  /** Null values become "" (the clear signal) instead of failing the whole save. */
+  private Map<String, String> sanitizeBaustein(Map<String, String> translations) {
+    if (translations == null) {
+      return null;
+    }
+    var blankSafe = new java.util.LinkedHashMap<String, String>();
+    translations.forEach((key, value) -> blankSafe.put(key, value == null ? "" : value));
+    return sanitizeAllTranslations(
+        blankSafe,
+        inputSanitizer::sanitizeAllowingFormattingAndLinks,
+        TranslationMetaUtil::isMetaKey);
+  }
+
+  private Map<String, String> sanitizeAllTranslations(
+      Map<String, String> translations,
+      Function<String, String> sanitizeFuntion,
+      java.util.function.Predicate<String> keepVerbatim) {
+    if (translations != null) {
+      return translations.entrySet().stream()
+          .filter(entry -> entry.getKey() != null)
+          .collect(
+              Collectors.toMap(
+                  Map.Entry::getKey,
+                  e ->
+                      keepVerbatim.test(e.getKey())
+                          ? e.getValue()
+                          : sanitizeFuntion.apply(e.getValue())));
+    }
+    return translations;
   }
 
   private Map<String, String> sanitizeAllTranslations(

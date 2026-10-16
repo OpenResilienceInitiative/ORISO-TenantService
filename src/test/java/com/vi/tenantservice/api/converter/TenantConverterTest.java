@@ -819,4 +819,190 @@ class TenantConverterTest {
     var stored = TenantEntity.builder().dataProtectionOfficer("{not json").build();
     assertThat(tenantConverter.toMultilingualDTO(stored).getDataProtectionOfficer()).isNull();
   }
+
+  @Test
+  void toEntity_withExistingEntity_Should_keepErstantwortWhenDtoHasNone() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"<p>x</p>\"}");
+    existing.setErstantwortResponseDeadlineDays(5);
+    MultilingualTenantDTO dto = new MultilingualTenantDTO();
+    dto.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{\"de\":\"<p>x</p>\"}");
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(5);
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_replaceErstantwortWhenDtoHasValues() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"old\"}");
+    existing.setErstantwortResponseDeadlineDays(5);
+    MultilingualTenantDTO dto = new MultilingualTenantDTO();
+    dto.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    dto.getContent().setErstantwortClosing(java.util.Map.of("de", "new"));
+    dto.getContent().setErstantwortResponseDeadlineDays(7);
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{\"de\":\"new\"}");
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(7);
+  }
+
+  private MultilingualTenantDTO dtoWithContent() {
+    MultilingualTenantDTO dto = new MultilingualTenantDTO();
+    dto.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    return dto;
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_removeOnlyTheLanguageWithBlankValue() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"a\",\"en\":\"b\"}");
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortClosing(Map.of("de", "", "en", "b"));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{\"en\":\"b\"}");
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_storeEmptyObjectWhenEveryLanguageIsBlank() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"a\",\"en\":\"b\"}");
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortClosing(Map.of("de", "", "en", "  "));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{}");
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_keepStoredTextWhenMapIsEmpty() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"a\"}");
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortClosing(Map.of());
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{\"de\":\"a\"}");
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_dropMetaOfClearedLanguageButKeepNewMeta() {
+    // given
+    String meta = "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-10-14T10:00:00Z\"}";
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"a\",\"en\":\"b\",\"en__meta\":\"old\"}");
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent()
+        .setErstantwortClosing(
+            Map.of("de", "a", "en", "", "en__meta", "", "fr", "c", "fr__meta", meta));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing())
+        .doesNotContain("en__meta")
+        .doesNotContain("\"en\"")
+        .contains("fr__meta");
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_clearDeadlineWhenZero() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setErstantwortResponseDeadlineDays(5);
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortResponseDeadlineDays(0);
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getErstantwortResponseDeadlineDays()).isNull();
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_keepStoredDeadlineWhenDtoDeadlineIsNull() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setErstantwortResponseDeadlineDays(5);
+    MultilingualTenantDTO dto = new MultilingualTenantDTO();
+    dto.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    dto.getContent().setErstantwortGreeting(java.util.Map.of("de", "hi"));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(5);
+    assertThat(result.getContentErstantwortGreeting()).isEqualTo("{\"de\":\"hi\"}");
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_dropNonBlankMetaOfClearedLanguage() {
+    // given
+    String meta = "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-10-14T10:00:00Z\"}";
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"a\",\"en\":\"b\",\"en__meta\":\"old\"}");
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent()
+        .setErstantwortClosing(Map.of("de", "a", "en", "", "en__meta", meta, "de__meta", meta));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing())
+        .doesNotContain("en__meta")
+        .doesNotContain("\"en\"")
+        .contains("de__meta");
+  }
+
+  @Test
+  void toEntity_forCreate_Should_storeNullDeadlineWhenZero() {
+    // given
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortResponseDeadlineDays(0);
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(dto);
+
+    // then
+    assertThat(result.getErstantwortResponseDeadlineDays()).isNull();
+  }
+
+  @Test
+  void toEntity_forCreate_Should_keepPositiveDeadline() {
+    // given
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortResponseDeadlineDays(4);
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(dto);
+
+    // then
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(4);
+  }
 }
