@@ -13,6 +13,7 @@ import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.Authority;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
+import com.vi.tenantservice.api.model.ClosingAnimation;
 import com.vi.tenantservice.api.model.Licensing;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
@@ -32,6 +33,8 @@ import com.vi.tenantservice.config.security.AuthorisationService;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -512,6 +515,82 @@ class TenantFacadeAuthorisationServiceTest {
     givenAppearanceToggle(false);
 
     // when
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        unchanged, existing);
+
+    // then no exception
+  }
+
+  private TenantEntity tenantWithClosingAnimations(String desktop, String mobile) {
+    return TenantEntity.builder()
+        .id(ID)
+        .settings(JsonConverter.convertToJson(new TenantSettings()))
+        .themingClosingAnimationDesktop(desktop)
+        .themingClosingAnimationMobile(mobile)
+        .build();
+  }
+
+  private static MultilingualTenantDTO submittedClosingAnimations(String desktop, String mobile) {
+    return new MultilingualTenantDTO()
+        .theming(
+            new Theming()
+                .closingAnimationDesktop(
+                    desktop == null ? null : ClosingAnimation.fromValue(desktop))
+                .closingAnimationMobile(
+                    mobile == null ? null : ClosingAnimation.fromValue(mobile)));
+  }
+
+  /**
+   * The closing animation is part of the branding, so a Träger admin whose appearance toggle is off
+   * must not be able to change it. Either side counts, adding or clearing a value counts, and so
+   * does swapping the two values between desktop and mobile.
+   */
+  @ParameterizedTest(name = "stored {0}/{1}, submitted {2}/{3}")
+  @CsvSource(
+      value = {
+        "CURTAIN,SLIDE_REVEAL,CIRCLE_ZOOM,SLIDE_REVEAL",
+        "CURTAIN,SLIDE_REVEAL,CURTAIN,CIRCLE_ZOOM",
+        "null,null,CURTAIN,null",
+        "null,null,null,CURTAIN",
+        "CURTAIN,SLIDE_REVEAL,null,SLIDE_REVEAL",
+        "CURTAIN,SLIDE_REVEAL,CURTAIN,null",
+        "CURTAIN,SLIDE_REVEAL,SLIDE_REVEAL,CURTAIN",
+      },
+      nullValues = "null")
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_RejectBrandingChange_When_TheClosingAnimationChanges(
+          String storedDesktop, String storedMobile, String newDesktop, String newMobile) {
+    // given
+    TenantEntity existing = tenantWithClosingAnimations(storedDesktop, storedMobile);
+    MultilingualTenantDTO changed = submittedClosingAnimations(newDesktop, newMobile);
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(false);
+
+    // when / then
+    TenantAuthorisationException thrown =
+        assertThrows(
+            TenantAuthorisationException.class,
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(changed, existing));
+    assertThat(thrown.getCustomHttpHeaders().getFirst("X-Reason"))
+        .isEqualTo(HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE.name());
+  }
+
+  @ParameterizedTest(name = "stored and submitted {0}/{1}")
+  @CsvSource(
+      value = {"null,null", "CURTAIN,SLIDE_REVEAL", "CIRCLE_ZOOM,null", "null,CIRCLE_ZOOM"},
+      nullValues = "null")
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_AllowUnrelatedSave_When_AppearanceToggleIsOffButTheClosingAnimationIsUnchanged(
+          String desktop, String mobile) {
+    // The admin panel submits whole tenant payloads; an unrelated save carries the theming block
+    // too and must not be mistaken for a branding change.
+    TenantEntity existing = tenantWithClosingAnimations(desktop, mobile);
+    MultilingualTenantDTO unchanged = submittedClosingAnimations(desktop, mobile);
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(false);
+
     tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
         unchanged, existing);
 

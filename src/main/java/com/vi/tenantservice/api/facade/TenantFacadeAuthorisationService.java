@@ -7,6 +7,7 @@ import com.vi.tenantservice.api.authorisation.Authority;
 import com.vi.tenantservice.api.authorisation.UserRole;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
+import com.vi.tenantservice.api.model.ClosingAnimation;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.TenantContent;
 import com.vi.tenantservice.api.model.TenantEntity;
@@ -284,7 +285,13 @@ public class TenantFacadeAuthorisationService {
         || !Objects.equals(theming.getSecondaryColor(), existing.getThemingSecondaryColor())
         || !Objects.equals(theming.getAccent(), existing.getThemingAccent())
         || !Objects.equals(theming.getSignal(), existing.getThemingSignal())
-        || !Objects.equals(loginEffectValue(theming), existing.getThemingLoginEffect());
+        || !Objects.equals(loginEffectValue(theming), existing.getThemingLoginEffect())
+        || !Objects.equals(
+            closingAnimationValue(theming.getClosingAnimationDesktop()),
+            existing.getThemingClosingAnimationDesktop())
+        || !Objects.equals(
+            closingAnimationValue(theming.getClosingAnimationMobile()),
+            existing.getThemingClosingAnimationMobile());
   }
 
   private static String blankToNull(String value) {
@@ -294,6 +301,11 @@ public class TenantFacadeAuthorisationService {
   /** Mirrors TenantConverter: the effect is stored as the enum name, null stays null. */
   private String loginEffectValue(Theming theming) {
     return theming.getLoginEffect() == null ? null : theming.getLoginEffect().getValue();
+  }
+
+  /** Same rule for the closing animation of either device: the enum name, null stays null. */
+  private String closingAnimationValue(ClosingAnimation animation) {
+    return animation == null ? null : animation.getValue();
   }
 
   private void assertSingleTenantAdminDoesNotTryToChangeLicensingInformation(

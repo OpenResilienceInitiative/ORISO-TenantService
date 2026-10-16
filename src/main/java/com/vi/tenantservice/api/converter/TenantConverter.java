@@ -12,6 +12,7 @@ import com.google.common.collect.Maps;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.ClosingAnimation;
 import com.vi.tenantservice.api.model.Content;
 import com.vi.tenantservice.api.model.DataProtectionContactTemplateDTO;
 import com.vi.tenantservice.api.model.Licensing;
@@ -334,7 +335,12 @@ public class TenantConverter {
           .themingLoginEffect(
               tenantDTO.getTheming().getLoginEffect() == null
                   ? null
-                  : tenantDTO.getTheming().getLoginEffect().getValue());
+                  : tenantDTO.getTheming().getLoginEffect().getValue())
+          // Same storage rule, but null also reads back as null (see toClosingAnimation).
+          .themingClosingAnimationDesktop(
+              closingAnimationName(tenantDTO.getTheming().getClosingAnimationDesktop()))
+          .themingClosingAnimationMobile(
+              closingAnimationName(tenantDTO.getTheming().getClosingAnimationMobile()));
     }
   }
 
@@ -1007,7 +1013,36 @@ public class TenantConverter {
         .secondaryColor(tenant.getThemingSecondaryColor())
         .accent(tenant.getThemingAccent())
         .signal(tenant.getThemingSignal())
-        .loginEffect(toLoginEffect(tenant.getThemingLoginEffect()));
+        .loginEffect(toLoginEffect(tenant.getThemingLoginEffect()))
+        .closingAnimationDesktop(
+            toClosingAnimation(
+                "closingAnimationDesktop", tenant.getThemingClosingAnimationDesktop()))
+        .closingAnimationMobile(
+            toClosingAnimation(
+                "closingAnimationMobile", tenant.getThemingClosingAnimationMobile()));
+  }
+
+  private static String closingAnimationName(ClosingAnimation animation) {
+    return animation == null ? null : animation.getValue();
+  }
+
+  /**
+   * Unlike the login effect, an absent or unknown stored name reads as {@code null}, not as a
+   * default. The tenant either never chose (NULL), or its stored value is one this build does not
+   * know, for instance written by a newer version. Both mean "no usable choice here": null lets
+   * {@link EffectiveThemingApplier} fill the gap from the platform tenant and, failing that, lets
+   * the frontend play its own default. Inventing a default here would hide the gap from both.
+   */
+  private ClosingAnimation toClosingAnimation(String field, String stored) {
+    if (stored == null) {
+      return null;
+    }
+    try {
+      return ClosingAnimation.fromValue(stored);
+    } catch (IllegalArgumentException e) {
+      log.warn("Unknown theming.{} '{}' stored; reading it as not configured", field, stored);
+      return null;
+    }
   }
 
   /**

@@ -29,6 +29,7 @@ import com.vi.tenantservice.api.authorisation.Authority;
 import com.vi.tenantservice.api.authorisation.UserRole;
 import com.vi.tenantservice.api.config.apiclient.ApplicationSettingsApiControllerFactory;
 import com.vi.tenantservice.api.config.apiclient.ConsultingTypeServiceApiControllerFactory;
+import com.vi.tenantservice.api.model.ClosingAnimation;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
@@ -560,6 +561,80 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.theming.primaryColor").value(ACCENT_DARK))
         .andExpect(jsonPath("$.theming.accent").value(ACCENT_LIGHT))
         .andExpect(jsonPath("$.theming.signal").value(SIGNAL_COLOR));
+  }
+
+  @Test
+  void updateTenant_Should_roundTripTheClosingAnimationForDesktopAndMobile() throws Exception {
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+
+    mockMvc
+        .perform(
+            put(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    multilingualTenantTestDataBuilder
+                        .withId(1L)
+                        .withName("tenant")
+                        .withSubdomain("closingsubdomain")
+                        .withThemingClosingAnimations(
+                            ClosingAnimation.CIRCLE_ZOOM, ClosingAnimation.SLIDE_REVEAL)
+                        .withLicensing()
+                        .jsonify()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("CIRCLE_ZOOM"))
+        .andExpect(jsonPath("$.theming.closingAnimationMobile").value("SLIDE_REVEAL"));
+
+    // the Admin card reads the stored choice back...
+    mockMvc
+        .perform(
+            get(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
+                .contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("CIRCLE_ZOOM"))
+        .andExpect(jsonPath("$.theming.closingAnimationMobile").value("SLIDE_REVEAL"));
+
+    // ...and so does the waiting room, through the public read
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("CIRCLE_ZOOM"))
+        .andExpect(jsonPath("$.theming.closingAnimationMobile").value("SLIDE_REVEAL"));
+  }
+
+  @Test
+  void getPublicTenant_Should_inheritEachClosingAnimationFromThePlatformTenant() throws Exception {
+    // given — the platform tenant (0) picked both, the Träger picked only its own mobile one
+    jdbcTemplate.update(
+        "UPDATE tenant SET theming_closing_animation_desktop = 'CURTAIN',"
+            + " theming_closing_animation_mobile = 'CIRCLE_ZOOM' WHERE id = 0");
+    jdbcTemplate.update(
+        "UPDATE tenant SET theming_closing_animation_mobile = 'SLIDE_REVEAL' WHERE id = 1");
+
+    // when / then — desktop is inherited, the Träger's own mobile choice wins
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("CURTAIN"))
+        .andExpect(jsonPath("$.theming.closingAnimationMobile").value("SLIDE_REVEAL"));
+  }
+
+  @Test
+  void getPublicTenant_Should_readAnUnknownStoredClosingAnimationAsNull() throws Exception {
+    // given — a value this build does not know, e.g. written by a newer one
+    jdbcTemplate.update(
+        "UPDATE tenant SET theming_closing_animation_desktop = 'KALEIDOSCOPE',"
+            + " theming_closing_animation_mobile = 'CURTAIN' WHERE id = 1");
+
+    // when / then — null, not an error and not a default: the frontend then uses its own
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.theming.closingAnimationDesktop").doesNotExist())
+        .andExpect(jsonPath("$.theming.closingAnimationMobile").value("CURTAIN"));
   }
 
   @Test

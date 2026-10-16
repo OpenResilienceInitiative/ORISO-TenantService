@@ -3,9 +3,14 @@ package com.vi.tenantservice.api.converter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.ClosingAnimation;
 import com.vi.tenantservice.api.model.DataProtectionContactTemplateDTO;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.NoAgencyContextDTO;
@@ -29,11 +34,15 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.LoggerFactory;
 
 @ExtendWith(MockitoExtension.class)
 class TenantConverterTest {
@@ -130,6 +139,143 @@ class TenantConverterTest {
     // then — the login screen must never break over decoration
     assertThat(tenantConverter.toDTO(entity, "de").getTheming().getLoginEffect())
         .isEqualTo(Theming.LoginEffectEnum.NONE);
+  }
+
+  /**
+   * Every value on both sides, paired with a different value on the other side. A swapped
+   * desktop/mobile mapping would still pass if both always carried the same value.
+   */
+  @ParameterizedTest
+  @CsvSource({
+    "CURTAIN,CIRCLE_ZOOM",
+    "CIRCLE_ZOOM,SLIDE_REVEAL",
+    "SLIDE_REVEAL,CURTAIN",
+  })
+  void toEntity_should_roundTripTheClosingAnimationForDesktopAndMobile(
+      String desktop, String mobile) {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder()
+            .tenantDTO()
+            .withTheming()
+            .withThemingClosingAnimations(
+                ClosingAnimation.fromValue(desktop), ClosingAnimation.fromValue(mobile))
+            .build();
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then — stored as the enum NAME in the matching column, and read back unchanged
+    assertThat(entity.getThemingClosingAnimationDesktop()).isEqualTo(desktop);
+    assertThat(entity.getThemingClosingAnimationMobile()).isEqualTo(mobile);
+    Theming read = tenantConverter.toDTO(entity, "de").getTheming();
+    assertThat(read.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.fromValue(desktop));
+    assertThat(read.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.fromValue(mobile));
+  }
+
+  @Test
+  void toEntity_should_keepAnUnsetClosingAnimationNull() {
+    // given — a tenant that never chose a closing animation
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withTheming().build();
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then — NULL is the honest "never configured": no default is written into the column...
+    assertThat(entity.getThemingClosingAnimationDesktop()).isNull();
+    assertThat(entity.getThemingClosingAnimationMobile()).isNull();
+    // ...and none is invented on the way out. Unlike the login effect, the reader gets null so
+    // that inheritance from the platform tenant can tell "unset" from "chose the default".
+    Theming read = tenantConverter.toDTO(entity, "de").getTheming();
+    assertThat(read.getClosingAnimationDesktop()).isNull();
+    assertThat(read.getClosingAnimationMobile()).isNull();
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      value = {"CURTAIN,null", "null,SLIDE_REVEAL"},
+      nullValues = "null")
+  void toEntity_should_keepEachClosingAnimationIndependentOfTheOther(
+      String desktop, String mobile) {
+    // given — only one side configured
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder()
+            .tenantDTO()
+            .withTheming()
+            .withThemingClosingAnimations(
+                desktop == null ? null : ClosingAnimation.fromValue(desktop),
+                mobile == null ? null : ClosingAnimation.fromValue(mobile))
+            .build();
+
+    // when
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    // then — the unset side stays null, in storage and on the way back out
+    assertThat(entity.getThemingClosingAnimationDesktop()).isEqualTo(desktop);
+    assertThat(entity.getThemingClosingAnimationMobile()).isEqualTo(mobile);
+    Theming read = tenantConverter.toDTO(entity, "de").getTheming();
+    assertThat(read.getClosingAnimationDesktop())
+        .isEqualTo(desktop == null ? null : ClosingAnimation.fromValue(desktop));
+    assertThat(read.getClosingAnimationMobile())
+        .isEqualTo(mobile == null ? null : ClosingAnimation.fromValue(mobile));
+  }
+
+  /**
+   * A value written by a newer version or a hand-edited row. Case matters: the stored form is the
+   * exact enum name, so a lower-case spelling is as unknown as a new design.
+   */
+  @ParameterizedTest
+  @ValueSource(strings = {"KALEIDOSCOPE", "curtain", ""})
+  void toDTO_should_readAnUnknownStoredClosingAnimationAsNullAndKeepTheOtherSide(String unknown) {
+    // given
+    TenantEntity entity =
+        tenantConverter.toEntity(
+            new MultilingualTenantTestDataBuilder().tenantDTO().withTheming().build());
+
+    // when / then — desktop unknown, mobile valid: only desktop falls back, to null, not a default
+    entity.setThemingClosingAnimationDesktop(unknown);
+    entity.setThemingClosingAnimationMobile("CIRCLE_ZOOM");
+    Theming read = tenantConverter.toDTO(entity, "de").getTheming();
+    assertThat(read.getClosingAnimationDesktop()).isNull();
+    assertThat(read.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.CIRCLE_ZOOM);
+
+    // and the other way round
+    entity.setThemingClosingAnimationDesktop("SLIDE_REVEAL");
+    entity.setThemingClosingAnimationMobile(unknown);
+    read = tenantConverter.toDTO(entity, "de").getTheming();
+    assertThat(read.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
+    assertThat(read.getClosingAnimationMobile()).isNull();
+  }
+
+  @Test
+  void toDTO_should_warnAboutAnUnknownStoredClosingAnimation() {
+    // given
+    TenantEntity entity =
+        tenantConverter.toEntity(
+            new MultilingualTenantTestDataBuilder().tenantDTO().withTheming().build());
+    entity.setThemingClosingAnimationDesktop("KALEIDOSCOPE");
+    Logger converterLog = (Logger) LoggerFactory.getLogger(TenantConverter.class);
+    var appender = new ListAppender<ILoggingEvent>();
+    appender.start();
+    converterLog.addAppender(appender);
+
+    try {
+      // when
+      tenantConverter.toDTO(entity, "de");
+
+      // then — silent data loss would hide a newer client's value from the operator
+      assertThat(appender.list)
+          .anySatisfy(
+              event -> {
+                assertThat(event.getLevel()).isEqualTo(Level.WARN);
+                assertThat(event.getFormattedMessage())
+                    .contains("closingAnimationDesktop")
+                    .contains("KALEIDOSCOPE");
+              });
+    } finally {
+      converterLog.detachAppender(appender);
+    }
   }
 
   @Test
