@@ -119,6 +119,13 @@ class PermissionPolicyOpenApiContractTest {
           .as(carrier + ".internalGroupChat")
           .containsEntry("$ref", "#/components/schemas/InternalGroupChatPolicies");
     }
+
+    // a Traeger write against a platform requirement is a documented 400, not an undocumented error
+    var paths = (Map<String, Object>) specification.get("paths");
+    var put =
+        (Map<String, Object>)
+            ((Map<String, Object>) paths.get("/tenantadmin/{id}/permission-policies")).get("put");
+    assertThat((Map<Object, Object>) put.get("responses")).containsKey(400);
   }
 
   /** The property's own {@code $ref}, or the first entry of its {@code allOf} wrapper. */

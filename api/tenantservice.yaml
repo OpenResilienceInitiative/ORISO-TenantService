@@ -483,6 +483,10 @@ paths:
       tags:
         - tenant-controller
       summary: Updates tenant-scoped permission policy overrides
+      description: >-
+        Omitting `internalGroupChat` keeps the stored override. A platform requirement (ENFORCED)
+        of `internalGroupChat.recipientScope` cannot be changed: an unchanged echo of it is
+        accepted and discarded, a changed value or mode is refused with 400 and nothing is stored.
       operationId: updateTenantPermissionPolicies
       requestBody:
         required: true
@@ -497,6 +501,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TenantPermissionPolicies'
+        400:
+          description: BAD REQUEST - the body tries to change an ENFORCED internalGroupChat.recipientScope
         403:
           description: FORBIDDEN - tenant admins can update only their own tenant
   /tenantadmin/dpia:
