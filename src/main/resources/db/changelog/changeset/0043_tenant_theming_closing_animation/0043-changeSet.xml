@@ -1,0 +1,36 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Persist which closing animation a tenant plays when a person leaves a waiting room
+      (ORISO-Frontend#1737): one choice for desktop viewports, one for mobile.
+
+      The value is one of CURTAIN / CIRCLE_ZOOM / SLIDE_REVEAL and is chosen in Admin under
+      Appearance.
+
+      Stored as the enum NAME in a varchar, not as an ordinal: the column stays readable in a
+      dump, and reordering the enum in code can never silently repoint existing tenants at a
+      different animation. Following 0029.
+
+      MIGRATION DECISION — deliberately NO backfill. Existing tenants get NULL, which means
+      "never configured": the frontend then plays its own default, and a tenant inherits the
+      platform tenant's choice. Writing 'CURTAIN' into every row would be indistinguishable from
+      an administrator having chosen it, and would stop every tenant from inheriting. Following
+      the same reasoning as 0027 and 0029.
+
+      The precondition marks the changeset ran where the columns already exist, so it is safe on
+      fresh and on already-patched databases. Both columns are added together, as in 0027, and the
+      first one stands for the pair.
+    -->
+    <changeSet author="oriso" id="addThemingClosingAnimation">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant" columnName="theming_closing_animation_desktop"/>
+            </not>
+        </preConditions>
+        <sqlFile path="db/changelog/changeset/0043_tenant_theming_closing_animation/addThemingClosingAnimation.sql" stripComments="true" />
+        <rollback>
+            <sql>ALTER TABLE `tenantservice`.`tenant` DROP COLUMN `theming_closing_animation_desktop`, DROP COLUMN `theming_closing_animation_mobile`;</sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

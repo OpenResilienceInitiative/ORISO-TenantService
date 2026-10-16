@@ -30,6 +30,10 @@ public interface TenantRestrictedData {
 
   String getThemingLoginEffect();
 
+  String getThemingClosingAnimationDesktop();
+
+  String getThemingClosingAnimationMobile();
+
   String getContentImpressum();
 
   String getContentClaim();

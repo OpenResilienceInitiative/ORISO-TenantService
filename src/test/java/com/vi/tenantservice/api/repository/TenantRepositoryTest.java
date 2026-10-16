@@ -4,13 +4,22 @@ import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.TenantRestrictedData;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.Sql.ExecutionPhase;
@@ -147,5 +156,64 @@ class TenantRepositoryTest {
                 .orElseThrow()
                 .getLegalName())
         .isEqualTo("Caritasverband für die Erzdiözese Musterstadt e.V.");
+  }
+
+  /**
+   * Six constructor projections feed the Admin and the public reads. They are positional, so two
+   * adjacent String columns swapped in one of them would still compile and start up; only distinct
+   * values per device show it.
+   */
+  @ParameterizedTest
+  @MethodSource("projectionsOfTheTenantTheming")
+  void projections_should_carryTheClosingAnimationOfDesktopAndMobileSeparately(
+      Function<TenantRepository, TenantRestrictedData> projection) {
+    // given
+    TenantEntity entity = tenantRepository.findById(EXISTING_ID).orElseThrow();
+    entity.setThemingClosingAnimationDesktop("CIRCLE_ZOOM");
+    entity.setThemingClosingAnimationMobile("SLIDE_REVEAL");
+    tenantRepository.saveAndFlush(entity);
+
+    // when
+    TenantRestrictedData view = projection.apply(tenantRepository);
+
+    // then
+    assertThat(view.getThemingClosingAnimationDesktop()).isEqualTo("CIRCLE_ZOOM");
+    assertThat(view.getThemingClosingAnimationMobile()).isEqualTo("SLIDE_REVEAL");
+  }
+
+  @ParameterizedTest
+  @MethodSource("projectionsOfTheTenantTheming")
+  void projections_should_keepAnUnconfiguredClosingAnimationNull(
+      Function<TenantRepository, TenantRestrictedData> projection) {
+    TenantRestrictedData view = projection.apply(tenantRepository);
+
+    assertThat(view.getThemingClosingAnimationDesktop()).isNull();
+    assertThat(view.getThemingClosingAnimationMobile()).isNull();
+  }
+
+  static Stream<Arguments> projectionsOfTheTenantTheming() {
+    return Stream.of(
+        projection("findTenantDataById", repository -> repository.findTenantDataById(EXISTING_ID)),
+        projection("findAllTenantData", repository -> repository.findAllTenantData().get(0)),
+        projection(
+            "findAllTenantDataExceptTechnicalByInfix",
+            repository ->
+                repository
+                    .findAllTenantDataExceptTechnicalByInfix("*", PageRequest.of(0, 10))
+                    .getContent()
+                    .get(0)),
+        projection(
+            "findRestrictedDataBySubdomain",
+            repository -> repository.findRestrictedDataBySubdomain("happylife")),
+        projection(
+            "findRestrictedDataById", repository -> repository.findRestrictedDataById(EXISTING_ID)),
+        projection(
+            "findRestrictedDataByIdIn",
+            repository -> repository.findRestrictedDataByIdIn(Set.of(EXISTING_ID)).get(0)));
+  }
+
+  private static Arguments projection(
+      String name, Function<TenantRepository, TenantRestrictedData> query) {
+    return Arguments.of(Named.of(name, query));
   }
 }
