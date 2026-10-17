@@ -11,8 +11,10 @@ import static org.mockito.Mockito.when;
 
 import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.Authority;
+import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
+import com.vi.tenantservice.api.model.ClosingAnimation;
 import com.vi.tenantservice.api.model.Licensing;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
@@ -24,14 +26,20 @@ import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PermissionPolicyMode;
 import com.vi.tenantservice.api.policy.ResolvedPolicyValue;
+import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
+import com.vi.tenantservice.api.service.TemplateRenderer;
+import com.vi.tenantservice.api.service.TemplateService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
+import com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens;
 import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -516,6 +524,216 @@ class TenantFacadeAuthorisationServiceTest {
         unchanged, existing);
 
     // then no exception
+  }
+
+  private TenantEntity tenantWithClosingAnimations(String desktop, String mobile) {
+    return TenantEntity.builder()
+        .id(ID)
+        .settings(JsonConverter.convertToJson(new TenantSettings()))
+        .themingClosingAnimationDesktop(desktop)
+        .themingClosingAnimationMobile(mobile)
+        .build();
+  }
+
+  private static MultilingualTenantDTO submittedClosingAnimations(String desktop, String mobile) {
+    return new MultilingualTenantDTO()
+        .theming(
+            new Theming()
+                .closingAnimationDesktop(
+                    desktop == null ? null : ClosingAnimation.fromValue(desktop))
+                .closingAnimationMobile(
+                    mobile == null ? null : ClosingAnimation.fromValue(mobile)));
+  }
+
+  /**
+   * The closing animation is part of the branding, so a Träger admin whose appearance toggle is off
+   * must not be able to change it. Either side counts, adding a value counts, and so does swapping
+   * the two values between desktop and mobile. Sending nothing is not a change: see {@link
+   * #assertUserHasSufficientPermissionsToChangeAttributes_Should_KeepTheStoredClosingAnimations_When_ARestrictedAdminDoesNotSendThem}.
+   */
+  @ParameterizedTest(name = "stored {0}/{1}, submitted {2}/{3}")
+  @CsvSource(
+      value = {
+        "CURTAIN,SLIDE_REVEAL,CIRCLE_ZOOM,SLIDE_REVEAL",
+        "CURTAIN,SLIDE_REVEAL,CURTAIN,CIRCLE_ZOOM",
+        "null,null,CURTAIN,null",
+        "null,null,null,CURTAIN",
+        "CURTAIN,SLIDE_REVEAL,SLIDE_REVEAL,CURTAIN",
+      },
+      nullValues = "null")
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_RejectBrandingChange_When_TheClosingAnimationChanges(
+          String storedDesktop, String storedMobile, String newDesktop, String newMobile) {
+    // given
+    TenantEntity existing = tenantWithClosingAnimations(storedDesktop, storedMobile);
+    MultilingualTenantDTO changed = submittedClosingAnimations(newDesktop, newMobile);
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(false);
+
+    // when / then
+    TenantAuthorisationException thrown =
+        assertThrows(
+            TenantAuthorisationException.class,
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(changed, existing));
+    assertThat(thrown.getCustomHttpHeaders().getFirst("X-Reason"))
+        .isEqualTo(HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE.name());
+  }
+
+  @ParameterizedTest(name = "stored and submitted {0}/{1}")
+  @CsvSource(
+      value = {"null,null", "CURTAIN,SLIDE_REVEAL", "CIRCLE_ZOOM,null", "null,CIRCLE_ZOOM"},
+      nullValues = "null")
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_AllowUnrelatedSave_When_AppearanceToggleIsOffButTheClosingAnimationIsUnchanged(
+          String desktop, String mobile) {
+    // The admin panel submits whole tenant payloads; an unrelated save carries the theming block
+    // too and must not be mistaken for a branding change.
+    TenantEntity existing = tenantWithClosingAnimations(desktop, mobile);
+    MultilingualTenantDTO unchanged = submittedClosingAnimations(desktop, mobile);
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(false);
+
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        unchanged, existing);
+
+    // then no exception
+  }
+
+  /**
+   * The two closing animations arrived after the Admin panel, so an older whole-tenant payload
+   * carries no value for them, and JSON cannot tell "not sent" from a null here. For a Träger admin
+   * who may not change the appearance, that must neither be rejected as a branding change nor wipe
+   * what the platform set: the stored value is kept, and the update then writes it back unchanged.
+   */
+  @ParameterizedTest(name = "stored {0}/{1}, sent {2}/{3}, kept {4}/{5}")
+  @CsvSource(
+      value = {
+        "CURTAIN,SLIDE_REVEAL,null,null,CURTAIN,SLIDE_REVEAL",
+        "CURTAIN,SLIDE_REVEAL,null,SLIDE_REVEAL,CURTAIN,SLIDE_REVEAL",
+        "CURTAIN,SLIDE_REVEAL,CURTAIN,null,CURTAIN,SLIDE_REVEAL",
+        "CIRCLE_ZOOM,null,null,null,CIRCLE_ZOOM,null",
+        "null,null,null,null,null,null",
+      },
+      nullValues = "null")
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_KeepTheStoredClosingAnimations_When_ARestrictedAdminDoesNotSendThem(
+          String storedDesktop,
+          String storedMobile,
+          String sentDesktop,
+          String sentMobile,
+          String keptDesktop,
+          String keptMobile) {
+    // given
+    TenantEntity existing = tenantWithClosingAnimations(storedDesktop, storedMobile);
+    MultilingualTenantDTO submitted = submittedClosingAnimations(sentDesktop, sentMobile);
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(false);
+
+    // when
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        submitted, existing);
+
+    // then no exception, and nothing is about to be wiped or invented
+    assertThat(submitted.getTheming().getClosingAnimationDesktop())
+        .isEqualTo(keptDesktop == null ? null : ClosingAnimation.fromValue(keptDesktop));
+    assertThat(submitted.getTheming().getClosingAnimationMobile())
+        .isEqualTo(keptMobile == null ? null : ClosingAnimation.fromValue(keptMobile));
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_NotWipeTheStoredAnimationsOnSave_When_ARestrictedAdminDoesNotSendThem() {
+    // The guard lets the save through; what the update then writes must be the stored choice.
+    // given
+    TenantEntity existing = tenantWithClosingAnimations("CURTAIN", "SLIDE_REVEAL");
+    MultilingualTenantDTO olderPayload = new MultilingualTenantDTO().theming(new Theming());
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(false);
+    var converter =
+        new TenantConverter(
+            org.mockito.Mockito.mock(TemplateService.class),
+            org.mockito.Mockito.mock(TemplateRenderer.class),
+            new SmtpPasswordEncryptionService("unit-test-secret"),
+            org.mockito.Mockito.mock(PlatformLegalTextTokens.class));
+
+    // when
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        olderPayload, existing);
+    TenantEntity written = converter.toEntity(existing, olderPayload);
+
+    // then
+    assertThat(written.getThemingClosingAnimationDesktop()).isEqualTo("CURTAIN");
+    assertThat(written.getThemingClosingAnimationMobile()).isEqualTo("SLIDE_REVEAL");
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_KeepTheStoredAnimations_When_ARestrictedAdminSendsNoThemingBlockAndNoBrandingIsStored() {
+    // given
+    TenantEntity existing = tenantWithClosingAnimations("CURTAIN", "SLIDE_REVEAL");
+    MultilingualTenantDTO withoutTheming = new MultilingualTenantDTO();
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(false);
+    var converter =
+        new TenantConverter(
+            org.mockito.Mockito.mock(TemplateService.class),
+            org.mockito.Mockito.mock(TemplateRenderer.class),
+            new SmtpPasswordEncryptionService("unit-test-secret"),
+            org.mockito.Mockito.mock(PlatformLegalTextTokens.class));
+
+    // when
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        withoutTheming, existing);
+    TenantEntity written = converter.toEntity(existing, withoutTheming);
+
+    // then no exception, and what the update writes still carries the stored choice
+    assertThat(written.getThemingClosingAnimationDesktop()).isEqualTo("CURTAIN");
+    assertThat(written.getThemingClosingAnimationMobile()).isEqualTo("SLIDE_REVEAL");
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_RejectBrandingChange_When_ARestrictedAdminSendsNoThemingBlockAndBrandingIsStored() {
+    // The update would reset the whole theming block, so this is a branding change.
+    // given
+    TenantEntity existing = tenantWithClosingAnimations("CURTAIN", "SLIDE_REVEAL");
+    existing.setThemingLogo("logo.png");
+    MultilingualTenantDTO withoutTheming = new MultilingualTenantDTO();
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(false);
+
+    // when / then
+    TenantAuthorisationException thrown =
+        assertThrows(
+            TenantAuthorisationException.class,
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(
+                        withoutTheming, existing));
+    assertThat(thrown.getCustomHttpHeaders().getFirst("X-Reason"))
+        .isEqualTo(HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE.name());
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_LetANullClearTheAnimation_When_AppearanceToggleIsOn() {
+    // The Admin panel's "Platform default" sends null to hand the choice back to the platform; an
+    // admin who may change the appearance must still be able to do that.
+    // given
+    TenantEntity existing = tenantWithClosingAnimations("CURTAIN", "SLIDE_REVEAL");
+    MultilingualTenantDTO cleared = submittedClosingAnimations(null, null);
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(true);
+
+    // when
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        cleared, existing);
+
+    // then
+    assertThat(cleared.getTheming().getClosingAnimationDesktop()).isNull();
+    assertThat(cleared.getTheming().getClosingAnimationMobile()).isNull();
   }
 
   @Test

@@ -1,0 +1,52 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Persist which closing animation a tenant plays when a person leaves a waiting room
+      (ORISO-Frontend#1737): one choice for desktop viewports, one for mobile.
+
+      The value is one of CURTAIN / CIRCLE_ZOOM / SLIDE_REVEAL and is chosen in Admin under
+      Appearance.
+
+      Stored as the enum NAME in a varchar, not as an ordinal: the column stays readable in a
+      dump, and reordering the enum in code can never silently repoint existing tenants at a
+      different animation. Following 0029.
+
+      MIGRATION DECISION — deliberately NO backfill. Existing tenants get NULL, which means
+      "never configured": the frontend then plays its own default, and a tenant inherits the
+      platform tenant's choice. Writing 'CURTAIN' into every row would be indistinguishable from
+      an administrator having chosen it, and would stop every tenant from inheriting. Following
+      the same reasoning as 0027 and 0029.
+
+      One changeset per column, each guarded on its own column, following 0041: a database that
+      has only one of the two (patched by hand, or half-migrated) gets the other one instead of
+      skipping the pair or failing on the column that is already there. onFail="CONTINUE" leaves a
+      skipped changeset unrun, so a rollback never drops a column this migration did not add.
+    -->
+    <changeSet author="oriso" id="addThemingClosingAnimationDesktop">
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="tenant" columnName="theming_closing_animation_desktop"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="tenant">
+            <column name="theming_closing_animation_desktop" type="VARCHAR(32)"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tenant" columnName="theming_closing_animation_desktop"/>
+        </rollback>
+    </changeSet>
+    <changeSet author="oriso" id="addThemingClosingAnimationMobile">
+        <preConditions onFail="CONTINUE">
+            <not>
+                <columnExists tableName="tenant" columnName="theming_closing_animation_mobile"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="tenant">
+            <column name="theming_closing_animation_mobile" type="VARCHAR(32)"/>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tenant" columnName="theming_closing_animation_mobile"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

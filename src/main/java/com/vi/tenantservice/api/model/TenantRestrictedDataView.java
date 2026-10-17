@@ -21,6 +21,8 @@ public class TenantRestrictedDataView implements TenantRestrictedData {
   private final String themingAccent;
   private final String themingSignal;
   private final String themingLoginEffect;
+  private final String themingClosingAnimationDesktop;
+  private final String themingClosingAnimationMobile;
   private final String contentImpressum;
   private final String contentClaim;
   private final String contentPrivacy;

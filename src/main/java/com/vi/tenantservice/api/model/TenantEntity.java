@@ -103,6 +103,18 @@ public class TenantEntity implements TenantData {
   @Column(name = "theming_login_effect", length = 32)
   private String themingLoginEffect;
 
+  /**
+   * Which closing animation is played when a person leaves a waiting room on a desktop-sized
+   * viewport (ORISO-Frontend#1737); {@code null} means never configured and the frontend uses its
+   * own default. Stored as the enum name, like {@link #themingLoginEffect}.
+   */
+  @Column(name = "theming_closing_animation_desktop", length = 32)
+  private String themingClosingAnimationDesktop;
+
+  /** The same choice for mobile viewports; see {@link #themingClosingAnimationDesktop}. */
+  @Column(name = "theming_closing_animation_mobile", length = 32)
+  private String themingClosingAnimationMobile;
+
   @Column(name = "content_impressum")
   private String contentImpressum;
 

@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.validation;
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 import static org.mockito.Mockito.*;
 
+import com.vi.tenantservice.api.model.ClosingAnimation;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.Theming;
 import java.util.HashMap;
@@ -119,6 +120,38 @@ class TenantInputSanitizerTest {
     assertThat(sanitized.getTheming().getSecondaryColor()).isNull();
     assertThat(sanitized.getTheming().getAccent()).isNull();
     assertThat(sanitized.getTheming().getSignal()).isEqualTo("#E53935");
+  }
+
+  @Test
+  void sanitize_Should_passTheClosingAnimationChoicesThroughUnchanged() {
+    // given — different values on the two sides, so a swap cannot hide
+    MultilingualTenantDTO tenantDTO = tenantWithSeeds("#8B1A2B", "#FFFFFF", "#FFB3C7", "#E53935");
+    tenantDTO.getTheming().setClosingAnimationDesktop(ClosingAnimation.CIRCLE_ZOOM);
+    tenantDTO.getTheming().setClosingAnimationMobile(ClosingAnimation.SLIDE_REVEAL);
+
+    // when
+    MultilingualTenantDTO sanitized =
+        new TenantInputSanitizer(new InputSanitizer()).sanitize(tenantDTO);
+
+    // then — a generated enum is its own whitelist; nothing to strip, nothing to lose
+    assertThat(sanitized.getTheming().getClosingAnimationDesktop())
+        .isEqualTo(ClosingAnimation.CIRCLE_ZOOM);
+    assertThat(sanitized.getTheming().getClosingAnimationMobile())
+        .isEqualTo(ClosingAnimation.SLIDE_REVEAL);
+  }
+
+  @Test
+  void sanitize_Should_keepAnUnsetClosingAnimationUnset() {
+    MultilingualTenantDTO tenantDTO = tenantWithSeeds("#8B1A2B", "#FFFFFF", "#FFB3C7", "#E53935");
+    tenantDTO.getTheming().setClosingAnimationDesktop(null);
+    tenantDTO.getTheming().setClosingAnimationMobile(ClosingAnimation.CURTAIN);
+
+    MultilingualTenantDTO sanitized =
+        new TenantInputSanitizer(new InputSanitizer()).sanitize(tenantDTO);
+
+    assertThat(sanitized.getTheming().getClosingAnimationDesktop()).isNull();
+    assertThat(sanitized.getTheming().getClosingAnimationMobile())
+        .isEqualTo(ClosingAnimation.CURTAIN);
   }
 
   private static MultilingualTenantDTO tenantWithSeeds(

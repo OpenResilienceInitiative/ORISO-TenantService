@@ -28,6 +28,10 @@ public class EffectiveThemingApplier {
     inheritString(tenant, platform, Theming::getAccent, Theming::setAccent);
     inheritString(tenant, platform, Theming::getSecondaryColor, Theming::setSecondaryColor);
     inherit(tenant, platform, Theming::getLoginEffect, Theming::setLoginEffect);
+    inherit(
+        tenant, platform, Theming::getClosingAnimationDesktop, Theming::setClosingAnimationDesktop);
+    inherit(
+        tenant, platform, Theming::getClosingAnimationMobile, Theming::setClosingAnimationMobile);
     inheritString(tenant, platform, Theming::getSignal, Theming::setSignal);
   }
 

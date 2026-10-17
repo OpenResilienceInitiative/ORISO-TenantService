@@ -7,6 +7,7 @@ import com.vi.tenantservice.api.authorisation.Authority;
 import com.vi.tenantservice.api.authorisation.UserRole;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
+import com.vi.tenantservice.api.model.ClosingAnimation;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.TenantContent;
 import com.vi.tenantservice.api.model.TenantEntity;
@@ -215,8 +216,11 @@ public class TenantFacadeAuthorisationService {
    */
   private void assertSingleTenantAdminMayChangeAppearance(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenant) {
-    if (appearanceChangesAllowedForTenantAdmins(existingTenant.getId())
-        || !themingChanged(sanitizedTenantDTO, existingTenant)) {
+    if (appearanceChangesAllowedForTenantAdmins(existingTenant.getId())) {
+      return;
+    }
+    keepStoredClosingAnimationsWhereNotSent(sanitizedTenantDTO, existingTenant);
+    if (!themingChanged(sanitizedTenantDTO, existingTenant)) {
       return;
     }
 
@@ -260,6 +264,51 @@ public class TenantFacadeAuthorisationService {
   }
 
   /**
+   * The two closing animations arrived after the Admin panel, so an older whole-tenant payload
+   * carries no value for them, and JSON cannot tell "not sent" from a null. For a Träger admin who
+   * may not change the appearance, that must neither be rejected as a branding change nor wipe what
+   * the platform set (the update replaces the whole theming block): the stored value is put into
+   * the payload, so the comparison sees no change and the update writes it back as it was. This
+   * admin therefore cannot clear a value either, which is the point of the restriction.
+   *
+   * <p>An admin who may change the appearance never reaches this: for them a null clears the value,
+   * which is how the Admin panel hands the choice back to the platform.
+   *
+   * <p>A payload without any theming block is treated as an empty one: the update would reset the
+   * whole theming, so it counts as a change as soon as any branding is stored, and otherwise keeps
+   * the stored animations.
+   *
+   * <p>A stored name this version does not know cannot be put back; it stays a difference.
+   */
+  private void keepStoredClosingAnimationsWhereNotSent(
+      MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existing) {
+    var theming = sanitizedTenantDTO.getTheming();
+    if (theming == null) {
+      theming = new Theming();
+      sanitizedTenantDTO.setTheming(theming);
+    }
+    if (theming.getClosingAnimationDesktop() == null) {
+      theming.setClosingAnimationDesktop(
+          knownClosingAnimation(existing.getThemingClosingAnimationDesktop()));
+    }
+    if (theming.getClosingAnimationMobile() == null) {
+      theming.setClosingAnimationMobile(
+          knownClosingAnimation(existing.getThemingClosingAnimationMobile()));
+    }
+  }
+
+  private static ClosingAnimation knownClosingAnimation(String stored) {
+    if (stored == null) {
+      return null;
+    }
+    try {
+      return ClosingAnimation.fromValue(stored);
+    } catch (IllegalArgumentException unknown) {
+      return null;
+    }
+  }
+
+  /**
    * Compares the submitted branding against what is stored. The admin panel sends whole tenant
    * payloads, so every other card's save carries the theming block too - rejecting on its mere
    * presence would lock a restricted Träger admin out of settings that have nothing to do with
@@ -284,7 +333,13 @@ public class TenantFacadeAuthorisationService {
         || !Objects.equals(theming.getSecondaryColor(), existing.getThemingSecondaryColor())
         || !Objects.equals(theming.getAccent(), existing.getThemingAccent())
         || !Objects.equals(theming.getSignal(), existing.getThemingSignal())
-        || !Objects.equals(loginEffectValue(theming), existing.getThemingLoginEffect());
+        || !Objects.equals(loginEffectValue(theming), existing.getThemingLoginEffect())
+        || !Objects.equals(
+            closingAnimationValue(theming.getClosingAnimationDesktop()),
+            existing.getThemingClosingAnimationDesktop())
+        || !Objects.equals(
+            closingAnimationValue(theming.getClosingAnimationMobile()),
+            existing.getThemingClosingAnimationMobile());
   }
 
   private static String blankToNull(String value) {
@@ -294,6 +349,11 @@ public class TenantFacadeAuthorisationService {
   /** Mirrors TenantConverter: the effect is stored as the enum name, null stays null. */
   private String loginEffectValue(Theming theming) {
     return theming.getLoginEffect() == null ? null : theming.getLoginEffect().getValue();
+  }
+
+  /** Same rule for the closing animation of either device: the enum name, null stays null. */
+  private String closingAnimationValue(ClosingAnimation animation) {
+    return animation == null ? null : animation.getValue();
   }
 
   private void assertSingleTenantAdminDoesNotTryToChangeLicensingInformation(

@@ -87,6 +87,9 @@ public class TenantInputSanitizer {
       // loginEffect is a generated enum, not free text — there is nothing to strip,
       // and the enum itself is the whitelist.
       output.getTheming().setLoginEffect(theming.getLoginEffect());
+      // The closing animations are generated enums too: the enum is the whitelist.
+      output.getTheming().setClosingAnimationDesktop(theming.getClosingAnimationDesktop());
+      output.getTheming().setClosingAnimationMobile(theming.getClosingAnimationMobile());
     }
   }
 

@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api.util;
 
 import com.google.common.collect.Lists;
+import com.vi.tenantservice.api.model.ClosingAnimation;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.DataProtectionContactTemplateDTO;
 import com.vi.tenantservice.api.model.Licensing;
@@ -206,6 +207,19 @@ public class MultilingualTenantTestDataBuilder {
     Theming theming =
         tenantMultilingualDTO.getTheming() == null ? theming() : tenantMultilingualDTO.getTheming();
     tenantMultilingualDTO.setTheming(theming.loginEffect(loginEffect));
+    return this;
+  }
+
+  /**
+   * Theming carrying the closing animation chosen for desktop and for mobile (ORISO-Frontend#1737).
+   * Either side may be {@code null} to leave it unconfigured.
+   */
+  public MultilingualTenantTestDataBuilder withThemingClosingAnimations(
+      ClosingAnimation desktop, ClosingAnimation mobile) {
+    Theming theming =
+        tenantMultilingualDTO.getTheming() == null ? theming() : tenantMultilingualDTO.getTheming();
+    tenantMultilingualDTO.setTheming(
+        theming.closingAnimationDesktop(desktop).closingAnimationMobile(mobile));
     return this;
   }
 
