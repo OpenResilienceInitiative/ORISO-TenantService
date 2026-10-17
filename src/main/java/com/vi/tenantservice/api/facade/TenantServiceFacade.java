@@ -1019,6 +1019,17 @@ public class TenantServiceFacade {
    * controls themselves. See ADR-013 P4.
    */
   private RestrictedTenantDTO withEffectivePermissions(RestrictedTenantDTO dto) {
+    return dto == null ? null : withEffectivePermissions(dto, dto.getId());
+  }
+
+  /**
+   * Same as {@link #withEffectivePermissions(RestrictedTenantDTO)} for the single-domain override
+   * paths, where the DTO keeps the main tenant's id although its settings belong to the resolved
+   * tenant. The recipient scope of internal group chats is a privacy boundary, so it is resolved
+   * for {@code resolvedTenantId}, never for the main tenant (#319).
+   */
+  private RestrictedTenantDTO withEffectivePermissions(
+      RestrictedTenantDTO dto, Long resolvedTenantId) {
     if (dto == null) {
       return null;
     }
@@ -1028,7 +1039,7 @@ public class TenantServiceFacade {
         tenantAdminControlsService.getControls(),
         getPlatformTheming(lang),
         tenantPermissionPolicyService.getResolvedPolicies(dto.getId()),
-        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(dto.getId()));
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantId));
   }
 
   /**
@@ -1257,7 +1268,8 @@ public class TenantServiceFacade {
         tenantService.findRestrictedTenantDataById(actualTenantId).orElseThrow();
     return withEffectivePermissions(
         singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-            mainTenant, actualTenant));
+            mainTenant, actualTenant),
+        actualTenantId);
   }
 
   public Optional<RestrictedTenantDTO> getTenantDataWithOverride(
@@ -1275,7 +1287,8 @@ public class TenantServiceFacade {
     return Optional.of(
         withEffectivePermissions(
             singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-                mainTenantForSingleDomainMultitenancy.get(), tenantToOverridePrivacy.get())));
+                mainTenantForSingleDomainMultitenancy.get(), tenantToOverridePrivacy.get()),
+            resolvedTenantId));
   }
 
   public Optional<RestrictedTenantDTO> getSingleTenant() {
