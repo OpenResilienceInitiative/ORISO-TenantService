@@ -69,6 +69,9 @@ public class TenantSettings {
   Boolean featureAskerBrowserAgencyCounsellingEnabled;
   Boolean featureAskerBrowserLiveChatEnabled;
   Boolean featureAskerBrowserSelfHelpEnabled;
+  // FE#1725 story 40: counsellor channels for internal group chats, opt-out.
+  Boolean featureConsultantEmailInternalGroupEnabled;
+  Boolean featureConsultantBrowserInternalGroupEnabled;
 
   Boolean featureCallsEnabled;
   Boolean featureSupervisionEnabled;
@@ -165,6 +168,8 @@ public class TenantSettings {
               Map.entry("featureAskerBrowserAgencyCounsellingEnabled", true),
               Map.entry("featureAskerBrowserLiveChatEnabled", true),
               Map.entry("featureAskerBrowserSelfHelpEnabled", true),
+              Map.entry("featureConsultantEmailInternalGroupEnabled", true),
+              Map.entry("featureConsultantBrowserInternalGroupEnabled", true),
               Map.entry("featureCallsEnabled", true),
               Map.entry("featureSupervisionEnabled", true),
               Map.entry("featureSupervisionAnonymousChatsEnabled", true),
@@ -378,6 +383,14 @@ public class TenantSettings {
     if (featureAskerBrowserSelfHelpEnabled == null) {
       featureAskerBrowserSelfHelpEnabled =
           BOOLEAN_FIELD_DEFAULTS.get("featureAskerBrowserSelfHelpEnabled");
+    }
+    if (featureConsultantEmailInternalGroupEnabled == null) {
+      featureConsultantEmailInternalGroupEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureConsultantEmailInternalGroupEnabled");
+    }
+    if (featureConsultantBrowserInternalGroupEnabled == null) {
+      featureConsultantBrowserInternalGroupEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureConsultantBrowserInternalGroupEnabled");
     }
     applyMediaDefaults();
     if (isVideoCallAllowed == null) {

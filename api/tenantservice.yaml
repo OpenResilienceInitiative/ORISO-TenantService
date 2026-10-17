@@ -2549,6 +2549,14 @@ components:
           type: boolean
           default: true
           description: "Effective advice-seeker notification channel permission for BrowserSelfHelp. Email additionally requires featureAskerEmailEnabled."
+        featureConsultantEmailInternalGroupEnabled:
+          type: boolean
+          default: true
+          description: "Effective counsellor notification channel permission: e-mail for new messages in internal group chats (FE#1725 story 40). Opt-out: defaults to true."
+        featureConsultantBrowserInternalGroupEnabled:
+          type: boolean
+          default: true
+          description: "Effective counsellor notification channel permission: browser notification for new messages in internal group chats (FE#1725 story 40). Opt-out: defaults to true."
         featureCallsEnabled:
           type: boolean
           example: "true"
@@ -3141,6 +3149,8 @@ components:
         - featureAskerBrowserAgencyCounsellingEnabled
         - featureAskerBrowserLiveChatEnabled
         - featureAskerBrowserSelfHelpEnabled
+        - featureConsultantEmailInternalGroupEnabled
+        - featureConsultantBrowserInternalGroupEnabled
         - caseHandoverEnabled
 
     TenantLegalDraftDTO:

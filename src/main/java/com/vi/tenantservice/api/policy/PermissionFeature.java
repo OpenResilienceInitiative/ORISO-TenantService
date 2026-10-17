@@ -78,6 +78,8 @@ public enum PermissionFeature {
   ASKER_BROWSER_AGENCY_COUNSELLING("featureAskerBrowserAgencyCounsellingEnabled", null),
   ASKER_BROWSER_LIVE_CHAT("featureAskerBrowserLiveChatEnabled", null),
   ASKER_BROWSER_SELF_HELP("featureAskerBrowserSelfHelpEnabled", null),
+  CONSULTANT_EMAIL_INTERNAL_GROUP("featureConsultantEmailInternalGroupEnabled", null),
+  CONSULTANT_BROWSER_INTERNAL_GROUP("featureConsultantBrowserInternalGroupEnabled", null),
 
   CASE_HANDOVER("caseHandoverEnabled", null);
 
