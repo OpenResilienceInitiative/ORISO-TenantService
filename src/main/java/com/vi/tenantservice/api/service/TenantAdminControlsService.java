@@ -16,6 +16,7 @@ import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
+import com.vi.tenantservice.api.policy.InternalGroupChatPolicyRules;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
 import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PolicyValue;
@@ -69,6 +70,9 @@ public class TenantAdminControlsService {
       }
       if (controlsSettings.getCaseHandoverPolicies() == null) {
         controlsSettings.setCaseHandoverPolicies(existingSettings.getCaseHandoverPolicies());
+      }
+      if (controlsSettings.getInternalGroupChat() == null) {
+        controlsSettings.setInternalGroupChat(existingSettings.getInternalGroupChat());
       }
       // the DTO never carries the translation API keys - carry the stored values over verbatim,
       // still encrypted, so this path never decrypts and re-encrypts them for nothing
@@ -366,5 +370,7 @@ public class TenantAdminControlsService {
           CaseHandoverPolicyRules.normalize(settings.getCaseHandoverPolicies()));
     }
     CaseHandoverPolicyRules.validate(settings.getCaseHandoverPolicies());
+    settings.setInternalGroupChat(
+        InternalGroupChatPolicyRules.normalize(settings.getInternalGroupChat()));
   }
 }

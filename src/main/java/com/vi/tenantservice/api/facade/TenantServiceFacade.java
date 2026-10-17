@@ -868,7 +868,8 @@ public class TenantServiceFacade {
     return toTenantPermissionPolicies(
         tenantId,
         tenantPermissionPolicyService.getResolvedPolicies(tenantId),
-        tenantPermissionPolicyService.getResolvedCaseHandoverPolicies(tenantId));
+        tenantPermissionPolicyService.getResolvedCaseHandoverPolicies(tenantId),
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(tenantId));
   }
 
   public TenantPermissionPolicies updateTenantPermissionPolicies(
@@ -888,14 +889,16 @@ public class TenantServiceFacade {
                             entry.getValue().getValue(),
                             com.vi.tenantservice.api.policy.PermissionPolicyMode.valueOf(
                                 entry.getValue().getMode().name())))),
-        request.getCaseHandoverPolicies());
+        request.getCaseHandoverPolicies(),
+        request.getInternalGroupChat());
     return getTenantPermissionPolicies(tenantId);
   }
 
   private TenantPermissionPolicies toTenantPermissionPolicies(
       Long tenantId,
       Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> policies,
-      com.vi.tenantservice.api.model.CaseHandoverPolicies caseHandoverPolicies) {
+      com.vi.tenantservice.api.model.CaseHandoverPolicies caseHandoverPolicies,
+      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat) {
     return new TenantPermissionPolicies(
             tenantId,
             policies.entrySet().stream()
@@ -908,7 +911,8 @@ public class TenantServiceFacade {
                                     com.vi.tenantservice.api.model.PermissionPolicyMode.valueOf(
                                         entry.getValue().mode().name()))
                                 .inherited(entry.getValue().inherited()))))
-        .caseHandoverPolicies(caseHandoverPolicies);
+        .caseHandoverPolicies(caseHandoverPolicies)
+        .internalGroupChat(internalGroupChat);
   }
 
   private void assertSuperAdmin() {
@@ -995,6 +999,8 @@ public class TenantServiceFacade {
             .collect(java.util.stream.Collectors.toSet());
     Map<Long, Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>>>
         policiesByTenant = tenantPermissionPolicyService.getResolvedPolicies(resolvedTenantIds);
+    Map<Long, com.vi.tenantservice.api.model.InternalGroupChatPolicies> internalGroupChatByTenant =
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantIds);
     return tenants.stream()
         .map(
             dto ->
@@ -1002,7 +1008,8 @@ public class TenantServiceFacade {
                     dto,
                     controls,
                     platformTheming,
-                    policiesByTenant.getOrDefault(dto.getId(), Map.of())))
+                    policiesByTenant.getOrDefault(dto.getId(), Map.of()),
+                    internalGroupChatByTenant.get(dto.getId())))
         .toList();
   }
 
@@ -1012,6 +1019,17 @@ public class TenantServiceFacade {
    * controls themselves. See ADR-013 P4.
    */
   private RestrictedTenantDTO withEffectivePermissions(RestrictedTenantDTO dto) {
+    return dto == null ? null : withEffectivePermissions(dto, dto.getId());
+  }
+
+  /**
+   * Same as {@link #withEffectivePermissions(RestrictedTenantDTO)} for the single-domain override
+   * paths, where the DTO keeps the main tenant's id although its settings belong to the resolved
+   * tenant. The recipient scope of internal group chats is a privacy boundary, so it is resolved
+   * for {@code resolvedTenantId}, never for the main tenant (#319).
+   */
+  private RestrictedTenantDTO withEffectivePermissions(
+      RestrictedTenantDTO dto, Long resolvedTenantId) {
     if (dto == null) {
       return null;
     }
@@ -1020,7 +1038,8 @@ public class TenantServiceFacade {
         dto,
         tenantAdminControlsService.getControls(),
         getPlatformTheming(lang),
-        tenantPermissionPolicyService.getResolvedPolicies(dto.getId()));
+        tenantPermissionPolicyService.getResolvedPolicies(dto.getId()),
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantId));
   }
 
   /**
@@ -1038,8 +1057,10 @@ public class TenantServiceFacade {
       RestrictedTenantDTO dto,
       TenantAdminControls controls,
       Theming platformTheming,
-      Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies) {
+      Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies,
+      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat) {
     if (dto != null) {
+      dto.setInternalGroupChat(internalGroupChat);
       Map<String, BooleanPermissionPolicy> policies =
           resolvedPolicies.entrySet().stream()
               .collect(
@@ -1247,7 +1268,8 @@ public class TenantServiceFacade {
         tenantService.findRestrictedTenantDataById(actualTenantId).orElseThrow();
     return withEffectivePermissions(
         singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-            mainTenant, actualTenant));
+            mainTenant, actualTenant),
+        actualTenantId);
   }
 
   public Optional<RestrictedTenantDTO> getTenantDataWithOverride(
@@ -1265,7 +1287,8 @@ public class TenantServiceFacade {
     return Optional.of(
         withEffectivePermissions(
             singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-                mainTenantForSingleDomainMultitenancy.get(), tenantToOverridePrivacy.get())));
+                mainTenantForSingleDomainMultitenancy.get(), tenantToOverridePrivacy.get()),
+            resolvedTenantId));
   }
 
   public Optional<RestrictedTenantDTO> getSingleTenant() {

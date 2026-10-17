@@ -60,6 +60,9 @@ public class TenantAdminControlsSettings {
   /** Platform defaults for reason-specific Case Handover policies. */
   CaseHandoverPolicies caseHandoverPolicies;
 
+  /** Platform preset for the internal group chat policies (#319), e.g. the recipient scope. */
+  InternalGroupChatPolicies internalGroupChat;
+
   /**
    * Platform-global machine-translation provider API keys (provider id -> raw key), e.g.
    * "openrouter"/"mistral". Stored in the same tenant_admin_controls JSON blob as the other
