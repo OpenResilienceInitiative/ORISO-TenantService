@@ -1255,6 +1255,7 @@ class TenantServiceFacadeTest {
         .isEqualTo(
             new RecipientScopePermissionPolicy(
                 InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
+    verify(tenantPermissionPolicyService, never()).getResolvedInternalGroupChatPolicies(1L);
   }
 
   @Test
@@ -1294,6 +1295,7 @@ class TenantServiceFacadeTest {
         .isEqualTo(
             new RecipientScopePermissionPolicy(
                 InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
+    verify(tenantPermissionPolicyService, never()).getResolvedInternalGroupChatPolicies(1L);
   }
 
   private static InternalGroupChatPolicies recipientScope(
