@@ -724,6 +724,38 @@ class TenantConverterTest {
   }
 
   @Test
+  void toDTO_should_defaultInternalGroupChannelsToTrue_When_storedSettingsJsonIsEmpty() {
+    // given — FE#1725: legacy tenant without the counsellor channel keys
+    TenantEntity entity = TenantEntity.builder().settings("{}").build();
+
+    // when
+    Settings settings = tenantConverter.toDTO(entity, "de").getSettings();
+
+    // then
+    assertThat(settings.getFeatureConsultantEmailInternalGroupEnabled()).isTrue();
+    assertThat(settings.getFeatureConsultantBrowserInternalGroupEnabled()).isTrue();
+  }
+
+  @Test
+  void toEntity_should_roundTripExplicitFalseForInternalGroupChannels() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .featureConsultantEmailInternalGroupEnabled(false)
+        .featureConsultantBrowserInternalGroupEnabled(false);
+
+    // when
+    Settings settings =
+        tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de").getSettings();
+
+    // then
+    assertThat(settings.getFeatureConsultantEmailInternalGroupEnabled()).isFalse();
+    assertThat(settings.getFeatureConsultantBrowserInternalGroupEnabled()).isFalse();
+  }
+
+  @Test
   void toDTO_should_notCrossContaminate_When_jsonContainsMisspelledFieldName() {
     // given — typo must not satisfy .contains() for the correctly-spelled key
     TenantEntity entity =
