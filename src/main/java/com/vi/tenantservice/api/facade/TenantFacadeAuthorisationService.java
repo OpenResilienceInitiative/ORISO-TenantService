@@ -216,8 +216,11 @@ public class TenantFacadeAuthorisationService {
    */
   private void assertSingleTenantAdminMayChangeAppearance(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenant) {
-    if (appearanceChangesAllowedForTenantAdmins(existingTenant.getId())
-        || !themingChanged(sanitizedTenantDTO, existingTenant)) {
+    if (appearanceChangesAllowedForTenantAdmins(existingTenant.getId())) {
+      return;
+    }
+    keepStoredClosingAnimationsWhereNotSent(sanitizedTenantDTO, existingTenant);
+    if (!themingChanged(sanitizedTenantDTO, existingTenant)) {
       return;
     }
 
@@ -258,6 +261,46 @@ public class TenantFacadeAuthorisationService {
     }
 
     return !Boolean.FALSE.equals(controls.getAllowedPermissionToggles().getAppearance());
+  }
+
+  /**
+   * The two closing animations arrived after the Admin panel, so an older whole-tenant payload
+   * carries no value for them, and JSON cannot tell "not sent" from a null. For a Träger admin who
+   * may not change the appearance, that must neither be rejected as a branding change nor wipe what
+   * the platform set (the update replaces the whole theming block): the stored value is put into
+   * the payload, so the comparison sees no change and the update writes it back as it was. This
+   * admin therefore cannot clear a value either, which is the point of the restriction.
+   *
+   * <p>An admin who may change the appearance never reaches this: for them a null clears the value,
+   * which is how the Admin panel hands the choice back to the platform.
+   *
+   * <p>A stored name this version does not know cannot be put back; it stays a difference.
+   */
+  private void keepStoredClosingAnimationsWhereNotSent(
+      MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existing) {
+    var theming = sanitizedTenantDTO.getTheming();
+    if (theming == null) {
+      return;
+    }
+    if (theming.getClosingAnimationDesktop() == null) {
+      theming.setClosingAnimationDesktop(
+          knownClosingAnimation(existing.getThemingClosingAnimationDesktop()));
+    }
+    if (theming.getClosingAnimationMobile() == null) {
+      theming.setClosingAnimationMobile(
+          knownClosingAnimation(existing.getThemingClosingAnimationMobile()));
+    }
+  }
+
+  private static ClosingAnimation knownClosingAnimation(String stored) {
+    if (stored == null) {
+      return null;
+    }
+    try {
+      return ClosingAnimation.fromValue(stored);
+    } catch (IllegalArgumentException unknown) {
+      return null;
+    }
   }
 
   /**
