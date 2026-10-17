@@ -274,13 +274,18 @@ public class TenantFacadeAuthorisationService {
    * <p>An admin who may change the appearance never reaches this: for them a null clears the value,
    * which is how the Admin panel hands the choice back to the platform.
    *
+   * <p>A payload without any theming block is treated as an empty one: the update would reset the
+   * whole theming, so it counts as a change as soon as any branding is stored, and otherwise keeps
+   * the stored animations.
+   *
    * <p>A stored name this version does not know cannot be put back; it stays a difference.
    */
   private void keepStoredClosingAnimationsWhereNotSent(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existing) {
     var theming = sanitizedTenantDTO.getTheming();
     if (theming == null) {
-      return;
+      theming = new Theming();
+      sanitizedTenantDTO.setTheming(theming);
     }
     if (theming.getClosingAnimationDesktop() == null) {
       theming.setClosingAnimationDesktop(

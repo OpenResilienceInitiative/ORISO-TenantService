@@ -670,17 +670,50 @@ class TenantFacadeAuthorisationServiceTest {
 
   @Test
   void
-      assertUserHasSufficientPermissionsToChangeAttributes_Should_AllowTheSave_When_ARestrictedAdminSendsNoThemingBlockAtAll() {
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_KeepTheStoredAnimations_When_ARestrictedAdminSendsNoThemingBlockAndNoBrandingIsStored() {
     // given
     TenantEntity existing = tenantWithClosingAnimations("CURTAIN", "SLIDE_REVEAL");
     MultilingualTenantDTO withoutTheming = new MultilingualTenantDTO();
     givenSingleTenantAdmin();
     givenAppearanceToggle(false);
+    var converter =
+        new TenantConverter(
+            org.mockito.Mockito.mock(TemplateService.class),
+            org.mockito.Mockito.mock(TemplateRenderer.class),
+            new SmtpPasswordEncryptionService("unit-test-secret"),
+            org.mockito.Mockito.mock(PlatformLegalTextTokens.class));
 
-    // when / then no exception
+    // when
     tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
         withoutTheming, existing);
-    assertThat(withoutTheming.getTheming()).isNull();
+    TenantEntity written = converter.toEntity(existing, withoutTheming);
+
+    // then no exception, and what the update writes still carries the stored choice
+    assertThat(written.getThemingClosingAnimationDesktop()).isEqualTo("CURTAIN");
+    assertThat(written.getThemingClosingAnimationMobile()).isEqualTo("SLIDE_REVEAL");
+  }
+
+  @Test
+  void
+      assertUserHasSufficientPermissionsToChangeAttributes_Should_RejectBrandingChange_When_ARestrictedAdminSendsNoThemingBlockAndBrandingIsStored() {
+    // The update would reset the whole theming block, so this is a branding change.
+    // given
+    TenantEntity existing = tenantWithClosingAnimations("CURTAIN", "SLIDE_REVEAL");
+    existing.setThemingLogo("logo.png");
+    MultilingualTenantDTO withoutTheming = new MultilingualTenantDTO();
+    givenSingleTenantAdmin();
+    givenAppearanceToggle(false);
+
+    // when / then
+    TenantAuthorisationException thrown =
+        assertThrows(
+            TenantAuthorisationException.class,
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(
+                        withoutTheming, existing));
+    assertThat(thrown.getCustomHttpHeaders().getFirst("X-Reason"))
+        .isEqualTo(HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE.name());
   }
 
   @Test
