@@ -726,14 +726,24 @@ class TenantFacadeAuthorisationServiceTest {
     MultilingualTenantDTO cleared = submittedClosingAnimations(null, null);
     givenSingleTenantAdmin();
     givenAppearanceToggle(true);
+    var converter =
+        new TenantConverter(
+            org.mockito.Mockito.mock(TemplateService.class),
+            org.mockito.Mockito.mock(TemplateRenderer.class),
+            new SmtpPasswordEncryptionService("unit-test-secret"),
+            org.mockito.Mockito.mock(PlatformLegalTextTokens.class));
 
     // when
     tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
         cleared, existing);
+    TenantEntity written = converter.toEntity(existing, cleared);
 
-    // then
+    // then — the guard did not put the stored choice back into the payload...
     assertThat(cleared.getTheming().getClosingAnimationDesktop()).isNull();
     assertThat(cleared.getTheming().getClosingAnimationMobile()).isNull();
+    // ...and what the update writes is no choice at all
+    assertThat(written.getThemingClosingAnimationDesktop()).isNull();
+    assertThat(written.getThemingClosingAnimationMobile()).isNull();
   }
 
   @Test

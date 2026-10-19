@@ -76,26 +76,32 @@ class EffectiveThemingApplierTest {
     assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.CURTAIN);
   }
 
+  private static Theming platformClosingAnimationsSameOnBothSides() {
+    return new Theming()
+        .closingAnimationDesktop(ClosingAnimation.SLIDE_REVEAL)
+        .closingAnimationMobile(ClosingAnimation.SLIDE_REVEAL);
+  }
+
   @Test
   void applyTo_shouldInheritTheDesktopAnimationAndKeepTheTenantsOwnMobileOne() {
-    // the platform's mobile choice is CURTAIN: the tenant's own differs, so a mix-up shows
-    var tenant = new Theming().closingAnimationMobile(ClosingAnimation.SLIDE_REVEAL);
+    // the platform has one value on both sides and the tenant's own differs: copying the tenant's
+    // other device into the missing one, or the platform over the tenant's own, both show
+    var tenant = new Theming().closingAnimationMobile(ClosingAnimation.CURTAIN);
 
-    applier.applyTo(tenant, platformClosingAnimations());
+    applier.applyTo(tenant, platformClosingAnimationsSameOnBothSides());
 
     assertThat(tenant.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
-    assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
+    assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.CURTAIN);
   }
 
   @Test
   void applyTo_shouldInheritTheMobileAnimationAndKeepTheTenantsOwnDesktopOne() {
-    // the platform's desktop choice is SLIDE_REVEAL: the tenant's own differs, so a mix-up shows
     var tenant = new Theming().closingAnimationDesktop(ClosingAnimation.CURTAIN);
 
-    applier.applyTo(tenant, platformClosingAnimations());
+    applier.applyTo(tenant, platformClosingAnimationsSameOnBothSides());
 
     assertThat(tenant.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.CURTAIN);
-    assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.CURTAIN);
+    assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
   }
 
   @Test
