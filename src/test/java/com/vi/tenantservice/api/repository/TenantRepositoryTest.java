@@ -169,16 +169,16 @@ class TenantRepositoryTest {
       Function<TenantRepository, TenantRestrictedData> projection) {
     // given
     TenantEntity entity = tenantRepository.findById(EXISTING_ID).orElseThrow();
-    entity.setThemingClosingAnimationDesktop("CIRCLE_ZOOM");
-    entity.setThemingClosingAnimationMobile("SLIDE_REVEAL");
+    entity.setThemingClosingAnimationDesktop("SLIDE_REVEAL");
+    entity.setThemingClosingAnimationMobile("CURTAIN");
     tenantRepository.saveAndFlush(entity);
 
     // when
     TenantRestrictedData view = projection.apply(tenantRepository);
 
     // then
-    assertThat(view.getThemingClosingAnimationDesktop()).isEqualTo("CIRCLE_ZOOM");
-    assertThat(view.getThemingClosingAnimationMobile()).isEqualTo("SLIDE_REVEAL");
+    assertThat(view.getThemingClosingAnimationDesktop()).isEqualTo("SLIDE_REVEAL");
+    assertThat(view.getThemingClosingAnimationMobile()).isEqualTo("CURTAIN");
   }
 
   @ParameterizedTest

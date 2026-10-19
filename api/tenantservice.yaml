@@ -2376,15 +2376,16 @@ components:
           $ref: '#/components/schemas/ClosingAnimation'
     ClosingAnimation:
       type: string
-      enum: [CURTAIN, CIRCLE_ZOOM, SLIDE_REVEAL]
-      example: "CIRCLE_ZOOM"
+      enum: [CURTAIN, SLIDE_REVEAL]
+      example: "SLIDE_REVEAL"
       description: >-
         The short animation played when a person leaves a waiting room, as used by
         `theming.closingAnimationDesktop` (viewport of 1200 px and wider) and
         `theming.closingAnimationMobile` (everything narrower). Both fields are optional:
         null means "never configured", and the frontend then plays its own default. A
         tenant that has not chosen inherits the value of the platform tenant, each field
-        on its own. A stored value this version does not know is read as null.
+        on its own. A stored value this version does not know (a design that was dropped, or one a
+        newer version wrote) is read as null.
     Content:
       type: object
       required:

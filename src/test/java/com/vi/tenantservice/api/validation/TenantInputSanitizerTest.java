@@ -126,8 +126,8 @@ class TenantInputSanitizerTest {
   void sanitize_Should_passTheClosingAnimationChoicesThroughUnchanged() {
     // given — different values on the two sides, so a swap cannot hide
     MultilingualTenantDTO tenantDTO = tenantWithSeeds("#8B1A2B", "#FFFFFF", "#FFB3C7", "#E53935");
-    tenantDTO.getTheming().setClosingAnimationDesktop(ClosingAnimation.CIRCLE_ZOOM);
-    tenantDTO.getTheming().setClosingAnimationMobile(ClosingAnimation.SLIDE_REVEAL);
+    tenantDTO.getTheming().setClosingAnimationDesktop(ClosingAnimation.SLIDE_REVEAL);
+    tenantDTO.getTheming().setClosingAnimationMobile(ClosingAnimation.CURTAIN);
 
     // when
     MultilingualTenantDTO sanitized =
@@ -135,9 +135,9 @@ class TenantInputSanitizerTest {
 
     // then — a generated enum is its own whitelist; nothing to strip, nothing to lose
     assertThat(sanitized.getTheming().getClosingAnimationDesktop())
-        .isEqualTo(ClosingAnimation.CIRCLE_ZOOM);
-    assertThat(sanitized.getTheming().getClosingAnimationMobile())
         .isEqualTo(ClosingAnimation.SLIDE_REVEAL);
+    assertThat(sanitized.getTheming().getClosingAnimationMobile())
+        .isEqualTo(ClosingAnimation.CURTAIN);
   }
 
   @Test

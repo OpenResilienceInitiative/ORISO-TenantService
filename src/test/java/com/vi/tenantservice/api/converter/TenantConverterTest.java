@@ -147,8 +147,7 @@ class TenantConverterTest {
    */
   @ParameterizedTest
   @CsvSource({
-    "CURTAIN,CIRCLE_ZOOM",
-    "CIRCLE_ZOOM,SLIDE_REVEAL",
+    "CURTAIN,SLIDE_REVEAL",
     "SLIDE_REVEAL,CURTAIN",
   })
   void toEntity_should_roundTripTheClosingAnimationForDesktopAndMobile(
@@ -226,7 +225,7 @@ class TenantConverterTest {
    * exact enum name, so a lower-case spelling is as unknown as a new design.
    */
   @ParameterizedTest
-  @ValueSource(strings = {"KALEIDOSCOPE", "curtain", ""})
+  @ValueSource(strings = {"KALEIDOSCOPE", "CIRCLE_ZOOM", "curtain", ""})
   void toDTO_should_readAnUnknownStoredClosingAnimationAsNullAndKeepTheOtherSide(String unknown) {
     // given
     TenantEntity entity =
@@ -235,10 +234,10 @@ class TenantConverterTest {
 
     // when / then — desktop unknown, mobile valid: only desktop falls back, to null, not a default
     entity.setThemingClosingAnimationDesktop(unknown);
-    entity.setThemingClosingAnimationMobile("CIRCLE_ZOOM");
+    entity.setThemingClosingAnimationMobile("CURTAIN");
     Theming read = tenantConverter.toDTO(entity, "de").getTheming();
     assertThat(read.getClosingAnimationDesktop()).isNull();
-    assertThat(read.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.CIRCLE_ZOOM);
+    assertThat(read.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.CURTAIN);
 
     // and the other way round
     entity.setThemingClosingAnimationDesktop("SLIDE_REVEAL");

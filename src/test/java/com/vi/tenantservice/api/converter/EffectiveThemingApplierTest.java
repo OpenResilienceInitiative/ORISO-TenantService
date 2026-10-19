@@ -62,8 +62,8 @@ class EffectiveThemingApplierTest {
 
   private static Theming platformClosingAnimations() {
     return new Theming()
-        .closingAnimationDesktop(ClosingAnimation.CIRCLE_ZOOM)
-        .closingAnimationMobile(ClosingAnimation.SLIDE_REVEAL);
+        .closingAnimationDesktop(ClosingAnimation.SLIDE_REVEAL)
+        .closingAnimationMobile(ClosingAnimation.CURTAIN);
   }
 
   @Test
@@ -72,41 +72,43 @@ class EffectiveThemingApplierTest {
 
     applier.applyTo(tenant, platformClosingAnimations());
 
-    assertThat(tenant.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.CIRCLE_ZOOM);
-    assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
-  }
-
-  @Test
-  void applyTo_shouldInheritTheDesktopAnimationAndKeepTheTenantsOwnMobileOne() {
-    var tenant = new Theming().closingAnimationMobile(ClosingAnimation.CURTAIN);
-
-    applier.applyTo(tenant, platformClosingAnimations());
-
-    assertThat(tenant.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.CIRCLE_ZOOM);
+    assertThat(tenant.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
     assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.CURTAIN);
   }
 
   @Test
+  void applyTo_shouldInheritTheDesktopAnimationAndKeepTheTenantsOwnMobileOne() {
+    // the platform's mobile choice is CURTAIN: the tenant's own differs, so a mix-up shows
+    var tenant = new Theming().closingAnimationMobile(ClosingAnimation.SLIDE_REVEAL);
+
+    applier.applyTo(tenant, platformClosingAnimations());
+
+    assertThat(tenant.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
+    assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
+  }
+
+  @Test
   void applyTo_shouldInheritTheMobileAnimationAndKeepTheTenantsOwnDesktopOne() {
+    // the platform's desktop choice is SLIDE_REVEAL: the tenant's own differs, so a mix-up shows
     var tenant = new Theming().closingAnimationDesktop(ClosingAnimation.CURTAIN);
 
     applier.applyTo(tenant, platformClosingAnimations());
 
     assertThat(tenant.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.CURTAIN);
-    assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
+    assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.CURTAIN);
   }
 
   @Test
   void applyTo_shouldLetTheTenantsOwnClosingAnimationsWinOverThePlatformsOnBothSides() {
     var tenant =
         new Theming()
-            .closingAnimationDesktop(ClosingAnimation.SLIDE_REVEAL)
-            .closingAnimationMobile(ClosingAnimation.CIRCLE_ZOOM);
+            .closingAnimationDesktop(ClosingAnimation.CURTAIN)
+            .closingAnimationMobile(ClosingAnimation.SLIDE_REVEAL);
 
     applier.applyTo(tenant, platformClosingAnimations());
 
-    assertThat(tenant.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
-    assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.CIRCLE_ZOOM);
+    assertThat(tenant.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.CURTAIN);
+    assertThat(tenant.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
   }
 
   @Test
@@ -124,7 +126,7 @@ class EffectiveThemingApplierTest {
   void effective_shouldCarryThePlatformClosingAnimationsIntoANewTheming() {
     Theming effective = applier.effective(null, platformClosingAnimations());
 
-    assertThat(effective.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.CIRCLE_ZOOM);
-    assertThat(effective.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
+    assertThat(effective.getClosingAnimationDesktop()).isEqualTo(ClosingAnimation.SLIDE_REVEAL);
+    assertThat(effective.getClosingAnimationMobile()).isEqualTo(ClosingAnimation.CURTAIN);
   }
 }

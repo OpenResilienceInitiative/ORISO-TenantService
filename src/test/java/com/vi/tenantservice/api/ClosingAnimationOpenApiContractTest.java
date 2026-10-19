@@ -29,13 +29,12 @@ class ClosingAnimationOpenApiContractTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void closingAnimation_should_offerExactlyTheThreeDesigns() throws IOException {
+  void closingAnimation_should_offerExactlyTheTwoDesigns() throws IOException {
     var schema = (Map<String, Object>) schemas().get("ClosingAnimation");
 
     assertThat(schema).isNotNull();
     assertThat(schema.get("type")).isEqualTo("string");
-    assertThat((List<String>) schema.get("enum"))
-        .containsExactly("CURTAIN", "CIRCLE_ZOOM", "SLIDE_REVEAL");
+    assertThat((List<String>) schema.get("enum")).containsExactly("CURTAIN", "SLIDE_REVEAL");
   }
 
   @ParameterizedTest
@@ -57,13 +56,13 @@ class ClosingAnimationOpenApiContractTest {
   void theming_should_speakTheDesignNamesOnTheWire() throws IOException {
     Theming theming =
         new Theming()
-            .closingAnimationDesktop(ClosingAnimation.CIRCLE_ZOOM)
-            .closingAnimationMobile(ClosingAnimation.SLIDE_REVEAL);
+            .closingAnimationDesktop(ClosingAnimation.SLIDE_REVEAL)
+            .closingAnimationMobile(ClosingAnimation.CURTAIN);
 
     JsonNode written = JSON.readTree(JSON.writeValueAsString(theming));
 
-    assertThat(written.get("closingAnimationDesktop").asText()).isEqualTo("CIRCLE_ZOOM");
-    assertThat(written.get("closingAnimationMobile").asText()).isEqualTo("SLIDE_REVEAL");
+    assertThat(written.get("closingAnimationDesktop").asText()).isEqualTo("SLIDE_REVEAL");
+    assertThat(written.get("closingAnimationMobile").asText()).isEqualTo("CURTAIN");
   }
 
   @Test

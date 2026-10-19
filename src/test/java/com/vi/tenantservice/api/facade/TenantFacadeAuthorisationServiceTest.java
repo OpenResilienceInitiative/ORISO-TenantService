@@ -554,8 +554,8 @@ class TenantFacadeAuthorisationServiceTest {
   @ParameterizedTest(name = "stored {0}/{1}, submitted {2}/{3}")
   @CsvSource(
       value = {
-        "CURTAIN,SLIDE_REVEAL,CIRCLE_ZOOM,SLIDE_REVEAL",
-        "CURTAIN,SLIDE_REVEAL,CURTAIN,CIRCLE_ZOOM",
+        "CURTAIN,SLIDE_REVEAL,SLIDE_REVEAL,SLIDE_REVEAL",
+        "CURTAIN,SLIDE_REVEAL,CURTAIN,CURTAIN",
         "null,null,CURTAIN,null",
         "null,null,null,CURTAIN",
         "CURTAIN,SLIDE_REVEAL,SLIDE_REVEAL,CURTAIN",
@@ -583,7 +583,7 @@ class TenantFacadeAuthorisationServiceTest {
 
   @ParameterizedTest(name = "stored and submitted {0}/{1}")
   @CsvSource(
-      value = {"null,null", "CURTAIN,SLIDE_REVEAL", "CIRCLE_ZOOM,null", "null,CIRCLE_ZOOM"},
+      value = {"null,null", "CURTAIN,SLIDE_REVEAL", "SLIDE_REVEAL,null", "null,SLIDE_REVEAL"},
       nullValues = "null")
   void
       assertUserHasSufficientPermissionsToChangeAttributes_Should_AllowUnrelatedSave_When_AppearanceToggleIsOffButTheClosingAnimationIsUnchanged(
@@ -613,7 +613,7 @@ class TenantFacadeAuthorisationServiceTest {
         "CURTAIN,SLIDE_REVEAL,null,null,CURTAIN,SLIDE_REVEAL",
         "CURTAIN,SLIDE_REVEAL,null,SLIDE_REVEAL,CURTAIN,SLIDE_REVEAL",
         "CURTAIN,SLIDE_REVEAL,CURTAIN,null,CURTAIN,SLIDE_REVEAL",
-        "CIRCLE_ZOOM,null,null,null,CIRCLE_ZOOM,null",
+        "SLIDE_REVEAL,null,null,null,SLIDE_REVEAL,null",
         "null,null,null,null,null,null",
       },
       nullValues = "null")

@@ -5,7 +5,7 @@
       Persist which closing animation a tenant plays when a person leaves a waiting room
       (ORISO-Frontend#1737): one choice for desktop viewports, one for mobile.
 
-      The value is one of CURTAIN / CIRCLE_ZOOM / SLIDE_REVEAL and is chosen in Admin under
+      The value is one of CURTAIN / SLIDE_REVEAL and is chosen in Admin under
       Appearance.
 
       Stored as the enum NAME in a varchar, not as an ordinal: the column stays readable in a

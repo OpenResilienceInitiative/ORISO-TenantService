@@ -580,12 +580,12 @@ class TenantControllerIT {
                         .withName("tenant")
                         .withSubdomain("closingsubdomain")
                         .withThemingClosingAnimations(
-                            ClosingAnimation.CIRCLE_ZOOM, ClosingAnimation.SLIDE_REVEAL)
+                            ClosingAnimation.SLIDE_REVEAL, ClosingAnimation.CURTAIN)
                         .withLicensing()
                         .jsonify()))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("CIRCLE_ZOOM"))
-        .andExpect(jsonPath("$.theming.closingAnimationMobile").value("SLIDE_REVEAL"));
+        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("SLIDE_REVEAL"))
+        .andExpect(jsonPath("$.theming.closingAnimationMobile").value("CURTAIN"));
 
     // the Admin card reads the stored choice back...
     mockMvc
@@ -594,23 +594,23 @@ class TenantControllerIT {
                 .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
                 .contentType(APPLICATION_JSON))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("CIRCLE_ZOOM"))
-        .andExpect(jsonPath("$.theming.closingAnimationMobile").value("SLIDE_REVEAL"));
+        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("SLIDE_REVEAL"))
+        .andExpect(jsonPath("$.theming.closingAnimationMobile").value("CURTAIN"));
 
     // ...and so does the waiting room, through the public read
     mockMvc
         .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("CIRCLE_ZOOM"))
-        .andExpect(jsonPath("$.theming.closingAnimationMobile").value("SLIDE_REVEAL"));
+        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("SLIDE_REVEAL"))
+        .andExpect(jsonPath("$.theming.closingAnimationMobile").value("CURTAIN"));
   }
 
   @Test
   void getPublicTenant_Should_inheritEachClosingAnimationFromThePlatformTenant() throws Exception {
     // given — the platform tenant (0) picked both, the Träger picked only its own mobile one
     jdbcTemplate.update(
-        "UPDATE tenant SET theming_closing_animation_desktop = 'CURTAIN',"
-            + " theming_closing_animation_mobile = 'CIRCLE_ZOOM' WHERE id = 0");
+        "UPDATE tenant SET theming_closing_animation_desktop = 'SLIDE_REVEAL',"
+            + " theming_closing_animation_mobile = 'CURTAIN' WHERE id = 0");
     jdbcTemplate.update(
         "UPDATE tenant SET theming_closing_animation_mobile = 'SLIDE_REVEAL' WHERE id = 1");
 
@@ -618,7 +618,7 @@ class TenantControllerIT {
     mockMvc
         .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("CURTAIN"))
+        .andExpect(jsonPath("$.theming.closingAnimationDesktop").value("SLIDE_REVEAL"))
         .andExpect(jsonPath("$.theming.closingAnimationMobile").value("SLIDE_REVEAL"));
   }
 
