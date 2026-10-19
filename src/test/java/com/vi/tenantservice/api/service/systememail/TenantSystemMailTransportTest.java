@@ -43,6 +43,7 @@ class TenantSystemMailTransportTest {
   @Test
   void sendsExactlyOneRecipientAndMultipartTextBeforeHtml() throws Exception {
     var captured = new java.util.concurrent.atomic.AtomicReference<Message>();
+    UUID correlation = UUID.fromString("ab2e5141-2f26-456a-9e46-0ff642918115");
     try (var smtp = mockStatic(Transport.class)) {
       smtp.when(() -> Transport.send(any(Message.class)))
           .thenAnswer(
@@ -59,7 +60,7 @@ class TenantSystemMailTransportTest {
               "Änderung",
               "<p>Änderung</p>",
               "Änderung",
-              UUID.randomUUID()));
+              correlation));
       smtp.verify(() -> Transport.send(any(Message.class)), times(1));
     }
     assertThat(captured.get().getAllRecipients()).hasSize(1);
@@ -68,6 +69,9 @@ class TenantSystemMailTransportTest {
     assertThat(mime.getBodyPart(0).getContent()).isEqualTo("Änderung");
     assertThat(mime.getBodyPart(1).getContent()).isEqualTo("<p>Änderung</p>");
     assertThat(captured.get().getSubject()).isEqualTo("Änderung");
+    ((jakarta.mail.internet.MimeMessage) captured.get()).saveChanges();
+    assertThat(captured.get().getHeader("X-ORISO-Delivery-ID"))
+        .containsExactly(correlation.toString());
   }
 
   @Test

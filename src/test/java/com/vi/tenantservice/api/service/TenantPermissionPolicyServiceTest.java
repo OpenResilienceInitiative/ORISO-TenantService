@@ -12,14 +12,19 @@ import static org.mockito.Mockito.when;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
+import com.vi.tenantservice.api.model.ConsentPermissionPolicy;
 import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
 import com.vi.tenantservice.api.model.PermissionPolicyMode;
+import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantPermissionPolicyEntity;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
+import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.policy.ResolvedPolicyValue;
 import com.vi.tenantservice.api.repository.TenantPermissionPolicyRepository;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -64,6 +69,36 @@ class TenantPermissionPolicyServiceTest {
         .isEqualTo(new ResolvedPolicyValue<>(true, ENFORCED, true));
     assertThat(resolved.get("featureVideoCallsEnabled"))
         .isEqualTo(new ResolvedPolicyValue<>(false, ENFORCED, false));
+  }
+
+  @Test
+  void resolve_shouldApplyASplitFormatOverride_whenThePlatformMapPredatesTheSplit() {
+    // the platform map lists only the master switch, never the split-out format keys (#250).
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        "featureGroupChatV2Enabled",
+                        new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED))));
+    when(repository.findByTenantId(42L))
+        .thenReturn(
+            Optional.of(
+                TenantPermissionPolicyEntity.builder()
+                    .tenantId(42L)
+                    .policies(
+                        "{\"featureSelfHelpGroupsEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}")
+                    .build()));
+
+    Map<String, ResolvedPolicyValue<Boolean>> resolved = service.getResolvedPolicies(42L);
+
+    // the override is honoured against the master inherited as the split format's parent,
+    // not dropped because the platform map lacks the key.
+    assertThat(resolved.get("featureSelfHelpGroupsEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(false, SUGGESTED, false));
+    // the sibling internal format inherits the master untouched.
+    assertThat(resolved.get("featureInternalGroupChatEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
   }
 
   @Test
@@ -182,6 +217,104 @@ class TenantPermissionPolicyServiceTest {
     verify(platformControls).getControls();
   }
 
+  // --- #254: the platform list on dev holds a single entry (caseHandoverEnabled) ---
+
+  private static TenantAdminControls platformWithOnlyCaseHandover() {
+    return new TenantAdminControls()
+        .permissionPolicies(
+            Map.of(
+                "caseHandoverEnabled",
+                new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED)));
+  }
+
+  private static String[] everyRegistryFeature() {
+    return Arrays.stream(PermissionFeature.values())
+        .map(PermissionFeature::apiKey)
+        .toArray(String[]::new);
+  }
+
+  @Test
+  void resolve_shouldKeepATenantOverrideForAFeatureWithoutAPlatformEntry_acrossSaveAndRead() {
+    when(platformControls.getControls()).thenReturn(platformWithOnlyCaseHandover());
+    TenantPermissionPolicyEntity[] stored = new TenantPermissionPolicyEntity[1];
+    when(repository.findByTenantId(42L)).thenAnswer(invocation -> Optional.ofNullable(stored[0]));
+    when(repository.saveAndFlush(any(TenantPermissionPolicyEntity.class)))
+        .thenAnswer(
+            invocation -> {
+              stored[0] = invocation.getArgument(0);
+              return stored[0];
+            });
+
+    service.saveOverrides(
+        42L, Map.of("featureAudioCallsEnabled", new PolicyValue<>(true, ENFORCED)));
+    Map<String, ResolvedPolicyValue<Boolean>> resolved = service.getResolvedPolicies(42L);
+
+    assertThat(resolved.get("featureAudioCallsEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, ENFORCED, false));
+    assertThat(resolved.get("caseHandoverEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
+  }
+
+  @Test
+  void resolve_shouldListEveryRegistryFeature_whenThePlatformListHoldsASingleEntry() {
+    when(platformControls.getControls()).thenReturn(platformWithOnlyCaseHandover());
+    when(repository.findByTenantId(42L)).thenReturn(Optional.empty());
+
+    Map<String, ResolvedPolicyValue<Boolean>> resolved = service.getResolvedPolicies(42L);
+
+    assertThat(resolved).containsOnlyKeys(everyRegistryFeature());
+    assertThat(resolved.get("featureVideoCallsEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
+    assertThat(resolved.get("featureAudioCallsEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
+  }
+
+  @Test
+  void resolve_shouldTakeTheMissingPlatformEntryFromTheLegacyToggles_notFromAFixedDefault() {
+    when(platformControls.getControls())
+        .thenReturn(
+            platformWithOnlyCaseHandover()
+                .allowedPermissionToggles(
+                    new TenantAdminAllowedPermissionToggles().videoCalls(false))
+                .enforcedPermissionToggles(
+                    new TenantAdminAllowedPermissionToggles().supervision(true)));
+    when(repository.findByTenantId(42L))
+        .thenReturn(
+            Optional.of(
+                TenantPermissionPolicyEntity.builder()
+                    .tenantId(42L)
+                    .policies(
+                        "{\"featureVideoCallsEnabled\":{\"value\":true,\"mode\":\"SUGGESTED\"}}")
+                    .build()));
+
+    Map<String, ResolvedPolicyValue<Boolean>> resolved = service.getResolvedPolicies(42L);
+
+    // platform forbade video calls through the legacy toggle: the tenant override cannot win
+    assertThat(resolved.get("featureVideoCallsEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(false, ENFORCED, true));
+    assertThat(resolved.get("featureSupervisionEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, ENFORCED, true));
+  }
+
+  @Test
+  void resolveMany_shouldListEveryRegistryFeature_whenThePlatformListHoldsASingleEntry() {
+    when(platformControls.getControls()).thenReturn(platformWithOnlyCaseHandover());
+    when(repository.findByTenantIdIn(Set.of(1L)))
+        .thenReturn(
+            java.util.List.of(
+                TenantPermissionPolicyEntity.builder()
+                    .tenantId(1L)
+                    .policies(
+                        "{\"featureAudioCallsEnabled\":{\"value\":true,\"mode\":\"ENFORCED\"}}")
+                    .build()));
+
+    var resolved = service.getResolvedPolicies(Set.of(1L));
+
+    assertThat(resolved.get(1L)).containsOnlyKeys(everyRegistryFeature());
+    assertThat(resolved.get(1L).get("featureAudioCallsEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, ENFORCED, false));
+  }
+
   @Test
   void resolveCaseHandover_shouldKeepEnforcedParentAndApplySuggestedDurationOverride()
       throws Exception {
@@ -211,5 +344,55 @@ class TenantPermissionPolicyServiceTest {
     assertThat(advice.getEnabled().getInherited()).isTrue();
     assertThat(advice.getMaxAccessDurationMinutes().getValue()).isEqualTo(1500);
     assertThat(advice.getMaxAccessDurationMinutes().getInherited()).isFalse();
+  }
+
+  @Test
+  void resolveCaseHandover_shouldPreferLegacyEnforcedOptInDuringDualRead() throws Exception {
+    var local = CaseHandoverPolicyDefaults.create();
+    var localAdvice = local.getReasons().get(CaseHandoverPolicyDefaults.ADVICE_NEEDED);
+    localAdvice.setClientConsent(
+        new ConsentPermissionPolicy(
+            CaseHandoverConsentValue.OPT_OUT, PermissionPolicyMode.SUGGESTED));
+    localAdvice.setClientConsentRequired(
+        new BooleanPermissionPolicy(true, PermissionPolicyMode.ENFORCED));
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls().caseHandoverPolicies(CaseHandoverPolicyDefaults.create()));
+    when(repository.findByTenantId(42L))
+        .thenReturn(
+            Optional.of(
+                TenantPermissionPolicyEntity.builder()
+                    .tenantId(42L)
+                    .policies("{}")
+                    .caseHandoverPolicies(new ObjectMapper().writeValueAsString(local))
+                    .build()));
+
+    var consent =
+        service
+            .getResolvedCaseHandoverPolicies(42L)
+            .getReasons()
+            .get(CaseHandoverPolicyDefaults.ADVICE_NEEDED)
+            .getClientConsent();
+
+    assertThat(consent.getValue()).isEqualTo(CaseHandoverConsentValue.OPT_IN);
+    assertThat(consent.getMode()).isEqualTo(PermissionPolicyMode.ENFORCED);
+    assertThat(consent.getInherited()).isFalse();
+  }
+
+  @Test
+  void saveCaseHandover_shouldRejectEnforcedNoConsentBecauseItHasNoUiState() {
+    var local = CaseHandoverPolicyDefaults.create();
+    local
+        .getReasons()
+        .get(CaseHandoverPolicyDefaults.ADVICE_NEEDED)
+        .setClientConsent(
+            new ConsentPermissionPolicy(
+                CaseHandoverConsentValue.NONE, PermissionPolicyMode.ENFORCED));
+
+    assertThatThrownBy(() -> service.saveOverrides(42L, Map.of(), local))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("NONE consent");
+
+    verify(repository, never()).saveAndFlush(any());
   }
 }

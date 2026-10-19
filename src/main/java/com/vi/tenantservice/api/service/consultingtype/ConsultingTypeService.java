@@ -34,6 +34,10 @@ public class ConsultingTypeService {
   private String defaultConsultingTypesFilePath;
 
   public void createDefaultConsultingTypes(Long tenantId) {
+    createDefaultConsultingTypes(tenantId, null);
+  }
+
+  public void createDefaultConsultingTypes(Long tenantId, String creationContext) {
     if (StringUtils.isBlank(defaultConsultingTypesFilePath)) {
       log.warn(
           "default.consulting.types.json.path is empty - skipping default consulting type bootstrap for tenant {}",
@@ -54,18 +58,24 @@ public class ConsultingTypeService {
       ConsultingTypeDTO consultingTypeDTO =
           new ObjectMapper().readValue(file, ConsultingTypeDTO.class);
       consultingTypeDTO.setTenantId(tenantId.intValue());
-      createConsultingType(consultingTypeDTO);
+      createConsultingType(consultingTypeDTO, creationContext);
     } catch (IOException ioException) {
       log.error("Error while reading default consulting types configuration file", ioException);
       throw new IllegalStateException(ioException);
     }
   }
 
-  private void createConsultingType(ConsultingTypeDTO consultingTypeDTO)
+  private void createConsultingType(ConsultingTypeDTO consultingTypeDTO, String creationContext)
       throws RestClientException {
     var consultingTypeControllerApi =
         consultingTypeServiceApiControllerFactory.createControllerApi();
     addDefaultHeaders(consultingTypeControllerApi.getApiClient());
+    if (creationContext != null) {
+      consultingTypeControllerApi
+          .getApiClient()
+          .addDefaultHeader(
+              com.vi.tenantservice.config.security.TenantCreationContext.HEADER, creationContext);
+    }
     try {
       consultingTypeControllerApi.createConsultingType(consultingTypeDTO);
     } catch (RestClientException e) {

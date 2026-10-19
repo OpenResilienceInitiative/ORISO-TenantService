@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.validation;
 
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
+import com.vi.tenantservice.api.model.TenantDataProtectionOfficerDTO;
 import com.vi.tenantservice.api.model.Theming;
 import java.util.Map;
 import java.util.function.Function;
@@ -25,9 +26,30 @@ public class TenantInputSanitizer {
     output.setSubdomain(inputSanitizer.sanitize(input.getSubdomain()));
     output.setAddress(inputSanitizer.sanitize(input.getAddress()));
     output.setDescription(inputSanitizer.sanitize(input.getDescription()));
+    // null must survive as null: on update it means "keep the stored value", not "clear it".
+    output.setLegalName(inputSanitizer.sanitizePlainText(input.getLegalName()));
+    output.setContactEmail(inputSanitizer.sanitizePlainText(input.getContactEmail()));
+    output.setContactPhone(inputSanitizer.sanitizePlainText(input.getContactPhone()));
+    output.setDataProtectionOfficer(
+        sanitizeDataProtectionOfficer(input.getDataProtectionOfficer()));
     sanitizeTheming(input, output);
     sanitizeContent(input, output);
     return output;
+  }
+
+  /** Plain text like the sender block; null stays null ("keep" on update). */
+  private TenantDataProtectionOfficerDTO sanitizeDataProtectionOfficer(
+      TenantDataProtectionOfficerDTO input) {
+    if (input == null) {
+      return null;
+    }
+    return new TenantDataProtectionOfficerDTO()
+        .nameAndLegalForm(inputSanitizer.sanitizePlainText(input.getNameAndLegalForm()))
+        .street(inputSanitizer.sanitizePlainText(input.getStreet()))
+        .postcode(inputSanitizer.sanitizePlainText(input.getPostcode()))
+        .city(inputSanitizer.sanitizePlainText(input.getCity()))
+        .phoneNumber(inputSanitizer.sanitizePlainText(input.getPhoneNumber()))
+        .email(inputSanitizer.sanitizePlainText(input.getEmail()));
   }
 
   private MultilingualTenantDTO copyNotSanitizedAttributes(MultilingualTenantDTO input) {
@@ -45,6 +67,8 @@ public class TenantInputSanitizer {
   private void sanitizeTheming(MultilingualTenantDTO input, MultilingualTenantDTO output) {
     Theming theming = input.getTheming();
     if (theming != null) {
+      output.getTheming().setAssistantName(theming.getAssistantName());
+      output.getTheming().setAssistantIcon(theming.getAssistantIcon());
       // Assets are URLs, not markup — HTML-sanitizing them encoded the base64
       // payload ("+" -> "&#43;") and left an undecodable data URL behind, which
       // is what made the tenant logo and favicon disappear from every public
@@ -54,14 +78,21 @@ public class TenantInputSanitizer {
       output
           .getTheming()
           .setAssociationLogo(inputSanitizer.sanitizeAssetUrl(theming.getAssociationLogo()));
-      output.getTheming().setPrimaryColor(inputSanitizer.sanitize(theming.getPrimaryColor()));
-      output.getTheming().setSecondaryColor(inputSanitizer.sanitize(theming.getSecondaryColor()));
-      output.getTheming().setAccent(inputSanitizer.sanitize(theming.getAccent()));
-      output.getTheming().setSignal(inputSanitizer.sanitize(theming.getSignal()));
+      // Blank/whitespace seeds must stay absent (null), not persist as "". An empty
+      // string is what made the public app discard the entire tenant palette.
+      output.getTheming().setPrimaryColor(sanitizeSeed(theming.getPrimaryColor()));
+      output.getTheming().setSecondaryColor(sanitizeSeed(theming.getSecondaryColor()));
+      output.getTheming().setAccent(sanitizeSeed(theming.getAccent()));
+      output.getTheming().setSignal(sanitizeSeed(theming.getSignal()));
       // loginEffect is a generated enum, not free text — there is nothing to strip,
       // and the enum itself is the whitelist.
       output.getTheming().setLoginEffect(theming.getLoginEffect());
     }
+  }
+
+  private String sanitizeSeed(String value) {
+    String sanitized = inputSanitizer.sanitize(value);
+    return sanitized == null || sanitized.isBlank() ? null : sanitized;
   }
 
   private void sanitizeContent(MultilingualTenantDTO input, MultilingualTenantDTO output) {

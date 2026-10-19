@@ -194,6 +194,26 @@ class DpaSignatureOrphanIT {
   }
 
   @Test
+  void aSignatureConfirmedBeforeRegistration_Should_makeTheRegisteredTenantValid() {
+    // ORISO-Admin#1065: the representative confirms while the id is still only reserved, the
+    // admin registers afterwards — the new tenant must start unlocked, without a second signature
+    reserve("reservation-token", TenantIdReservationStatus.RESERVED);
+    var rawToken =
+        tenantDpaService.createSignInvite(
+            TENANT_ID, VERSION, java.time.Duration.ofDays(14), null, "reservation-token");
+    tenantDpaService.confirmSignature(
+        rawToken, "Erika", "GF", "erika@example.org", "Träger Nord", false, "de");
+
+    reservationRepository.deleteAll();
+    reserve("reservation-token", TenantIdReservationStatus.ASSIGNED);
+    registerTenant("Träger Nord");
+
+    assertThat(tenantDpaStatusService.getStatus(TENANT_ID).status())
+        .isEqualTo(TenantDpaStatus.VALID);
+    assertThat(tenantDpaService.getSignatures(TENANT_ID)).hasSize(1);
+  }
+
+  @Test
   void anAdminCreatedInvite_Should_stayUnaffectedByTheOwnershipCheck() {
     // links an authenticated admin mints carry no reservation binding and must keep counting
     registerTenant("Träger Nord");

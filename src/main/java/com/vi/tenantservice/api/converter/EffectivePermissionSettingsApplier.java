@@ -25,6 +25,9 @@ public class EffectivePermissionSettingsApplier {
       Map.ofEntries(
           Map.entry("featureAnonymousChatEnabled", Settings::setFeatureAnonymousChatEnabled),
           Map.entry("featureGroupChatV2Enabled", Settings::setFeatureGroupChatV2Enabled),
+          Map.entry(
+              "featureInternalGroupChatEnabled", Settings::setFeatureInternalGroupChatEnabled),
+          Map.entry("featureSelfHelpGroupsEnabled", Settings::setFeatureSelfHelpGroupsEnabled),
           Map.entry("featureCallsEnabled", Settings::setFeatureCallsEnabled),
           Map.entry("featureSupervisionEnabled", Settings::setFeatureSupervisionEnabled),
           Map.entry(
@@ -123,7 +126,23 @@ public class EffectivePermissionSettingsApplier {
               "featureMediaAiScanSupervisionChatsEnabled",
               Settings::setFeatureMediaAiScanSupervisionChatsEnabled),
           Map.entry("featureDisplayNameEditable", Settings::setFeatureDisplayNameEditable),
-          Map.entry("featureAskerEmailEnabled", Settings::setFeatureAskerEmailEnabled));
+          Map.entry("featureAskerEmailEnabled", Settings::setFeatureAskerEmailEnabled),
+          Map.entry(
+              "featureAskerEmailAgencyCounsellingEnabled",
+              Settings::setFeatureAskerEmailAgencyCounsellingEnabled),
+          Map.entry(
+              "featureAskerEmailLiveChatEnabled", Settings::setFeatureAskerEmailLiveChatEnabled),
+          Map.entry(
+              "featureAskerEmailSelfHelpEnabled", Settings::setFeatureAskerEmailSelfHelpEnabled),
+          Map.entry(
+              "featureAskerBrowserAgencyCounsellingEnabled",
+              Settings::setFeatureAskerBrowserAgencyCounsellingEnabled),
+          Map.entry(
+              "featureAskerBrowserLiveChatEnabled",
+              Settings::setFeatureAskerBrowserLiveChatEnabled),
+          Map.entry(
+              "featureAskerBrowserSelfHelpEnabled",
+              Settings::setFeatureAskerBrowserSelfHelpEnabled));
 
   private record ToggleBinding(
       Function<TenantAdminAllowedPermissionToggles, Boolean> getter,
@@ -140,6 +159,12 @@ public class EffectivePermissionSettingsApplier {
           new ToggleBinding(
               TenantAdminAllowedPermissionToggles::getGroupChat,
               Settings::setFeatureGroupChatV2Enabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getInternalGroupChat,
+              Settings::setFeatureInternalGroupChatEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getSelfHelpGroups,
+              Settings::setFeatureSelfHelpGroupsEnabled),
           new ToggleBinding(
               TenantAdminAllowedPermissionToggles::getCalls, Settings::setFeatureCallsEnabled),
           new ToggleBinding(
@@ -227,7 +252,7 @@ public class EffectivePermissionSettingsApplier {
     }
   }
 
-  /** Applies only locked policies. Suggestions remain editable tenant settings. */
+  /** Applies locked policies and resolved tenant-local values. Inherited suggestions are hints. */
   public void applyPolicies(
       Settings settings, Map<String, BooleanPermissionPolicy> permissionPolicies) {
     if (settings == null || permissionPolicies == null) {
@@ -238,7 +263,8 @@ public class EffectivePermissionSettingsApplier {
           BiConsumer<Settings, Boolean> setter = POLICY_SETTERS.get(feature);
           if (setter != null
               && policy != null
-              && policy.getMode() == PermissionPolicyMode.ENFORCED) {
+              && (policy.getMode() == PermissionPolicyMode.ENFORCED
+                  || Boolean.FALSE.equals(policy.getInherited()))) {
             setter.accept(settings, policy.getValue());
           }
         });

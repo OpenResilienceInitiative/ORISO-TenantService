@@ -1,5 +1,6 @@
 package com.vi.tenantservice.config.security;
 
+import com.vi.tenantservice.api.authorisation.Authority;
 import java.util.Collection;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -18,6 +19,9 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class JwtAuthConverter implements Converter<Jwt, AbstractAuthenticationToken> {
 
+  private static final String TECHNICAL_AUTHORITY_PREFIX =
+      Authority.AuthorityValue.PREFIX + "TECHNICAL_";
+
   private final @NonNull AuthorisationService authorisationService;
 
   private final JwtGrantedAuthoritiesConverter jwtGrantedAuthoritiesConverter =
@@ -25,10 +29,26 @@ public class JwtAuthConverter implements Converter<Jwt, AbstractAuthenticationTo
 
   private final JwtAuthConverterProperties properties;
 
+  private final TechnicalServiceIdentity technicalServiceIdentity;
+
   public JwtAuthConverter(
-      JwtAuthConverterProperties properties, AuthorisationService authorisationService) {
+      JwtAuthConverterProperties properties,
+      AuthorisationService authorisationService,
+      TechnicalServiceIdentity technicalServiceIdentity) {
     this.properties = properties;
     this.authorisationService = authorisationService;
+    this.technicalServiceIdentity = technicalServiceIdentity;
+  }
+
+  private TaskServiceIdentity taskServiceIdentity;
+
+  public JwtAuthConverter(
+      JwtAuthConverterProperties properties,
+      AuthorisationService authorisationService,
+      TechnicalServiceIdentity technicalServiceIdentity,
+      TaskServiceIdentity taskServiceIdentity) {
+    this(properties, authorisationService, technicalServiceIdentity);
+    this.taskServiceIdentity = taskServiceIdentity;
   }
 
   @Override
@@ -38,16 +58,28 @@ public class JwtAuthConverter implements Converter<Jwt, AbstractAuthenticationTo
   }
 
   private Collection<GrantedAuthority> getGrantedAuthorities(Jwt jwt) {
+    if (TaskServiceIdentity.hasTaskRole(jwt)
+        || (taskServiceIdentity != null && taskServiceIdentity.isTaskToken(jwt))) {
+      return java.util.List.of();
+    }
     Collection<GrantedAuthority> convertedGrantedAuthorities =
         jwtGrantedAuthoritiesConverter.convert(jwt);
-    if (convertedGrantedAuthorities != null) {
-      return Stream.concat(
-              convertedGrantedAuthorities.stream(),
-              authorisationService.extractRealmAuthorities(jwt).stream())
-          .collect(Collectors.toSet());
-    } else {
-      return authorisationService.extractRealmAuthorities(jwt);
+    Stream<GrantedAuthority> authorities =
+        convertedGrantedAuthorities != null
+            ? Stream.concat(
+                convertedGrantedAuthorities.stream(),
+                authorisationService.extractRealmAuthorities(jwt).stream())
+            : authorisationService.extractRealmAuthorities(jwt).stream();
+    // The role alone is not the service identity: technical-only rights need its subject too.
+    if (!technicalServiceIdentity.isServiceIdentity(jwt)) {
+      authorities = authorities.filter(authority -> !isTechnicalOnly(authority));
     }
+    return authorities.collect(Collectors.toSet());
+  }
+
+  private static boolean isTechnicalOnly(GrantedAuthority authority) {
+    return authority.getAuthority() != null
+        && authority.getAuthority().startsWith(TECHNICAL_AUTHORITY_PREFIX);
   }
 
   private String getPrincipalClaimName(Jwt jwt) {

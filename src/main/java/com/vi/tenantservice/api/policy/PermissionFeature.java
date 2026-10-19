@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api.policy;
 
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
@@ -11,6 +12,8 @@ public enum PermissionFeature {
   APPEARANCE("appearance", "appearance"),
   ANONYMOUS_CHAT("featureAnonymousChatEnabled", "anonymousChat"),
   GROUP_CHAT("featureGroupChatV2Enabled", "groupChat"),
+  INTERNAL_GROUP_CHAT("featureInternalGroupChatEnabled", "internalGroupChat"),
+  SELF_HELP_GROUPS("featureSelfHelpGroupsEnabled", "selfHelpGroups"),
   CALLS("featureCallsEnabled", "calls"),
   SUPERVISION("featureSupervisionEnabled", "supervision"),
   SUPERVISION_ANONYMOUS_CHATS(
@@ -69,6 +72,13 @@ public enum PermissionFeature {
       "featureMediaAiScanSupervisionChatsEnabled", "mediaAiScanSupervisionChats"),
   ASKER_DISPLAY_NAME("featureDisplayNameEditable", null),
   ASKER_EMAIL("featureAskerEmailEnabled", null),
+  ASKER_EMAIL_AGENCY_COUNSELLING("featureAskerEmailAgencyCounsellingEnabled", null),
+  ASKER_EMAIL_LIVE_CHAT("featureAskerEmailLiveChatEnabled", null),
+  ASKER_EMAIL_SELF_HELP("featureAskerEmailSelfHelpEnabled", null),
+  ASKER_BROWSER_AGENCY_COUNSELLING("featureAskerBrowserAgencyCounsellingEnabled", null),
+  ASKER_BROWSER_LIVE_CHAT("featureAskerBrowserLiveChatEnabled", null),
+  ASKER_BROWSER_SELF_HELP("featureAskerBrowserSelfHelpEnabled", null),
+
   CASE_HANDOVER("caseHandoverEnabled", null);
 
   private static final Map<String, PermissionFeature> BY_API_KEY =
@@ -83,12 +93,56 @@ public enum PermissionFeature {
     this.legacyToggleKey = legacyToggleKey;
   }
 
+  public boolean defaultValue() {
+    return this != ASKER_EMAIL_LIVE_CHAT;
+  }
+
   public String apiKey() {
     return apiKey;
   }
 
   public String legacyToggleKey() {
     return legacyToggleKey;
+  }
+
+  /**
+   * The feature whose rule applies while no rule was stored for this one yet. The two group chat
+   * formats (#250) were split out of {@link #GROUP_CHAT}; platform and tenant rules written before
+   * the split must keep governing both formats.
+   */
+  public Optional<PermissionFeature> transitionFallback() {
+    return switch (this) {
+      case INTERNAL_GROUP_CHAT, SELF_HELP_GROUPS -> Optional.of(GROUP_CHAT);
+      default -> Optional.empty();
+    };
+  }
+
+  /**
+   * Returns {@code policies} with every missing split-out feature filled from its {@link
+   * #transitionFallback()} entry. Present entries are never touched; the input is not modified.
+   */
+  public static <V> Map<String, V> withTransitionFallbacks(Map<String, V> policies) {
+    if (policies == null || policies.isEmpty()) {
+      return policies;
+    }
+    Map<String, V> result = null;
+    for (PermissionFeature feature : values()) {
+      if (policies.containsKey(feature.apiKey())) {
+        continue;
+      }
+      V inherited =
+          feature
+              .transitionFallback()
+              .map(fallback -> policies.get(fallback.apiKey()))
+              .orElse(null);
+      if (inherited != null) {
+        if (result == null) {
+          result = new LinkedHashMap<>(policies);
+        }
+        result.put(feature.apiKey(), inherited);
+      }
+    }
+    return result == null ? policies : Map.copyOf(result);
   }
 
   public static Optional<PermissionFeature> byApiKey(String apiKey) {

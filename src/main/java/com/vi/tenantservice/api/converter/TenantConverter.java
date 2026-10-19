@@ -28,10 +28,12 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantData;
+import com.vi.tenantservice.api.model.TenantDataProtectionOfficerDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantEntity.TenantEntityBuilder;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.TenantSmtpSettings;
 import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.policy.PolicyValue;
@@ -39,9 +41,11 @@ import com.vi.tenantservice.api.service.SmtpPasswordEncryptionService;
 import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
+import com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens;
 import com.vi.tenantservice.api.util.JsonConverter;
 import freemarker.template.TemplateException;
 import java.io.IOException;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -62,6 +66,8 @@ public class TenantConverter {
 
   private final @NonNull SmtpPasswordEncryptionService smtpPasswordEncryptionService;
 
+  private final @NonNull PlatformLegalTextTokens platformLegalTextTokens;
+
   public TenantEntity toEntity(MultilingualTenantDTO tenantDTO) {
     var builder =
         TenantEntity.builder()
@@ -69,7 +75,12 @@ public class TenantConverter {
             .name(tenantDTO.getName())
             .subdomain(tenantDTO.getSubdomain())
             .address(tenantDTO.getAddress())
-            .description(tenantDTO.getDescription());
+            .description(tenantDTO.getDescription())
+            .legalName(blankToNull(tenantDTO.getLegalName()))
+            .contactEmail(blankToNull(tenantDTO.getContactEmail()))
+            .contactPhone(blankToNull(tenantDTO.getContactPhone()))
+            .dataProtectionOfficer(
+                dataProtectionOfficerToJson(tenantDTO.getDataProtectionOfficer()));
     contentToEntity(tenantDTO, builder);
     licensingToEntity(tenantDTO, builder);
     themingToEntity(tenantDTO, builder);
@@ -92,11 +103,21 @@ public class TenantConverter {
         .featureAppointmentsEnabled(settings.getFeatureAppointmentsEnabled())
         .featureStatisticsEnabled(settings.getFeatureStatisticsEnabled())
         .featureGroupChatV2Enabled(settings.getFeatureGroupChatV2Enabled())
+        .featureInternalGroupChatEnabled(settings.getFeatureInternalGroupChatEnabled())
+        .featureSelfHelpGroupsEnabled(settings.getFeatureSelfHelpGroupsEnabled())
         .featureTeamDiscussionEnabled(settings.getFeatureTeamDiscussionEnabled())
         .featureToolsEnabled(settings.getFeatureToolsEnabled())
         .featureAnonymousChatEnabled(settings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(settings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(settings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailAgencyCounsellingEnabled(
+            settings.getFeatureAskerEmailAgencyCounsellingEnabled())
+        .featureAskerEmailLiveChatEnabled(settings.getFeatureAskerEmailLiveChatEnabled())
+        .featureAskerEmailSelfHelpEnabled(settings.getFeatureAskerEmailSelfHelpEnabled())
+        .featureAskerBrowserAgencyCounsellingEnabled(
+            settings.getFeatureAskerBrowserAgencyCounsellingEnabled())
+        .featureAskerBrowserLiveChatEnabled(settings.getFeatureAskerBrowserLiveChatEnabled())
+        .featureAskerBrowserSelfHelpEnabled(settings.getFeatureAskerBrowserSelfHelpEnabled())
         .featureCallsEnabled(settings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(settings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -132,6 +153,10 @@ public class TenantConverter {
             settings.getFeatureVoiceMessagesSupervisionChatsEnabled())
         .featureSystemNotificationEmailsEnabled(
             settings.getFeatureSystemNotificationEmailsEnabled())
+        .smtpMode(
+            settings.getSmtpMode() == null
+                ? null
+                : TenantSmtpMode.valueOf(settings.getSmtpMode().getValue()))
         .smtp(toTenantSmtpSettings(settings.getSmtp()))
         .featureToolsOIDCToken(settings.getFeatureToolsOICDToken())
         .featureMediaUploadEnabled(settings.getFeatureMediaUploadEnabled())
@@ -181,8 +206,83 @@ public class TenantConverter {
         "contentPrivacyActivationDate",
         "contentTermsAndConditionsActivationDate",
         "contentDataProcessingAgreement",
-        "contentDataProcessingAgreementActivationDate");
+        "contentDataProcessingAgreementActivationDate",
+        "legalName",
+        "contactEmail",
+        "contactPhone",
+        "dataProtectionOfficer");
+    applyLegalNameAndContact(targetEntity, tenantDTO);
     return targetEntity;
+  }
+
+  /**
+   * Absent keeps, blank clears. Every other tenant field is replaced wholesale on update, but these
+   * arrived after the Admin panel and UserService already sent full tenants without them; treating
+   * "absent" as "empty" would let any older client wipe a Träger's sender block by saving the rest.
+   */
+  private void applyLegalNameAndContact(TenantEntity target, MultilingualTenantDTO tenantDTO) {
+    if (tenantDTO.getLegalName() != null) {
+      target.setLegalName(blankToNull(tenantDTO.getLegalName()));
+    }
+    if (tenantDTO.getContactEmail() != null) {
+      target.setContactEmail(blankToNull(tenantDTO.getContactEmail()));
+    }
+    if (tenantDTO.getContactPhone() != null) {
+      target.setContactPhone(blankToNull(tenantDTO.getContactPhone()));
+    }
+    if (tenantDTO.getDataProtectionOfficer() != null) {
+      target.setDataProtectionOfficer(
+          dataProtectionOfficerToJson(tenantDTO.getDataProtectionOfficer()));
+    }
+  }
+
+  /** Blank fields are dropped; an object without any value is stored as NULL ("not entered"). */
+  static String dataProtectionOfficerToJson(TenantDataProtectionOfficerDTO dpo) {
+    if (dpo == null) {
+      return null;
+    }
+    var fields = new LinkedHashMap<String, String>();
+    putIfPresent(fields, "nameAndLegalForm", dpo.getNameAndLegalForm());
+    putIfPresent(fields, "street", dpo.getStreet());
+    putIfPresent(fields, "postcode", dpo.getPostcode());
+    putIfPresent(fields, "city", dpo.getCity());
+    putIfPresent(fields, "phoneNumber", dpo.getPhoneNumber());
+    putIfPresent(fields, "email", dpo.getEmail());
+    return fields.isEmpty() ? null : convertToJson(fields);
+  }
+
+  private static void putIfPresent(Map<String, String> fields, String key, String value) {
+    var trimmed = blankToNull(value);
+    if (trimmed != null) {
+      fields.put(key, trimmed);
+    }
+  }
+
+  /** A damaged stored value must not break the public tenant read; it reads as "not entered". */
+  static TenantDataProtectionOfficerDTO dataProtectionOfficerFromJson(String json) {
+    if (json == null || json.isBlank()) {
+      return null;
+    }
+    try {
+      var fields = convertMapFromJson(json);
+      if (fields.isEmpty()) {
+        return null;
+      }
+      return new TenantDataProtectionOfficerDTO()
+          .nameAndLegalForm(fields.get("nameAndLegalForm"))
+          .street(fields.get("street"))
+          .postcode(fields.get("postcode"))
+          .city(fields.get("city"))
+          .phoneNumber(fields.get("phoneNumber"))
+          .email(fields.get("email"));
+    } catch (RuntimeException e) {
+      log.warn("Stored data protection officer is not readable JSON; treating it as not entered");
+      return null;
+    }
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value.trim();
   }
 
   private void contentToEntity(
@@ -222,6 +322,8 @@ public class TenantConverter {
     if (tenantDTO.getTheming() != null) {
       builder
           .themingFavicon(tenantDTO.getTheming().getFavicon())
+          .themingAssistantName(tenantDTO.getTheming().getAssistantName())
+          .themingAssistantIcon(tenantDTO.getTheming().getAssistantIcon())
           .themingLogo(tenantDTO.getTheming().getLogo())
           .themingAssociationLogo(tenantDTO.getTheming().getAssociationLogo())
           .themingPrimaryColor(tenantDTO.getTheming().getPrimaryColor())
@@ -243,6 +345,10 @@ public class TenantConverter {
             .subdomain(tenant.getSubdomain())
             .address(tenant.getAddress())
             .description(tenant.getDescription())
+            .legalName(tenant.getLegalName())
+            .contactEmail(tenant.getContactEmail())
+            .contactPhone(tenant.getContactPhone())
+            .dataProtectionOfficer(dataProtectionOfficerFromJson(tenant.getDataProtectionOfficer()))
             .content(toMultilingualContentDTO(tenant))
             .theming(toThemingDTO(tenant))
             .licensing(toLicensingDTO(tenant))
@@ -261,6 +367,10 @@ public class TenantConverter {
         new TenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
             .address(tenant.getAddress())
             .description(tenant.getDescription())
+            .legalName(tenant.getLegalName())
+            .contactEmail(tenant.getContactEmail())
+            .contactPhone(tenant.getContactPhone())
+            .dataProtectionOfficer(dataProtectionOfficerFromJson(tenant.getDataProtectionOfficer()))
             .content(toContentDTO(tenant, lang))
             .theming(toThemingDTO(tenant))
             .licensing(toLicensingDTO(tenant))
@@ -291,12 +401,22 @@ public class TenantConverter {
         .featureAppointmentsEnabled(tenantSettings.getFeatureAppointmentsEnabled())
         .featureStatisticsEnabled(tenantSettings.getFeatureStatisticsEnabled())
         .featureGroupChatV2Enabled(tenantSettings.getFeatureGroupChatV2Enabled())
+        .featureInternalGroupChatEnabled(tenantSettings.getFeatureInternalGroupChatEnabled())
+        .featureSelfHelpGroupsEnabled(tenantSettings.getFeatureSelfHelpGroupsEnabled())
         .featureTeamDiscussionEnabled(tenantSettings.getFeatureTeamDiscussionEnabled())
         .featureToolsOICDToken(tenantSettings.getFeatureToolsOIDCToken())
         .featureToolsEnabled(tenantSettings.getFeatureToolsEnabled())
         .featureAnonymousChatEnabled(tenantSettings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(tenantSettings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(tenantSettings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailAgencyCounsellingEnabled(
+            tenantSettings.getFeatureAskerEmailAgencyCounsellingEnabled())
+        .featureAskerEmailLiveChatEnabled(tenantSettings.getFeatureAskerEmailLiveChatEnabled())
+        .featureAskerEmailSelfHelpEnabled(tenantSettings.getFeatureAskerEmailSelfHelpEnabled())
+        .featureAskerBrowserAgencyCounsellingEnabled(
+            tenantSettings.getFeatureAskerBrowserAgencyCounsellingEnabled())
+        .featureAskerBrowserLiveChatEnabled(tenantSettings.getFeatureAskerBrowserLiveChatEnabled())
+        .featureAskerBrowserSelfHelpEnabled(tenantSettings.getFeatureAskerBrowserSelfHelpEnabled())
         .featureCallsEnabled(tenantSettings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(tenantSettings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -337,6 +457,10 @@ public class TenantConverter {
             tenantSettings.getFeatureVoiceMessagesSupervisionChatsEnabled())
         .featureSystemNotificationEmailsEnabled(
             tenantSettings.getFeatureSystemNotificationEmailsEnabled())
+        .smtpMode(
+            tenantSettings.getSmtpMode() == null
+                ? null
+                : Settings.SmtpModeEnum.fromValue(tenantSettings.getSmtpMode().name()))
         .smtp(toSmtpConfig(tenantSettings.getSmtp()))
         .featureMediaUploadEnabled(tenantSettings.getFeatureMediaUploadEnabled())
         .featureMediaUploadAnonymousChatsEnabled(
@@ -389,6 +513,8 @@ public class TenantConverter {
             toEnforcedPermissionTogglesSettings(tenantAdminControls.getEnforcedPermissionToggles()))
         .permissionPolicies(toPermissionPolicySettings(tenantAdminControls.getPermissionPolicies()))
         .caseHandoverPolicies(tenantAdminControls.getCaseHandoverPolicies())
+        .chatRecoverySettings(tenantAdminControls.getChatRecoverySettings())
+        .accountInactivitySettings(tenantAdminControls.getAccountInactivitySettings())
         .build();
   }
 
@@ -402,6 +528,8 @@ public class TenantConverter {
         .anonymousChat(nullAsTrue(allowedPermissionToggles.getAnonymousChat()))
         .calls(nullAsTrue(allowedPermissionToggles.getCalls()))
         .groupChat(nullAsTrue(allowedPermissionToggles.getGroupChat()))
+        .internalGroupChat(allowedPermissionToggles.getInternalGroupChat())
+        .selfHelpGroups(allowedPermissionToggles.getSelfHelpGroups())
         .supervision(nullAsTrue(allowedPermissionToggles.getSupervision()))
         .supervisionAnonymousChats(
             nullAsTrue(allowedPermissionToggles.getSupervisionAnonymousChats()))
@@ -476,7 +604,9 @@ public class TenantConverter {
             toEnforcedPermissionToggles(tenantAdminControlsSettings.getEnforcedPermissionToggles()))
         .permissionPolicies(
             toBooleanPermissionPolicies(tenantAdminControlsSettings.getPermissionPolicies()))
-        .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies());
+        .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies())
+        .chatRecoverySettings(tenantAdminControlsSettings.getChatRecoverySettings())
+        .accountInactivitySettings(tenantAdminControlsSettings.getAccountInactivitySettings());
   }
 
   private Map<String, PolicyValue<Boolean>> toPermissionPolicySettings(
@@ -520,6 +650,16 @@ public class TenantConverter {
         .anonymousChat(nullAsTrue(allowedPermissionTogglesSettings.getAnonymousChat()))
         .calls(nullAsTrue(allowedPermissionTogglesSettings.getCalls()))
         .groupChat(nullAsTrue(allowedPermissionTogglesSettings.getGroupChat()))
+        .internalGroupChat(
+            nullAsTrue(
+                orGroupChat(
+                    allowedPermissionTogglesSettings.getInternalGroupChat(),
+                    allowedPermissionTogglesSettings)))
+        .selfHelpGroups(
+            nullAsTrue(
+                orGroupChat(
+                    allowedPermissionTogglesSettings.getSelfHelpGroups(),
+                    allowedPermissionTogglesSettings)))
         .supervision(nullAsTrue(allowedPermissionTogglesSettings.getSupervision()))
         .supervisionAnonymousChats(
             nullAsTrue(allowedPermissionTogglesSettings.getSupervisionAnonymousChats()))
@@ -599,6 +739,8 @@ public class TenantConverter {
         .anonymousChat(nullAsFalse(allowedPermissionToggles.getAnonymousChat()))
         .calls(nullAsFalse(allowedPermissionToggles.getCalls()))
         .groupChat(nullAsFalse(allowedPermissionToggles.getGroupChat()))
+        .internalGroupChat(allowedPermissionToggles.getInternalGroupChat())
+        .selfHelpGroups(allowedPermissionToggles.getSelfHelpGroups())
         .supervision(nullAsFalse(allowedPermissionToggles.getSupervision()))
         .supervisionAnonymousChats(
             nullAsFalse(allowedPermissionToggles.getSupervisionAnonymousChats()))
@@ -659,6 +801,16 @@ public class TenantConverter {
         .build();
   }
 
+  /**
+   * #250 transition: a group chat format toggle that was never stored follows the stored legacy
+   * {@code groupChat} toggle, so a platform rule written before the split still covers both
+   * formats.
+   */
+  private static Boolean orGroupChat(
+      Boolean formatToggle, TenantAdminAllowedPermissionTogglesSettings toggles) {
+    return formatToggle != null ? formatToggle : toggles.getGroupChat();
+  }
+
   private TenantAdminAllowedPermissionToggles toEnforcedPermissionToggles(
       TenantAdminAllowedPermissionTogglesSettings allowedPermissionTogglesSettings) {
     if (allowedPermissionTogglesSettings == null) {
@@ -669,6 +821,16 @@ public class TenantConverter {
         .anonymousChat(nullAsFalse(allowedPermissionTogglesSettings.getAnonymousChat()))
         .calls(nullAsFalse(allowedPermissionTogglesSettings.getCalls()))
         .groupChat(nullAsFalse(allowedPermissionTogglesSettings.getGroupChat()))
+        .internalGroupChat(
+            nullAsFalse(
+                orGroupChat(
+                    allowedPermissionTogglesSettings.getInternalGroupChat(),
+                    allowedPermissionTogglesSettings)))
+        .selfHelpGroups(
+            nullAsFalse(
+                orGroupChat(
+                    allowedPermissionTogglesSettings.getSelfHelpGroups(),
+                    allowedPermissionTogglesSettings)))
         .supervision(nullAsFalse(allowedPermissionTogglesSettings.getSupervision()))
         .supervisionAnonymousChats(
             nullAsFalse(allowedPermissionTogglesSettings.getSupervisionAnonymousChats()))
@@ -784,8 +946,12 @@ public class TenantConverter {
   }
 
   public RestrictedTenantDTO toRestrictedTenantDTO(TenantRestrictedData tenant, String lang) {
+    var content = toContentDTO(tenant, lang);
+    // Public reads only: the Admin editor loads /tenant/{id} and must keep the raw token.
+    platformLegalTextTokens.fill(content);
     return new RestrictedTenantDTO(tenant.getId(), tenant.getName())
-        .content(toContentDTO(tenant, lang))
+        .dataProtectionOfficer(dataProtectionOfficerFromJson(tenant.getDataProtectionOfficer()))
+        .content(content)
         .theming(toThemingDTO(tenant))
         .subdomain(tenant.getSubdomain())
         .settings(getRestrictedPublicSettings(tenant));
@@ -794,6 +960,7 @@ public class TenantConverter {
   private Settings getRestrictedPublicSettings(TenantRestrictedData tenant) {
     Settings settings = getSettings(tenant);
     settings.setFeatureToolsOICDToken(null);
+    settings.setSmtpMode(null);
     settings.setSmtp(toPublicSmtpConfig(settings.getSmtp()));
     return settings;
   }
@@ -832,6 +999,8 @@ public class TenantConverter {
   private Theming toThemingDTO(TenantRestrictedData tenant) {
     return new Theming()
         .favicon(tenant.getThemingFavicon())
+        .assistantName(tenant.getThemingAssistantName())
+        .assistantIcon(tenant.getThemingAssistantIcon())
         .logo(tenant.getThemingLogo())
         .associationLogo(tenant.getThemingAssociationLogo())
         .primaryColor(tenant.getThemingPrimaryColor())

@@ -20,9 +20,11 @@ import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
+import com.vi.tenantservice.api.model.AccountInactivitySettings;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.ChatRecoverySettings;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
@@ -33,16 +35,23 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
+import com.vi.tenantservice.api.model.TenantIdAllocationStatus;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.AssistantIdentityValidator;
+import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
+import com.vi.tenantservice.api.service.TenantLegalProposalService;
+import com.vi.tenantservice.api.service.TenantLegalVersionService;
+import com.vi.tenantservice.api.service.TenantLegalVersionService.PublishedLegalTexts;
 import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
@@ -51,6 +60,7 @@ import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
+import com.vi.tenantservice.api.validation.SubdomainValidator;
 import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
@@ -74,18 +84,25 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort.Direction;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.server.ResponseStatusException;
 
 /** Facade to encapsulate services and logic needed to manage tenants */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class TenantServiceFacade {
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.vi.tenantservice.config.security.TaskServiceIdentity taskIdentity;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.vi.tenantservice.config.security.TenantCreationContext creationContext;
 
   private static final int TECHNICAL_TENANT_ID = 0;
 
@@ -102,6 +119,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantIdAllocationService tenantIdAllocationService;
   private final @NonNull TenantConverter tenantConverter;
   private final @NonNull TenantInputSanitizer tenantInputSanitizer;
+
+  private final @NonNull SubdomainValidator subdomainValidator;
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TranslationService translationService;
@@ -120,6 +139,8 @@ public class TenantServiceFacade {
 
   private final @NonNull TenantPermissionPolicyService tenantPermissionPolicyService;
 
+  private final @NonNull NewTenantPresetService newTenantPresetService;
+
   private final @NonNull EffectivePermissionSettingsApplier effectivePermissionSettingsApplier;
 
   private final @NonNull EffectiveThemingApplier effectiveThemingApplier;
@@ -134,22 +155,49 @@ public class TenantServiceFacade {
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
+  private final @NonNull TenantLegalVersionService tenantLegalVersionService;
+
+  private final @NonNull TenantLegalProposalService tenantLegalProposalService;
+
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
 
+  /**
+   * How long the main tenant's images are reused, so a public tenant lookup does not call the
+   * settings service every time. Short on purpose: a logo the platform admin just uploaded shows up
+   * in the next mail within this window. 0 disables the cache.
+   */
+  @Value("${branding.main-tenant-images.cache-seconds:10}")
+  private long mainTenantImagesCacheSeconds;
+
+  private record MainTenantImages(Theming images, long loadedAtNanos) {}
+
+  private final java.util.concurrent.atomic.AtomicReference<MainTenantImages> mainTenantImages =
+      new java.util.concurrent.atomic.AtomicReference<>();
+
   public MultilingualTenantDTO createTenant(MultilingualTenantDTO tenantDTO) {
     log.info("Creating new tenant");
+    assertCallerMayCreateThisTenant(tenantDTO);
     MultilingualTenantDTO sanitizedTenantDTO = tenantInputSanitizer.sanitize(tenantDTO);
     validateCreateTenantInput(tenantDTO);
+    // The sanitized value is the one that would be stored, so that is the one that is checked.
+    subdomainValidator.validateOnCreate(sanitizedTenantDTO.getSubdomain());
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnCreate(
         sanitizedTenantDTO);
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
+    validateSelectedOwnSmtp(entity, null, sanitizedTenantDTO);
+    if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
+      creationContext.validateConfiguration();
+    }
     String reservationToken = tenantDTO.getTenantIdReservationToken();
     TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
       createDefaultConsultingTypeSettings(createdTenant);
+    } catch (com.vi.tenantservice.config.security.TenantCreationContext.IssuanceException ex) {
+      performRollback(createdTenant, reservationToken);
+      throw ex;
     } catch (ConsultingTypeCreationException ex) {
       performRollback(createdTenant, reservationToken);
       log.error(
@@ -159,9 +207,48 @@ public class TenantServiceFacade {
     }
     recordOnboardingDpaAcceptance(
         createdTenant, tenantDTO.getOnboardingDpaAcceptance(), reservationToken);
+    recordInitialLegalState(createdTenant);
     var createdTenantDto = tenantConverter.toMultilingualDTO(createdTenant);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(createdTenantDto);
     return createdTenantDto;
+  }
+
+  /**
+   * The tenant exists at this point; a failed history write or template offer must not undo it. A
+   * missed offer is recoverable — the platform can send again.
+   */
+  private void recordInitialLegalState(TenantEntity createdTenant) {
+    try {
+      tenantLegalVersionService.saveRecordingPublications(
+          PublishedLegalTexts.NONE, () -> createdTenant);
+    } catch (RuntimeException e) {
+      log.error("Could not record the initial legal texts of tenant {}", createdTenant.getId(), e);
+    }
+    try {
+      tenantLegalProposalService.deliverLatestTemplatesTo(createdTenant.getId());
+    } catch (RuntimeException e) {
+      log.error(
+          "Could not offer the latest platform legal templates to tenant {}",
+          createdTenant.getId(),
+          e);
+    }
+  }
+
+  /**
+   * A caller without the full create right (the technical service identity) may only complete a
+   * public onboarding: the request must name an ID that is currently RESERVED and carry a token.
+   * Whether the token matches is decided atomically when the reservation is consumed.
+   */
+  private void assertCallerMayCreateThisTenant(MultilingualTenantDTO tenantDTO) {
+    if (!tenantFacadeAuthorisationService.mayOnlyCreateReservedTenants()) {
+      return;
+    }
+    Long id = tenantDTO.getId();
+    if (id == null
+        || isBlank(tenantDTO.getTenantIdReservationToken())
+        || tenantIdAllocationService.getStatus(id) != TenantIdAllocationStatus.RESERVED) {
+      throw new AccessDeniedException("Tenant creation requires an open ID reservation");
+    }
   }
 
   /**
@@ -320,13 +407,28 @@ public class TenantServiceFacade {
 
   private void setDefaultTenantSettings(TenantEntity tenant) {
     var defaultTenantSettings = tenantService.getDefaultTenantSettings();
-    tenant.setSettings(convertToJson(defaultTenantSettings));
+    if (defaultTenantSettings == null) {
+      defaultTenantSettings = TenantSettings.builder().build();
+    }
+    // #251: the platform admin's current preset decides the conversation features of a new Träger
+    var settings = newTenantPresetService.applyCurrentPlatformPreset(defaultTenantSettings);
+    if (settings == null) {
+      settings = TenantSettings.builder().build();
+    }
+    settings.setSmtpMode(TenantSmtpMode.PLATFORM);
+    settings.setSmtp(null);
+    tenant.setSettings(convertToJson(settings));
   }
 
   private void createDefaultConsultingTypeSettings(TenantEntity createdTenant)
       throws ConsultingTypeCreationException {
     try {
-      consultingTypeService.createDefaultConsultingTypes(createdTenant.getId());
+      if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
+        consultingTypeService.createDefaultConsultingTypes(
+            createdTenant.getId(), creationContext.issue(createdTenant.getId()));
+      } else {
+        consultingTypeService.createDefaultConsultingTypes(createdTenant.getId());
+      }
     } catch (RestClientException ex) {
       throw new ConsultingTypeCreationException(
           "Consulting types could not be created for tenant with id " + createdTenant.getId(), ex);
@@ -398,6 +500,7 @@ public class TenantServiceFacade {
     var isoCountries = Arrays.stream(Locale.getISOLanguages()).toList();
     validateContent(tenantDTO, isoCountries);
     validateSettings(tenantDTO.getSettings());
+    AssistantIdentityValidator.validate(tenantDTO.getTheming());
   }
 
   private void validateSettings(Settings settings) {
@@ -502,6 +605,8 @@ public class TenantServiceFacade {
 
   private MultilingualTenantDTO updateExistingTenant(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenantEntity) {
+    subdomainValidator.validateOnUpdate(
+        sanitizedTenantDTO.getSubdomain(), existingTenantEntity.getSubdomain());
     tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
         sanitizedTenantDTO, existingTenantEntity);
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
@@ -517,10 +622,20 @@ public class TenantServiceFacade {
     }
     // toEntity mutates existingTenantEntity, so capture the stored settings first
     var existingSettingsJson = existingTenantEntity.getSettings();
+    var publishedBefore = PublishedLegalTexts.of(existingTenantEntity);
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
+    if (sanitizedTenantDTO.getSettings() == null) {
+      updatedEntity.setSettings(existingSettingsJson);
+    }
     preserveStoredSmtpPassword(existingSettingsJson, updatedEntity);
+    preserveStoredSmtpMode(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
+    validateSelectedOwnSmtp(updatedEntity, existingSettingsJson, sanitizedTenantDTO);
+    preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
-    updatedEntity = tenantService.update(updatedEntity);
+    var entityToSave = updatedEntity;
+    updatedEntity =
+        tenantLegalVersionService.saveRecordingPublications(
+            publishedBefore, () -> tenantService.update(entityToSave));
     updateExtendedSettingsAsConsultingType(sanitizedTenantDTO, existingTenantEntity.getId());
     log.info("Tenant with id {} updated", existingTenantEntity.getId());
     return getConvertedAndEnrichedTenant(updatedEntity);
@@ -535,18 +650,123 @@ public class TenantServiceFacade {
       return;
     }
     TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
-    if (updatedSettings.getSmtp() == null
-        || nonNull(updatedSettings.getSmtp().getPassword())
-            && !updatedSettings.getSmtp().getPassword().isBlank()) {
+    TenantSettings existingSettings = convertFromJson(existingSettingsJson);
+    if (updatedSettings.getSmtp() == null) {
+      if (existingSettings.getSmtpMode() == TenantSmtpMode.OWN
+          && updatedSettings.getSmtpMode() != TenantSmtpMode.PLATFORM) {
+        updatedSettings.setSmtp(existingSettings.getSmtp());
+        updatedEntity.setSettings(convertToJson(updatedSettings));
+      }
       return;
     }
-    TenantSettings existingSettings = convertFromJson(existingSettingsJson);
+    if (nonNull(updatedSettings.getSmtp().getPassword())
+        && !updatedSettings.getSmtp().getPassword().isBlank()) {
+      return;
+    }
     if (existingSettings.getSmtp() == null
         || existingSettings.getSmtp().getPassword() == null
         || existingSettings.getSmtp().getPassword().isBlank()) {
       return;
     }
     updatedSettings.getSmtp().setPassword(existingSettings.getSmtp().getPassword());
+    updatedEntity.setSettings(convertToJson(updatedSettings));
+  }
+
+  private void preserveStoredSmtpMode(
+      String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
+    if (existingSettingsJson == null || updatedEntity.getSettings() == null) {
+      return;
+    }
+    if (tenantDTO.getSettings() != null && tenantDTO.getSettings().getSmtpMode() != null) {
+      return;
+    }
+    TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
+    updatedSettings.setSmtpMode(convertFromJson(existingSettingsJson).getSmtpMode());
+    updatedEntity.setSettings(convertToJson(updatedSettings));
+  }
+
+  private void validateSelectedOwnSmtp(
+      TenantEntity updatedEntity, String existingSettingsJson, MultilingualTenantDTO tenantDTO) {
+    if (updatedEntity.getSettings() == null) {
+      return;
+    }
+    TenantSettings settings = convertFromJson(updatedEntity.getSettings());
+    if (settings.getSmtpMode() != TenantSmtpMode.OWN) {
+      return;
+    }
+    var smtp = settings.getSmtp();
+    if (smtp == null
+        || !smtp.isEnabled()
+        || smtp.getHost() == null
+        || smtp.getHost().isBlank()
+        || smtp.getFrom() == null
+        || smtp.getFrom().isBlank()
+        || smtp.getUsername() == null
+        || smtp.getUsername().isBlank()
+        || smtp.getPassword() == null
+        || smtp.getPassword().isBlank()
+        || smtp.getPort() == null
+        || smtp.getPort() < 1
+        || smtp.getPort() > 65535) {
+      throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_INVALID");
+    }
+    boolean standardTransport =
+        (smtp.getPort() == 465 && smtp.isSecure()) || (smtp.getPort() == 587 && !smtp.isSecure());
+    if (standardTransport) {
+      return;
+    }
+    boolean unchangedOwnTransport = false;
+    if (existingSettingsJson != null) {
+      TenantSettings existing = convertFromJson(existingSettingsJson);
+      unchangedOwnTransport =
+          existing.getSmtpMode() == TenantSmtpMode.OWN
+              && existing.getSmtp() != null
+              && smtp.getPort().equals(existing.getSmtp().getPort())
+              && smtp.isSecure() == existing.getSmtp().isSecure();
+    }
+    boolean confirmed =
+        tenantDTO.getSettings() != null
+            && tenantDTO.getSettings().getSmtp() != null
+            && Boolean.TRUE.equals(
+                tenantDTO.getSettings().getSmtp().getNonstandardTransportConfirmed());
+    if (!unchangedOwnTransport && !confirmed) {
+      throw new ResponseStatusException(
+          HttpStatus.UNPROCESSABLE_ENTITY, "TENANT_SMTP_TRANSPORT_CONFIRMATION_REQUIRED");
+    }
+  }
+
+  /**
+   * The #250 split-format flags ({@code featureInternalGroupChatEnabled}, {@code
+   * featureSelfHelpGroupsEnabled}) are explicit stored overrides. Like the SMTP password, they must
+   * survive the settings full-replace: a request that omits them (any update from a client that
+   * does not carry the fields) would blank them, and {@link TenantSettings#applyDefaults()} would
+   * then re-derive them from {@code featureGroupChatV2Enabled} on read, silently flipping a stored
+   * override. Retain the stored value whenever the request omits the field; a non-null request
+   * value still overrides it.
+   */
+  private void preserveStoredGroupChatFormatFlags(
+      String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
+    if (existingSettingsJson == null || updatedEntity.getSettings() == null) {
+      return;
+    }
+    Settings requestSettings = tenantDTO.getSettings();
+    boolean internalOmitted =
+        requestSettings == null || requestSettings.getFeatureInternalGroupChatEnabled() == null;
+    boolean selfHelpOmitted =
+        requestSettings == null || requestSettings.getFeatureSelfHelpGroupsEnabled() == null;
+    if (!internalOmitted && !selfHelpOmitted) {
+      return;
+    }
+    TenantSettings existingSettings = convertFromJson(existingSettingsJson);
+    TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
+    if (internalOmitted) {
+      updatedSettings.setFeatureInternalGroupChatEnabled(
+          existingSettings.getFeatureInternalGroupChatEnabled());
+    }
+    if (selfHelpOmitted) {
+      updatedSettings.setFeatureSelfHelpGroupsEnabled(
+          existingSettings.getFeatureSelfHelpGroupsEnabled());
+    }
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }
 
@@ -567,7 +787,7 @@ public class TenantServiceFacade {
   }
 
   public Optional<TenantDTO> findTenantById(Long id) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id);
     var tenantById = tenantService.findTenantDataById(id);
     if (tenantById.isEmpty()) {
       return Optional.empty();
@@ -578,12 +798,59 @@ public class TenantServiceFacade {
     return Optional.of(tenantDTO);
   }
 
+  public Optional<com.vi.tenantservice.api.model.AccountProvisioningPolicy>
+      findAccountProvisioningPolicy(Long id) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id, "CONFIG_WIZARD");
+    return tenantService
+        .findTenantDataById(id)
+        .map(
+            tenant ->
+                new com.vi.tenantservice.api.model.AccountProvisioningPolicy(
+                    tenant.getId(), tenant.getLicensingAllowedNumberOfUsers()));
+  }
+
+  public Optional<com.vi.tenantservice.api.model.SystemEmailContext> findSystemEmailContext(
+      Long id) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(
+        id, "NOTIFICATION_DISPATCH");
+    return tenantService
+        .findTenantDataById(id)
+        .map(
+            tenant -> {
+              TenantSettings settings = convertFromJson(tenant.getSettings());
+              TenantDTO dto =
+                  tenantConverter.toDTO(tenant, translationService.getCurrentLanguageContext());
+              return com.vi.tenantservice.api.model.SystemEmailContext.from(dto, settings);
+            });
+  }
+
   private MultilingualTenantDTO getConvertedAndEnrichedTenant(TenantData tenantEntity) {
     var multilingualTenantDTO = tenantConverter.toMultilingualDTO(tenantEntity);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(multilingualTenantDTO);
     enrichWithAdminDataIfSuperadmin(multilingualTenantDTO);
     enrichWithConsultingTypeSettings(multilingualTenantDTO, tenantEntity.getId());
     return multilingualTenantDTO;
+  }
+
+  public ChatRecoverySettings getChatRecoverySettings() {
+    assertSuperAdmin();
+    return tenantAdminControlsService.getChatRecoverySettings();
+  }
+
+  public ChatRecoverySettings updateChatRecoverySettings(ChatRecoverySettings settings) {
+    assertSuperAdmin();
+    return tenantAdminControlsService.updateChatRecoverySettings(settings);
+  }
+
+  public AccountInactivitySettings getAccountInactivitySettings() {
+    assertSuperAdmin();
+    return tenantAdminControlsService.getAccountInactivitySettings();
+  }
+
+  public AccountInactivitySettings updateAccountInactivitySettings(
+      AccountInactivitySettings settings) {
+    assertSuperAdmin();
+    return tenantAdminControlsService.updateAccountInactivitySettings(settings);
   }
 
   public TenantAdminControls getTenantAdminControls() {
@@ -597,7 +864,7 @@ public class TenantServiceFacade {
   }
 
   public TenantPermissionPolicies getTenantPermissionPolicies(Long tenantId) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId, "RUNTIME_POLICY");
     return toTenantPermissionPolicies(
         tenantId,
         tenantPermissionPolicyService.getResolvedPolicies(tenantId),
@@ -787,6 +1054,15 @@ public class TenantServiceFacade {
       dto.setPermissionPolicies(policies);
       effectivePermissionSettingsApplier.applyPolicies(dto.getSettings(), policies);
       effectivePermissionSettingsApplier.applyTo(dto.getSettings(), controls);
+      if (dto.getSettings() != null && controls != null) {
+        // Account creation needs the current role defaults, never platform secrets or write access.
+        dto.getSettings()
+            .setTenantAdminControls(
+                new TenantAdminControls()
+                    .chatRecoverySettings(controls.getChatRecoverySettings())
+                    .accountInactivitySettings(controls.getAccountInactivitySettings())
+                    .permissionPolicies(null));
+      }
       if (dto.getId() == null || dto.getId() != TECHNICAL_TENANT_ID) {
         dto.setTheming(effectiveThemingApplier.effective(dto.getTheming(), platformTheming));
       }
@@ -794,11 +1070,103 @@ public class TenantServiceFacade {
     return dto;
   }
 
+  /**
+   * The branding every Träger without its own image inherits (#300). The technical tenant 0 is the
+   * source where it carries a value. On a single-domain installation the platform admin edits the
+   * platform branding on the <em>main tenant</em> instead, which is what Admin → Appearance shows
+   * as inherited; tenant 0 then has no row or no image. Its image gaps are filled from there.
+   */
   private Theming getPlatformTheming(String lang) {
+    Theming technical =
+        tenantService
+            .findRestrictedTenantDataById((long) TECHNICAL_TENANT_ID)
+            .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
+            .orElse(null);
+    if (technical != null && hasAllImages(technical)) {
+      return technical;
+    }
+    Theming mainTenantImages = getMainTenantImages(lang);
+    if (mainTenantImages == null) {
+      return technical;
+    }
+    Theming platform = technical == null ? new Theming() : technical;
+    effectiveThemingApplier.applyTo(platform, mainTenantImages);
+    return platform;
+  }
+
+  private static boolean hasAllImages(Theming theming) {
+    return !isBlank(theming.getLogo())
+        && !isBlank(theming.getAssociationLogo())
+        && !isBlank(theming.getFavicon());
+  }
+
+  /**
+   * Only the images of the main tenant, never its colours or login effect: this widens the
+   * inheritance for the assets Admin already shows as inherited, not for the rest of the theme.
+   * Best effort -- an unreachable settings service must not break a public tenant lookup.
+   */
+  private Theming getMainTenantImages(String lang) {
+    if (!multitenancyWithSingleDomain) {
+      return null;
+    }
+    long ttlNanos = java.util.concurrent.TimeUnit.SECONDS.toNanos(mainTenantImagesCacheSeconds);
+    MainTenantImages cached = mainTenantImages.get();
+    if (ttlNanos > 0 && cached != null && System.nanoTime() - cached.loadedAtNanos() < ttlNanos) {
+      return cached.images();
+    }
+    Theming loaded = loadMainTenantImages(lang);
+    mainTenantImages.set(new MainTenantImages(loaded, System.nanoTime()));
+    return loaded;
+  }
+
+  private Theming loadMainTenantImages(String lang) {
+    String mainTenantSubdomain = readMainTenantSubdomain();
+    if (isBlank(mainTenantSubdomain)) {
+      return null;
+    }
     return tenantService
-        .findRestrictedTenantDataById((long) TECHNICAL_TENANT_ID)
+        .findRestrictedTenantDataBySubdomain(mainTenantSubdomain)
         .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang).getTheming())
+        .filter(theming -> theming != null)
+        .map(
+            theming ->
+                new Theming()
+                    .logo(theming.getLogo())
+                    .associationLogo(theming.getAssociationLogo())
+                    .favicon(theming.getFavicon()))
         .orElse(null);
+  }
+
+  /** The only best-effort step: a missing or unreachable setting means "no main tenant". */
+  private String readMainTenantSubdomain() {
+    try {
+      var settings = applicationSettingsService.getApplicationSettings();
+      var setting =
+          settings == null ? null : settings.getMainTenantSubdomainForSingleDomainMultitenancy();
+      return setting == null ? null : setting.getValue();
+    } catch (RuntimeException exception) {
+      log.warn(
+          "Main tenant setting unavailable, platform images are not inherited ({})",
+          exception.getClass().getSimpleName());
+      return null;
+    }
+  }
+
+  /**
+   * The tenant exactly as stored, without platform inheritance: public image routes must prefer a
+   * Träger's own association logo over an inherited platform logo.
+   */
+  public Optional<RestrictedTenantDTO> findOwnRestrictedTenantById(Long id) {
+    String lang = translationService.getCurrentLanguageContext();
+    return tenantService
+        .findRestrictedTenantDataById(id)
+        .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang));
+  }
+
+  /** Platform branding for mail and public image routes, see {@link #getPlatformTheming}. */
+  public Optional<RestrictedTenantDTO> getPlatformBrandingTenant() {
+    return Optional.ofNullable(getPlatformTheming(translationService.getCurrentLanguageContext()))
+        .map(theming -> new RestrictedTenantDTO().theming(theming));
   }
 
   public Optional<RestrictedTenantDTO> getPlatformTenant() {

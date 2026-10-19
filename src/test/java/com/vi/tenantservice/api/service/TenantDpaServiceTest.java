@@ -45,7 +45,11 @@ class TenantDpaServiceTest {
   void setUp() {
     // the governing-document resolver runs for real over the mocked repositories: the preview must
     // resolve the exact snapshot the invite was issued for (#569)
-    governingDpaResolver = new GoverningDpaResolver(tenantRepository, versionRepository);
+    governingDpaResolver =
+        new GoverningDpaResolver(
+            tenantRepository,
+            versionRepository,
+            org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class));
     tenantDpaService =
         new TenantDpaService(
             signatureRepository,
@@ -223,7 +227,7 @@ class TenantDpaServiceTest {
     assertThat(preview.content()).contains("Vertragstext");
     assertThat(preview.expiresAt()).isEqualTo(pending.getTokenExpiresAt());
     verify(signatureRepository, org.mockito.Mockito.never())
-        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
   }
 
   @Test
@@ -356,7 +360,8 @@ class TenantDpaServiceTest {
             eq(false),
             eq("de"),
             eq(TenantDpaService.SOURCE_FORWARDED_EXTERNAL),
-            any(LocalDateTime.class)))
+            any(LocalDateTime.class),
+            any()))
         .thenReturn(1);
 
     // when
@@ -373,7 +378,16 @@ class TenantDpaServiceTest {
     // then
     verify(signatureRepository)
         .consumeSignToken(
-            any(), any(), any(), any(), any(), any(), any(), any(), any(LocalDateTime.class));
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(),
+            any(LocalDateTime.class),
+            eq(false));
     // any successful signature kills every other outstanding link of the tenant (#179)
     verify(signatureRepository).invalidateOutstandingByTenantId(7L);
     assertThat(result.getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
@@ -384,6 +398,7 @@ class TenantDpaServiceTest {
     assertThat(result.getForwardedByUserId()).isEqualTo("tenant-admin-1");
     assertThat(result.getSource()).isEqualTo(TenantDpaService.SOURCE_FORWARDED_EXTERNAL);
     assertThat(result.getSignedAt()).isNotNull();
+    assertThat(result.getCurrentVersionWhenSigned()).isFalse();
     assertThat(result.getTokenHash()).isNull(); // consumed -> single use
   }
 
@@ -403,7 +418,7 @@ class TenantDpaServiceTest {
         .thenReturn(Optional.of(pending));
     givenExistingTenant(7L);
     when(signatureRepository.consumeSignToken(
-            any(), any(), any(), any(), any(), any(), any(), any(), any()))
+            any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(1);
 
     // when
@@ -442,7 +457,7 @@ class TenantDpaServiceTest {
             () -> tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de"))
         .isInstanceOf(InvalidDpaSignTokenException.class);
     verify(signatureRepository, org.mockito.Mockito.never())
-        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
   }
 
   @Test
@@ -475,7 +490,7 @@ class TenantDpaServiceTest {
     // the guard must reject BEFORE the token is consumed — an unstubbed consume returns 0, so
     // without this the test would pass even if the link had been burned
     verify(signatureRepository, org.mockito.Mockito.never())
-        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
   }
 
   @Test
@@ -505,7 +520,7 @@ class TenantDpaServiceTest {
                     .status(TenantIdReservationStatus.RESERVED)
                     .build()));
     when(signatureRepository.consumeSignToken(
-            any(), any(), any(), any(), any(), any(), any(), any(), any()))
+            any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(1);
 
     var result = tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de");
@@ -530,7 +545,7 @@ class TenantDpaServiceTest {
                     .build()));
     givenExistingTenant(7L);
     when(signatureRepository.consumeSignToken(
-            any(), any(), any(), any(), any(), any(), any(), any(), any()))
+            any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(1);
 
     tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de");
@@ -545,7 +560,8 @@ class TenantDpaServiceTest {
             any(),
             any(),
             eq(TenantDpaService.SOURCE_FORWARDED_EXTERNAL),
-            any(LocalDateTime.class));
+            any(LocalDateTime.class),
+            any());
   }
 
   @Test
@@ -578,7 +594,7 @@ class TenantDpaServiceTest {
             () -> tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de"))
         .isInstanceOf(InvalidDpaSignTokenException.class);
     verify(signatureRepository, org.mockito.Mockito.never())
-        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
   }
 
   @Test
@@ -609,7 +625,7 @@ class TenantDpaServiceTest {
     when(tenantRepository.findById(42L))
         .thenReturn(Optional.of(TenantEntity.builder().id(42L).name("Träger Nord").build()));
     when(signatureRepository.consumeSignToken(
-            any(), any(), any(), any(), any(), any(), any(), any(), any()))
+            any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(1);
 
     var result = tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de");
@@ -670,7 +686,7 @@ class TenantDpaServiceTest {
         .thenReturn(Optional.of(pending));
     givenExistingTenant(7L);
     when(signatureRepository.consumeSignToken(
-            any(), any(), any(), any(), any(), any(), any(), any(), any()))
+            any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(1);
 
     tenantDpaService.confirmSignature(rawToken, "n", "p", null, null, false, "de");
@@ -679,7 +695,7 @@ class TenantDpaServiceTest {
     inOrder.verify(signatureRepository).lockOutstandingByTenantId(7L);
     inOrder
         .verify(signatureRepository)
-        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        .consumeSignToken(any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     inOrder.verify(signatureRepository).invalidateOutstandingByTenantId(7L);
   }
 
@@ -708,7 +724,7 @@ class TenantDpaServiceTest {
         .thenReturn(Optional.of(pending));
     givenExistingTenant(7L);
     when(signatureRepository.consumeSignToken(
-            any(), any(), any(), any(), any(), any(), any(), any(), any()))
+            any(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
         .thenReturn(0);
 
     // when / then

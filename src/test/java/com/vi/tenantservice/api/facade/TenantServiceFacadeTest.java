@@ -3,8 +3,10 @@ package com.vi.tenantservice.api.facade;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -20,6 +22,7 @@ import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.EffectiveThemingApplier;
 import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
@@ -36,6 +39,8 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
+import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -43,6 +48,8 @@ import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
+import com.vi.tenantservice.api.service.TenantLegalProposalService;
+import com.vi.tenantservice.api.service.TenantLegalVersionService;
 import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
@@ -51,6 +58,7 @@ import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
+import com.vi.tenantservice.api.validation.SubdomainValidator;
 import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
@@ -61,6 +69,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -106,6 +115,10 @@ class TenantServiceFacadeTest {
 
   @Mock private TenantInputSanitizer tenantInputSanitizer;
 
+  // Real instance on purpose: the subdomain format rule is production behaviour of the facade, and
+  // a mocked validator would let a malformed subdomain through every test in this class.
+  @Spy private SubdomainValidator subdomainValidator = new SubdomainValidator();
+
   @Mock private TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
 
   @Mock private AuthorisationService authorisationService;
@@ -131,6 +144,8 @@ class TenantServiceFacadeTest {
 
   @Mock private TenantAdminControlsService tenantAdminControlsService;
 
+  @Mock private NewTenantPresetService newTenantPresetService;
+
   @Spy
   private EffectivePermissionSettingsApplier effectivePermissionSettingsApplier =
       new EffectivePermissionSettingsApplier();
@@ -144,12 +159,181 @@ class TenantServiceFacadeTest {
   @Mock private SingleDomainTenantOverrideService singleDomainTenantOverrideService;
   @Mock private TenantIdAllocationService tenantIdAllocationService;
   @Mock private TenantPermissionPolicyService tenantPermissionPolicyService;
+  @Mock private TenantLegalVersionService tenantLegalVersionService;
+  @Mock private TenantLegalProposalService tenantLegalProposalService;
 
   @InjectMocks private TenantServiceFacade tenantServiceFacade;
 
   @BeforeEach
   public void initialize() {
     tenantEntity.setId(ID);
+    // The history service wraps the real save; the mock has to run it like the real one does.
+    lenient()
+        .when(tenantLegalVersionService.saveRecordingPublications(any(), any()))
+        .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_notConsultTheMainTenant_When_singleDomainIsDisabled() {
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+
+    verifyNoInteractions(applicationSettingsService);
+  }
+
+  private void givenSingleDomainWithMainTenant(String subdomain) {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    var settings =
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+            .ApplicationSettingsDTO();
+    settings.setMainTenantSubdomainForSingleDomainMultitenancy(
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO()
+            .value(subdomain));
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(settings);
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+  }
+
+  private TenantRestrictedData tenantDataWithTheming(Theming theming) {
+    TenantRestrictedData data = mock(TenantRestrictedData.class);
+    when(converter.toRestrictedTenantDTO(data, DE))
+        .thenReturn(new RestrictedTenantDTO().theming(theming));
+    return data;
+  }
+
+  @Test
+  void
+      getPlatformBrandingTenant_Should_fillOnlyTheImageGapsOfTheTechnicalTenantFromTheMainTenant() {
+    givenSingleDomainWithMainTenant("app");
+    var technical = new Theming().logo("technical-logo");
+    var main =
+        new Theming()
+            .logo("main-logo")
+            .favicon("main-icon")
+            .associationLogo("main-association")
+            .primaryColor("#123456");
+    var technicalData = tenantDataWithTheming(technical);
+    var mainData = tenantDataWithTheming(main);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.of(technicalData));
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    Theming platform = tenantServiceFacade.getPlatformBrandingTenant().orElseThrow().getTheming();
+
+    assertThat(platform.getLogo()).isEqualTo("technical-logo");
+    assertThat(platform.getFavicon()).isEqualTo("main-icon");
+    assertThat(platform.getAssociationLogo()).isEqualTo("main-association");
+    assertThat(platform.getPrimaryColor()).isNull();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_useTheMainTenantImages_When_theTechnicalTenantHasNoRow() {
+    givenSingleDomainWithMainTenant("app");
+    var mainData = tenantDataWithTheming(new Theming().logo("main-logo"));
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant().orElseThrow().getTheming().getLogo())
+        .isEqualTo("main-logo");
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_inheritNothing_When_theMainSubdomainIsBlank() {
+    givenSingleDomainWithMainTenant(" ");
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+    verify(tenantService, never()).findRestrictedTenantDataBySubdomain(any());
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_inheritNothing_When_theMainTenantDoesNotExist() {
+    givenSingleDomainWithMainTenant("gone");
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("gone")).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_degrade_When_theSettingsServiceReturnsNothing() {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(null);
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_askTheSettingsServiceOnlyOncePerCacheWindow() {
+    givenSingleDomainWithMainTenant("app");
+    ReflectionTestUtils.setField(tenantServiceFacade, "mainTenantImagesCacheSeconds", 10L);
+    var mainData = tenantDataWithTheming(new Theming().logo("main-logo"));
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    tenantServiceFacade.getPlatformBrandingTenant();
+    tenantServiceFacade.getPlatformBrandingTenant();
+
+    verify(applicationSettingsService, times(1)).getApplicationSettings();
+  }
+
+  @Test
+  void createTenant_Should_offerTheLatestPlatformTemplatesAndRecordInitialLegalTexts() {
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    verify(tenantLegalVersionService)
+        .saveRecordingPublications(eq(TenantLegalVersionService.PublishedLegalTexts.NONE), any());
+    verify(tenantLegalProposalService).deliverLatestTemplatesTo(ID);
+  }
+
+  @Test
+  void createTenant_Should_stillSucceed_When_theTemplateOfferFails() {
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+    when(tenantLegalProposalService.deliverLatestTemplatesTo(ID))
+        .thenThrow(new IllegalStateException("database hiccup"));
+
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    verify(tenantService, never()).delete(any());
+  }
+
+  @Test
+  void updateTenant_Should_recordLegalHistoryAgainstTheTextsStoredBeforeTheUpdate() {
+    tenantEntity.setContentImpressum("{\"de\":\"old imprint\"}");
+    tenantEntity.setContentPrivacy("{\"de\":\"old privacy\"}");
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(converter.toEntity(tenantEntity, sanitizedTenantDTO))
+        .thenAnswer(
+            invocation -> {
+              // The real converter mutates the stored entity in place.
+              tenantEntity.setContentPrivacy("{\"de\":\"new privacy\"}");
+              return tenantEntity;
+            });
+    givenConsultingTypeReturnsConsultingTypeByTenantId();
+    when(tenantService.update(tenantEntity)).thenReturn(tenantEntity);
+    when(converter.toMultilingualDTO(tenantEntity)).thenReturn(sanitizedTenantDTO);
+
+    tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO);
+
+    verify(tenantLegalVersionService)
+        .saveRecordingPublications(
+            eq(
+                new TenantLegalVersionService.PublishedLegalTexts(
+                    "{\"de\":\"old imprint\"}", "{\"de\":\"old privacy\"}")),
+            any());
+    verify(tenantService).update(tenantEntity);
   }
 
   @Test
@@ -167,6 +351,21 @@ class TenantServiceFacadeTest {
     verify(tenantService).create(tenantEntity, null);
     verify(consultingTypeService).createDefaultConsultingTypes(tenantEntity.getId());
     verify(applicationSettingsService, never()).saveMainTenantSubDomain(any());
+  }
+
+  @Test
+  void createTenant_Should_applyPlatformPresetToEmptySettings_WhenDefaultFileIsNull() {
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+    when(tenantService.getDefaultTenantSettings()).thenReturn(null);
+
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    ArgumentCaptor<com.vi.tenantservice.api.model.TenantSettings> settings =
+        ArgumentCaptor.forClass(com.vi.tenantservice.api.model.TenantSettings.class);
+    verify(newTenantPresetService).applyCurrentPlatformPreset(settings.capture());
+    assertThat(settings.getValue()).isNotNull();
   }
 
   @Test
@@ -831,7 +1030,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     Optional<TenantRestrictedData> defaultTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
     Optional<TenantRestrictedData> accessTokenTenantData =
@@ -867,7 +1068,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     Optional<TenantRestrictedData> mainTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
     when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
@@ -905,7 +1108,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     var settings =
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
@@ -949,7 +1154,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     var settings =
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
@@ -1012,5 +1219,85 @@ class TenantServiceFacadeTest {
     defaultTenantEntity.setContentPrivacy(contentPrivacy);
     Optional<TenantRestrictedData> defaultTenant = Optional.of(defaultTenantEntity);
     return defaultTenant;
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "<svg xmlns='urn:other'/>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><g xmlns='urn:other'/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><foreignObject/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><path onload='alert(1)'/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><path fill='url(https://example.org)'/></svg>",
+        "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><svg>&x;</svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><use href='https://example.org'/></svg>"
+      })
+  void updateRejectsActiveAssistantArtworkWithoutSaving(String svg) {
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming()
+            .assistantIcon(
+                "data:image/svg+xml;base64,"
+                    + java.util.Base64.getEncoder()
+                        .encodeToString(svg.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {"data:image/jpeg;base64,", "data:image/png;base64,%%%"})
+  void invalidIconEncodingNeverSaves(String icon) {
+    if (icon.startsWith("data:image/jpeg")) {
+      // Valid passive artwork isolates the unsupported MIME prefix from content validation.
+      icon +=
+          java.util.Base64.getEncoder()
+              .encodeToString(
+                  "<svg xmlns='http://www.w3.org/2000/svg'><circle r='1'/></svg>"
+                      .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantIcon(icon));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"<Helper", "Helper>"})
+  void markupInAssistantNameNeverSaves(String name) {
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantName(name));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @Test
+  void oversizedAssistantNameNeverSaves() {
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantName("x".repeat(81)));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @Test
+  void decodedIconBeyondLimitNeverSaves() {
+    byte[] bytes = new byte[512 * 1024 + 1];
+    byte[] signature = {(byte) 137, 80, 78, 71, 13, 10, 26, 10};
+    System.arraycopy(signature, 0, bytes, 0, signature.length);
+    String icon = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(bytes);
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantIcon(icon));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
   }
 }

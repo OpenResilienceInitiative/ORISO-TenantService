@@ -13,10 +13,15 @@ public class TenantDataView implements TenantData {
   private final String subdomain;
   private final String address;
   private final String description;
+  private final String legalName;
+  private final String contactEmail;
+  private final String contactPhone;
   private final Integer licensingAllowedNumberOfUsers;
   private final String themingLogo;
   private final String themingAssociationLogo;
   private final String themingFavicon;
+  private final String themingAssistantName;
+  private final String themingAssistantIcon;
   private final String themingPrimaryColor;
   private final String themingSecondaryColor;
   private final String themingAccent;
@@ -40,4 +45,5 @@ public class TenantDataView implements TenantData {
   private final String settings;
   private final LocalDateTime createDate;
   private final LocalDateTime updateDate;
+  private final String dataProtectionOfficer;
 }

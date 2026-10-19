@@ -8,6 +8,33 @@ class InputSanitizerTest {
 
   private final InputSanitizer inputSanitizer = new InputSanitizer();
 
+  // --- Plain-text fields (Träger legal name and contact): no markup, but also no HTML entities ---
+
+  @Test
+  void sanitizePlainText_should_keepNullAsNull_soAnAbsentFieldStaysDistinguishableFromBlank() {
+    assertThat(inputSanitizer.sanitizePlainText(null)).isNull();
+  }
+
+  @Test
+  void sanitizePlainText_should_returnPhoneEmailAndAmpersandByteForByte() {
+    // sanitize() HTML-encodes text ("+" -> "&#43;", "@" -> "&#64;"), which would put entities into
+    // a mail footer's contact line.
+    assertThat(inputSanitizer.sanitizePlainText("+49 761 200-0")).isEqualTo("+49 761 200-0");
+    assertThat(inputSanitizer.sanitizePlainText("beratung@caritas-musterstadt.de"))
+        .isEqualTo("beratung@caritas-musterstadt.de");
+    assertThat(inputSanitizer.sanitizePlainText("Caritas & Diakonie e.V. \"Musterstadt\""))
+        .isEqualTo("Caritas & Diakonie e.V. \"Musterstadt\"");
+  }
+
+  @Test
+  void sanitizePlainText_should_dropMarkup_includingMarkupSmuggledInAsEntities() {
+    assertThat(inputSanitizer.sanitizePlainText("Caritas<script>alert(1)</script> e.V."))
+        .isEqualTo("Caritas e.V.");
+    assertThat(inputSanitizer.sanitizePlainText("Caritas &lt;b&gt;e.V.&lt;/b&gt;"))
+        .doesNotContain("<")
+        .doesNotContain(">");
+  }
+
   // --- Anchor navigation support (Admin anchor feature): id + data-anchor-removed on headings ---
 
   @Test

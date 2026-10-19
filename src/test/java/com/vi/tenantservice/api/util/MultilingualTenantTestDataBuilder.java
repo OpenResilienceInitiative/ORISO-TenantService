@@ -119,6 +119,23 @@ public class MultilingualTenantTestDataBuilder {
     return this;
   }
 
+  /**
+   * Sets the legacy group chat switch and the two group chat format flags (#250). {@code null}
+   * leaves a format flag out of the request, like a client that does not know it yet.
+   */
+  public MultilingualTenantTestDataBuilder withGroupChatFormats(
+      boolean groupChatV2, Boolean internalGroupChat, Boolean selfHelpGroups) {
+    if (tenantMultilingualDTO.getSettings() == null) {
+      withSettings();
+    }
+    tenantMultilingualDTO
+        .getSettings()
+        .featureGroupChatV2Enabled(groupChatV2)
+        .featureInternalGroupChatEnabled(internalGroupChat)
+        .featureSelfHelpGroupsEnabled(selfHelpGroups);
+    return this;
+  }
+
   private static Settings getSettings() {
     return new Settings()
         .featureTopicsEnabled(true)

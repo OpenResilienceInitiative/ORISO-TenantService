@@ -75,4 +75,12 @@ public interface TenantIdReservationRepository
           + "WHERE r.tenantId = :tenantId AND r.status = :status")
   int deleteByTenantIdAndStatus(
       @Param("tenantId") long tenantId, @Param("status") TenantIdReservationStatus status);
+
+  @Modifying
+  @Query(
+      "DELETE FROM TenantIdReservationEntity r WHERE r.tenantId = :tenantId AND r.status = :status AND r.token = :token")
+  int deleteWithProof(
+      @Param("tenantId") long tenantId,
+      @Param("status") TenantIdReservationStatus status,
+      @Param("token") String token);
 }

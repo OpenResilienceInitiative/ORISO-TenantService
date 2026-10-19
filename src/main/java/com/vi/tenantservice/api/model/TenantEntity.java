@@ -47,6 +47,22 @@ public class TenantEntity implements TenantData {
   @Column(name = "description", columnDefinition = "TEXT")
   private String description;
 
+  /* Mail-footer sender block of the Träger (Frank, 2026-09-23). Optional; NULL means "not
+  entered", and the platform operator's value applies in its place. */
+  @Column(name = "legal_name", length = 255)
+  private String legalName;
+
+  @Column(name = "contact_email", length = 255)
+  private String contactEmail;
+
+  @Column(name = "contact_phone", length = 64)
+  private String contactPhone;
+
+  /* Optional DPO of the Träger as a JSON contact object (Admin#1067); inherited by its
+  Beratungsstellen for {{Datenschutzbeauftragte}}. NULL = not entered. */
+  @Column(name = "data_protection_officer", columnDefinition = "TEXT")
+  private String dataProtectionOfficer;
+
   @Column(name = "licensing_allowed_users")
   private Integer licensingAllowedNumberOfUsers;
 
@@ -58,6 +74,12 @@ public class TenantEntity implements TenantData {
 
   @Column(name = "theming_favicon")
   private String themingFavicon;
+
+  @Column(length = 80)
+  private String themingAssistantName;
+
+  @Column(columnDefinition = "LONGTEXT")
+  private String themingAssistantIcon;
 
   @Column(name = "theming_primary_color")
   private String themingPrimaryColor;
@@ -155,6 +177,9 @@ public class TenantEntity implements TenantData {
 
   @Column(name = "update_date")
   private LocalDateTime updateDate;
+
+  @Column(name = "smtp_test_requested_at")
+  private LocalDateTime smtpTestRequestedAt;
 
   public interface TenantBase {
 

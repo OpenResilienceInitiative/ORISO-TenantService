@@ -1,6 +1,9 @@
 package com.vi.tenantservice.api.controller;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -9,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.vi.tenantservice.api.facade.PlatformDpiaMasterDataFacade;
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
+import com.vi.tenantservice.api.facade.TenantLegalDraftFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.service.BrandingAssetDecoder.DecodedAsset;
@@ -42,6 +46,10 @@ class TenantControllerBrandingAssetTest {
   @Mock private TenantDtoMapper tenantDtoMapper;
   @Mock private TenantDpaService tenantDpaService;
   @Mock private TenantDpaFacade tenantDpaFacade;
+  @Mock private TenantLegalDraftFacade tenantLegalDraftFacade;
+  @Mock private com.vi.tenantservice.api.facade.TenantLegalProposalFacade tenantLegalProposalFacade;
+
+  @Mock private com.vi.tenantservice.api.facade.TenantLegalVersionFacade tenantLegalVersionFacade;
   @Mock private TranslationFacade translationFacade;
   @Mock private TenantMediaService tenantMediaService;
   @Mock private TenantIdAllocationService tenantIdAllocationService;
@@ -108,5 +116,43 @@ class TenantControllerBrandingAssetTest {
         .perform(get("/tenant/public/branding/8/logo").header(HttpHeaders.IF_NONE_MATCH, etag))
         .andExpect(status().isOk())
         .andExpect(content().bytes("tenant-eight".getBytes(UTF_8)));
+  }
+
+  @Test
+  void tenantPinnedRouteIgnoresTheRequestHostsTenant() throws Exception {
+    when(publicBrandingAssetService.find(12L, "logo"))
+        .thenReturn(Optional.of(new DecodedAsset("image/png", "tenant-twelve".getBytes(UTF_8))));
+
+    mockMvc
+        .perform(
+            get("/tenant/public/branding/12/logo")
+                .header(HttpHeaders.HOST, "platform.example.org")
+                .header("Origin", "https://platform.example.org"))
+        .andExpect(status().isOk())
+        .andExpect(content().bytes("tenant-twelve".getBytes(UTF_8)));
+
+    verify(publicBrandingAssetService, never()).find(anyString());
+  }
+
+  @Test
+  void tenantPinnedFaviconIsServed() throws Exception {
+    when(publicBrandingAssetService.find(12L, "favicon"))
+        .thenReturn(Optional.of(new DecodedAsset("image/x-icon", "icon".getBytes(UTF_8))));
+
+    mockMvc
+        .perform(get("/tenant/public/branding/12/favicon"))
+        .andExpect(status().isOk())
+        .andExpect(content().bytes("icon".getBytes(UTF_8)));
+  }
+
+  @Test
+  void tenantPinnedRouteAnswersNotFoundForUnknownTenantOrAsset() throws Exception {
+    when(publicBrandingAssetService.find(99L, "logo")).thenReturn(Optional.empty());
+    when(publicBrandingAssetService.find(12L, "smtpPassword")).thenReturn(Optional.empty());
+
+    mockMvc.perform(get("/tenant/public/branding/99/logo")).andExpect(status().isNotFound());
+    mockMvc
+        .perform(get("/tenant/public/branding/12/smtpPassword"))
+        .andExpect(status().isNotFound());
   }
 }

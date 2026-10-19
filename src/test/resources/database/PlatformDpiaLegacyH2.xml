@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+  <!-- Historical 0028 uses MariaDB-only sequence/default syntax. Adapt only this test fixture;
+       the new production singleton migration runs unmodified on both engines. -->
+  <changeSet id="legacyDpiaH2Fixture" author="test">
+    <sqlFile path="db/changelog/changeset/0028_platform_dpia_master_data/createPlatformDpiaMasterData.sql"/>
+    <modifySql>
+      <replace replace="MINVALUE = 1" with="MINVALUE 1"/>
+      <replace replace="NOMAXVALUE" with="NO MAXVALUE"/>
+      <replace replace="UTC_TIMESTAMP" with="CURRENT_TIMESTAMP"/>
+    </modifySql>
+  </changeSet>
+</databaseChangeLog>

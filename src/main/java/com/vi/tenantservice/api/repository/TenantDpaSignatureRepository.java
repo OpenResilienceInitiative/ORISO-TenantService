@@ -69,7 +69,8 @@ public interface TenantDpaSignatureRepository
           + "s.signerEmail = :signerEmail, s.signerOrganisation = :signerOrganisation, "
           + "s.signerIsMember = :signerIsMember, s.language = :language, "
           + "s.source = coalesce(s.source, :defaultSource), "
-          + "s.signedAt = :now, s.tokenHash = null "
+          + "s.signedAt = :now, s.tokenHash = null, "
+          + "s.currentVersionWhenSigned = :currentVersionWhenSigned "
           + "where s.tokenHash = :tokenHash "
           + "and s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.PENDING")
   int consumeSignToken(
@@ -81,7 +82,8 @@ public interface TenantDpaSignatureRepository
       @Param("signerIsMember") Boolean signerIsMember,
       @Param("language") String language,
       @Param("defaultSource") String defaultSource,
-      @Param("now") LocalDateTime now);
+      @Param("now") LocalDateTime now,
+      @Param("currentVersionWhenSigned") Boolean currentVersionWhenSigned);
 
   /**
    * Locks every outstanding sign link of the tenant, in ascending id order, before a confirmation

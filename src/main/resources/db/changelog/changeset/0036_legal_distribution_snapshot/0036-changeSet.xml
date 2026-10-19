@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.2.xsd">
+  <!-- The sent template keeps its own copy: its proposals disappear with deleted recipient tenants. -->
+  <changeSet author="oriso" id="addLegalDistributionSnapshot">
+    <sql>ALTER TABLE tenant_legal_proposal_distribution ADD COLUMN content LONGTEXT NULL;</sql>
+    <sql>ALTER TABLE tenant_legal_proposal_distribution ADD COLUMN privacy_consent LONGTEXT NULL;</sql>
+    <rollback>
+      <sql>ALTER TABLE tenant_legal_proposal_distribution DROP COLUMN privacy_consent;</sql>
+      <sql>ALTER TABLE tenant_legal_proposal_distribution DROP COLUMN content;</sql>
+    </rollback>
+  </changeSet>
+</databaseChangeLog>

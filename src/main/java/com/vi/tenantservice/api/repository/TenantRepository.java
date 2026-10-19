@@ -3,15 +3,30 @@ package com.vi.tenantservice.api.repository;
 import com.vi.tenantservice.api.model.TenantDataView;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedDataView;
+import jakarta.persistence.LockModeType;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT t FROM TenantEntity t WHERE t.id = :id")
+  Optional<TenantEntity> findByIdForSmtpTest(@Param("id") Long id);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT t FROM TenantEntity t WHERE t.id = :id")
+  Optional<TenantEntity> findForDpaPublication(@Param("id") Long id);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT t FROM TenantEntity t WHERE t.id IN :ids ORDER BY t.id")
+  List<TenantEntity> findForDpaSigning(@Param("ids") Set<Long> ids);
 
   TenantEntity findBySubdomain(String subdomain);
 
@@ -29,10 +44,15 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.subdomain, "
               + "t.address, "
               + "t.description, "
+              + "t.legalName, "
+              + "t.contactEmail, "
+              + "t.contactPhone, "
               + "t.licensingAllowedNumberOfUsers, "
               + "t.themingLogo, "
               + "t.themingAssociationLogo, "
               + "t.themingFavicon, "
+              + "t.themingAssistantName, "
+              + "t.themingAssistantIcon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
               + "t.themingAccent, "
@@ -52,7 +72,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.erstantwortResponseDeadlineDays, "
               + "t.settings, "
               + "t.createDate, "
-              + "t.updateDate) "
+              + "t.updateDate, "
+              + "t.dataProtectionOfficer) "
               + "FROM TenantEntity t WHERE t.id = :id")
   TenantDataView findTenantDataById(@Param("id") Long id);
 
@@ -64,10 +85,15 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.subdomain, "
               + "t.address, "
               + "t.description, "
+              + "t.legalName, "
+              + "t.contactEmail, "
+              + "t.contactPhone, "
               + "t.licensingAllowedNumberOfUsers, "
               + "t.themingLogo, "
               + "t.themingAssociationLogo, "
               + "t.themingFavicon, "
+              + "t.themingAssistantName, "
+              + "t.themingAssistantIcon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
               + "t.themingAccent, "
@@ -87,7 +113,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.erstantwortResponseDeadlineDays, "
               + "t.settings, "
               + "t.createDate, "
-              + "t.updateDate) "
+              + "t.updateDate, "
+              + "t.dataProtectionOfficer) "
               + "FROM TenantEntity t")
   List<TenantDataView> findAllTenantData();
 
@@ -99,10 +126,15 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.subdomain, "
               + "t.address, "
               + "t.description, "
+              + "t.legalName, "
+              + "t.contactEmail, "
+              + "t.contactPhone, "
               + "t.licensingAllowedNumberOfUsers, "
               + "t.themingLogo, "
               + "t.themingAssociationLogo, "
               + "t.themingFavicon, "
+              + "t.themingAssistantName, "
+              + "t.themingAssistantIcon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
               + "t.themingAccent, "
@@ -122,7 +154,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.erstantwortResponseDeadlineDays, "
               + "t.settings, "
               + "t.createDate, "
-              + "t.updateDate) "
+              + "t.updateDate, "
+              + "t.dataProtectionOfficer) "
               + "FROM TenantEntity t "
               + "WHERE"
               + "  t.id != 0L "
@@ -142,6 +175,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.themingLogo, "
               + "t.themingAssociationLogo, "
               + "t.themingFavicon, "
+              + "t.themingAssistantName, "
+              + "t.themingAssistantIcon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
               + "t.themingAccent, "
@@ -153,7 +188,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.contentPrivacyActivationDate, "
               + "t.contentTermsAndConditions, "
               + "t.contentTermsAndConditionsActivationDate, "
-              + "t.settings) "
+              + "t.settings, "
+              + "t.dataProtectionOfficer) "
               + "FROM TenantEntity t WHERE t.subdomain = :subdomain")
   TenantRestrictedDataView findRestrictedDataBySubdomain(@Param("subdomain") String subdomain);
 
@@ -166,6 +202,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.themingLogo, "
               + "t.themingAssociationLogo, "
               + "t.themingFavicon, "
+              + "t.themingAssistantName, "
+              + "t.themingAssistantIcon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
               + "t.themingAccent, "
@@ -177,7 +215,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.contentPrivacyActivationDate, "
               + "t.contentTermsAndConditions, "
               + "t.contentTermsAndConditionsActivationDate, "
-              + "t.settings) "
+              + "t.settings, "
+              + "t.dataProtectionOfficer) "
               + "FROM TenantEntity t WHERE t.id = :id")
   TenantRestrictedDataView findRestrictedDataById(@Param("id") Long id);
 
@@ -190,6 +229,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.themingLogo, "
               + "t.themingAssociationLogo, "
               + "t.themingFavicon, "
+              + "t.themingAssistantName, "
+              + "t.themingAssistantIcon, "
               + "t.themingPrimaryColor, "
               + "t.themingSecondaryColor, "
               + "t.themingAccent, "
@@ -201,7 +242,8 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.contentPrivacyActivationDate, "
               + "t.contentTermsAndConditions, "
               + "t.contentTermsAndConditionsActivationDate, "
-              + "t.settings) "
+              + "t.settings, "
+              + "t.dataProtectionOfficer) "
               + "FROM TenantEntity t WHERE t.id IN :ids")
   List<TenantRestrictedDataView> findRestrictedDataByIdIn(@Param("ids") Set<Long> ids);
 

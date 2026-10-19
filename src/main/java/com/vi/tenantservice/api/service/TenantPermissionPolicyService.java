@@ -5,16 +5,19 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
 import com.vi.tenantservice.api.model.CaseHandoverPolicies;
 import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
+import com.vi.tenantservice.api.model.ConsentPermissionPolicy;
 import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
 import com.vi.tenantservice.api.model.MultilingualTextPermissionPolicy;
 import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.StringListPermissionPolicy;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantPermissionPolicyEntity;
-import com.vi.tenantservice.api.policy.CaseHandoverDurationPolicy;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
+import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
+import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
 import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PermissionPolicyResolver;
 import com.vi.tenantservice.api.policy.PolicyValue;
@@ -42,8 +45,7 @@ public class TenantPermissionPolicyService {
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   public Map<String, ResolvedPolicyValue<Boolean>> getResolvedPolicies(Long tenantId) {
-    Map<String, PolicyValue<Boolean>> inherited =
-        toDomain(platformControls.getControls().getPermissionPolicies());
+    Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platformControls.getControls());
     Map<String, PolicyValue<Boolean>> overrides =
         repository.findByTenantId(tenantId).map(this::deserialize).orElse(Map.of());
     return resolvePolicies(inherited, overrides);
@@ -54,8 +56,7 @@ public class TenantPermissionPolicyService {
     if (tenantIds.isEmpty()) {
       return Map.of();
     }
-    Map<String, PolicyValue<Boolean>> inherited =
-        toDomain(platformControls.getControls().getPermissionPolicies());
+    Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platformControls.getControls());
     Map<Long, Map<String, PolicyValue<Boolean>>> overridesByTenant = new LinkedHashMap<>();
     repository
         .findByTenantIdIn(tenantIds)
@@ -69,14 +70,33 @@ public class TenantPermissionPolicyService {
     return Map.copyOf(resolvedByTenant);
   }
 
+  /**
+   * The platform rule for every registry feature. The stored platform list may be partial (dev
+   * carried only {@code caseHandoverEnabled}, #254); the missing features take the same default the
+   * platform read uses: the legacy toggle mapping, else SUGGESTED/on.
+   */
+  private Map<String, PolicyValue<Boolean>> platformPolicies(TenantAdminControls platform) {
+    return LegacyPermissionPolicyMapper.complete(
+        toDomain(platform.getPermissionPolicies()),
+        platform.getAllowedPermissionToggles(),
+        platform.getEnforcedPermissionToggles());
+  }
+
   private Map<String, ResolvedPolicyValue<Boolean>> resolvePolicies(
       Map<String, PolicyValue<Boolean>> inherited, Map<String, PolicyValue<Boolean>> overrides) {
     Map<String, ResolvedPolicyValue<Boolean>> resolved = new LinkedHashMap<>();
-    inherited.forEach(
-        (feature, parent) ->
-            resolved.put(
-                feature,
-                PermissionPolicyResolver.resolveWithOrigin(parent, overrides.get(feature))));
+    // tenant overrides stored before the group chat formats were split out (#250) still apply
+    Map<String, PolicyValue<Boolean>> effectiveOverrides =
+        PermissionFeature.withTransitionFallbacks(overrides);
+    // resolve over the registry, never over the platform keys: a tenant override for a feature the
+    // platform list does not mention must survive the read (#254)
+    for (PermissionFeature feature : PermissionFeature.values()) {
+      String key = feature.apiKey();
+      resolved.put(
+          key,
+          PermissionPolicyResolver.resolveWithOrigin(
+              inherited.get(key), effectiveOverrides.get(key)));
+    }
     return Map.copyOf(resolved);
   }
 
@@ -91,10 +111,10 @@ public class TenantPermissionPolicyService {
       Map<String, PolicyValue<Boolean>> overrides,
       CaseHandoverPolicies caseHandoverOverrides) {
     overrides.keySet().forEach(this::assertKnownFeature);
-    validateCaseHandoverOverrides(caseHandoverOverrides);
+    CaseHandoverPolicyRules.validate(caseHandoverOverrides);
     TenantAdminControls platform = platformControls.getControls();
     Map<String, PolicyValue<Boolean>> writableOverrides =
-        sanitizeBooleanOverrides(toDomain(platform.getPermissionPolicies()), overrides);
+        sanitizeBooleanOverrides(platformPolicies(platform), overrides);
     CaseHandoverPolicies parentCaseHandover = platform.getCaseHandoverPolicies();
     if (parentCaseHandover == null) {
       parentCaseHandover = CaseHandoverPolicyDefaults.create();
@@ -221,6 +241,11 @@ public class TenantPermissionPolicyService {
         .forEach(
             (code, localReason) -> {
               CaseHandoverReasonPolicy parentReason = parent.getReasons().get(code);
+              ConsentPermissionPolicy consent =
+                  sanitizePolicy(
+                      CaseHandoverPolicyRules.effectiveConsent(parentReason),
+                      CaseHandoverPolicyRules.effectiveConsent(localReason),
+                      code + ".clientConsent");
               writableReasons.put(
                   code,
                   new CaseHandoverReasonPolicy(
@@ -235,10 +260,7 @@ public class TenantPermissionPolicyService {
                               parentReason.getAccessAllowed(),
                               localReason.getAccessAllowed(),
                               code + ".accessAllowed"),
-                          sanitizePolicy(
-                              parentReason.getClientConsentRequired(),
-                              localReason.getClientConsentRequired(),
-                              code + ".clientConsentRequired"),
+                          CaseHandoverPolicyRules.legacyConsentMirror(consent),
                           sanitizePolicy(
                               parentReason.getApprovalRoles(),
                               localReason.getApprovalRoles(),
@@ -247,6 +269,7 @@ public class TenantPermissionPolicyService {
                               parentReason.getClientNotificationTemplates(),
                               localReason.getClientNotificationTemplates(),
                               code + ".clientNotificationTemplates"))
+                      .clientConsent(consent)
                       .maxAccessDurationMinutes(
                           sanitizePolicy(
                               parentReason.getMaxAccessDurationMinutes(),
@@ -263,6 +286,11 @@ public class TenantPermissionPolicyService {
 
   private IntegerPermissionPolicy sanitizePolicy(
       IntegerPermissionPolicy parent, IntegerPermissionPolicy local, String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private ConsentPermissionPolicy sanitizePolicy(
+      ConsentPermissionPolicy parent, ConsentPermissionPolicy local, String field) {
     return sanitizePolicy(parent, local, field, this::toDomain);
   }
 
@@ -299,20 +327,23 @@ public class TenantPermissionPolicyService {
 
   private CaseHandoverReasonPolicy resolveReason(
       CaseHandoverReasonPolicy parent, CaseHandoverReasonPolicy local) {
+    ConsentPermissionPolicy consent =
+        resolveConsent(
+            CaseHandoverPolicyRules.effectiveConsent(parent),
+            local == null ? null : CaseHandoverPolicyRules.effectiveConsent(local));
     return new CaseHandoverReasonPolicy(
             parent.getCode(),
             resolveMultilingual(parent.getLabels(), local == null ? null : local.getLabels()),
             resolveBoolean(parent.getEnabled(), local == null ? null : local.getEnabled()),
             resolveBoolean(
                 parent.getAccessAllowed(), local == null ? null : local.getAccessAllowed()),
-            resolveBoolean(
-                parent.getClientConsentRequired(),
-                local == null ? null : local.getClientConsentRequired()),
+            CaseHandoverPolicyRules.legacyConsentMirror(consent),
             resolveStringList(
                 parent.getApprovalRoles(), local == null ? null : local.getApprovalRoles()),
             resolveMultilingual(
                 parent.getClientNotificationTemplates(),
                 local == null ? null : local.getClientNotificationTemplates()))
+        .clientConsent(consent)
         .maxAccessDurationMinutes(
             parent.getMaxAccessDurationMinutes() == null
                 ? null
@@ -326,6 +357,15 @@ public class TenantPermissionPolicyService {
     ResolvedPolicyValue<Boolean> resolved =
         PermissionPolicyResolver.resolveWithOrigin(toDomain(parent), toDomain(local));
     return new BooleanPermissionPolicy(
+            resolved.value(), PermissionPolicyMode.valueOf(resolved.mode().name()))
+        .inherited(resolved.inherited());
+  }
+
+  private ConsentPermissionPolicy resolveConsent(
+      ConsentPermissionPolicy parent, ConsentPermissionPolicy local) {
+    ResolvedPolicyValue<CaseHandoverConsentValue> resolved =
+        PermissionPolicyResolver.resolveWithOrigin(toDomain(parent), toDomain(local));
+    return new ConsentPermissionPolicy(
             resolved.value(), PermissionPolicyMode.valueOf(resolved.mode().name()))
         .inherited(resolved.inherited());
   }
@@ -369,6 +409,10 @@ public class TenantPermissionPolicyService {
     return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
   }
 
+  private PolicyValue<CaseHandoverConsentValue> toDomain(ConsentPermissionPolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
+  }
+
   private PolicyValue<Integer> toDomain(IntegerPermissionPolicy policy) {
     return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
   }
@@ -379,35 +423,6 @@ public class TenantPermissionPolicyService {
 
   private PolicyValue<Map<String, String>> toDomain(MultilingualTextPermissionPolicy policy) {
     return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
-  }
-
-  private void validateCaseHandoverOverrides(CaseHandoverPolicies policies) {
-    if (policies == null) {
-      return;
-    }
-    if (policies.getReasons() == null) {
-      throw new IllegalArgumentException("Case Handover reasons must not be null");
-    }
-    Set<String> knownReasons = CaseHandoverPolicyDefaults.create().getReasons().keySet();
-    for (var entry : policies.getReasons().entrySet()) {
-      if (!knownReasons.contains(entry.getKey()) || entry.getValue() == null) {
-        throw new IllegalArgumentException("Unknown Case Handover reason: " + entry.getKey());
-      }
-      CaseHandoverReasonPolicy reason = entry.getValue();
-      if (!entry.getKey().equals(reason.getCode().getValue())) {
-        throw new IllegalArgumentException("Case Handover reason key must match its code");
-      }
-      if (CaseHandoverPolicyDefaults.ADVICE_NEEDED.equals(entry.getKey())) {
-        IntegerPermissionPolicy duration = reason.getMaxAccessDurationMinutes();
-        CaseHandoverDurationPolicy.validateAdviceNeeded(
-            duration == null ? null : duration.getValue());
-      } else {
-        CaseHandoverDurationPolicy.validateTakeover(
-            reason.getMaxAccessDurationMinutes() == null
-                ? null
-                : reason.getMaxAccessDurationMinutes().getValue());
-      }
-    }
   }
 
   private void assertKnownFeature(String feature) {

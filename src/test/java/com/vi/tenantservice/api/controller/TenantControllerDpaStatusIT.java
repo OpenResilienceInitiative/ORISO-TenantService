@@ -94,7 +94,8 @@ class TenantControllerDpaStatusIT {
         "signerEmail": "toni@example.org",
         "signerOrganisation": "Träger Nord e.V.",
         "language": "de",
-        "accepted": true
+        "accepted": true,
+        "dpaVersion": "2026-07-01T12:00"
       }
       """;
 
@@ -208,6 +209,9 @@ class TenantControllerDpaStatusIT {
 
   private RequestPostProcessor platformAdmin() {
     givenAuthoritiesOfRole(TENANT_ADMIN);
+    // The platform admin is tenant-admin from tenant 0; a Träger admin holds the same role.
+    when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
     when(authorisationService.getUserId()).thenReturn("platform-admin-user");
     when(authorisationService.getUsername()).thenReturn("platformadmin");
     return authentication(
@@ -493,6 +497,41 @@ class TenantControllerDpaStatusIT {
     assertThat(signature.getSignerUserId()).isEqualTo("kc-onboarded-admin");
     assertThat(signature.getDpaVersion()).isEqualTo(VERSION_2);
     assertThat(signature.getFormData()).contains("PUBLIC_TENANT_ADMIN_ONBOARDING");
+  }
+
+  @Test
+  void createTenantCannotGainInitialGraceByAcceptingASupersededOnboardingDocument()
+      throws Exception {
+    publishDpaVersion(OPERATOR_TENANT, VERSION_1);
+    publishDpaVersion(OPERATOR_TENANT, VERSION_2);
+    var currentPublication =
+        versionRepository
+            .findFirstByTenantIdAndActivationDate(OPERATOR_TENANT, VERSION_2)
+            .orElseThrow();
+    currentPublication.setSigningDeadlineAt(LocalDateTime.of(2099, 10, 1, 12, 0));
+    versionRepository.save(currentPublication);
+
+    mockMvc
+        .perform(
+            post(TENANTADMIN_RESOURCE)
+                .with(platformAdmin())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    new MultilingualTenantTestDataBuilder()
+                        .withId(ONBOARDED_TENANT)
+                        .withName("Late Onboarding Tenant")
+                        .withSubdomain("late-onboarding-tenant")
+                        .withLicensing()
+                        .withOnboardingDpaAcceptance(
+                            "kc-onboarded-admin", "Toni Tenantadmin", VERSION_1.toString())
+                        .jsonify()))
+        .andExpect(status().isOk());
+    mockMvc
+        .perform(get(DPA_GATE.formatted(ONBOARDED_TENANT)).with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("dpaStatus", is("OUTDATED")))
+        .andExpect(jsonPath("renewalGraceActive", is(false)))
+        .andExpect(jsonPath("newCounsellingAllowed", is(false)));
   }
 
   /**
