@@ -21,6 +21,21 @@ public class TenantSettings {
   Boolean featureDemographicsEnabled;
   Boolean featureAppointmentsEnabled;
   Boolean featureGroupChatV2Enabled;
+
+  /**
+   * #250 — internal group chats (counsellors only). Switched separately from {@link
+   * #featureSelfHelpGroupsEnabled}. Deliberately absent from {@link #BOOLEAN_FIELD_DEFAULTS}: a
+   * tenant that never stored it reads its own {@link #featureGroupChatV2Enabled}, so existing
+   * tenants keep today's behaviour.
+   */
+  Boolean featureInternalGroupChatEnabled;
+
+  /**
+   * #250 — conversation circles / self-help groups (advice seekers take part). Same transition rule
+   * as {@link #featureInternalGroupChatEnabled}.
+   */
+  Boolean featureSelfHelpGroupsEnabled;
+
   Boolean featureTeamDiscussionEnabled;
   Boolean featureToolsEnabled;
   Boolean featureAnonymousChatEnabled;
@@ -48,6 +63,13 @@ public class TenantSettings {
    */
   Boolean featureAskerEmailEnabled;
 
+  Boolean featureAskerEmailAgencyCounsellingEnabled;
+  Boolean featureAskerEmailLiveChatEnabled;
+  Boolean featureAskerEmailSelfHelpEnabled;
+  Boolean featureAskerBrowserAgencyCounsellingEnabled;
+  Boolean featureAskerBrowserLiveChatEnabled;
+  Boolean featureAskerBrowserSelfHelpEnabled;
+
   Boolean featureCallsEnabled;
   Boolean featureSupervisionEnabled;
   Boolean featureSupervisionAnonymousChatsEnabled;
@@ -73,6 +95,7 @@ public class TenantSettings {
   Boolean featureVoiceMessagesGroupChatsEnabled;
   Boolean featureVoiceMessagesSupervisionChatsEnabled;
   Boolean featureSystemNotificationEmailsEnabled;
+  TenantSmtpMode smtpMode;
   TenantSmtpSettings smtp;
   Boolean featureMediaUploadEnabled;
   Boolean featureMediaUploadAnonymousChatsEnabled;
@@ -136,6 +159,12 @@ public class TenantSettings {
               // ORISO-Admin#602: opt-out, so every existing tenant keeps today's behaviour.
               Map.entry("featureDisplayNameEditable", true),
               Map.entry("featureAskerEmailEnabled", true),
+              Map.entry("featureAskerEmailAgencyCounsellingEnabled", true),
+              Map.entry("featureAskerEmailLiveChatEnabled", false),
+              Map.entry("featureAskerEmailSelfHelpEnabled", true),
+              Map.entry("featureAskerBrowserAgencyCounsellingEnabled", true),
+              Map.entry("featureAskerBrowserLiveChatEnabled", true),
+              Map.entry("featureAskerBrowserSelfHelpEnabled", true),
               Map.entry("featureCallsEnabled", true),
               Map.entry("featureSupervisionEnabled", true),
               Map.entry("featureSupervisionAnonymousChatsEnabled", true),
@@ -209,6 +238,14 @@ public class TenantSettings {
     }
     if (featureGroupChatV2Enabled == null) {
       featureGroupChatV2Enabled = BOOLEAN_FIELD_DEFAULTS.get("featureGroupChatV2Enabled");
+    }
+    // #250 transition: the format flags follow the tenant's own legacy group chat switch until
+    // they are stored explicitly (must run after featureGroupChatV2Enabled got its default).
+    if (featureInternalGroupChatEnabled == null) {
+      featureInternalGroupChatEnabled = featureGroupChatV2Enabled;
+    }
+    if (featureSelfHelpGroupsEnabled == null) {
+      featureSelfHelpGroupsEnabled = featureGroupChatV2Enabled;
     }
     if (featureTeamDiscussionEnabled == null) {
       featureTeamDiscussionEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureTeamDiscussionEnabled");
@@ -317,6 +354,30 @@ public class TenantSettings {
     }
     if (featureAskerEmailEnabled == null) {
       featureAskerEmailEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailEnabled");
+    }
+    if (featureAskerEmailAgencyCounsellingEnabled == null) {
+      featureAskerEmailAgencyCounsellingEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailAgencyCounsellingEnabled");
+    }
+    if (featureAskerEmailLiveChatEnabled == null) {
+      featureAskerEmailLiveChatEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailLiveChatEnabled");
+    }
+    if (featureAskerEmailSelfHelpEnabled == null) {
+      featureAskerEmailSelfHelpEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailSelfHelpEnabled");
+    }
+    if (featureAskerBrowserAgencyCounsellingEnabled == null) {
+      featureAskerBrowserAgencyCounsellingEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerBrowserAgencyCounsellingEnabled");
+    }
+    if (featureAskerBrowserLiveChatEnabled == null) {
+      featureAskerBrowserLiveChatEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerBrowserLiveChatEnabled");
+    }
+    if (featureAskerBrowserSelfHelpEnabled == null) {
+      featureAskerBrowserSelfHelpEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerBrowserSelfHelpEnabled");
     }
     applyMediaDefaults();
     if (isVideoCallAllowed == null) {

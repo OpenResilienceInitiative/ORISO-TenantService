@@ -5,6 +5,7 @@ import java.util.Base64;
 import java.util.regex.Pattern;
 import org.owasp.html.HtmlPolicyBuilder;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.HtmlUtils;
 
 @Component
 public class InputSanitizer {
@@ -35,6 +36,22 @@ public class InputSanitizer {
   public String sanitize(String input) {
     var sanitizer = new HtmlPolicyBuilder().toFactory();
     return sanitizer.sanitize(input);
+  }
+
+  /**
+   * For fields that are plain text everywhere they are shown (a Träger's legal name, contact e-mail
+   * and phone): markup is removed, but the result is not HTML-encoded, because {@link
+   * #sanitize(String)} would store "+49" as "&amp;#43;49" and an e-mail address with "&amp;#64;".
+   * Angle brackets are dropped after decoding, so markup cannot come back in as entities. Renderers
+   * still escape on output.
+   *
+   * @return {@code null} for {@code null}, so "not sent" stays distinguishable from "blank"
+   */
+  public String sanitizePlainText(String input) {
+    if (input == null) {
+      return null;
+    }
+    return HtmlUtils.htmlUnescape(sanitize(input)).replace("<", "").replace(">", "");
   }
 
   /**

@@ -5,7 +5,9 @@ import com.vi.tenantservice.api.model.TenantDpaAdminSignatureEntity;
 import com.vi.tenantservice.api.model.TenantDpaStatus;
 import com.vi.tenantservice.api.repository.TenantDpaAdminSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
+import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -41,14 +43,49 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RequiredArgsConstructor
 public class TenantDpaStatusService {
 
-  /** Authoritative DPA state of a tenant plus the facts it was derived from. */
+  /**
+   * Authoritative DPA state of a tenant plus the facts it was derived from.
+   *
+   * <p>{@code forwardPending} is the orthogonal "contract on hold" fact (ORISO-TenantService#179):
+   * the tenant is not validly signed AND at least one unexpired sign link is outstanding, i.e. the
+   * agreement was forwarded and is awaiting the authorised signer. It is deliberately a separate
+   * flag rather than a status value, so consumers keep receiving the UNSIGNED/OUTDATED they already
+   * handle and can opt into the waiting state.
+   */
   public record DpaStatusView(
       Long tenantId,
       TenantDpaStatus status,
       LocalDateTime currentVersion,
       LocalDateTime signedVersion,
       LocalDateTime signedAt,
-      String signedBy) {}
+      String signedBy,
+      boolean forwardPending,
+      LocalDateTime signingDeadlineAt,
+      boolean renewalGraceActive) {
+    public boolean newCounsellingAllowed() {
+      return status == TenantDpaStatus.VALID || renewalGraceActive;
+    }
+
+    public DpaStatusView(
+        Long tenantId,
+        TenantDpaStatus status,
+        LocalDateTime currentVersion,
+        LocalDateTime signedVersion,
+        LocalDateTime signedAt,
+        String signedBy,
+        boolean forwardPending) {
+      this(
+          tenantId,
+          status,
+          currentVersion,
+          signedVersion,
+          signedAt,
+          signedBy,
+          forwardPending,
+          null,
+          false);
+    }
+  }
 
   /** The submitted sign form: structured signer fields plus the verbatim JSON snapshot. */
   public record AdminSignatureForm(
@@ -59,27 +96,71 @@ public class TenantDpaStatusService {
       String language,
       String formDataJson) {}
 
-  private record SignedEntry(LocalDateTime version, LocalDateTime signedAt, String signedBy) {}
+  private record SignedEntry(
+      LocalDateTime version, LocalDateTime signedAt, String signedBy, boolean graceEligible) {}
 
   private final TenantDpaAdminSignatureRepository adminSignatureRepository;
   private final TenantDpaSignatureRepository signatureRepository;
+  private final DpaSignatureOwnership dpaSignatureOwnership;
   private final GoverningDpaResolver governingDpaResolver;
   private final PlatformTransactionManager transactionManager;
+  private final Clock dpaClock;
 
   /** Computes the authoritative DPA state for the tenant. */
   @Transactional(readOnly = true)
   public DpaStatusView getStatus(Long tenantId) {
-    var currentVersion = resolveCurrentVersion(tenantId);
+    var governing = governingDpaResolver.resolve(tenantId);
+    var currentVersion = governing == null ? null : governing.version();
     var signedEntries = collectSignedEntries(tenantId);
     var status = deriveStatus(currentVersion, signedEntries);
     var latestSigned = latestSignedEntry(signedEntries);
+    var deadline =
+        governingDpaResolver
+            .findCurrentPublishedVersion(governing)
+            .map(com.vi.tenantservice.api.model.TenantDpaVersionEntity::getSigningDeadlineAt)
+            .orElse(null);
     return new DpaStatusView(
         tenantId,
         status,
         currentVersion,
         latestSigned == null ? null : latestSigned.version(),
         latestSigned == null ? null : latestSigned.signedAt(),
-        latestSigned == null ? null : latestSigned.signedBy());
+        latestSigned == null ? null : latestSigned.signedBy(),
+        isForwardPending(tenantId, status, currentVersion),
+        deadline,
+        status == TenantDpaStatus.OUTDATED
+            && deadline != null
+            && signedEntries.stream().anyMatch(SignedEntry::graceEligible)
+            && dpaClock.instant().isBefore(deadline.toInstant(ZoneOffset.UTC)));
+  }
+
+  /**
+   * "Contract on hold" (ORISO-TenantService#179): a not-yet-validly-signed tenant with an unexpired
+   * outstanding sign link FOR THE CURRENT VERSION is waiting for the authorised signer, which the
+   * wizard, the legal gate and the invite progress board need to tell apart from "nobody acted
+   * yet". Matching the version matters: after a republish, a link issued for the previous version
+   * can only ever yield an OUTDATED signature, so counting it would claim the current contract is
+   * awaiting a signer when nobody can actually satisfy it. A VALID, MISSING or INCONSISTENT tenant
+   * is never reported as waiting, and the ledger is only queried when the answer can be true — the
+   * common signed case costs no extra read.
+   */
+  private boolean isForwardPending(
+      Long tenantId, TenantDpaStatus derived, LocalDateTime currentVersion) {
+    if (derived != TenantDpaStatus.UNSIGNED && derived != TenantDpaStatus.OUTDATED) {
+      return false;
+    }
+    if (currentVersion == null) {
+      return false;
+    }
+    // Ownership applies here too: a live link from a PREVIOUS occupant of this tenant ID can no
+    // longer be confirmed (the confirm path checks the binding), so reporting it as "awaiting a
+    // signer" would be a status that lies to the wizard and the legal gate.
+    return !dpaSignatureOwnership
+        .filterCurrentOccupant(
+            tenantId,
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                tenantId, currentVersion, DpaSignatureStatus.PENDING, LocalDateTime.now()))
+        .isEmpty();
   }
 
   /**
@@ -111,6 +192,66 @@ public class TenantDpaStatusService {
       return status;
     }
     persistSignature(tenantId, status.currentVersion(), signerUserId, signerUsername, form);
+    return getStatus(tenantId);
+  }
+
+  /**
+   * Accepts exactly the version the admin read. Resolve, compare and insert while the document
+   * owner and recipient are locked in the same transaction as signature/link invalidation.
+   */
+  public DpaStatusView signDisplayedVersion(
+      Long tenantId,
+      LocalDateTime shownVersion,
+      String signerUserId,
+      String signerUsername,
+      AdminSignatureForm form) {
+    return acceptDisplayedVersion(
+        tenantId, shownVersion, signerUserId, signerUsername, form, false);
+  }
+
+  /** Genuine compatibility for legacy contracts; adopted deadline policy requires the v2 form. */
+  public DpaStatusView signLegacyVersion(
+      Long tenantId, String signerUserId, String signerUsername, AdminSignatureForm form) {
+    var version = getStatus(tenantId).currentVersion();
+    if (version == null) {
+      throw new DpaNotPublishedException("Tenant has no published DPA to sign yet");
+    }
+    return acceptDisplayedVersion(tenantId, version, signerUserId, signerUsername, form, true);
+  }
+
+  private DpaStatusView acceptDisplayedVersion(
+      Long tenantId,
+      LocalDateTime shownVersion,
+      String signerUserId,
+      String signerUsername,
+      AdminSignatureForm form,
+      boolean legacy) {
+    var transaction = new TransactionTemplate(transactionManager);
+    transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    try {
+      transaction.executeWithoutResult(
+          tx -> {
+            governingDpaResolver.lockForSigning(tenantId);
+            if (legacy && governingDpaResolver.requiresVersionedDpaMutation(tenantId)) {
+              throw new DpaNotPublishedException("Deadline-managed DPA requires versioned signing");
+            }
+            var current = getStatus(tenantId);
+            if (!shownVersion.equals(current.currentVersion())) {
+              throw new DpaNotPublishedException(
+                  "The displayed DPA version changed; read the current contract before signing");
+            }
+            if (current.status() != TenantDpaStatus.VALID) {
+              adminSignatureRepository.save(
+                  signatureEntity(
+                      tenantId, shownVersion, signerUserId, signerUsername, form, true));
+              signatureRepository.invalidateOutstandingByTenantId(tenantId);
+            }
+          });
+    } catch (DataIntegrityViolationException e) {
+      if (!adminSignatureRepository.existsByTenantIdAndDpaVersion(tenantId, shownVersion)) {
+        throw e;
+      }
+    }
     return getStatus(tenantId);
   }
 
@@ -164,29 +305,38 @@ public class TenantDpaStatusService {
       String signerUserId,
       String signerUsername,
       AdminSignatureForm form) {
-    var now = LocalDateTime.now();
-    var entity =
-        TenantDpaAdminSignatureEntity.builder()
-            .tenantId(tenantId)
-            .dpaVersion(version)
-            .signerUserId(signerUserId)
-            .signerUsername(signerUsername)
-            .signerName(form.signerName())
-            .signerPosition(form.signerPosition())
-            .signerEmail(form.signerEmail())
-            .signerOrganisation(form.signerOrganisation())
-            .language(form.language())
-            .formData(form.formDataJson())
-            .signedAt(now)
-            .createDate(now)
-            .build();
     var insertTransaction = new TransactionTemplate(transactionManager);
     insertTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     try {
       // the catch must wrap the whole transaction boundary: with a SEQUENCE-generated id the
-      // INSERT is deferred until the flush at this template's commit, not save() itself
-      insertTransaction.executeWithoutResult(tx -> adminSignatureRepository.save(entity));
+      // INSERT is deferred until the flush at this template's commit, not save() itself.
+      // The invalidation of outstanding sign links rides INSIDE this transaction on purpose
+      // (#179): recording a signature and killing the tenant's live links either both commit or
+      // both roll back, so a failed invalidation can never leave a usable link behind a signature
+      // that already made the tenant VALID.
+      insertTransaction.executeWithoutResult(
+          tx -> {
+            governingDpaResolver.lockForSigning(tenantId);
+            var current = governingDpaResolver.resolve(tenantId);
+            var entity =
+                signatureEntity(
+                    tenantId,
+                    version,
+                    signerUserId,
+                    signerUsername,
+                    form,
+                    current != null && version.equals(current.version()));
+            adminSignatureRepository.save(entity);
+            signatureRepository.invalidateOutstandingByTenantId(tenantId);
+          });
     } catch (DataIntegrityViolationException e) {
+      // Only the concurrent-duplicate race is benign, and it is recognised by the winner's row
+      // actually being there — not by the exception type, which the JPA provider does not
+      // distinguish reliably. Anything else means nothing was recorded, so it must surface
+      // instead of being reported as a successful signature (and instead of invalidating links).
+      if (!adminSignatureRepository.existsByTenantIdAndDpaVersion(tenantId, version)) {
+        throw e;
+      }
       log.info(
           "Concurrent DPA signature for tenant {} version {} was absorbed (unique constraint)",
           tenantId,
@@ -194,13 +344,29 @@ public class TenantDpaStatusService {
     }
   }
 
-  /**
-   * The DPA version currently in force for the tenant — its own published version if it has one,
-   * otherwise the governing operator DPA version (see {@link GoverningDpaResolver}).
-   */
-  private LocalDateTime resolveCurrentVersion(Long tenantId) {
-    var governing = governingDpaResolver.resolve(tenantId);
-    return governing == null ? null : governing.version();
+  private TenantDpaAdminSignatureEntity signatureEntity(
+      Long tenantId,
+      LocalDateTime version,
+      String signerUserId,
+      String signerUsername,
+      AdminSignatureForm form,
+      boolean currentVersionWhenSigned) {
+    var now = LocalDateTime.now(dpaClock);
+    return TenantDpaAdminSignatureEntity.builder()
+        .tenantId(tenantId)
+        .dpaVersion(version)
+        .signerUserId(signerUserId)
+        .signerUsername(signerUsername)
+        .signerName(form.signerName())
+        .signerPosition(form.signerPosition())
+        .signerEmail(form.signerEmail())
+        .signerOrganisation(form.signerOrganisation())
+        .language(form.language())
+        .formData(form.formDataJson())
+        .signedAt(now)
+        .currentVersionWhenSigned(currentVersionWhenSigned)
+        .createDate(now)
+        .build();
   }
 
   private boolean isPublishedVersion(Long tenantId, LocalDateTime version) {
@@ -217,15 +383,23 @@ public class TenantDpaStatusService {
                     new SignedEntry(
                         row.getDpaVersion(),
                         row.getSignedAt(),
-                        row.getSignerName() != null
-                            ? row.getSignerName()
-                            : row.getSignerUsername())));
-    signatureRepository
-        .findByTenantIdAndStatus(tenantId, DpaSignatureStatus.SIGNED)
+                        row.getSignerName() != null ? row.getSignerName() : row.getSignerUsername(),
+                        !Boolean.FALSE.equals(row.getCurrentVersionWhenSigned()))));
+    // Only the current occupant's signatures count: a tenant ID is a reusable slot, and an
+    // orphan left behind by a released reservation must never make the next organisation on that
+    // ID look signed (#179).
+    dpaSignatureOwnership
+        .filterCurrentOccupant(
+            tenantId,
+            signatureRepository.findByTenantIdAndStatus(tenantId, DpaSignatureStatus.SIGNED))
         .forEach(
             row ->
                 entries.add(
-                    new SignedEntry(row.getDpaVersion(), row.getSignedAt(), row.getSignerName())));
+                    new SignedEntry(
+                        row.getDpaVersion(),
+                        row.getSignedAt(),
+                        row.getSignerName(),
+                        !Boolean.FALSE.equals(row.getCurrentVersionWhenSigned()))));
     return entries;
   }
 

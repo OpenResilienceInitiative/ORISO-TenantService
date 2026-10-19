@@ -51,6 +51,10 @@ public class TenantDpaVersionEntity {
   @Column(name = "activation_date", nullable = false)
   private LocalDateTime activationDate;
 
+  /** UTC signing deadline for this publication; null only for pre-deadline legacy history. */
+  @Column(name = "signing_deadline_at")
+  private LocalDateTime signingDeadlineAt;
+
   @Column(name = "create_date", nullable = false)
   private LocalDateTime createDate;
 

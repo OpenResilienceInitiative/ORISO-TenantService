@@ -2,9 +2,24 @@ package com.vi.tenantservice.api.exception.httpresponse;
 
 public enum HttpStatusExceptionReason {
   SUBDOMAIN_NOT_UNIQUE,
+
+  /**
+   * The submitted subdomain is not a usable routing key. The format rule used to live only in the
+   * admin panel's tenant form, so every other writer stored the value unchecked
+   * (ORISO-Admin/src/utils/isValidSubdomain.ts).
+   */
+  SUBDOMAIN_INVALID,
+
   NOT_ALLOWED_TO_CHANGE_SUBDOMAIN,
   NOT_ALLOWED_TO_CHANGE_LICENSING,
   NOT_ALLOWED_TO_CHANGE_SETTING,
+
+  /**
+   * The platform admin switched {@code allowedPermissionToggles.appearance} off for Träger admins,
+   * so this tenant admin may not change logo, favicon or colours. Until now the restriction lived
+   * only in the admin panel's UI (ORISO-Admin#688, TenantService#174).
+   */
+  NOT_ALLOWED_TO_CHANGE_APPEARANCE,
 
   NOT_ALLOWED_TO_CHANGE_LEGAL_CONTENT,
 

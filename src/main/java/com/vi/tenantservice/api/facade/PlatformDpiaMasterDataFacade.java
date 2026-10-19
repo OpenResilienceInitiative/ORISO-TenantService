@@ -18,8 +18,8 @@ import org.springframework.stereotype.Service;
  *
  * <p>Branding intentionally reuses the restricted public tenant data — the same pruned view served
  * by /tenant/public/** — so no new exposure surface is created. If no tenant context can be
- * resolved (e.g. the DPIA renderer calls the API host directly), the master data is served without
- * branding instead of failing.
+ * resolved (e.g. the DPIA renderer calls the API host directly), platform tenant 0 supplies the
+ * branding.
  */
 @Service
 @RequiredArgsConstructor
@@ -59,13 +59,8 @@ public class PlatformDpiaMasterDataFacade {
     try {
       return Optional.of(tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext());
     } catch (NoSuchElementException exception) {
-      log.debug("No tenant context for DPIA branding, trying single-tenant fallback", exception);
+      log.debug("No tenant context for DPIA branding, using platform tenant branding", exception);
     }
-    try {
-      return tenantServiceFacade.getSingleTenant();
-    } catch (IllegalStateException exception) {
-      log.debug("No single tenant either - serving DPIA master data without branding", exception);
-      return Optional.empty();
-    }
+    return tenantServiceFacade.getPlatformTenant();
   }
 }

@@ -14,6 +14,8 @@ public class TenantRestrictedDataView implements TenantRestrictedData {
   private final String themingLogo;
   private final String themingAssociationLogo;
   private final String themingFavicon;
+  private final String themingAssistantName;
+  private final String themingAssistantIcon;
   private final String themingPrimaryColor;
   private final String themingSecondaryColor;
   private final String themingAccent;
@@ -26,4 +28,5 @@ public class TenantRestrictedDataView implements TenantRestrictedData {
   private final String contentTermsAndConditions;
   private final LocalDateTime contentTermsAndConditionsActivationDate;
   private final String settings;
+  private final String dataProtectionOfficer;
 }

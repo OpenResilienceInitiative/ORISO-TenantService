@@ -47,6 +47,22 @@ public class TenantEntity implements TenantData {
   @Column(name = "description", columnDefinition = "TEXT")
   private String description;
 
+  /* Mail-footer sender block of the Träger (Frank, 2026-09-23). Optional; NULL means "not
+  entered", and the platform operator's value applies in its place. */
+  @Column(name = "legal_name", length = 255)
+  private String legalName;
+
+  @Column(name = "contact_email", length = 255)
+  private String contactEmail;
+
+  @Column(name = "contact_phone", length = 64)
+  private String contactPhone;
+
+  /* Optional DPO of the Träger as a JSON contact object (Admin#1067); inherited by its
+  Beratungsstellen for {{Datenschutzbeauftragte}}. NULL = not entered. */
+  @Column(name = "data_protection_officer", columnDefinition = "TEXT")
+  private String dataProtectionOfficer;
+
   @Column(name = "licensing_allowed_users")
   private Integer licensingAllowedNumberOfUsers;
 
@@ -58,6 +74,12 @@ public class TenantEntity implements TenantData {
 
   @Column(name = "theming_favicon")
   private String themingFavicon;
+
+  @Column(length = 80)
+  private String themingAssistantName;
+
+  @Column(columnDefinition = "LONGTEXT")
+  private String themingAssistantIcon;
 
   @Column(name = "theming_primary_color")
   private String themingPrimaryColor;
@@ -99,6 +121,46 @@ public class TenantEntity implements TenantData {
   @Column(name = "termsandconditions_activation_date")
   private LocalDateTime contentTermsAndConditionsActivationDate;
 
+  /* ORISO-Admin#601 — the five Bausteine a Träger authors in its own voice
+  (ADR-018 §2). Stored as columns beside the legal texts rather than in a new
+  table: same lifecycle, same rich-text bodies, and the machine-translation-on-
+  publish mechanism is already wired to that shape.
+
+  There is exactly ONE free-notice column on purpose. A collection would have
+  turned "a Träger cannot add a second" into a validation rule somebody could
+  relax; one column cannot hold two.
+
+  No column exists for the derived Bausteine — the response-deadline wording,
+  "send us no personal data", the modality note. What the system knows, the
+  system renders; a typed claim can contradict the configuration, a rendered
+  one cannot. */
+  @Column(name = "content_erstantwort_greeting")
+  private String contentErstantwortGreeting;
+
+  @Column(name = "content_erstantwort_who_reads_along")
+  private String contentErstantwortWhoReadsAlong;
+
+  @Column(name = "content_erstantwort_emergency_addition")
+  private String contentErstantwortEmergencyAddition;
+
+  @Column(name = "content_erstantwort_free_notice")
+  private String contentErstantwortFreeNotice;
+
+  @Column(name = "content_erstantwort_closing")
+  private String contentErstantwortClosing;
+
+  /**
+   * The Antwortfrist in working days — a NUMBER, never prose (ADR-018), so the promise is one value
+   * that can be compared against what actually happened, and so the wording can be rendered around
+   * it in every locale without anyone retyping it.
+   *
+   * <p>Deliberately NOT defaulted to the platform's 2 here. A tenant that never chose a number must
+   * stay distinguishable from one that chose 2 — the difference matters the day the platform
+   * default changes.
+   */
+  @Column(name = "erstantwort_response_deadline_days")
+  private Integer erstantwortResponseDeadlineDays;
+
   @Column(name = "content_dpa")
   private String contentDataProcessingAgreement;
 
@@ -115,6 +177,9 @@ public class TenantEntity implements TenantData {
 
   @Column(name = "update_date")
   private LocalDateTime updateDate;
+
+  @Column(name = "smtp_test_requested_at")
+  private LocalDateTime smtpTestRequestedAt;
 
   public interface TenantBase {
 

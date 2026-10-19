@@ -1,11 +1,14 @@
 package com.vi.tenantservice.api.controller;
 
+import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import jakarta.validation.ConstraintViolationException;
+import java.util.EnumSet;
+import java.util.Set;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,13 +23,23 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 @ControllerAdvice
 public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
 
+  /**
+   * Malformed input, not a conflict: these answer 400 while every other validation reason keeps the
+   * historical 409. The X-Reason header is sent either way, so the admin panel can tell the causes
+   * apart instead of showing one generic failure.
+   */
+  private static final Set<HttpStatusExceptionReason> BAD_REQUEST_REASONS =
+      EnumSet.of(
+          HttpStatusExceptionReason.LANGUAGE_KEY_NOT_VALID,
+          HttpStatusExceptionReason.SUBDOMAIN_INVALID);
+
   @ExceptionHandler(value = {TenantValidationException.class})
   protected ResponseEntity<Object> handle(RuntimeException ex, WebRequest request) {
 
     var customHttpHeader = ((TenantValidationException) ex).getCustomHttpHeaders();
     HttpStatusExceptionReason statusExceptionReason =
         ((TenantValidationException) ex).getStatusExceptionReason();
-    if (HttpStatusExceptionReason.LANGUAGE_KEY_NOT_VALID.equals(statusExceptionReason)) {
+    if (BAD_REQUEST_REASONS.contains(statusExceptionReason)) {
       return handleExceptionInternal(ex, "", customHttpHeader, HttpStatus.BAD_REQUEST, request);
     }
     return handleExceptionInternal(ex, "", customHttpHeader, HttpStatus.CONFLICT, request);
@@ -36,6 +49,12 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
   @ResponseStatus(HttpStatus.CONFLICT)
   protected void handleTenantIdAllocationConflict(TenantIdAllocationConflictException e) {
     logger.info("Returning HTTP 409 Conflict for tenant ID allocation: " + e.getMessage());
+  }
+
+  @ExceptionHandler(value = {SettingsUpdateConflictException.class})
+  @ResponseStatus(HttpStatus.CONFLICT)
+  protected void handleSettingsUpdateConflict(SettingsUpdateConflictException e) {
+    logger.info("Returning HTTP 409 Conflict for concurrent settings update: " + e.getMessage());
   }
 
   @ExceptionHandler(value = {TenantAuthorisationException.class})

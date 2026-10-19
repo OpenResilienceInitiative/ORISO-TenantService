@@ -7,11 +7,16 @@ import com.vi.tenantservice.api.model.DpaSignInviteDTO;
 import com.vi.tenantservice.api.model.DpaSignatureDTO;
 import com.vi.tenantservice.api.model.DpaStatusDTO;
 import com.vi.tenantservice.api.model.DpaVersionDTO;
+import com.vi.tenantservice.api.model.PublicDpaForwardRequestDTO;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
 import com.vi.tenantservice.api.model.TenantDpaStatus;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
+import com.vi.tenantservice.api.model.TenantIdReservationEntity;
+import com.vi.tenantservice.api.model.TenantIdReservationStatus;
+import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.GoverningDpaResolver;
+import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantService;
@@ -19,8 +24,14 @@ import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.api.util.TranslationMetaUtil;
 import com.vi.tenantservice.api.validation.InputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,7 +39,7 @@ import java.util.Map;
 import java.util.Objects;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,16 +58,23 @@ public class TenantDpaFacade {
 
   private static final Duration INVITE_TTL = Duration.ofDays(14);
 
+  /**
+   * How many unexpired sign links one onboarding may have outstanding at once. The public forward
+   * needs no session, so this is what stops a leaked onboarding token from minting links (and
+   * signature rows) without limit; a real forward needs one or two.
+   */
+  static final int MAX_OUTSTANDING_INVITES = 5;
+
   private final @NonNull TenantDpaService tenantDpaService;
   private final @NonNull TenantDpaStatusService tenantDpaStatusService;
   private final @NonNull GoverningDpaResolver governingDpaResolver;
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   private final @NonNull TenantService tenantService;
+  private final @NonNull TenantIdReservationRepository tenantIdReservationRepository;
   private final @NonNull InputSanitizer inputSanitizer;
   private final @NonNull AuthorisationService authorisationService;
-
-  @Value("${app.base.url:}")
-  private String appBaseUrl;
+  private final @NonNull DpaSignLinkOrigin dpaSignLinkOrigin;
+  private final @NonNull Clock dpaClock;
 
   /**
    * Creates a single-use sign invite for the DPA version currently in force for the tenant and
@@ -78,20 +96,113 @@ public class TenantDpaFacade {
       throw new DpaNotPublishedException(
           "Tenant " + tenantId + " has no published DPA to sign yet");
     }
-    var rawToken = tenantDpaService.createSignInvite(tenantId, governing.version(), INVITE_TTL);
+    var rawToken =
+        tenantDpaService.createSignInvite(
+            tenantId, governing.version(), INVITE_TTL, authorisationService.getUserId());
     return new DpaSignInviteDTO()
         .token(rawToken)
-        .signLink(buildSignLink(rawToken))
+        .signLink(dpaSignLinkOrigin.build(rawToken))
         .expiresAt(LocalDateTime.now().plus(INVITE_TTL).toString());
   }
 
-  private String buildSignLink(String rawToken) {
-    return (appBaseUrl == null ? "" : appBaseUrl) + "/dpa-sign/" + rawToken;
+  /**
+   * Creates a single-use DPA sign link from the PUBLIC tenant onboarding context
+   * (ORISO-TenantService#179). No session exists — the caller is authorised by the tenant-ID
+   * reservation pair its onboarding invite carries: the reservation must exist, the presented token
+   * must match the ledger row (constant-time compare), and the reservation must still be RESERVED,
+   * i.e. the onboarding it belongs to is still open. Every failure mode answers the same "invalid"
+   * state via {@link InvalidDpaSignTokenException} (410), so nothing about the reservation ledger
+   * leaks.
+   *
+   * <p>The PENDING signature row is bound to the RESERVED tenant id: the link works immediately —
+   * before and after the registration completes — and the signature lands on the tenant the moment
+   * it exists. Note the asymmetry: an already-minted link keeps working across registration (that
+   * is the whole point of the forward), but MINTING is limited to the open onboarding window;
+   * afterwards the authenticated admin endpoint owns it. {@code forwardedByUserId} stays null —
+   * there is no account yet.
+   *
+   * @throws InvalidDpaSignTokenException unknown reservation, token mismatch, or a reservation that
+   *     is no longer open (410)
+   * @throws DpaNotPublishedException nothing is published to sign (409)
+   */
+  @Transactional
+  public DpaSignInviteDTO createPublicForwardSignInvite(PublicDpaForwardRequestDTO request) {
+    if (request == null
+        || request.getReservedTenantId() == null
+        || request.getTenantIdReservationToken() == null
+        || request.getTenantIdReservationToken().isBlank()) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "reservedTenantId and tenantIdReservationToken are required");
+    }
+    var tenantId = request.getReservedTenantId();
+    TenantIdReservationEntity reservation;
+    try {
+      reservation =
+          tenantIdReservationRepository
+              .findByTenantIdForUpdate(tenantId)
+              .orElseThrow(() -> new InvalidDpaSignTokenException("Unknown tenant-ID reservation"));
+    } catch (PessimisticLockingFailureException contention) {
+      // another forward for this onboarding holds the row; "retry shortly" is the honest answer,
+      // not a 500 — same status the cap uses, since both mean "come back in a moment"
+      throw new ResponseStatusException(
+          HttpStatus.TOO_MANY_REQUESTS,
+          "Another sign link for this onboarding is being created; please retry");
+    }
+    if (!constantTimeEquals(reservation.getToken(), request.getTenantIdReservationToken())) {
+      throw new InvalidDpaSignTokenException("Tenant-ID reservation token mismatch");
+    }
+    // The reservation pair is a credential for the OPEN onboarding only. Registration consumes the
+    // reservation by flipping the ledger row to ASSIGNED while keeping the same token, and a
+    // tenant deletion leaves that ASSIGNED row behind — so without this check the onboarding token
+    // would keep minting sign links (and re-creating signer PII) for the whole life of the id, and
+    // even after the tenant it belonged to was deleted. Once the tenant exists, forwarding is the
+    // authenticated admin's endpoint. The answer is the same opaque one an unknown reservation
+    // gets, so nothing about the ledger's state leaks.
+    if (reservation.getStatus() != TenantIdReservationStatus.RESERVED) {
+      throw new InvalidDpaSignTokenException(
+          "Tenant-ID reservation is no longer open for onboarding");
+    }
+    // Anyone holding the onboarding token can call this, and every call mints a link that stays
+    // valid for 14 days, so the endpoint is throttled by how many links are already outstanding.
+    // Capping instead of replacing is deliberate: the product rule is that every issued link keeps
+    // working until a signature lands, so an admin who forwarded to two people does not silently
+    // break the first one.
+    if (tenantDpaService.countOutstandingSignInvites(
+            tenantId, request.getTenantIdReservationToken())
+        >= MAX_OUTSTANDING_INVITES) {
+      throw new ResponseStatusException(
+          HttpStatus.TOO_MANY_REQUESTS,
+          "Too many outstanding sign links for this onboarding; wait for one to be used or to"
+              + " expire");
+    }
+    // A RESERVED id has no tenant row yet by definition, so the governing document is the
+    // operator's — the same one the regular resolution returns the moment registration completes.
+    var governing = governingDpaResolver.resolveForUnregisteredTenant();
+    if (governing == null) {
+      throw new DpaNotPublishedException(
+          "No data processing agreement is published for reserved tenant " + tenantId + " yet");
+    }
+    var rawToken =
+        tenantDpaService.createSignInvite(
+            tenantId, governing.version(), INVITE_TTL, null, request.getTenantIdReservationToken());
+    return new DpaSignInviteDTO()
+        .token(rawToken)
+        .signLink(dpaSignLinkOrigin.build(rawToken))
+        .expiresAt(LocalDateTime.now().plus(INVITE_TTL).toString());
+  }
+
+  private static boolean constantTimeEquals(String expected, String presented) {
+    if (expected == null || presented == null) {
+      return false;
+    }
+    return MessageDigest.isEqual(
+        expected.getBytes(StandardCharsets.UTF_8), presented.getBytes(StandardCharsets.UTF_8));
   }
 
   /** The tenant's confirmed-DPA audit list (the platform-admin "list of confirmed AVVs"). */
   public List<DpaSignatureDTO> getSignatures(Long tenantId) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(
+        tenantId, "NOTIFICATION_DISPATCH");
     return tenantDpaService.getSignatures(tenantId).stream().map(TenantDpaFacade::toDto).toList();
   }
 
@@ -104,11 +215,21 @@ public class TenantDpaFacade {
    * nothing left to sign.
    */
   public DpaGateStatusDTO getGateStatus(Long tenantId) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId, "RUNTIME_POLICY");
     var status = tenantDpaStatusService.getStatus(tenantId);
     return new DpaGateStatusDTO()
         .dpaPublished(status.currentVersion() != null)
-        .dpaSigned(status.status() == TenantDpaStatus.VALID);
+        .dpaSigned(status.status() == TenantDpaStatus.VALID)
+        .dpaForwardPending(status.forwardPending())
+        .dpaStatus(status.status().name())
+        .currentDpaVersion(
+            status.currentVersion() == null ? null : status.currentVersion().toString())
+        .signingDeadlineAt(
+            status.signingDeadlineAt() == null
+                ? null
+                : status.signingDeadlineAt().toInstant(ZoneOffset.UTC).toString())
+        .renewalGraceActive(status.renewalGraceActive())
+        .newCounsellingAllowed(status.newCounsellingAllowed());
   }
 
   /**
@@ -130,23 +251,52 @@ public class TenantDpaFacade {
    * form is persisted verbatim as an append-only, revision-safe audit row. Signing an already-VALID
    * tenant has no duplicate effect and simply returns the current status.
    */
-  public DpaStatusDTO signDpa(Long tenantId, DpaAdminSignRequestDTO request) {
+  public DpaStatusDTO signDpa(
+      Long tenantId, DpaAdminSignRequestDTO request, String displayedVersion) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
-    var form =
-        new TenantDpaStatusService.AdminSignatureForm(
-            request.getSignerName(),
-            request.getSignerPosition(),
-            request.getSignerEmail(),
-            request.getSignerOrganisation(),
-            request.getLanguage(),
-            buildFormDataJson(request));
+    final LocalDateTime shownVersion;
+    try {
+      if (displayedVersion == null || displayedVersion.isBlank()) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "Displayed DPA version is required");
+      }
+      shownVersion = LocalDateTime.parse(displayedVersion);
+    } catch (DateTimeException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Displayed DPA version is invalid");
+    }
+    var form = signatureForm(request, displayedVersion);
     return toStatusDto(
-        tenantDpaStatusService.sign(
-            tenantId, authorisationService.getUserId(), authorisationService.getUsername(), form));
+        tenantDpaStatusService.signDisplayedVersion(
+            tenantId,
+            shownVersion,
+            authorisationService.getUserId(),
+            authorisationService.getUsername(),
+            form));
+  }
+
+  public DpaStatusDTO signLegacyDpa(Long tenantId, DpaAdminSignRequestDTO request) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    return toStatusDto(
+        tenantDpaStatusService.signLegacyVersion(
+            tenantId,
+            authorisationService.getUserId(),
+            authorisationService.getUsername(),
+            signatureForm(request, null)));
+  }
+
+  private static TenantDpaStatusService.AdminSignatureForm signatureForm(
+      DpaAdminSignRequestDTO request, String displayedVersion) {
+    return new TenantDpaStatusService.AdminSignatureForm(
+        request.getSignerName(),
+        request.getSignerPosition(),
+        request.getSignerEmail(),
+        request.getSignerOrganisation(),
+        request.getLanguage(),
+        buildFormDataJson(request, displayedVersion));
   }
 
   /** Verbatim JSON snapshot of the submitted sign form for the audit row. */
-  private static String buildFormDataJson(DpaAdminSignRequestDTO request) {
+  private static String buildFormDataJson(DpaAdminSignRequestDTO request, String displayedVersion) {
     var formData = new LinkedHashMap<String, Object>();
     formData.put("signerName", request.getSignerName());
     formData.put("signerPosition", request.getSignerPosition());
@@ -154,6 +304,7 @@ public class TenantDpaFacade {
     formData.put("signerOrganisation", request.getSignerOrganisation());
     formData.put("language", request.getLanguage());
     formData.put("accepted", request.getAccepted());
+    formData.put("dpaVersion", displayedVersion);
     return JsonConverter.convertToJson(formData);
   }
 
@@ -164,7 +315,14 @@ public class TenantDpaFacade {
         .currentDpaVersion(view.currentVersion() == null ? null : view.currentVersion().toString())
         .signedDpaVersion(view.signedVersion() == null ? null : view.signedVersion().toString())
         .signedAt(view.signedAt() == null ? null : view.signedAt().toString())
-        .signedBy(view.signedBy());
+        .signedBy(view.signedBy())
+        .forwardPending(view.forwardPending())
+        .signingDeadlineAt(
+            view.signingDeadlineAt() == null
+                ? null
+                : view.signingDeadlineAt().toInstant(ZoneOffset.UTC).toString())
+        .renewalGraceActive(view.renewalGraceActive())
+        .newCounsellingAllowed(view.newCounsellingAllowed());
   }
 
   /**
@@ -181,11 +339,35 @@ public class TenantDpaFacade {
    * is removed - a manual edit clears the machine-translated tag.
    */
   @Transactional
-  public DpaGateStatusDTO publishDpa(Long tenantId, Map<String, String> contentByLanguage) {
+  public DpaGateStatusDTO publishDpa(
+      Long tenantId, Map<String, String> contentByLanguage, String signingDeadlineAt) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    var deadline = requireFutureSigningDeadline(signingDeadlineAt);
+    return persistPublication(tenantId, contentByLanguage, deadline, false);
+  }
+
+  @Transactional
+  public DpaGateStatusDTO publishLegacyDpa(Long tenantId, Map<String, String> contentByLanguage) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    return persistPublication(tenantId, contentByLanguage, null, true);
+  }
+
+  private DpaGateStatusDTO persistPublication(
+      Long tenantId,
+      Map<String, String> contentByLanguage,
+      LocalDateTime deadline,
+      boolean legacy) {
+    // Use the same ordered owner/recipient locks as signing before reading the governing version.
+    // Otherwise a first own publication could reuse the previously signed operator timestamp.
+    governingDpaResolver.lockForSigning(tenantId);
+    if (legacy && governingDpaResolver.requiresVersionedDpaMutation(tenantId)) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "Deadline-managed DPA requires versioned publication");
+    }
+    var previouslyGoverning = governingDpaResolver.resolve(tenantId);
     var tenant =
         tenantService
-            .findTenantById(tenantId)
+            .findTenantForDpaPublication(tenantId)
             .orElseThrow(
                 () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant not found"));
     var previous = JsonConverter.convertMapFromJson(tenant.getContentDataProcessingAgreement());
@@ -213,14 +395,44 @@ public class TenantDpaFacade {
         });
     // Truncate to seconds so the in-memory version key matches the MariaDB DATETIME(0) column
     // after a round-trip — otherwise the signature gate (equals on dpa_version) could never match.
-    var version = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
+    var version = LocalDateTime.now(dpaClock).truncatedTo(ChronoUnit.SECONDS);
+    var previousVersion = tenant.getContentDataProcessingAgreementActivationDate();
+    var historyVersion = tenantDpaService.latestPublicationDate(tenantId);
+    if (historyVersion != null
+        && (previousVersion == null || historyVersion.isAfter(previousVersion))) {
+      previousVersion = historyVersion;
+    }
+    if (previouslyGoverning != null
+        && (previousVersion == null || previouslyGoverning.version().isAfter(previousVersion))) {
+      previousVersion = previouslyGoverning.version();
+    }
+    if (previousVersion != null && !version.isAfter(previousVersion)) {
+      version = previousVersion.plusSeconds(1);
+    }
     var json = JsonConverter.convertToJson(sanitized);
     tenant.setContentDataProcessingAgreement(json);
     tenant.setContentDataProcessingAgreementActivationDate(version);
     tenantService.update(tenant);
-    tenantDpaService.recordPublishedVersion(tenantId, json, version);
-    boolean signed = tenantDpaService.isSignedForVersion(tenantId, version);
-    return new DpaGateStatusDTO().dpaPublished(true).dpaSigned(signed);
+    tenantDpaService.recordPublishedVersion(tenantId, json, version, deadline);
+    return getGateStatus(tenantId);
+  }
+
+  private LocalDateTime requireFutureSigningDeadline(String value) {
+    if (value == null || value.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "DPA signing deadline is required");
+    }
+    try {
+      var deadline = OffsetDateTime.parse(value).toInstant().truncatedTo(ChronoUnit.SECONDS);
+      if (!deadline.isAfter(dpaClock.instant())) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "DPA signing deadline must be in the future");
+      }
+      return LocalDateTime.ofInstant(deadline, ZoneOffset.UTC);
+    } catch (DateTimeException e) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "DPA signing deadline must include a valid date, time and offset");
+    }
   }
 
   /**
@@ -255,7 +467,7 @@ public class TenantDpaFacade {
    * language. Signatures stay strictly per-tenant — only the CONTENT is shared.
    */
   public List<DpaVersionDTO> getVersions(Long tenantId) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId, "CONFIG_WIZARD");
     var documentTenantId = governingDpaResolver.documentTenantIdFor(tenantId);
     return tenantDpaService.getVersions(documentTenantId).stream()
         .map(TenantDpaFacade::toVersionDto)
@@ -266,19 +478,25 @@ public class TenantDpaFacade {
     return new DpaVersionDTO()
         .activationDate(
             entity.getActivationDate() == null ? null : entity.getActivationDate().toString())
-        .content(entity.getContent());
+        .content(entity.getContent())
+        .signingDeadlineAt(
+            entity.getSigningDeadlineAt() == null
+                ? null
+                : entity.getSigningDeadlineAt().toInstant(ZoneOffset.UTC).toString());
   }
 
   private static DpaSignatureDTO toDto(TenantDpaSignatureEntity entity) {
     return new DpaSignatureDTO()
         .tenantId(entity.getTenantId())
         .status(entity.getStatus() == null ? null : entity.getStatus().name())
+        .dpaVersion(entity.getDpaVersion() == null ? null : entity.getDpaVersion().toString())
         .signerName(entity.getSignerName())
         .signerPosition(entity.getSignerPosition())
         .signerEmail(entity.getSignerEmail())
         .signerOrganisation(entity.getSignerOrganisation())
         .forwardedByUserId(entity.getForwardedByUserId())
         .source(entity.getSource())
+        .language(entity.getLanguage())
         .signedAt(entity.getSignedAt() == null ? null : entity.getSignedAt().toString());
   }
 }

@@ -137,6 +137,11 @@ public class TenantService {
     return tenantRepository.findById(id);
   }
 
+  /** Serializes contract versions for one document owner inside the publication transaction. */
+  public Optional<TenantEntity> findTenantForDpaPublication(Long id) {
+    return tenantRepository.findForDpaPublication(id);
+  }
+
   public Optional<TenantData> findTenantDataById(Long id) {
     return Optional.ofNullable(tenantRepository.findTenantDataById(id));
   }

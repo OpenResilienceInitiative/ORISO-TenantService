@@ -91,12 +91,27 @@ public class TenantDpaSignatureEntity {
   @Column(name = "signed_at")
   private LocalDateTime signedAt;
 
+  /** Whether this contract was still governing when signed; null retains legacy audit semantics. */
+  @Column(name = "current_version_when_signed")
+  @Convert(converter = NumericBooleanConverter.class)
+  private Boolean currentVersionWhenSigned;
+
   /** SHA-256 hash of the single-use sign-link token while PENDING; nulled once consumed. */
   @Column(name = "token_hash")
   private String tokenHash;
 
   @Column(name = "token_expires_at")
   private LocalDateTime tokenExpiresAt;
+
+  /**
+   * SHA-256 hash of the tenant-ID reservation token this link was minted from (public onboarding
+   * forward only; null for links an authenticated admin created). Binds the link to the RESERVATION
+   * rather than to the tenant-ID slot: an ID that is released and reserved again keeps the same
+   * number but gets a new token, so the old link stops resolving instead of recording a signature
+   * for whoever holds the ID next (ORISO-TenantService#179).
+   */
+  @Column(name = "reservation_token_hash")
+  private String reservationTokenHash;
 
   @Column(name = "create_date", nullable = false)
   private LocalDateTime createDate;

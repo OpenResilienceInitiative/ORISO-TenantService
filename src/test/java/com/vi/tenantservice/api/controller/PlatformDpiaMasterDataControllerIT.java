@@ -1,6 +1,8 @@
 package com.vi.tenantservice.api.controller;
 
 import static com.vi.tenantservice.api.authorisation.UserRole.TENANT_ADMIN;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -10,6 +12,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -25,6 +28,7 @@ import com.vi.tenantservice.api.service.httpheader.SecurityHeaderSupplier;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.config.security.AuthorisationService;
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,7 +36,9 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -89,6 +95,7 @@ class PlatformDpiaMasterDataControllerIT {
       """;
 
   @Autowired private WebApplicationContext context;
+  @Autowired private JdbcTemplate jdbcTemplate;
 
   @Autowired
   private com.vi.tenantservice.api.repository.PlatformDpiaMasterDataRepository
@@ -130,6 +137,11 @@ class PlatformDpiaMasterDataControllerIT {
         .thenAnswer(
             invocation ->
                 Authority.getAuthoritiesByUserRole(userRole).contains(invocation.getArgument(0)));
+    if (userRole == UserRole.TENANT_ADMIN) {
+      // Every Träger admin holds tenant-admin too; the platform admin is the one from tenant 0.
+      when(authorisationService.hasRole(UserRole.TENANT_ADMIN.getValue())).thenReturn(true);
+      when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    }
   }
 
   private void saveFullMasterData() throws Exception {
@@ -174,6 +186,7 @@ class PlatformDpiaMasterDataControllerIT {
   @Test
   void updatePlatformDpiaMasterData_Should_overwriteSingleton_When_calledTwice() throws Exception {
     saveFullMasterData();
+    Long originalId = platformDpiaMasterDataRepository.findAll().getFirst().getId();
     AuthenticationMockBuilder builder = new AuthenticationMockBuilder();
     mockMvc
         .perform(
@@ -192,6 +205,35 @@ class PlatformDpiaMasterDataControllerIT {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.operator.legalName", is("New operator")))
         .andExpect(jsonPath("$.operator.shortName").doesNotExist());
+    assertThat(platformDpiaMasterDataRepository.findAll())
+        .singleElement()
+        .satisfies(
+            row -> {
+              assertThat(row.getId()).isEqualTo(originalId).isEqualTo(1L);
+              assertThat(row.getOperatorLegalName()).isEqualTo("New operator");
+              assertThat(row.getKeyFigureTenants()).isNull();
+            });
+  }
+
+  @Test
+  void database_Should_rejectSecondMasterDataRow() throws Exception {
+    saveFullMasterData();
+    assertThatThrownBy(
+            () ->
+                jdbcTemplate.update(
+                    "INSERT INTO platform_dpia_master_data (id, operator_legal_name, update_date) VALUES (999999, 'Second operator', CURRENT_TIMESTAMP)"))
+        .isInstanceOf(DataIntegrityViolationException.class);
+    assertThat(platformDpiaMasterDataRepository.count()).isEqualTo(1);
+  }
+
+  @Test
+  void database_Should_rejectNonSingletonIdEvenWhenEmpty() {
+    assertThatThrownBy(
+            () ->
+                jdbcTemplate.update(
+                    "INSERT INTO platform_dpia_master_data (id, update_date) VALUES (2, CURRENT_TIMESTAMP)"))
+        .isInstanceOf(DataIntegrityViolationException.class);
+    assertThat(platformDpiaMasterDataRepository.count()).isZero();
   }
 
   @Test
@@ -268,6 +310,7 @@ class PlatformDpiaMasterDataControllerIT {
         .andExpect(jsonPath("$.keyFigures.activeCounsellors.count", is(1500)))
         .andExpect(jsonPath("$.branding.tenantName").exists())
         .andExpect(jsonPath("$.branding.theming").exists())
+        .andExpect(jsonPath("$.branding.theming.logo", is("base64encoded logo")))
         // secrets and non-master-data must never appear on the public endpoint
         .andExpect(jsonPath("$.settings").doesNotExist())
         .andExpect(jsonPath("$.branding.settings").doesNotExist())
@@ -276,7 +319,7 @@ class PlatformDpiaMasterDataControllerIT {
   }
 
   @Test
-  void getPublicDpiaMasterData_Should_returnMasterDataWithoutBranding_When_noTenantContext()
+  void getPublicDpiaMasterData_Should_returnPlatformBranding_When_noTenantContext()
       throws Exception {
     saveFullMasterData();
     when(tenantResolverService.tryResolve()).thenReturn(Optional.empty());
@@ -285,6 +328,20 @@ class PlatformDpiaMasterDataControllerIT {
         .perform(get(PUBLIC_DPIA_RESOURCE).contentType(APPLICATION_JSON))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.operator.legalName", is("Deutscher Caritasverband e. V.")))
-        .andExpect(jsonPath("$.branding").doesNotExist());
+        .andExpect(jsonPath("$.branding").exists())
+        .andExpect(jsonPath("$.branding.theming.logo", is("base64encoded logo")));
+  }
+
+  @Test
+  void getPublicBrandingAsset_ShouldServeInheritedPlatformLogoAsHttpImage() throws Exception {
+    jdbcTemplate.update(
+        "UPDATE tenant SET theming_logo = ? WHERE id = 0", "data:image/png;base64,aWNvbg==");
+    when(tenantResolverService.tryResolve()).thenReturn(Optional.of(2L));
+
+    mockMvc
+        .perform(get("/tenant/public/branding/logo"))
+        .andExpect(status().isOk())
+        .andExpect(content().contentType("image/png"))
+        .andExpect(content().bytes("icon".getBytes(StandardCharsets.UTF_8)));
   }
 }

@@ -11,9 +11,16 @@ import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.TenantContent;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantSetting;
+import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.policy.PermissionFeature;
+import com.vi.tenantservice.api.policy.ResolvedPolicyValue;
+import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import com.vi.tenantservice.config.security.AuthorisationService;
+import com.vi.tenantservice.config.security.TaskServiceIdentity;
+import com.vi.tenantservice.config.security.TechnicalServiceIdentity;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -21,8 +28,10 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @Slf4j
@@ -33,6 +42,13 @@ public class TenantFacadeAuthorisationService {
   private final @NonNull TenantFacadeChangeDetectionService tenantFacadeChangeDetectionService;
 
   private final @NonNull ApplicationSettingsService applicationSettingsService;
+
+  private final @NonNull TenantAdminControlsService tenantAdminControlsService;
+
+  private final @NonNull TenantPermissionPolicyService tenantPermissionPolicyService;
+
+  private final @NonNull TechnicalServiceIdentity technicalServiceIdentity;
+  private final @NonNull TaskServiceIdentity taskServiceIdentity;
 
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
@@ -62,8 +78,51 @@ public class TenantFacadeAuthorisationService {
     }
   }
 
+  /**
+   * Read-only variant of {@link #assertUserIsAuthorizedToAccessTenant(Long)}: the technical service
+   * identity may read any single tenant (ORISO-Helm#367). Write paths keep the strict check.
+   */
+  void assertUserIsAuthorizedToReadTenant(Long tenantId) {
+    if (authorisationService.hasAuthority(Authority.AuthorityValue.TECHNICAL_READ_TENANT)) {
+      return;
+    }
+    assertUserIsAuthorizedToAccessTenant(tenantId);
+  }
+
+  void assertUserIsAuthorizedToReadTenant(Long tenantId, String task) {
+    if (taskServiceIdentity.current(task)) return;
+    assertUserIsAuthorizedToReadTenant(tenantId);
+  }
+
+  /**
+   * True for a caller that may create tenants only by consuming an open ID reservation (the
+   * technical service identity without the full create right).
+   */
+  boolean mayOnlyCreateReservedTenants() {
+    return !authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT);
+  }
+
   private boolean hasSingleTenantAccessAuthority() {
-    return !authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS);
+    return !mayAccessEveryTenant();
+  }
+
+  /**
+   * Every Träger admin holds {@code tenant-admin}, and with it GET_ALL_TENANTS, just like the
+   * platform admin. Only the token's tenant (0 = platform) tells them apart, so both must hold.
+   */
+  public boolean mayAccessEveryTenant() {
+    return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
+        && isSuperAdmin();
+  }
+
+  /**
+   * Platform-wide listings and the platform DPIA are for the platform administrator as a person.
+   * The technical identity keeps its tenant-0 access to single tenants (it mints sign invites for
+   * reserved ids) but must not list every Träger.
+   */
+  public boolean mayListEveryTenant() {
+    return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
+        && isPlatformAdministrator();
   }
 
   void assertUserHasSufficientPermissionsToChangeAttributes(
@@ -141,6 +200,100 @@ public class TenantFacadeAuthorisationService {
     }
     assertSingleTenantAdminDoesNotTryToChangeLicensingInformation(
         sanitizedTenantDTO, existingTenant);
+    assertSingleTenantAdminMayChangeAppearance(sanitizedTenantDTO, existingTenant);
+  }
+
+  /**
+   * The platform admin can take branding away from Träger admins via {@code
+   * allowedPermissionToggles.appearance}. Until now that switch only greyed out the admin panel's
+   * "Individuelle Bilder" card, so the same change still went through over the API. See
+   * TenantService#174.
+   *
+   * <p>Only an explicit {@code false} restricts anything: legacy rows carry no controls at all, and
+   * an absent toggle must keep meaning "allowed" rather than silently locking every existing Träger
+   * out of its own branding.
+   */
+  private void assertSingleTenantAdminMayChangeAppearance(
+      MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenant) {
+    if (appearanceChangesAllowedForTenantAdmins(existingTenant.getId())
+        || !themingChanged(sanitizedTenantDTO, existingTenant)) {
+      return;
+    }
+
+    logAndThrowTenantAuthorisationException(
+        "Single tenant admin cannot change appearance for tenant with id: "
+            + existingTenant.getId(),
+        HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE);
+  }
+
+  /**
+   * Resolves the appearance permission <em>for this tenant</em>, not from the platform row alone.
+   *
+   * <p>{@code tenant_admin_controls} is a single platform-wide row on purpose - it has no {@code
+   * tenant_id} - so reading it directly would apply one global appearance toggle to every tenant
+   * and silently ignore a tenant-level override. Tenant scope lives in {@code
+   * tenant_permission_policy} (ADR-013 platform -> tenant -> agency), which {@link
+   * TenantPermissionPolicyService#getResolvedPolicies(Long)} resolves.
+   *
+   * <p>The legacy toggle map stays as the fallback for one transition release: a tenant whose
+   * canonical policy has not been written yet still gets the platform answer it got before. Unknown
+   * tenant or missing policy means allowed, matching the previous fail-open behaviour - this check
+   * restricts a Träger admin, it does not grant anything.
+   */
+  private boolean appearanceChangesAllowedForTenantAdmins(Long tenantId) {
+    if (tenantId != null) {
+      ResolvedPolicyValue<Boolean> resolved =
+          tenantPermissionPolicyService
+              .getResolvedPolicies(tenantId)
+              .get(PermissionFeature.APPEARANCE.apiKey());
+      if (resolved != null) {
+        return !Boolean.FALSE.equals(resolved.value());
+      }
+    }
+
+    var controls = tenantAdminControlsService.getControls();
+    if (controls == null || controls.getAllowedPermissionToggles() == null) {
+      return true;
+    }
+
+    return !Boolean.FALSE.equals(controls.getAllowedPermissionToggles().getAppearance());
+  }
+
+  /**
+   * Compares the submitted branding against what is stored. The admin panel sends whole tenant
+   * payloads, so every other card's save carries the theming block too - rejecting on its mere
+   * presence would lock a restricted Träger admin out of settings that have nothing to do with
+   * branding. Only a real difference counts.
+   */
+  private boolean themingChanged(MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existing) {
+    var theming = sanitizedTenantDTO.getTheming();
+    if (theming == null) {
+      return false;
+    }
+
+    return !Objects.equals(
+            blankToNull(theming.getAssistantName()),
+            blankToNull(existing.getThemingAssistantName()))
+        || !Objects.equals(
+            blankToNull(theming.getAssistantIcon()),
+            blankToNull(existing.getThemingAssistantIcon()))
+        || !Objects.equals(theming.getLogo(), existing.getThemingLogo())
+        || !Objects.equals(theming.getFavicon(), existing.getThemingFavicon())
+        || !Objects.equals(theming.getAssociationLogo(), existing.getThemingAssociationLogo())
+        || !Objects.equals(theming.getPrimaryColor(), existing.getThemingPrimaryColor())
+        || !Objects.equals(theming.getSecondaryColor(), existing.getThemingSecondaryColor())
+        || !Objects.equals(theming.getAccent(), existing.getThemingAccent())
+        || !Objects.equals(theming.getSignal(), existing.getThemingSignal())
+        || !Objects.equals(loginEffectValue(theming), existing.getThemingLoginEffect());
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value;
+  }
+
+  /** Mirrors TenantConverter: the effect is stored as the enum name, null stays null. */
+  private String loginEffectValue(Theming theming) {
+    return theming.getLoginEffect() == null ? null : theming.getLoginEffect().getValue();
   }
 
   private void assertSingleTenantAdminDoesNotTryToChangeLicensingInformation(
@@ -191,20 +344,35 @@ public class TenantFacadeAuthorisationService {
     }
 
     try {
-      var tenantIdInAccessToken = authorisationService.findTenantIdInAccessToken();
-      boolean result = tenantMatching(tenantId.get(), tenantIdInAccessToken);
-
-      // Temporary workaround: always return true for technical user
-      if (isTechnicalUser()) {
-        return true;
-      }
-
-      return result;
+      return tenantMatching(tenantId.get(), authorisationService.findTenantIdInAccessToken());
     } catch (Exception e) {
       log.debug("Could not determine tenant access from access token", e);
-      // Temporary workaround: always return true for technical user
-      return isTechnicalUser();
+      return false;
     }
+  }
+
+  /**
+   * Writing a legal draft follows the same rule as publishing legal content. A Träger admin ({@code
+   * single-tenant-admin}) may only change legal texts while the platform allows it ({@code
+   * legalContentChangesBySingleTenantAdminsAllowed}); without this check the draft endpoints let
+   * them write privacy and imprint drafts the publish path would refuse. Reading a draft is
+   * deliberately not covered here — it stays with tenant access.
+   */
+  public void assertCanWriteLegalDraft() {
+    if (!isAllowedToEditLegalContent()) {
+      logAndThrowTenantAuthorisationException(
+          "User does not have permissions to write legal drafts",
+          HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_LEGAL_CONTENT);
+    }
+  }
+
+  /**
+   * The platform administrator as a person. {@link #isSuperAdmin()} alone also accepts the
+   * technical user when its token carries tenant 0 and the tenant-admin role; platform legal drafts
+   * must not be reachable that way.
+   */
+  public boolean isPlatformAdministrator() {
+    return isSuperAdmin() && !isTechnicalUser();
   }
 
   public boolean isSuperAdmin() {
@@ -218,12 +386,69 @@ public class TenantFacadeAuthorisationService {
     }
   }
 
-  private boolean isTechnicalUser() {
-    try {
-      return "technical".equals(authorisationService.getUsername());
-    } catch (Exception e) {
-      log.debug("Could not determine username from access token while checking technical user", e);
-      return false;
+  /**
+   * Platform sender and the exact recipient may read incoming proposal history. Reading needs no
+   * legal-editor right: a Träger admin who may not change legal texts still has to see that a
+   * platform update is waiting. Dismissing and adopting stay with {@link
+   * #assertCanManageOwnLegalProposal(Long)}.
+   */
+  public void assertCanReadLegalProposal(Long recipientTenantId) {
+    if (isTechnicalUser()) {
+      throw new AccessDeniedException("Technical users cannot read legal proposals");
     }
+    if (isSuperAdmin()) return;
+    assertExactRecipient(recipientTenantId);
+  }
+
+  /**
+   * Legal-text history: the platform administrator, or an admin whose token names exactly this
+   * tenant. Deliberately not the GET_ALL_TENANTS shortcut of {@link
+   * #assertUserIsAuthorizedToAccessTenant}, which the tenant-admin role carries for every Träger
+   * admin as well.
+   */
+  public void assertCanReadLegalVersions(Long tenantId) {
+    if (tenantId == null || tenantId < 0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid tenant id");
+    }
+    if (isPlatformAdministrator()) return;
+    if (isTechnicalUser()
+        || tenantId == 0L
+        || !tenantMatching(tenantId, authorisationService.findTenantIdInAccessToken())) {
+      throw new AccessDeniedException("User may not read this tenant's legal text history");
+    }
+  }
+
+  public void assertCanDistributeLegalProposals() {
+    if (isTechnicalUser() || !isSuperAdmin()) {
+      throw new AccessDeniedException("Only the platform administrator may share legal drafts");
+    }
+  }
+
+  /** Proposal acknowledgement and adoption are actions of the exact recipient legal editor. */
+  public void assertCanManageOwnLegalProposal(Long recipientTenantId) {
+    assertExactRecipient(recipientTenantId);
+    assertLegalProposalPermission();
+  }
+
+  private void assertExactRecipient(Long recipientTenantId) {
+    if (isTechnicalUser()) {
+      throw new AccessDeniedException("Technical users cannot act on legal proposals");
+    }
+    Optional<Long> tokenTenantId = authorisationService.findTenantIdInAccessToken();
+    if (recipientTenantId == null
+        || recipientTenantId <= 0
+        || !tenantMatching(recipientTenantId, tokenTenantId)) {
+      throw new AccessDeniedException("User is not the legal proposal recipient");
+    }
+  }
+
+  private void assertLegalProposalPermission() {
+    if (!isAllowedToEditLegalContent()) {
+      throw new AccessDeniedException("User may not manage legal proposals");
+    }
+  }
+
+  private boolean isTechnicalUser() {
+    return technicalServiceIdentity.isCurrentCaller();
   }
 }

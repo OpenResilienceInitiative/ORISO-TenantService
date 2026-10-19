@@ -20,7 +20,27 @@ class RequiredCiContractTest(unittest.TestCase):
         self.assertIn("./mvnw -B verify", action)
         self.assertNotIn("continue-on-error:", action)
         self.assertNotIn("if ! ./mvnw", action)
-        self.assertIn("Zero test reports", action)
+        self.assertIn("scripts/ci/test-report-guard.py", action)
+
+        # The gate is the guard, not the mvnw exit status: a suite can be green
+        # and still have proven nothing. The check moved out of an inline
+        # heredoc so that tests/ci could reach it, so follow it there.
+        guard = (ROOT / "scripts/ci/test-report-guard.py").read_text()
+        self.assertIn("Zero test reports", guard)
+
+    def test_the_test_gate_cannot_lose_its_exit_status_to_the_summary_pipe(self):
+        """Without pipefail, `guard | tee` reports tee's success and the gate is decorative."""
+        action = (ROOT / ".github/actions/maven-build/action.yml").read_text()
+
+        step = action.index("- name: Run Maven tests")
+        following = action.index("- name: Generate coverage report")
+        block = action[step:following]
+
+        self.assertIn("tee -a", block)
+        self.assertIn("set -o pipefail", block)
+        self.assertLess(
+            block.index("set -o pipefail"), block.index("tee -a"), "pipefail must come first"
+        )
 
     def test_pull_request_has_one_truthful_required_conclusion(self):
         workflow = (ROOT / ".github/workflows/ci-pull-request.yml").read_text()

@@ -14,6 +14,12 @@ package com.vi.tenantservice.api.model;
  *       that has no published DPA at all).
  * </ul>
  */
+/*
+ * "Contract on hold" (forwarded, awaiting the authorised signer, ORISO-TenantService#179) is
+ * deliberately NOT a value here: it is an orthogonal fact about outstanding sign links, not a
+ * different signature state. It travels as the additive boolean flag on the status/gate DTOs, so
+ * existing consumers keep seeing the UNSIGNED/OUTDATED they already handle.
+ */
 public enum TenantDpaStatus {
   MISSING,
   UNSIGNED,
