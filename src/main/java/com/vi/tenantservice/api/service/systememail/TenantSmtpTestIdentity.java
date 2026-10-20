@@ -8,8 +8,13 @@ import org.springframework.stereotype.Component;
 
 @Component("tenantSmtpTestIdentity")
 public class TenantSmtpTestIdentity {
+  @org.springframework.beans.factory.annotation.Autowired(required = false)
+  private com.vi.tenantservice.config.security.TaskServiceIdentity taskIdentity;
+
   public boolean allows(Authentication authentication, long tenantId) {
     if (authentication == null || !(authentication.getPrincipal() instanceof Jwt jwt)) return false;
+    if (com.vi.tenantservice.config.security.TaskServiceIdentity.hasTaskRole(jwt)
+        || (taskIdentity != null && taskIdentity.isTaskToken(jwt))) return false;
     Object realmAccess = jwt.getClaims().get("realm_access");
     if (!(realmAccess instanceof Map<?, ?> realm)
         || !(realm.get("roles") instanceof Collection<?> roles)) return false;

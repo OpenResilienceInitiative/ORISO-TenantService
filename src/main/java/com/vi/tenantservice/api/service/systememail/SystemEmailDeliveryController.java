@@ -23,7 +23,8 @@ public class SystemEmailDeliveryController {
   }
 
   @PostMapping("/tenant/{tenantId}/internal/system-email-deliveries")
-  @PreAuthorize("@systemEmailServiceIdentity.allows(authentication)")
+  @PreAuthorize(
+      "@systemEmailServiceIdentity.allows(authentication) or @taskServiceIdentity.allows(authentication, 'NOTIFICATION_DISPATCH')")
   public ResponseEntity<Void> deliver(
       @PathVariable long tenantId, @Valid @RequestBody SystemEmailDeliveryRequest request) {
     boolean sent = delivery.deliver(tenantId, request);

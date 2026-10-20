@@ -98,6 +98,11 @@ import org.springframework.web.server.ResponseStatusException;
 @RequiredArgsConstructor
 @Slf4j
 public class TenantServiceFacade {
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.vi.tenantservice.config.security.TaskServiceIdentity taskIdentity;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.vi.tenantservice.config.security.TenantCreationContext creationContext;
 
   private static final int TECHNICAL_TENANT_ID = 0;
 
@@ -183,10 +188,16 @@ public class TenantServiceFacade {
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
     validateSelectedOwnSmtp(entity, null, sanitizedTenantDTO);
+    if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
+      creationContext.validateConfiguration();
+    }
     String reservationToken = tenantDTO.getTenantIdReservationToken();
     TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
       createDefaultConsultingTypeSettings(createdTenant);
+    } catch (com.vi.tenantservice.config.security.TenantCreationContext.IssuanceException ex) {
+      performRollback(createdTenant, reservationToken);
+      throw ex;
     } catch (ConsultingTypeCreationException ex) {
       performRollback(createdTenant, reservationToken);
       log.error(
@@ -412,7 +423,12 @@ public class TenantServiceFacade {
   private void createDefaultConsultingTypeSettings(TenantEntity createdTenant)
       throws ConsultingTypeCreationException {
     try {
-      consultingTypeService.createDefaultConsultingTypes(createdTenant.getId());
+      if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
+        consultingTypeService.createDefaultConsultingTypes(
+            createdTenant.getId(), creationContext.issue(createdTenant.getId()));
+      } else {
+        consultingTypeService.createDefaultConsultingTypes(createdTenant.getId());
+      }
     } catch (RestClientException ex) {
       throw new ConsultingTypeCreationException(
           "Consulting types could not be created for tenant with id " + createdTenant.getId(), ex);
@@ -782,6 +798,32 @@ public class TenantServiceFacade {
     return Optional.of(tenantDTO);
   }
 
+  public Optional<com.vi.tenantservice.api.model.AccountProvisioningPolicy>
+      findAccountProvisioningPolicy(Long id) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id, "CONFIG_WIZARD");
+    return tenantService
+        .findTenantDataById(id)
+        .map(
+            tenant ->
+                new com.vi.tenantservice.api.model.AccountProvisioningPolicy(
+                    tenant.getId(), tenant.getLicensingAllowedNumberOfUsers()));
+  }
+
+  public Optional<com.vi.tenantservice.api.model.SystemEmailContext> findSystemEmailContext(
+      Long id) {
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(
+        id, "NOTIFICATION_DISPATCH");
+    return tenantService
+        .findTenantDataById(id)
+        .map(
+            tenant -> {
+              TenantSettings settings = convertFromJson(tenant.getSettings());
+              TenantDTO dto =
+                  tenantConverter.toDTO(tenant, translationService.getCurrentLanguageContext());
+              return com.vi.tenantservice.api.model.SystemEmailContext.from(dto, settings);
+            });
+  }
+
   private MultilingualTenantDTO getConvertedAndEnrichedTenant(TenantData tenantEntity) {
     var multilingualTenantDTO = tenantConverter.toMultilingualDTO(tenantEntity);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(multilingualTenantDTO);
@@ -822,7 +864,7 @@ public class TenantServiceFacade {
   }
 
   public TenantPermissionPolicies getTenantPermissionPolicies(Long tenantId) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId, "RUNTIME_POLICY");
     return toTenantPermissionPolicies(
         tenantId,
         tenantPermissionPolicyService.getResolvedPolicies(tenantId),

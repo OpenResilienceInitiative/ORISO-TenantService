@@ -18,6 +18,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthorisationService {
 
+  @org.springframework.beans.factory.annotation.Autowired(required = false)
+  private TaskServiceIdentity taskIdentity;
+
   private final RoleAuthorizationAuthorityMapper roleAuthorizationAuthorityMapper =
       new RoleAuthorizationAuthorityMapper();
 
@@ -27,6 +30,10 @@ public class AuthorisationService {
   }
 
   public boolean hasRole(String roleName) {
+    if (TaskServiceIdentity.hasTaskRole(getPrincipal())
+        || (taskIdentity != null && taskIdentity.isTaskToken(getPrincipal()))) {
+      return false;
+    }
     var roles = extractRealmRoles(getPrincipal());
     return roles != null && roles.contains(roleName);
   }
@@ -121,6 +128,10 @@ public class AuthorisationService {
   }
 
   public Collection<String> extractRealmRoles(Jwt jwt) {
+    if (TaskServiceIdentity.hasTaskRole(jwt)
+        || (taskIdentity != null && taskIdentity.isTaskToken(jwt))) {
+      return java.util.List.of();
+    }
     Object realmAccess = jwt.getClaims().get("realm_access");
     if (realmAccess instanceof Map<?, ?> realmAccessMap) {
       Object roles = realmAccessMap.get("roles");
