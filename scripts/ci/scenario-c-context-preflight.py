@@ -22,6 +22,7 @@ BASES = {
 }
 FLOORS = {
     "tenant": {
+        "com.vi.tenantservice.api.controller.AccountPolicyPurposeAuthorizationIT": 4,
         "com.vi.tenantservice.config.security.CreationContextKeyTest": 2,
         "com.vi.tenantservice.config.security.WizardPolicyV2ContextTest": 35,
         "com.vi.tenantservice.api.service.consultingtype.ConsultingTypeBootstrapRoutingTest": 4,

@@ -78,6 +78,37 @@ class ExactBaselineControls(unittest.TestCase):
                 with patch.object(driver, "HOST", host):
                     self.assertFalse(driver.verify_v1(roots, "compensated-routed"))
 
+    def policy_fixture(self, directory):
+        host, roots, routed = self.fixture(directory)
+        compensated = json.loads(json.dumps(routed))
+        facade = roots['tenant'] / FACADE
+        facade.write_bytes(b'reviewed compensation')
+        compensated['tenant'][FACADE] = hashlib.sha256(facade.read_bytes()).hexdigest()
+        (host / 'scripts/ci/scenario-c-bootstrap-compensated-routed-v1-inputs.json').write_text(json.dumps(compensated))
+        facade.write_bytes(b'reviewed compensation plus narrow policy projection')
+        policy = json.loads(json.dumps(compensated))
+        policy['tenant'][FACADE] = hashlib.sha256(facade.read_bytes()).hexdigest()
+        (host / 'scripts/ci/scenario-c-bootstrap-compensated-routed-policy-v1-inputs.json').write_text(json.dumps(policy))
+        return host, roots, policy
+
+    def test_policy_composition_requires_its_own_explicit_baseline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            host, roots, _ = self.policy_fixture(directory)
+            with patch.object(driver, 'HOST', host):
+                self.assertFalse(driver.verify_v1(roots, 'compensated-routed'))
+                self.assertTrue(driver.verify_v1(roots, 'compensated-routed-policy'))
+
+    def test_policy_catalog_cannot_rebaseline_any_second_path_or_receiver_signer(self):
+        for role, name in (('tenant', ROUTING), ('cts', 'signer.java'), ('cts', FACADE)):
+            with self.subTest(role=role, name=name), tempfile.TemporaryDirectory() as directory:
+                host, roots, policy = self.policy_fixture(directory)
+                path = roots[role] / name
+                path.write_bytes(b'unreviewed authority change')
+                policy[role][name] = hashlib.sha256(path.read_bytes()).hexdigest()
+                (host / 'scripts/ci/scenario-c-bootstrap-compensated-routed-policy-v1-inputs.json').write_text(json.dumps(policy))
+                with patch.object(driver, 'HOST', host):
+                    self.assertFalse(driver.verify_v1(roots, 'compensated-routed-policy'))
+
     def test_an_empty_missing_or_expanded_catalog_cannot_weaken_the_guard(self):
         for change in ("empty", "missing", "extra", "changed"):
             with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
