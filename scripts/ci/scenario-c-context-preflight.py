@@ -24,12 +24,14 @@ FLOORS = {
     "tenant": {
         "com.vi.tenantservice.api.controller.AccountPolicyPurposeAuthorizationIT": 3,
         "com.vi.tenantservice.config.security.CreationContextKeyTest": 2,
+        "com.vi.tenantservice.config.security.TenantBootstrapAuthorityTest": 2,
         "com.vi.tenantservice.config.security.WizardPolicyV2ContextTest": 35,
         "com.vi.tenantservice.api.service.consultingtype.ConsultingTypeBootstrapRoutingTest": 4,
         "com.vi.tenantservice.api.facade.TenantServiceFacadeTest": 54,
     },
     "cts": {
         "de.caritas.cob.consultingtypeservice.config.security.CreationContextKeyTest": 2,
+        "de.caritas.cob.consultingtypeservice.config.security.TenantBootstrapV2ContextTest": 2,
     },
     "user": {
         "de.caritas.cob.userservice.api.service.accountpolicy.CheckedAccountPolicyReadsTest": 7,
