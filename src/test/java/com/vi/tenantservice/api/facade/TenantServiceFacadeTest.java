@@ -29,9 +29,13 @@ import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.Content;
+import com.vi.tenantservice.api.model.InternalGroupChatPolicies;
+import com.vi.tenantservice.api.model.InternalGroupChatRecipientScope;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO;
+import com.vi.tenantservice.api.model.PermissionPolicyMode;
+import com.vi.tenantservice.api.model.RecipientScopePermissionPolicy;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
@@ -1214,6 +1218,92 @@ class TenantServiceFacadeTest {
     assertThat(canAccessTenant).isTrue();
     verify(tenantService).findTenantIdBySubdomain("localhost");
     verify(tenantService, never()).findTenantBySubdomain("localhost");
+  }
+
+  @Test
+  void
+      findTenantBySubdomain_Should_resolveRecipientScopeForTheResolvedTenant_When_OverrideApplies() {
+    // given: single-domain mode. The override service hands back the MAIN tenant's DTO (id 1)
+    // carrying the resolved tenant's (id 2) settings. The main tenant allows PLATFORM; the
+    // resolved tenant is held to AGENCY by an ENFORCED platform requirement. The public payload
+    // must carry the resolved tenant's scope, never the wider main-tenant one (#319).
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    Optional<TenantRestrictedData> mainTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
+    Optional<TenantRestrictedData> resolvedTenant = getTenantWithPrivacy("{\"de\":\"content2\"}");
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(mainTenant);
+    when(tenantResolverService.tryResolveForNonAuthUsers()).thenReturn(Optional.of(2L));
+    when(tenantService.findRestrictedTenantDataById(2L)).thenReturn(resolvedTenant);
+    when(singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
+            mainTenant.get(), resolvedTenant.get()))
+        .thenReturn(new RestrictedTenantDTO().id(1L));
+    lenient()
+        .when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(1L))
+        .thenReturn(
+            recipientScope(
+                InternalGroupChatRecipientScope.PLATFORM, PermissionPolicyMode.SUGGESTED));
+    lenient()
+        .when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(2L))
+        .thenReturn(
+            recipientScope(InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
+
+    // when
+    Optional<RestrictedTenantDTO> tenantDTO =
+        tenantServiceFacade.findTenantBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME, null);
+
+    // then
+    assertThat(tenantDTO).isPresent();
+    assertThat(tenantDTO.get().getInternalGroupChat().getRecipientScope())
+        .isEqualTo(
+            new RecipientScopePermissionPolicy(
+                InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
+    verify(tenantPermissionPolicyService, never()).getResolvedInternalGroupChatPolicies(1L);
+  }
+
+  @Test
+  void
+      getRestrictedTenantDataDeterminingTenantContext_Should_resolveRecipientScopeForTheResolvedTenant_When_SingleDomain() {
+    // given: same hazard on the authenticated path -- the override DTO keeps the main tenant's id.
+    givenSingleDomainWithMainTenant(SINGLE_DOMAIN_SUBDOMAIN_NAME);
+    Optional<TenantRestrictedData> mainTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
+    Optional<TenantRestrictedData> resolvedTenant = getTenantWithPrivacy("{\"de\":\"content2\"}");
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(mainTenant);
+    when(tenantResolverService.tryResolve()).thenReturn(Optional.of(2L));
+    when(tenantService.findRestrictedTenantDataById(2L)).thenReturn(resolvedTenant);
+    // the main tenant's branding images are read for platform theming inheritance
+    lenient()
+        .when(converter.toRestrictedTenantDTO(any(TenantRestrictedData.class), any()))
+        .thenReturn(new RestrictedTenantDTO());
+    when(singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
+            mainTenant.get(), resolvedTenant.get()))
+        .thenReturn(new RestrictedTenantDTO().id(1L));
+    lenient()
+        .when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(1L))
+        .thenReturn(
+            recipientScope(
+                InternalGroupChatRecipientScope.PLATFORM, PermissionPolicyMode.SUGGESTED));
+    lenient()
+        .when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(2L))
+        .thenReturn(
+            recipientScope(InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
+
+    // when
+    RestrictedTenantDTO tenantDTO =
+        tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext();
+
+    // then
+    assertThat(tenantDTO.getInternalGroupChat().getRecipientScope())
+        .isEqualTo(
+            new RecipientScopePermissionPolicy(
+                InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
+    verify(tenantPermissionPolicyService, never()).getResolvedInternalGroupChatPolicies(1L);
+  }
+
+  private static InternalGroupChatPolicies recipientScope(
+      InternalGroupChatRecipientScope value, PermissionPolicyMode mode) {
+    return new InternalGroupChatPolicies()
+        .recipientScope(new RecipientScopePermissionPolicy(value, mode));
   }
 
   private static Optional<TenantRestrictedData> getTenantWithPrivacy(String contentPrivacy) {

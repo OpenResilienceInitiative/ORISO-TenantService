@@ -527,6 +527,7 @@ public class TenantConverter {
             toEnforcedPermissionTogglesSettings(tenantAdminControls.getEnforcedPermissionToggles()))
         .permissionPolicies(toPermissionPolicySettings(tenantAdminControls.getPermissionPolicies()))
         .caseHandoverPolicies(tenantAdminControls.getCaseHandoverPolicies())
+        .internalGroupChat(tenantAdminControls.getInternalGroupChat())
         .chatRecoverySettings(tenantAdminControls.getChatRecoverySettings())
         .accountInactivitySettings(tenantAdminControls.getAccountInactivitySettings())
         .build();
@@ -619,6 +620,7 @@ public class TenantConverter {
         .permissionPolicies(
             toBooleanPermissionPolicies(tenantAdminControlsSettings.getPermissionPolicies()))
         .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies())
+        .internalGroupChat(tenantAdminControlsSettings.getInternalGroupChat())
         .chatRecoverySettings(tenantAdminControlsSettings.getChatRecoverySettings())
         .accountInactivitySettings(tenantAdminControlsSettings.getAccountInactivitySettings());
   }
