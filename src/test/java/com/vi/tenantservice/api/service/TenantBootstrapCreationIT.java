@@ -153,55 +153,89 @@ class TenantBootstrapCreationIT {
   @Test
   void aMixedAutocommitPairCannotMintAGrantOrEnterTheCallback() throws Exception {
     String token = allocation.reserve(9157L, "synthetic-bootstrap").getToken();
-    var original = (javax.sql.DataSource) org.springframework.test.util.ReflectionTestUtils.getField(creation, "dataSource");
+    var original =
+        (javax.sql.DataSource)
+            org.springframework.test.util.ReflectionTestUtils.getField(creation, "dataSource");
     var armed = new java.util.concurrent.atomic.AtomicBoolean(true);
     var flipped = new java.util.concurrent.atomic.AtomicBoolean(false);
     var callback = new java.util.concurrent.atomic.AtomicBoolean(false);
-    var transaction = new org.springframework.transaction.support.TransactionTemplate(transactionManager);
-    javax.sql.DataSource interleaved = new org.springframework.jdbc.datasource.DelegatingDataSource(original) {
-      @Override
-      public java.sql.Connection getConnection() throws java.sql.SQLException {
-        java.sql.Connection connection = super.getConnection();
-        if (!armed.compareAndSet(true, false)) return connection;
-        String owner = sql.queryForObject("SELECT reserved_by FROM tenant_id_reservation WHERE tenant_id=9157", String.class);
-        sql.update("UPDATE tenant_id_reservation SET reserved_by='different-state' WHERE tenant_id=9157");
-        return (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
-            getClass().getClassLoader(), new Class<?>[] {java.sql.Connection.class},
-            (proxy, method, args) -> {
-              Object answer = invokeNative(method, connection, args);
-              if (!method.getName().equals("prepareStatement") || !(args[0] instanceof String)
-                  || !((String) args[0]).contains("FROM tenant ")) return answer;
-              java.sql.PreparedStatement statement = (java.sql.PreparedStatement) answer;
-              return java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
-                  new Class<?>[] {java.sql.PreparedStatement.class}, (prepared, operation, parameters) -> {
-                    Object selected = invokeNative(operation, statement, parameters);
-                    if (!operation.getName().equals("executeQuery")) return selected;
-                    java.sql.ResultSet rows = (java.sql.ResultSet) selected;
-                    return java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),
-                        new Class<?>[] {java.sql.ResultSet.class}, (result, read, values) -> {
-                          Object cell = invokeNative(read, rows, values);
-                          if (read.getName().equals("close") && flipped.compareAndSet(false, true)) {
-                            transaction.executeWithoutResult(status -> {
-                              assertThat(sql.update("UPDATE tenant SET name='interleaved' WHERE id=9157")).isEqualTo(1);
-                              assertThat(sql.update("UPDATE tenant_id_reservation SET reserved_by=? WHERE tenant_id=9157", owner)).isEqualTo(1);
-                            });
-                          }
-                          return cell;
-                        });
-                  });
-            });
-      }
-    };
+    var transaction =
+        new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+    javax.sql.DataSource interleaved =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(original) {
+          @Override
+          public java.sql.Connection getConnection() throws java.sql.SQLException {
+            java.sql.Connection connection = super.getConnection();
+            if (!armed.compareAndSet(true, false)) return connection;
+            String owner =
+                sql.queryForObject(
+                    "SELECT reserved_by FROM tenant_id_reservation WHERE tenant_id=9157",
+                    String.class);
+            sql.update(
+                "UPDATE tenant_id_reservation SET reserved_by='different-state' WHERE tenant_id=9157");
+            return (java.sql.Connection)
+                java.lang.reflect.Proxy.newProxyInstance(
+                    getClass().getClassLoader(),
+                    new Class<?>[] {java.sql.Connection.class},
+                    (proxy, method, args) -> {
+                      Object answer = invokeNative(method, connection, args);
+                      if (!method.getName().equals("prepareStatement")
+                          || !(args[0] instanceof String)
+                          || !((String) args[0]).contains("FROM tenant ")) return answer;
+                      java.sql.PreparedStatement statement = (java.sql.PreparedStatement) answer;
+                      return java.lang.reflect.Proxy.newProxyInstance(
+                          getClass().getClassLoader(),
+                          new Class<?>[] {java.sql.PreparedStatement.class},
+                          (prepared, operation, parameters) -> {
+                            Object selected = invokeNative(operation, statement, parameters);
+                            if (!operation.getName().equals("executeQuery")) return selected;
+                            java.sql.ResultSet rows = (java.sql.ResultSet) selected;
+                            return java.lang.reflect.Proxy.newProxyInstance(
+                                getClass().getClassLoader(),
+                                new Class<?>[] {java.sql.ResultSet.class},
+                                (result, read, values) -> {
+                                  Object cell = invokeNative(read, rows, values);
+                                  if (read.getName().equals("close")
+                                      && flipped.compareAndSet(false, true)) {
+                                    transaction.executeWithoutResult(
+                                        status -> {
+                                          assertThat(
+                                                  sql.update(
+                                                      "UPDATE tenant SET name='interleaved' WHERE id=9157"))
+                                              .isEqualTo(1);
+                                          assertThat(
+                                                  sql.update(
+                                                      "UPDATE tenant_id_reservation SET reserved_by=? WHERE tenant_id=9157",
+                                                      owner))
+                                              .isEqualTo(1);
+                                        });
+                                  }
+                                  return cell;
+                                });
+                          });
+                    });
+          }
+        };
     Throwable failure;
     org.springframework.test.util.ReflectionTestUtils.setField(creation, "dataSource", interleaved);
     try {
-      failure = org.assertj.core.api.Assertions.catchThrowable(() -> creation.create(input(9157L), token,
-          (created, grant) -> { callback.set(true); return null; }));
+      failure =
+          org.assertj.core.api.Assertions.catchThrowable(
+              () ->
+                  creation.create(
+                      input(9157L),
+                      token,
+                      (created, grant) -> {
+                        callback.set(true);
+                        return null;
+                      }));
     } finally {
       org.springframework.test.util.ReflectionTestUtils.setField(creation, "dataSource", original);
     }
     assertThat(flipped.get()).as("controlled atomic state transition occurred").isTrue();
-    assertThat(callback.get()).as("mixed row observations cannot enter the grant callback").isFalse();
+    assertThat(callback.get())
+        .as("mixed row observations cannot enter the grant callback")
+        .isFalse();
     assertThat(failure).isInstanceOf(AccessDeniedException.class);
     assertThat(tenants.findById(9157L).orElseThrow().getName()).isEqualTo("interleaved");
     assertThat(allocation.getStatus(9157L).name()).isEqualTo("ASSIGNED");
