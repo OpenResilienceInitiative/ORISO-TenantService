@@ -244,7 +244,7 @@ public class TenantPermissionPolicyService {
     }
     return new InternalGroupChatPolicies()
         .recipientScope(
-            local.getRecipientScope() == null
+            localScope == null
                 ? null
                 : new RecipientScopePermissionPolicy(
                     local.getRecipientScope().getValue(), local.getRecipientScope().getMode()));

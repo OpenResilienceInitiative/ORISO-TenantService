@@ -186,6 +186,17 @@ class InternalGroupChatRecipientScopeTest {
     assertThat(savedEntity().getInternalGroupChatPolicies()).isEqualTo(stored);
   }
 
+  @Test
+  void save_shouldNotStoreAScopeWithoutAMode() {
+    when(platformControls.getControls()).thenReturn(new TenantAdminControls());
+    when(repository.findByTenantId(TENANT)).thenReturn(Optional.empty());
+
+    service.saveOverrides(
+        TENANT, Map.of(), null, scopePolicies(InternalGroupChatRecipientScope.TENANT, null));
+
+    assertThat(savedEntity().getInternalGroupChatPolicies()).doesNotContain("\"TENANT\"");
+  }
+
   private RecipientScopePermissionPolicy resolvedScope(long tenantId) {
     return service.getResolvedInternalGroupChatPolicies(tenantId).getRecipientScope();
   }
