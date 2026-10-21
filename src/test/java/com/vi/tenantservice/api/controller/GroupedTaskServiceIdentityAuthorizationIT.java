@@ -141,16 +141,24 @@ class GroupedTaskServiceIdentityAuthorizationIT {
     var setup = actor("setup-subject", "backend-setup", SETUP_ROLES, "tenantservice");
     String path = "/internal/tenants/1/account-provisioning-policy";
     mvc.perform(get(path).with(setup)).andExpect(status().isForbidden());
-    mvc.perform(get(path).with(setup).header("X-ORISO-Wizard-Policy-Context", policyProof(2, "INVITATION")))
+    mvc.perform(
+            get(path)
+                .with(setup)
+                .header("X-ORISO-Wizard-Policy-Context", policyProof(2, "INVITATION")))
         .andExpect(status().isForbidden());
-    mvc.perform(get(path).with(setup).header("X-ORISO-Wizard-Policy-Context", policyProof(1, "INVITATION")))
+    mvc.perform(
+            get(path)
+                .with(setup)
+                .header("X-ORISO-Wizard-Policy-Context", policyProof(1, "INVITATION")))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(1))
         .andExpect(jsonPath("$.allowedNumberOfUsers").value(5))
         .andExpect(jsonPath("$.licensing").doesNotExist())
-        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
-            .string("Cache-Control", "no-store"));
-    mvc.perform(get(path).with(setup).header("X-ORISO-Wizard-Policy-Context", policyProof(1, "IMPORT")))
+        .andExpect(
+            org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                .string("Cache-Control", "no-store"));
+    mvc.perform(
+            get(path).with(setup).header("X-ORISO-Wizard-Policy-Context", policyProof(1, "IMPORT")))
         .andExpect(status().isOk());
   }
 
@@ -258,10 +266,23 @@ class GroupedTaskServiceIdentityAuthorizationIT {
     var json = new com.fasterxml.jackson.databind.ObjectMapper();
     var mac = javax.crypto.Mac.getInstance("HmacSHA256");
     mac.init(new javax.crypto.spec.SecretKeySpec(new byte[32], "HmacSHA256"));
-    claims.put("payloadDigest", java.util.HexFormat.of().formatHex(mac.doFinal(
-        ("payload\n" + json.writeValueAsString(semantic)).getBytes(java.nio.charset.StandardCharsets.UTF_8))));
-    String payload = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(json.writeValueAsBytes(claims));
-    return payload + "." + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
-        mac.doFinal(("proof\n" + payload).getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+    claims.put(
+        "payloadDigest",
+        java.util.HexFormat.of()
+            .formatHex(
+                mac.doFinal(
+                    ("payload\n" + json.writeValueAsString(semantic))
+                        .getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+    String payload =
+        java.util.Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(json.writeValueAsBytes(claims));
+    return payload
+        + "."
+        + java.util.Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(
+                mac.doFinal(
+                    ("proof\n" + payload).getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
   }
 }

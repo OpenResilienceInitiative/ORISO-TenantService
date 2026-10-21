@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-UserService
-          ref: a1a685b567931920ca6fb032740fba4a2ec59e6f
+          ref: a60505aeb3a5c4f28ef7484838967c4761f55323
           path: user
           persist-credentials: false
           fetch-depth: 0
@@ -76,10 +76,11 @@ jobs:
         run: |
           python -m unittest discover -s scripts/tests -p test_native_context_resources.py -q > "$RUNNER_TEMP/policy-resource-controls.txt" 2>&1
           python -m unittest discover -s scripts/tests -p test_account_policy_driver.py -q >> "$RUNNER_TEMP/policy-resource-controls.txt" 2>&1
+          python -m unittest discover -s ../user/scripts/tests -p test_account_policy_runner.py -q >> "$RUNNER_TEMP/policy-resource-controls.txt" 2>&1
       - name: Compile ordinary sources before disposable actual HTTP execution
         run: |
           python scripts/ci/scenario-c-account-policy-native.py \
-            --user ../user --user-ref a1a685b567931920ca6fb032740fba4a2ec59e6f \
+            --user ../user --user-ref a60505aeb3a5c4f28ef7484838967c4761f55323 \
             --helm ../helm --helm-ref ab13d41e56f077ca85d1412e9eba2e6816554d9d \
             --evidence "$RUNNER_TEMP/scenario-c-account-policy-native"
       - name: Produce a mechanical proposal only after a pre-container formatter failure
