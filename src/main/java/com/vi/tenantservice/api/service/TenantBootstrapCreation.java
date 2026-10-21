@@ -45,8 +45,11 @@ public class TenantBootstrapCreation {
   @PersistenceContext private EntityManager entities;
 
   public TenantBootstrapCreation(
-      TenantService tenants, TaskServiceIdentity identity, Environment environment,
-      DataSource dataSource, PlatformTransactionManager transactionManager) {
+      TenantService tenants,
+      TaskServiceIdentity identity,
+      Environment environment,
+      DataSource dataSource,
+      PlatformTransactionManager transactionManager) {
     this.tenants = tenants;
     this.identity = identity;
     this.environment = environment;
@@ -75,35 +78,43 @@ public class TenantBootstrapCreation {
       TenantEntity fresh = new TenantEntity();
       BeanUtils.copyProperties(input, fresh);
       try {
-        TenantEntity created = transaction.execute(status -> {
-          TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCompletion(int completion) {
-              attempt.completion = completion;
-            }
-          });
-          if (fresh.getId() != null) {
-            Snapshot previous = transactionalSnapshot(fresh.getId(), true);
-            if (!previous.tenant().isEmpty()) {
-              throw new TenantIdAllocationConflictException("Tenant ID is already assigned");
-            }
-            attempt.previousLedger = previous.ledger();
-          }
-          tenants.prepareBootstrapInsert(fresh, reservationToken);
-          attempt.id = fresh.getId();
-          entities.persist(fresh);
-          entities.flush();
-          if (sql.update("UPDATE tenant SET bootstrap_attempt_id=? WHERE id=? AND bootstrap_attempt_id IS NULL",
-              attempt.marker, attempt.id) != 1) {
-            throw denied();
-          }
-          attempt.snapshot = transactionalSnapshot(attempt.id, false);
-          if (!attempt.marker.equals(value(attempt.snapshot.tenant(), "bootstrap_attempt_id"))
-              || !"ASSIGNED".equals(value(attempt.snapshot.ledger(), "status"))) {
-            throw denied();
-          }
-          return fresh;
-        });
+        TenantEntity created =
+            transaction.execute(
+                status -> {
+                  TransactionSynchronizationManager.registerSynchronization(
+                      new TransactionSynchronization() {
+                        @Override
+                        public void afterCompletion(int completion) {
+                          attempt.completion = completion;
+                        }
+                      });
+                  if (fresh.getId() != null) {
+                    Snapshot previous = transactionalSnapshot(fresh.getId(), true);
+                    if (!previous.tenant().isEmpty()) {
+                      throw new TenantIdAllocationConflictException(
+                          "Tenant ID is already assigned");
+                    }
+                    attempt.previousLedger = previous.ledger();
+                  }
+                  tenants.prepareBootstrapInsert(fresh, reservationToken);
+                  attempt.id = fresh.getId();
+                  entities.persist(fresh);
+                  entities.flush();
+                  if (sql.update(
+                          "UPDATE tenant SET bootstrap_attempt_id=? WHERE id=? AND bootstrap_attempt_id IS NULL",
+                          attempt.marker,
+                          attempt.id)
+                      != 1) {
+                    throw denied();
+                  }
+                  attempt.snapshot = transactionalSnapshot(attempt.id, false);
+                  if (!attempt.marker.equals(
+                          value(attempt.snapshot.tenant(), "bootstrap_attempt_id"))
+                      || !"ASSIGNED".equals(value(attempt.snapshot.ledger(), "status"))) {
+                    throw denied();
+                  }
+                  return fresh;
+                });
         if (attempt.completion != TransactionSynchronization.STATUS_COMMITTED) throw denied();
         requireSnapshot(attempt);
         Grant grant = new Grant(this, attempt);
@@ -130,8 +141,8 @@ public class TenantBootstrapCreation {
     Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     if (!(principal instanceof Jwt)) throw denied();
     Jwt jwt = (Jwt) principal;
-    if (jwt.getIssuer() == null || jwt.getSubject() == null
-        || jwt.getClaimAsString("azp") == null) throw denied();
+    if (jwt.getIssuer() == null || jwt.getSubject() == null || jwt.getClaimAsString("azp") == null)
+      throw denied();
     return new Binding(jwt.getIssuer().toString(), jwt.getClaimAsString("azp"), jwt.getSubject());
   }
 
@@ -142,7 +153,8 @@ public class TenantBootstrapCreation {
 
   private void requireSnapshot(Attempt attempt) {
     noAmbientTransaction();
-    if (!attempt.owner.equals(caller()) || attempt.snapshot == null
+    if (!attempt.owner.equals(caller())
+        || attempt.snapshot == null
         || !attempt.snapshot.equals(freshSnapshot(attempt.id))) throw denied();
   }
 
@@ -159,15 +171,19 @@ public class TenantBootstrapCreation {
     return sql.execute((ConnectionCallback<Snapshot>) connection -> snapshot(connection, id, lock));
   }
 
-  private static Snapshot snapshot(Connection connection, long id, boolean lock) throws SQLException {
-    return new Snapshot(row(connection, "tenant", "id", id, lock),
+  private static Snapshot snapshot(Connection connection, long id, boolean lock)
+      throws SQLException {
+    return new Snapshot(
+        row(connection, "tenant", "id", id, lock),
         row(connection, "tenant_id_reservation", "tenant_id", id, lock));
   }
 
   private static Map<String, Cell> row(
-      Connection connection, String table, String column, long id, boolean lock) throws SQLException {
-    try (var statement = connection.prepareStatement(
-        "SELECT * FROM " + table + " WHERE " + column + "=?" + (lock ? " FOR UPDATE" : ""))) {
+      Connection connection, String table, String column, long id, boolean lock)
+      throws SQLException {
+    try (var statement =
+        connection.prepareStatement(
+            "SELECT * FROM " + table + " WHERE " + column + "=?" + (lock ? " FOR UPDATE" : ""))) {
       statement.setQueryTimeout(3);
       statement.setLong(1, id);
       try (ResultSet result = statement.executeQuery()) {
@@ -183,7 +199,8 @@ public class TenantBootstrapCreation {
           else if (raw instanceof Timestamp) scalar = ((Timestamp) raw).toLocalDateTime();
           else if (raw instanceof java.sql.Date) scalar = ((java.sql.Date) raw).toLocalDate();
           else if (raw instanceof java.sql.Time) scalar = ((java.sql.Time) raw).toLocalTime();
-          values.put(metadata.getColumnName(index).toLowerCase(Locale.ROOT),
+          values.put(
+              metadata.getColumnName(index).toLowerCase(Locale.ROOT),
               new Cell(metadata.getColumnType(index), type, scalar));
         }
         if (result.next()) throw new SQLException("Non-unique native ownership row");
@@ -195,7 +212,8 @@ public class TenantBootstrapCreation {
   private void resolveBeforeSend(Attempt attempt, RuntimeException original) {
     if (attempt.snapshot == null) {
       if (attempt.id != null && attempt.completion == TransactionSynchronization.STATUS_UNKNOWN) {
-        original.addSuppressed(new AccessDeniedException("Owned bootstrap outcome requires reconciliation"));
+        original.addSuppressed(
+            new AccessDeniedException("Owned bootstrap outcome requires reconciliation"));
       }
       return;
     }
@@ -207,24 +225,36 @@ public class TenantBootstrapCreation {
         return;
       }
       if (!attempt.snapshot.equals(actual)) throw denied();
-      transaction.executeWithoutResult(status -> {
-        if (!attempt.snapshot.equals(transactionalSnapshot(attempt.id, true))) throw denied();
-        if (sql.update("DELETE FROM tenant WHERE id=? AND bootstrap_attempt_id=?",
-            attempt.id, attempt.marker) != 1) throw denied();
-        Object token = value(attempt.snapshot.ledger(), "token");
-        int changed;
-        if ("RESERVED".equals(value(attempt.previousLedger, "status"))
-            && token.equals(value(attempt.previousLedger, "token"))) {
-          changed = sql.update("UPDATE tenant_id_reservation SET status='RESERVED', update_date=? WHERE tenant_id=? AND status='ASSIGNED' AND token=?",
-              value(attempt.previousLedger, "update_date"), attempt.id, token);
-        } else if (attempt.previousLedger.isEmpty()) {
-          changed = sql.update("DELETE FROM tenant_id_reservation WHERE tenant_id=? AND status='ASSIGNED' AND token=?",
-              attempt.id, token);
-        } else throw denied();
-        if (changed != 1) throw denied();
-      });
+      transaction.executeWithoutResult(
+          status -> {
+            if (!attempt.snapshot.equals(transactionalSnapshot(attempt.id, true))) throw denied();
+            if (sql.update(
+                    "DELETE FROM tenant WHERE id=? AND bootstrap_attempt_id=?",
+                    attempt.id,
+                    attempt.marker)
+                != 1) throw denied();
+            Object token = value(attempt.snapshot.ledger(), "token");
+            int changed;
+            if ("RESERVED".equals(value(attempt.previousLedger, "status"))
+                && token.equals(value(attempt.previousLedger, "token"))) {
+              changed =
+                  sql.update(
+                      "UPDATE tenant_id_reservation SET status='RESERVED', update_date=? WHERE tenant_id=? AND status='ASSIGNED' AND token=?",
+                      value(attempt.previousLedger, "update_date"),
+                      attempt.id,
+                      token);
+            } else if (attempt.previousLedger.isEmpty()) {
+              changed =
+                  sql.update(
+                      "DELETE FROM tenant_id_reservation WHERE tenant_id=? AND status='ASSIGNED' AND token=?",
+                      attempt.id,
+                      token);
+            } else throw denied();
+            if (changed != 1) throw denied();
+          });
     } catch (RuntimeException unresolved) {
-      original.addSuppressed(new AccessDeniedException("Owned bootstrap state retained for reconciliation"));
+      original.addSuppressed(
+          new AccessDeniedException("Owned bootstrap state retained for reconciliation"));
     }
   }
 
@@ -238,13 +268,19 @@ public class TenantBootstrapCreation {
   }
 
   private record Binding(String issuer, String client, String subject) {}
+
   private record Cell(int jdbcType, String javaType, Object value) {
     @Override
-    public String toString() { return "<native scalar>"; }
+    public String toString() {
+      return "<native scalar>";
+    }
   }
+
   private record Snapshot(Map<String, Cell> tenant, Map<String, Cell> ledger) {
     @Override
-    public String toString() { return "<native ownership snapshot>"; }
+    public String toString() {
+      return "<native ownership snapshot>";
+    }
   }
 
   private static final class Attempt {
@@ -255,7 +291,10 @@ public class TenantBootstrapCreation {
     private Snapshot snapshot;
     private int completion = TransactionSynchronization.STATUS_UNKNOWN;
     private boolean sendStarted;
-    private Attempt(Binding owner) { this.owner = owner; }
+
+    private Attempt(Binding owner) {
+      this.owner = owner;
+    }
   }
 
   /** Cannot be constructed from a public ID, entity, DTO or persisted marker. */
@@ -267,38 +306,59 @@ public class TenantBootstrapCreation {
     private final long expires = Instant.now().getEpochSecond() + 60;
     private boolean active = true;
     private String payloadDigest;
+
     private Grant(TenantBootstrapCreation authority, Attempt attempt) {
       this.authority = authority;
       this.attempt = attempt;
     }
+
     private void requireLive() {
-      if (!active || Thread.currentThread() != thread
+      if (!active
+          || Thread.currentThread() != thread
           || System.nanoTime() - started >= 60_000_000_000L
           || Instant.now().getEpochSecond() >= expires) throw denied();
       authority.requireSnapshot(attempt);
     }
+
     public long tenantId() {
       requireLive();
       return attempt.id;
     }
+
     public Map<String, Object> claims() {
       requireLive();
-      return Map.of("tenantId", attempt.id, "azp", attempt.owner.client(),
-          "sub", attempt.owner.subject(), "tokenIssuer", attempt.owner.issuer(),
-          "iat", Instant.now().getEpochSecond(), "exp", expires);
+      return Map.of(
+          "tenantId",
+          attempt.id,
+          "azp",
+          attempt.owner.client(),
+          "sub",
+          attempt.owner.subject(),
+          "tokenIssuer",
+          attempt.owner.issuer(),
+          "iat",
+          Instant.now().getEpochSecond(),
+          "exp",
+          expires);
     }
+
     public void bindPayload(String digest) {
       requireLive();
-      if (digest == null || !digest.matches("[a-f0-9]{64}")
+      if (digest == null
+          || !digest.matches("[a-f0-9]{64}")
           || (payloadDigest != null && !payloadDigest.equals(digest))) throw denied();
       payloadDigest = digest;
     }
+
     public void beginSend() {
       requireLive();
       if (payloadDigest == null) throw denied();
       attempt.sendStarted = true;
     }
+
     @Override
-    public String toString() { return "<scoped tenant creation grant>"; }
+    public String toString() {
+      return "<scoped tenant creation grant>";
+    }
   }
 }

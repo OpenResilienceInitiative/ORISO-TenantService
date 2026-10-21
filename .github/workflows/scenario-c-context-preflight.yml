@@ -50,6 +50,12 @@ jobs:
           path: subject
           persist-credentials: false
           fetch-depth: 0
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21.0.12+8.0.LTS'
+          cache: maven
+          cache-dependency-path: ${{ matrix.source }}/pom.xml
       - name: Keep evidence and dependency checkout outside the immutable host source
         env:
           PREFLIGHT_ROLE: ${{ matrix.role }}
@@ -60,12 +66,6 @@ jobs:
             mv subject "$RUNNER_TEMP/context-preflight-subject"
             printf 'PREFLIGHT_SOURCE_PATH=%s\n' "$RUNNER_TEMP/context-preflight-subject" >> "$GITHUB_ENV"
           fi
-      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
-        with:
-          distribution: temurin
-          java-version: '21.0.12+8.0.LTS'
-          cache: maven
-          cache-dependency-path: ${{ env.PREFLIGHT_SOURCE_PATH }}/pom.xml
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: 3.12.13

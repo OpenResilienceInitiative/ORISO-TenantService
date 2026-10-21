@@ -71,12 +71,14 @@ public class ConsultingTypeService {
   public void createDefaultConsultingTypes(
       com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant) {
     long tenantId = grant.tenantId();
-    if (tenantId < 1 || tenantId > Integer.MAX_VALUE
+    if (tenantId < 1
+        || tenantId > Integer.MAX_VALUE
         || StringUtils.isBlank(defaultConsultingTypesFilePath)) {
       throw new IllegalStateException("Owned bootstrap configuration is unavailable");
     }
     File file = configurationFileLoader.loadFrom(defaultConsultingTypesFilePath);
-    if (!file.isFile()) throw new IllegalStateException("Owned bootstrap configuration is unavailable");
+    if (!file.isFile())
+      throw new IllegalStateException("Owned bootstrap configuration is unavailable");
     try {
       ConsultingTypeDTO dto = new ObjectMapper().readValue(file, ConsultingTypeDTO.class);
       dto.setTenantId(Math.toIntExact(tenantId));
@@ -93,7 +95,8 @@ public class ConsultingTypeService {
   }
 
   private void createConsultingType(
-      ConsultingTypeDTO consultingTypeDTO, String creationContext,
+      ConsultingTypeDTO consultingTypeDTO,
+      String creationContext,
       com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant)
       throws RestClientException {
     var consultingTypeControllerApi =

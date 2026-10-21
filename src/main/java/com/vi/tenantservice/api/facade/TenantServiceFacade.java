@@ -204,19 +204,23 @@ public class TenantServiceFacade {
     }
     String reservationToken = tenantDTO.getTenantIdReservationToken();
     if (bootstrapCreation != null && bootstrapCreation.current()) {
-      return bootstrapCreation.create(entity, reservationToken, (created, grant) -> {
-        try {
-          createDefaultConsultingTypeSettings(created, grant);
-        } catch (ConsultingTypeCreationException failure) {
-          throw new TenantBadRequestException("Owned consulting-type bootstrap could not complete");
-        }
-        recordOnboardingDpaAcceptance(
-            created, tenantDTO.getOnboardingDpaAcceptance(), reservationToken, false);
-        recordInitialLegalState(created);
-        var result = tenantConverter.toMultilingualDTO(created);
-        tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(result);
-        return result;
-      });
+      return bootstrapCreation.create(
+          entity,
+          reservationToken,
+          (created, grant) -> {
+            try {
+              createDefaultConsultingTypeSettings(created, grant);
+            } catch (ConsultingTypeCreationException failure) {
+              throw new TenantBadRequestException(
+                  "Owned consulting-type bootstrap could not complete");
+            }
+            recordOnboardingDpaAcceptance(
+                created, tenantDTO.getOnboardingDpaAcceptance(), reservationToken, false);
+            recordInitialLegalState(created);
+            var result = tenantConverter.toMultilingualDTO(created);
+            tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(result);
+            return result;
+          });
     }
     TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
@@ -298,7 +302,9 @@ public class TenantServiceFacade {
   }
 
   private void recordOnboardingDpaAcceptance(
-      TenantEntity createdTenant, OnboardingDpaAcceptanceDTO acceptance, String reservationToken,
+      TenantEntity createdTenant,
+      OnboardingDpaAcceptanceDTO acceptance,
+      String reservationToken,
       boolean rollbackOnFailure) {
     if (acceptance == null) {
       return;

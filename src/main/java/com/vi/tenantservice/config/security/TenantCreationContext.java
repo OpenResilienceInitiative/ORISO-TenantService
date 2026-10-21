@@ -71,7 +71,8 @@ public class TenantCreationContext {
 
   public String issue(long tenantId) {
     if (TaskContextProof.grouped(environment)
-        || tenantId < 1 || !identity.current("CONFIG_WIZARD")) {
+        || tenantId < 1
+        || !identity.current("CONFIG_WIZARD")) {
       throw new AccessDeniedException("Verified tenant bootstrap required");
     }
     Jwt caller = (Jwt) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
@@ -107,13 +108,17 @@ public class TenantCreationContext {
   public String issue(
       com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant,
       com.vi.tenantservice.consultingtypeservice.generated.web.model.ConsultingTypeDTO dto) {
-    if (!TaskContextProof.grouped(environment) || !identity.current("CONFIG_WIZARD")
-        || grant == null || dto == null) {
+    if (!TaskContextProof.grouped(environment)
+        || !identity.current("CONFIG_WIZARD")
+        || grant == null
+        || dto == null) {
       throw new AccessDeniedException("Live owned tenant creation required");
     }
     Map<String, Object> claims = new TreeMap<>(grant.claims());
     long tenantId = ((Number) claims.get("tenantId")).longValue();
-    if (tenantId < 1 || tenantId > Integer.MAX_VALUE || dto.getTenantId() == null
+    if (tenantId < 1
+        || tenantId > Integer.MAX_VALUE
+        || dto.getTenantId() == null
         || dto.getTenantId().longValue() != tenantId) {
       throw new AccessDeniedException("Materialized bootstrap target differs from its creation");
     }
