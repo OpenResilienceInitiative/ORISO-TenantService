@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 import copy
+import json
 import xml.etree.ElementTree as ET
 from unittest.mock import Mock, patch
 
@@ -282,6 +283,25 @@ class CounterfactualTests(unittest.TestCase):
 
 
 class FinalRuntimeAcceptanceTests(unittest.TestCase):
+    def test_early_diagnostics_never_copy_provider_messages_or_source_values(self):
+        wrapper_spec = importlib.util.spec_from_file_location(
+            "native_early_diagnostic_wrapper", MODULE.parent / "ci/scenario-c-context-native.py")
+        wrapper = importlib.util.module_from_spec(wrapper_spec)
+        wrapper_spec.loader.exec_module(wrapper)
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / "early.log"
+            log.write_text('  File "/public/scripts/_keycloak_container.py", line 21, in <module>\n'
+                           '    private_value = "synthetic-sensitive-marker"\n'
+                           'ModuleNotFoundError: No module named \'yaml\'\n')
+            result = wrapper.safe_early_failure(log)
+            self.assertEqual("ModuleNotFoundError", result["failureType"])
+            self.assertEqual("PyYAML", result["missingDeclaredDependency"])
+            self.assertEqual([{ "file": "_keycloak_container.py", "line": 21,
+                                "function": "<module>"}], result["frames"])
+            self.assertNotIn("synthetic-sensitive-marker", json.dumps(result))
+            log.write_text("urllib.error.HTTPError: synthetic-sensitive-marker\n")
+            self.assertNotIn("synthetic-sensitive-marker", json.dumps(wrapper.safe_early_failure(log)))
+
     def test_safe_cleanup_absence_cannot_substitute_for_known_container_oom_state(self):
         wrapper_spec = importlib.util.spec_from_file_location(
             "native_bootstrap_wrapper", MODULE.parent / "ci/scenario-c-context-native.py")

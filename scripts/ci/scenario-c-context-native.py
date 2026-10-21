@@ -32,6 +32,23 @@ def known_container_runtime(cleanup):
         and row["runtime"]["restartCount"] == 0 for row in containers)
 
 
+def safe_early_failure(log):
+    """Uncaught pre-fixture failures retain code frames/type, never provider messages/values."""
+    result = {"frames": []}
+    for line in log.read_text(errors="replace").splitlines():
+        frame = re.fullmatch(
+            r'\s*File "[^"\n]*[/\\]([A-Za-z0-9_.-]+\.py)", line (\d+), in ([A-Za-z0-9_<>]+)', line)
+        if frame:
+            result["frames"].append({"file": frame[1], "line": int(frame[2]), "function": frame[3]})
+        failure = re.match(r"^([A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception)):", line)
+        if failure:
+            result["failureType"] = failure[1]
+        if line == "ModuleNotFoundError: No module named 'yaml'":
+            result["missingDeclaredDependency"] = "PyYAML"
+    result["frames"] = result["frames"][-8:]
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--receiver", type=Path, required=True)
@@ -88,6 +105,7 @@ def main():
         receipt_path = evidence / "native/receipt.json"
         if not receipt_path.is_file():
             report["state"] = "MISSING_NATIVE_RECEIPT_NO_ACCEPTANCE"
+            report["safeEarlyFailure"] = safe_early_failure(log)
             return 1
         native = json.loads(receipt_path.read_text())
         report["nativeReceipt"] = native

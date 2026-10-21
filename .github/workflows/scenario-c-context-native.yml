@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-ConsultingTypeService
-          ref: 0af6b5d4612b61c608dc23724fd1932de2fc45e1
+          ref: da74b293b291ec0b9ac238fafb2bd9e5276151ea
           path: receiver
           persist-credentials: false
           fetch-depth: 0
@@ -54,12 +54,30 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: 3.12.13
+      - name: Install and verify the selected native fixture's declared dependency
+        run: |
+          python - <<'PY'
+          import importlib.util, json, os
+          from pathlib import Path
+          available = importlib.util.find_spec("yaml") is not None
+          Path(os.environ["RUNNER_TEMP"], "ctx-python-dependencies.json").write_text(
+              json.dumps({"preexistingPyYAML": available, "required": "PyYAML==6.0.3"}) + "\n")
+          PY
+          python -m pip install --disable-pip-version-check -r ../helm/requirements-ci.txt
+          python - <<'PY'
+          import sys, yaml
+          from pathlib import Path
+          assert yaml.__version__ == "6.0.3"
+          sys.path.insert(0, str(Path("../helm/tests").resolve()))
+          import _keycloak_container, scenario_c_receiver_fixture
+          print("Both selected native helper imports passed; no native resource was started")
+          PY
       - name: Verify the resource and failure classifiers without native resources
         run: python -m unittest discover -s scripts/tests -p test_native_context_resources.py -q > "$RUNNER_TEMP/ctx-resource-controls.txt" 2>&1
       - name: Compile ordinary sources before disposable actual HTTP execution
         run: |
           python scripts/ci/scenario-c-context-native.py \
-            --receiver ../receiver --receiver-ref 0af6b5d4612b61c608dc23724fd1932de2fc45e1 \
+            --receiver ../receiver --receiver-ref da74b293b291ec0b9ac238fafb2bd9e5276151ea \
             --helm ../helm --helm-ref ab13d41e56f077ca85d1412e9eba2e6816554d9d \
             --expect red --evidence "$RUNNER_TEMP/scenario-c-context-native"
       - name: Retain only source hashes, sanitized measurements and original safe XML
@@ -69,6 +87,7 @@ jobs:
           name: scenario-c-native-bootstrap-counterfactual
           path: |
             ${{ runner.temp }}/ctx-resource-controls.txt
+            ${{ runner.temp }}/ctx-python-dependencies.json
             ${{ runner.temp }}/scenario-c-context-native/source-receipt.json
             ${{ runner.temp }}/scenario-c-context-native/native/*.json
             ${{ runner.temp }}/scenario-c-context-native/native/*.jsonl
