@@ -25,9 +25,14 @@ class TenantBootstrapAuthorityTest {
   void aTenantIdAndMachineIdentityCannotMintFiveActorCreationAuthority() {
     var identity = mock(TaskServiceIdentity.class);
     when(identity.current("CONFIG_WIZARD")).thenReturn(true);
-    var jwt = Jwt.withTokenValue("synthetic-no-wire-token").header("alg", "RS256")
-        .issuer("https://synthetic.identity/realms/context").subject("setup-subject")
-        .claim("azp", "backend-setup").expiresAt(Instant.now().plusSeconds(120)).build();
+    var jwt =
+        Jwt.withTokenValue("synthetic-no-wire-token")
+            .header("alg", "RS256")
+            .issuer("https://synthetic.identity/realms/context")
+            .subject("setup-subject")
+            .claim("azp", "backend-setup")
+            .expiresAt(Instant.now().plusSeconds(120))
+            .build();
     SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt));
     var environment = grouped().withProperty("ORISO_TENANT_CREATION_CONTEXT_KEY", key());
     var signer = new TenantCreationContext(environment, identity);
@@ -45,7 +50,8 @@ class TenantBootstrapAuthorityTest {
   }
 
   private static MockEnvironment grouped() {
-    return new MockEnvironment().withProperty("TASK_IDENTITY_MODEL", "FIVE_ACTORS")
+    return new MockEnvironment()
+        .withProperty("TASK_IDENTITY_MODEL", "FIVE_ACTORS")
         .withProperty("TASK_IDENTITY_REQUIRED_TASKS", "CONFIG_WIZARD")
         .withProperty("ORISO_TASK_CONTEXT_KEY", key());
   }
