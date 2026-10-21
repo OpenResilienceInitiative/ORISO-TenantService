@@ -71,6 +71,8 @@ public class ConsultingTypeService {
         consultingTypeServiceApiControllerFactory.createControllerApi();
     addDefaultHeaders(consultingTypeControllerApi.getApiClient());
     if (creationContext != null) {
+      // Internal routing only; the receiver still verifies the bearer, proof and target separately.
+      consultingTypeControllerApi.getApiClient().addDefaultHeader("tenantId", "0");
       consultingTypeControllerApi
           .getApiClient()
           .addDefaultHeader(

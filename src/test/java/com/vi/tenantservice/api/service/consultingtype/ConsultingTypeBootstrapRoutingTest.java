@@ -6,6 +6,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.vi.tenantservice.api.config.apiclient.ConsultingTypeServiceApiControllerFactory;
 import com.vi.tenantservice.api.service.ConfigurationFileLoader;
@@ -25,6 +28,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestTemplate;
 
 @ExtendWith(MockitoExtension.class)
 class ConsultingTypeBootstrapRoutingTest {
@@ -41,13 +46,17 @@ class ConsultingTypeBootstrapRoutingTest {
     String path = "src/test/resources/settings/bootstrap-v2-consulting-type.json";
     ReflectionTestUtils.setField(service, "defaultConsultingTypesFilePath", path);
     when(files.loadFrom(path)).thenReturn(Path.of(path).toFile());
+    when(headers.getKeycloakAndCsrfHttpHeaders()).thenReturn(new HttpHeaders());
+  }
+
+  private void useMockClient() {
     when(factory.createControllerApi()).thenReturn(api);
     when(api.getApiClient()).thenReturn(client);
-    when(headers.getKeycloakAndCsrfHttpHeaders()).thenReturn(new HttpHeaders());
   }
 
   @Test
   void proofProtectedBootstrapRoutesWithoutAClaimOnTheMachineAccount() {
+    useMockClient();
     when(tenants.tryResolve()).thenReturn(Optional.empty());
 
     service.createDefaultConsultingTypes(9157L, "synthetic-bootstrap-proof");
@@ -64,6 +73,7 @@ class ConsultingTypeBootstrapRoutingTest {
 
   @Test
   void ordinaryCreationKeepsTheResolvedTenant() {
+    useMockClient();
     when(tenants.tryResolve()).thenReturn(Optional.of(7L));
 
     service.createDefaultConsultingTypes(9157L);
@@ -74,10 +84,29 @@ class ConsultingTypeBootstrapRoutingTest {
 
   @Test
   void anUnscopedCallDoesNotInventATechnicalTenant() {
+    useMockClient();
     when(tenants.tryResolve()).thenReturn(Optional.empty());
 
     service.createDefaultConsultingTypes(9157L);
 
     verify(client, never()).addDefaultHeader(eq("tenantId"), anyString());
+  }
+
+  @Test
+  void theActualClientSendsOnlyTechnicalRoutingWhileTheBodyKeepsTheCreatedTenant() {
+    var transport = new RestTemplate();
+    var server = MockRestServiceServer.bindTo(transport).build();
+    var realClient = new ApiClient(transport).setBasePath("http://bootstrap-fixture");
+    when(factory.createControllerApi()).thenReturn(new ConsultingTypeControllerApi(realClient));
+    when(tenants.tryResolve()).thenReturn(Optional.of(7L));
+    server
+        .expect(requestTo("http://bootstrap-fixture/consultingtypes"))
+        .andExpect(request -> assertThat(request.getHeaders().get("tenantId")).containsExactly("0"))
+        .andExpect(content().json("{\"tenantId\":9157}"))
+        .andRespond(withSuccess());
+
+    service.createDefaultConsultingTypes(9157L, "synthetic-bootstrap-proof");
+
+    server.verify();
   }
 }

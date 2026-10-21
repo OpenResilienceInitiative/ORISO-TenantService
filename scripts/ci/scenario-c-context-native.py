@@ -18,8 +18,24 @@ support = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(support)
 
 
-def verify_v1(roots):
-    contract = json.loads((HOST / "scripts/ci/scenario-c-bootstrap-v1-inputs.json").read_text())
+def verify_v1(roots, baseline="original"):
+    original = json.loads((HOST / "scripts/ci/scenario-c-bootstrap-v1-inputs.json").read_text())
+    if set(original) != {"tenant", "cts"} or any(len(inputs) != 3 for inputs in original.values()):
+        return False
+    contract = original
+    if baseline == "routed":
+        contract = json.loads(
+            (HOST / "scripts/ci/scenario-c-bootstrap-routed-v1-inputs.json").read_text())
+        if set(contract) != set(original) or any(
+                set(contract[role]) != set(original[role]) for role in original):
+            return False
+        changed = {(role, name) for role in original for name in original[role]
+                   if contract[role][name] != original[role][name]}
+        if changed != {("tenant", "src/main/java/com/vi/tenantservice/api/service/"
+                        "consultingtype/ConsultingTypeService.java")}:
+            return False
+    elif baseline != "original":
+        return False
     return all(hashlib.sha256((roots[role] / name).read_bytes()).hexdigest() == digest
                for role, inputs in contract.items() for name, digest in inputs.items())
 
@@ -30,6 +46,15 @@ def known_container_runtime(cleanup):
         isinstance(row.get("runtime"), dict) and row["runtime"].get("oomKilled") is False
         and type(row["runtime"].get("restartCount")) is int
         and row["runtime"]["restartCount"] == 0 for row in containers)
+
+
+def known_process_cleanup(groups, server):
+    owned = [*groups, server]
+    return (len(groups) == 3 and all(
+        item.get("confirmedAbsent") is True
+        and type(item.get("processGroup")) is int and item["processGroup"] > 0
+        for item in owned)
+        and len({item["processGroup"] for item in owned}) == 4)
 
 
 def safe_early_failure(log):
@@ -56,6 +81,7 @@ def main():
     parser.add_argument("--helm", type=Path, required=True)
     parser.add_argument("--helm-ref", required=True)
     parser.add_argument("--expect", choices=("red", "green"), required=True)
+    parser.add_argument("--v1-baseline", choices=("original", "routed"), default="original")
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
     if os.environ.get("CI") != "true" or os.environ.get("RUNNER_OS") != "Linux":
@@ -68,12 +94,13 @@ def main():
             raise SystemExit("Every selected source must be an immutable full Git commit")
         if support.git(root, "rev-parse", "HEAD") != refs[role] or support.git(root, "status", "--porcelain"):
             raise SystemExit("Every native source checkout must be exact and clean")
-    if args.expect == "red" and not verify_v1(roots):
-        raise SystemExit("All six original v1 bootstrap production files are required for RED")
+    if args.expect == "red" and not verify_v1(roots, args.v1_baseline):
+        raise SystemExit("All six exact selected v1 baseline files are required for RED")
     evidence = args.evidence.resolve()
     evidence.mkdir(parents=True, exist_ok=False)
     before = {role: support.snapshot(root) for role, root in roots.items()}
     report = {"state": "STARTED_NOT_ACCEPTED", "refs": refs, "expect": args.expect,
+              "v1Baseline": args.v1_baseline,
               "sourceBefore": before, "scope": "CTX1 native slice only; not whole Scenario C"}
     java_home = Path(os.environ["JAVA_HOME"])
     version = subprocess.check_output([str(java_home / "bin/java"), "--version"], text=True)
@@ -128,9 +155,7 @@ def main():
                               ("container", "oriso-context-mongo-" + run_id[:12])}
         process_path = evidence / "native/process-cleanup.jsonl"
         groups = [json.loads(line) for line in process_path.read_text().splitlines()] if process_path.is_file() else []
-        groups_complete = (len(groups) == 3 and len({g.get("processGroup") for g in groups}) == 3
-                           and all(g.get("confirmedAbsent") is True for g in groups)
-                           and native.get("processCleanup", {}).get("confirmedAbsent") is True)
+        groups_complete = known_process_cleanup(groups, native.get("processCleanup", {}))
         if (report["runnerExit"] or native.get("state") != wanted or not expected
                 or not native.get("sourceUnchanged") or len(cleanup) != 3
                 or {(row.get("kind"), row.get("name")) for row in cleanup} != expected_resources

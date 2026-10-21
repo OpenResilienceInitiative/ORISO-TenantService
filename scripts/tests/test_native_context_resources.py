@@ -293,6 +293,22 @@ class CounterfactualTests(unittest.TestCase):
 
 
 class FinalRuntimeAcceptanceTests(unittest.TestCase):
+    def test_four_distinct_owned_process_groups_must_be_known_absent(self):
+        wrapper_spec = importlib.util.spec_from_file_location(
+            "native_process_wrapper", MODULE.parent / "ci/scenario-c-context-native.py")
+        wrapper = importlib.util.module_from_spec(wrapper_spec)
+        wrapper_spec.loader.exec_module(wrapper)
+        groups = [{"processGroup": number, "confirmedAbsent": True} for number in (101, 102, 103)]
+        server = {"processGroup": 104, "confirmedAbsent": True}
+        self.assertTrue(wrapper.known_process_cleanup(groups, server))
+        for invalid in ({}, {"processGroup": 103, "confirmedAbsent": True},
+                        {"processGroup": 104, "confirmedAbsent": False},
+                        {"processGroup": True, "confirmedAbsent": True},
+                        {"processGroup": 0, "confirmedAbsent": True}):
+            self.assertFalse(wrapper.known_process_cleanup(groups, invalid))
+        self.assertFalse(wrapper.known_process_cleanup(groups[:-1], server))
+        self.assertFalse(wrapper.known_process_cleanup(groups + groups[:1], server))
+
     def test_early_diagnostics_never_copy_provider_messages_or_source_values(self):
         wrapper_spec = importlib.util.spec_from_file_location(
             "native_early_diagnostic_wrapper", MODULE.parent / "ci/scenario-c-context-native.py")
