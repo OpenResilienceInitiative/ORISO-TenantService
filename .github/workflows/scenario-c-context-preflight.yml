@@ -50,12 +50,22 @@ jobs:
           path: subject
           persist-credentials: false
           fetch-depth: 0
+      - name: Keep evidence and dependency checkout outside the immutable host source
+        env:
+          PREFLIGHT_ROLE: ${{ matrix.role }}
+        run: |
+          if [ "$PREFLIGHT_ROLE" = tenant ]; then
+            printf 'PREFLIGHT_SOURCE_PATH=%s\n' "$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
+          else
+            mv subject "$RUNNER_TEMP/context-preflight-subject"
+            printf 'PREFLIGHT_SOURCE_PATH=%s\n' "$RUNNER_TEMP/context-preflight-subject" >> "$GITHUB_ENV"
+          fi
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
           java-version: '21.0.12+8.0.LTS'
           cache: maven
-          cache-dependency-path: ${{ matrix.source }}/pom.xml
+          cache-dependency-path: ${{ env.PREFLIGHT_SOURCE_PATH }}/pom.xml
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: 3.12.13
@@ -63,27 +73,25 @@ jobs:
         id: source-check
         env:
           PREFLIGHT_ROLE: ${{ matrix.role }}
-          PREFLIGHT_SOURCE: ${{ matrix.source }}
           PREFLIGHT_REF: ${{ matrix.ref || github.sha }}
         shell: bash
         run: |
           set -euo pipefail
           python scripts/ci/scenario-c-context-preflight.py "$PREFLIGHT_ROLE" \
-            --source "$PREFLIGHT_SOURCE" --expected "$PREFLIGHT_REF" \
-            --evidence "proof-reports/$PREFLIGHT_ROLE"
+            --source "$PREFLIGHT_SOURCE_PATH" --expected "$PREFLIGHT_REF" \
+            --evidence "$RUNNER_TEMP/context-preflight-$PREFLIGHT_ROLE"
       - name: Produce only a scoped mechanical proposal after confirmed formatter failure
         if: failure() && (matrix.role == 'tenant' || matrix.role == 'cts')
         env:
           PREFLIGHT_ROLE: ${{ matrix.role }}
-          PREFLIGHT_SOURCE: ${{ matrix.source }}
         run: |
           python scripts/ci/scenario-c-c16-format-proposal.py "$PREFLIGHT_ROLE" \
-            --source "$PREFLIGHT_SOURCE" --source-evidence "proof-reports/$PREFLIGHT_ROLE"
+            --source "$PREFLIGHT_SOURCE_PATH" --source-evidence "$RUNNER_TEMP/context-preflight-$PREFLIGHT_ROLE"
       - name: Retain current source, toolchain, compiler and unit receipts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: scenario-c-context-preflight-${{ matrix.role }}
-          path: proof-reports/${{ matrix.role }}/**
+          path: ${{ runner.temp }}/context-preflight-${{ matrix.role }}/**
           if-no-files-found: error
           retention-days: 14
