@@ -655,9 +655,7 @@ class TenantServiceFacadeTest {
     var denied =
         new org.springframework.web.server.ResponseStatusException(
             org.springframework.http.HttpStatus.FORBIDDEN, "Bootstrap proof denied");
-    doThrow(denied)
-        .when(consultingTypeService)
-        .createDefaultConsultingTypes(tenantEntity.getId());
+    doThrow(denied).when(consultingTypeService).createDefaultConsultingTypes(tenantEntity.getId());
 
     assertThat(
             assertThrows(
