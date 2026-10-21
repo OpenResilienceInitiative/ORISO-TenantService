@@ -155,13 +155,45 @@ public class TenantBootstrapCreation {
     noAmbientTransaction();
     if (!attempt.owner.equals(caller())
         || attempt.snapshot == null
-        || !attempt.snapshot.equals(freshSnapshot(attempt.id))) throw denied();
+        || !attempt.snapshot.equals(freshSnapshot(attempt))) throw denied();
   }
 
-  private Snapshot freshSnapshot(long id) {
+  private Snapshot freshSnapshot(Attempt attempt) {
     try (Connection connection = dataSource.getConnection()) {
       if (!connection.getAutoCommit()) throw denied();
-      return snapshot(connection, id, false);
+      try (var statement =
+          connection.prepareStatement(
+              "SELECT t.*, r.* FROM tenant t LEFT JOIN tenant_id_reservation r ON r.tenant_id=t.id WHERE t.id=?")) {
+        statement.setQueryTimeout(3);
+        statement.setLong(1, attempt.id);
+        try (ResultSet result = statement.executeQuery()) {
+          if (!result.next()) return new Snapshot(Map.of(), Map.of());
+          int tenantColumns = attempt.snapshot.tenant().size();
+          int ledgerColumns = attempt.snapshot.ledger().size();
+          var metadata = result.getMetaData();
+          if (metadata.getColumnCount() != tenantColumns + ledgerColumns) throw denied();
+          var tenant = new TreeMap<String, Cell>();
+          var ledger = new TreeMap<String, Cell>();
+          for (int index = 1; index <= metadata.getColumnCount(); index++) {
+            Object raw = result.getObject(index);
+            String type = raw == null ? "null" : raw.getClass().getName();
+            Object scalar = raw;
+            if (raw instanceof java.sql.Clob) scalar = result.getString(index);
+            else if (raw instanceof byte[]) scalar = HexFormat.of().formatHex((byte[]) raw);
+            else if (raw instanceof Timestamp) scalar = ((Timestamp) raw).toLocalDateTime();
+            else if (raw instanceof java.sql.Date) scalar = ((java.sql.Date) raw).toLocalDate();
+            else if (raw instanceof java.sql.Time) scalar = ((java.sql.Time) raw).toLocalTime();
+            (index <= tenantColumns ? tenant : ledger)
+                .put(
+                    metadata.getColumnName(index).toLowerCase(Locale.ROOT),
+                    new Cell(metadata.getColumnType(index), type, scalar));
+          }
+          if (!tenant.keySet().equals(attempt.snapshot.tenant().keySet())
+              || !ledger.keySet().equals(attempt.snapshot.ledger().keySet())
+              || result.next()) throw denied();
+          return new Snapshot(Map.copyOf(tenant), Map.copyOf(ledger));
+        }
+      }
     } catch (SQLException failure) {
       throw denied();
     }
@@ -219,7 +251,7 @@ public class TenantBootstrapCreation {
     }
     try {
       noAmbientTransaction();
-      Snapshot actual = freshSnapshot(attempt.id);
+      Snapshot actual = freshSnapshot(attempt);
       if (actual.tenant().isEmpty()) {
         if (attempt.completion != TransactionSynchronization.STATUS_ROLLED_BACK) throw denied();
         return;
