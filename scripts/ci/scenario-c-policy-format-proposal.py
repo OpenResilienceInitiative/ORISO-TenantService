@@ -16,7 +16,8 @@ HOST = Path(__file__).resolve().parents[2]
 FILES = {
     'tenant': [
         'src/test/java/com/vi/tenantservice/api/controller/AccountPolicyReceiverFixture.java',
-        'src/test/java/com/vi/tenantservice/api/controller/GroupedTaskServiceIdentityAuthorizationIT.java'],
+        'src/test/java/com/vi/tenantservice/api/controller/GroupedTaskServiceIdentityAuthorizationIT.java',
+        'src/test/java/com/vi/tenantservice/api/controller/AccountPolicyPurposeAuthorizationIT.java'],
     'user': ['src/test/java/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyNativeGate.java'],
 }
 

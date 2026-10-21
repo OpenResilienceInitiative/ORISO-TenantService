@@ -50,6 +50,8 @@ public final class AccountPolicyReceiverFixture {
     var queries = new AtomicLong();
     Path observed = Path.of(required("ORISO_POLICY_QUERY_COUNT"));
     Files.writeString(observed, "0");
+    Path mode = Path.of(required("ORISO_POLICY_TENANT_MODE"));
+    Files.writeString(mode, "live");
     var application = new SpringApplication(TenantServiceApplication.class);
     application.addInitializers(
         context ->
@@ -66,9 +68,11 @@ public final class AccountPolicyReceiverFixture {
                             (MethodInterceptor)
                                 invocation -> {
                                   if ("findAccountProvisioningPolicy"
-                                      .equals(invocation.getMethod().getName()))
-                                    Files.writeString(
-                                        observed, Long.toString(queries.incrementAndGet()));
+                                      .equals(invocation.getMethod().getName())) {
+                                    Files.writeString(observed, Long.toString(queries.incrementAndGet()));
+                                    if ("outage".equals(Files.readString(mode)))
+                                      throw new IllegalStateException("Synthetic policy projection outage");
+                                  }
                                   return invocation.proceed();
                                 });
                         return proxy.getProxy();
