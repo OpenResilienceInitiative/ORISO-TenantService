@@ -26,7 +26,7 @@ jobs:
           - role: cts
             source: subject
             repository: OpenResilienceInitiative/ORISO-ConsultingTypeService
-            ref: 1c0e34f7f6cd983adeb45b5cf370d142f720d89e
+            ref: 4dd5f999d8ac3265b434a2801a25c5583fd4ea47
           - role: user
             source: subject
             repository: OpenResilienceInitiative/ORISO-UserService
