@@ -120,11 +120,68 @@ class MemoryTests(unittest.TestCase):
         with self.assertRaises(resources.ResourceRefusal):
             self.sample()
 
-    def test_monitor_observes_short_full_stalls_even_when_rounded_average_is_zero(self):
+    def lease_samples(self, totals):
         initial = self.sample()
-        after = {**initial, "fullPsiTotal": initial["fullPsiTotal"] + 1}
         lease = resources.MemoryLease(3184, self.root / "observations.jsonl")
-        with patch.object(resources, "machine_memory", side_effect=[initial, after]):
+        samples = [{**initial, "fullPsiTotal": total} for total in totals]
+        return lease, samples
+
+    def test_full_stall_allowance_is_one_millisecond_for_the_entire_lease(self):
+        lease, samples = self.lease_samples([0, 1, 1000, 1001])
+        with patch.object(resources, "machine_memory", side_effect=samples):
+            lease.check(starting=True)
+            lease.check()
+            lease.check()
+            with self.assertRaises(resources.ResourceRefusal):
+                lease.check()
+        audit = [json.loads(line) for line in lease.observations.read_text().splitlines()]
+        self.assertEqual([0, 1, 1000, 1001], [row["fullPsiLeaseDeltaUs"] for row in audit])
+        self.assertTrue(all(row["fullPsiLeaseBaselineUs"] == 0 for row in audit))
+        self.assertTrue(all(row["fullPsiLeaseCeilingUs"] == 1000 for row in audit))
+
+    def test_full_stall_allowance_uses_nonzero_initial_baseline_not_absolute_total(self):
+        lease, samples = self.lease_samples([9000000, 9000001, 9001000])
+        with patch.object(resources, "machine_memory", side_effect=samples):
+            lease.check(starting=True)
+            lease.check()
+            lease.check()
+        last = json.loads(lease.observations.read_text().splitlines()[-1])
+        self.assertEqual(9000000, last["fullPsiLeaseBaselineUs"])
+        self.assertEqual(1000, last["fullPsiLeaseDeltaUs"])
+
+    def test_small_intervals_cannot_reset_the_total_stall_allowance(self):
+        lease, samples = self.lease_samples([100, 700, 1200])
+        with patch.object(resources, "machine_memory", side_effect=samples):
+            lease.check(starting=True)
+            lease.check()
+            with self.assertRaises(resources.ResourceRefusal):
+                lease.check()
+
+    def test_counter_reset_refuses_even_when_still_above_initial_baseline(self):
+        lease, samples = self.lease_samples([100, 600, 500])
+        with patch.object(resources, "machine_memory", side_effect=samples):
+            lease.check(starting=True)
+            lease.check()
+            with self.assertRaises(resources.ResourceRefusal):
+                lease.check()
+
+    def test_missing_or_noninteger_or_negative_full_total_is_not_zero(self):
+        for value in [None, True, False, -1, 1.0, "1"]:
+            with self.subTest(value=value):
+                lease, samples = self.lease_samples([value])
+                with patch.object(resources, "machine_memory", return_value=samples[0]):
+                    with self.assertRaises(resources.ResourceRefusal):
+                        lease.check(starting=True)
+        lease, samples = self.lease_samples([0])
+        del samples[0]["fullPsiTotal"]
+        with patch.object(resources, "machine_memory", return_value=samples[0]):
+            with self.assertRaises(resources.ResourceRefusal):
+                lease.check(starting=True)
+
+    def test_positive_average_still_refuses_within_cumulative_allowance(self):
+        lease, samples = self.lease_samples([100, 101])
+        samples[1]["fullPsiAvg10"] = 0.01
+        with patch.object(resources, "machine_memory", side_effect=samples):
             lease.check(starting=True)
             with self.assertRaises(resources.ResourceRefusal):
                 lease.check()

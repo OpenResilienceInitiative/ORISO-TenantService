@@ -9,6 +9,9 @@ import sys
 import time
 
 MIB = 1024 * 1024
+# Absolute FULL-stall time is measured in microseconds. This fixed allowance
+# applies cumulatively to the entire bounded lease, never to each interval.
+FULL_PSI_LEASE_CEILING_US = 1000
 
 
 class ResourceRefusal(RuntimeError):
@@ -117,7 +120,7 @@ def machine_memory():
 
 
 def require_memory(sample, budget_mib, starting=False):
-    """Fresh runners: no swap, no full PSI stalls/events; 40% start and 25% retained."""
+    """No swap, positive full PSI average or events; 40% start and 25% retained."""
     total, available = sample["totalBytes"], sample["availableBytes"]
     if budget_mib <= 0 or sample["swapUsedBytes"] or sample["fullPsiAvg10"] > 0:
         raise ResourceRefusal("Native start/monitor refuses swap or full memory pressure")
@@ -143,19 +146,37 @@ class MemoryLease:
         self.budget_mib = budget_mib
         self.observations = Path(observations)
         self.last = None
-        self.full_psi_total = None
+        self.full_psi_baseline = None
+        self.full_psi_last = None
 
     def check(self, starting=False):
         sample = machine_memory()
         self.last = sample
+        full_total = sample.get("fullPsiTotal")
+        psi_failure = None
+        delta = None
+        if sample["platform"] == "linux":
+            if type(full_total) is not int or full_total < 0:
+                psi_failure = "A nonnegative integer FULL-stall counter is required"
+            else:
+                if self.full_psi_baseline is None:
+                    self.full_psi_baseline = full_total
+                delta = full_total - self.full_psi_baseline
+                if self.full_psi_last is not None and full_total < self.full_psi_last:
+                    psi_failure = "The FULL-stall counter reset during the native lease"
+                elif delta > FULL_PSI_LEASE_CEILING_US:
+                    psi_failure = "Cumulative FULL memory stalls exceed the native lease ceiling"
+                self.full_psi_last = full_total
         with os.fdopen(os.open(self.observations, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a") as f:
             f.write(json.dumps({"measuredAt": time.time(), "starting": starting,
-                                "budgetMiB": self.budget_mib, **sample}, sort_keys=True) + "\n")
+                                "budgetMiB": self.budget_mib, **sample,
+                                "fullPsiLeaseBaselineUs": self.full_psi_baseline,
+                                "fullPsiLeaseDeltaUs": delta,
+                                "fullPsiLeaseCeilingUs": FULL_PSI_LEASE_CEILING_US,
+                                "fullPsiLeaseRefusal": psi_failure}, sort_keys=True) + "\n")
         percentage = require_memory(sample, self.budget_mib, starting)
-        full_total = sample.get("fullPsiTotal")
-        if self.full_psi_total is not None and full_total != self.full_psi_total:
-            raise ResourceRefusal("Full memory stalls changed during the native lease")
-        self.full_psi_total = full_total
+        if psi_failure is not None:
+            raise ResourceRefusal(psi_failure)
         return percentage
 
 
