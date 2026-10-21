@@ -203,6 +203,9 @@ public class TenantServiceFacade {
     TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
       createDefaultConsultingTypeSettings(createdTenant);
+    } catch (ResponseStatusException ex) {
+      performRollback(createdTenant, reservationToken);
+      throw ex;
     } catch (com.vi.tenantservice.config.security.TenantCreationContext.IssuanceException ex) {
       performRollback(createdTenant, reservationToken);
       throw ex;

@@ -11,6 +11,7 @@ spec = importlib.util.spec_from_file_location("bootstrap_baseline_driver", SOURC
 driver = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(driver)
 ROUTING = "src/main/java/com/vi/tenantservice/api/service/consultingtype/ConsultingTypeService.java"
+FACADE = "src/main/java/com/vi/tenantservice/api/facade/TenantServiceFacade.java"
 
 
 class ExactBaselineControls(unittest.TestCase):
@@ -20,7 +21,7 @@ class ExactBaselineControls(unittest.TestCase):
         original = {}
         for role, root in roots.items():
             original[role] = {}
-            for name in (ROUTING, "signer.java", "claim.java"):
+            for name in (ROUTING, "signer.java", FACADE):
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes((role + name).encode())
@@ -49,6 +50,34 @@ class ExactBaselineControls(unittest.TestCase):
             with patch.object(driver, "HOST", host):
                 self.assertFalse(driver.verify_v1(roots, "routed"))
 
+    def test_compensator_delta_requires_its_own_explicit_baseline(self):
+        with tempfile.TemporaryDirectory() as directory:
+            host, roots, routed = self.fixture(directory)
+            (roots["tenant"] / FACADE).write_bytes(b"reviewed downstream denial compensation")
+            compensated = json.loads(json.dumps(routed))
+            compensated["tenant"][FACADE] = hashlib.sha256(
+                (roots["tenant"] / FACADE).read_bytes()).hexdigest()
+            (host / "scripts/ci/scenario-c-bootstrap-compensated-routed-v1-inputs.json").write_text(
+                json.dumps(compensated))
+            with patch.object(driver, "HOST", host):
+                self.assertFalse(driver.verify_v1(roots, "original"))
+                self.assertFalse(driver.verify_v1(roots, "routed"))
+                self.assertTrue(driver.verify_v1(roots, "compensated-routed"))
+
+    def test_compensator_catalog_cannot_change_routing_or_receiver_authority(self):
+        for role, name in (("tenant", ROUTING), ("cts", "signer.java")):
+            with self.subTest(role=role, name=name), tempfile.TemporaryDirectory() as directory:
+                host, roots, routed = self.fixture(directory)
+                compensated = json.loads(json.dumps(routed))
+                for changed_role, changed_name in (("tenant", FACADE), (role, name)):
+                    path = roots[changed_role] / changed_name
+                    path.write_bytes(b"unexpected additional change" + changed_name.encode())
+                    compensated[changed_role][changed_name] = hashlib.sha256(path.read_bytes()).hexdigest()
+                (host / "scripts/ci/scenario-c-bootstrap-compensated-routed-v1-inputs.json").write_text(
+                    json.dumps(compensated))
+                with patch.object(driver, "HOST", host):
+                    self.assertFalse(driver.verify_v1(roots, "compensated-routed"))
+
     def test_an_empty_missing_or_expanded_catalog_cannot_weaken_the_guard(self):
         for change in ("empty", "missing", "extra", "changed"):
             with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
@@ -56,7 +85,7 @@ class ExactBaselineControls(unittest.TestCase):
                 if change == "empty":
                     routed = {}
                 elif change == "missing":
-                    routed["cts"].pop("claim.java")
+                    routed["cts"].pop(FACADE)
                 elif change == "extra":
                     routed["cts"]["extra.java"] = "0" * 64
                 else:

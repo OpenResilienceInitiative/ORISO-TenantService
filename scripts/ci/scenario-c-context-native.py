@@ -23,7 +23,7 @@ def verify_v1(roots, baseline="original"):
     if set(original) != {"tenant", "cts"} or any(len(inputs) != 3 for inputs in original.values()):
         return False
     contract = original
-    if baseline == "routed":
+    if baseline in ("routed", "compensated-routed"):
         contract = json.loads(
             (HOST / "scripts/ci/scenario-c-bootstrap-routed-v1-inputs.json").read_text())
         if set(contract) != set(original) or any(
@@ -34,6 +34,18 @@ def verify_v1(roots, baseline="original"):
         if changed != {("tenant", "src/main/java/com/vi/tenantservice/api/service/"
                         "consultingtype/ConsultingTypeService.java")}:
             return False
+        if baseline == "compensated-routed":
+            compensated = json.loads(
+                (HOST / "scripts/ci/scenario-c-bootstrap-compensated-routed-v1-inputs.json").read_text())
+            if set(compensated) != set(contract) or any(
+                    set(compensated[role]) != set(contract[role]) for role in contract):
+                return False
+            changed = {(role, name) for role in contract for name in contract[role]
+                       if compensated[role][name] != contract[role][name]}
+            if changed != {("tenant", "src/main/java/com/vi/tenantservice/api/facade/"
+                            "TenantServiceFacade.java")}:
+                return False
+            contract = compensated
     elif baseline != "original":
         return False
     return all(hashlib.sha256((roots[role] / name).read_bytes()).hexdigest() == digest
@@ -81,7 +93,8 @@ def main():
     parser.add_argument("--helm", type=Path, required=True)
     parser.add_argument("--helm-ref", required=True)
     parser.add_argument("--expect", choices=("red", "green"), required=True)
-    parser.add_argument("--v1-baseline", choices=("original", "routed"), default="original")
+    parser.add_argument("--v1-baseline", choices=("original", "routed", "compensated-routed"),
+                        default="original")
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
     if os.environ.get("CI") != "true" or os.environ.get("RUNNER_OS") != "Linux":
