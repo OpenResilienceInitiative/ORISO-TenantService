@@ -26,7 +26,7 @@ jobs:
           - role: cts
             source: subject
             repository: OpenResilienceInitiative/ORISO-ConsultingTypeService
-            ref: c1bb7f35142c33773bc38e74ecc51cf2c4efb3d0
+            ref: f1624c76afb0df0fec935d967f97afc4dda38cd7
           - role: user
             source: subject
             repository: OpenResilienceInitiative/ORISO-UserService
@@ -60,6 +60,7 @@ jobs:
         with:
           python-version: 3.12.13
       - name: Compile current production and tests, then execute affected units
+        id: source-check
         env:
           PREFLIGHT_ROLE: ${{ matrix.role }}
           PREFLIGHT_SOURCE: ${{ matrix.source }}
@@ -70,6 +71,14 @@ jobs:
           python scripts/ci/scenario-c-context-preflight.py "$PREFLIGHT_ROLE" \
             --source "$PREFLIGHT_SOURCE" --expected "$PREFLIGHT_REF" \
             --evidence "proof-reports/$PREFLIGHT_ROLE"
+      - name: Produce only a scoped mechanical proposal after confirmed formatter failure
+        if: failure() && (matrix.role == 'tenant' || matrix.role == 'cts')
+        env:
+          PREFLIGHT_ROLE: ${{ matrix.role }}
+          PREFLIGHT_SOURCE: ${{ matrix.source }}
+        run: |
+          python scripts/ci/scenario-c-c16-format-proposal.py "$PREFLIGHT_ROLE" \
+            --source "$PREFLIGHT_SOURCE" --source-evidence "proof-reports/$PREFLIGHT_ROLE"
       - name: Retain current source, toolchain, compiler and unit receipts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

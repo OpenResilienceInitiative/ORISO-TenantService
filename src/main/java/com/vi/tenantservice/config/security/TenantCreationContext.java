@@ -47,7 +47,8 @@ public class TenantCreationContext {
   /** Checks the signing prerequisite before a Wizard tenant/reservation transaction begins. */
   public void validateConfiguration() {
     try {
-      signingKey();
+      if (TaskContextProof.grouped(environment)) TaskContextProof.key(environment);
+      else signingKey();
     } catch (IllegalArgumentException ex) {
       throw new AccessDeniedException("Tenant creation context key is not configured", ex);
     }
@@ -69,7 +70,8 @@ public class TenantCreationContext {
   }
 
   public String issue(long tenantId) {
-    if (tenantId < 1 || !identity.current("CONFIG_WIZARD")) {
+    if (TaskContextProof.grouped(environment)
+        || tenantId < 1 || !identity.current("CONFIG_WIZARD")) {
       throw new AccessDeniedException("Verified tenant bootstrap required");
     }
     Jwt caller = (Jwt) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
@@ -98,6 +100,40 @@ public class TenantCreationContext {
           + Base64.getUrlEncoder().withoutPadding().encodeToString(signature(payload));
     } catch (Exception ex) {
       throw new IssuanceException(ex);
+    }
+  }
+
+  /** Signs only a live privately owned creation and the actual materialized outbound DTO. */
+  public String issue(
+      com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant,
+      com.vi.tenantservice.consultingtypeservice.generated.web.model.ConsultingTypeDTO dto) {
+    if (!TaskContextProof.grouped(environment) || !identity.current("CONFIG_WIZARD")
+        || grant == null || dto == null) {
+      throw new AccessDeniedException("Live owned tenant creation required");
+    }
+    Map<String, Object> claims = new TreeMap<>(grant.claims());
+    long tenantId = ((Number) claims.get("tenantId")).longValue();
+    if (tenantId < 1 || tenantId > Integer.MAX_VALUE || dto.getTenantId() == null
+        || dto.getTenantId().longValue() != tenantId) {
+      throw new AccessDeniedException("Materialized bootstrap target differs from its creation");
+    }
+    claims.put("v", 2);
+    claims.put("iss", "tenantservice");
+    claims.put("aud", "consultingtypeservice");
+    claims.put("actor", "SETUP");
+    claims.put("purpose", "CONFIG_WIZARD");
+    claims.put("operation", "tenant.consulting-type.bootstrap");
+    claims.put("method", "POST");
+    claims.put("target", "tenant/" + tenantId + "/consulting-type/default");
+    claims.put("nonce", UUID.randomUUID().toString().replace("-", ""));
+    try {
+      byte[] key = TaskContextProof.key(environment);
+      String digest = TaskContextProof.digest(key, dto);
+      grant.bindPayload(digest);
+      claims.put("payloadDigest", digest);
+      return TaskContextProof.sign(key, claims);
+    } catch (Exception failure) {
+      throw new IssuanceException(failure);
     }
   }
 

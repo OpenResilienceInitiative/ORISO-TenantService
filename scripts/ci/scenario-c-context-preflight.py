@@ -27,7 +27,8 @@ FLOORS = {
         "com.vi.tenantservice.config.security.TenantBootstrapAuthorityTest": 2,
         "com.vi.tenantservice.config.security.WizardPolicyV2ContextTest": 35,
         "com.vi.tenantservice.api.service.consultingtype.ConsultingTypeBootstrapRoutingTest": 4,
-        "com.vi.tenantservice.api.facade.TenantServiceFacadeTest": 54,
+        "com.vi.tenantservice.api.facade.TenantServiceFacadeTest": 66,
+        "com.vi.tenantservice.api.service.TenantBootstrapCreationIT": 4,
     },
     "cts": {
         "de.caritas.cob.consultingtypeservice.config.security.CreationContextKeyTest": 2,
@@ -43,10 +44,14 @@ FLOORS = {
 COMPILED = {
     "tenant": [
         "target/test-classes/com/vi/tenantservice/api/controller/BootstrapV2CallerReceiverIT.class",
+        "target/test-classes/com/vi/tenantservice/api/service/TenantBootstrapCreationIT.class",
+        "target/classes/com/vi/tenantservice/api/service/TenantBootstrapCreation.class",
         "target/test-classes/com/vi/tenantservice/config/security/WizardPolicyV2ContextTest.class",
     ],
     "cts": [
         "target/test-classes/de/caritas/cob/consultingtypeservice/api/controller/BootstrapV2ReceiverFixture.class",
+        "target/test-classes/de/caritas/cob/consultingtypeservice/config/security/TenantBootstrapV2ContextTest.class",
+        "target/classes/de/caritas/cob/consultingtypeservice/config/security/TenantCreationContext.class",
         "target/test-classes/de/caritas/cob/consultingtypeservice/api/controller/ScenarioCMailNativeServer.class",
     ],
     "user": [

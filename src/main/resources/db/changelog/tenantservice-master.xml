@@ -73,4 +73,5 @@
   <include file="db/changelog/changeset/0041_assistant_identity/0041-changeSet.xml"/>
   <include file="db/changelog/changeset/0042_tenant_operational_status/0042-changeSet.xml"/>
   <include file="db/changelog/changeset/0044_tenant_internal_group_chat_policies/0044-changeSet.xml"/>
+  <include file="db/changelog/changeset/0045_tenant_bootstrap_attempt/0045-changeSet.xml"/>
 </databaseChangeLog>

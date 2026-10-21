@@ -62,11 +62,16 @@ public class TenantService {
    */
   @Transactional
   public TenantEntity create(TenantEntity tenantEntity, String tenantIdReservationToken) {
+    prepareBootstrapInsert(tenantEntity, tenantIdReservationToken);
+    return tenantRepository.save(tenantEntity);
+  }
+
+  // Shared preparation only. The C owner performs persist/flush itself; legacy keeps save/merge.
+  void prepareBootstrapInsert(TenantEntity tenantEntity, String tenantIdReservationToken) {
     validateTenant(tenantEntity);
     overrideSubdomainIfNeededForSingleDomainMultitenancy(tenantEntity);
     setCreateAndUpdateDate(tenantEntity);
     tenantIdAllocationService.assignIdForNewTenant(tenantEntity, tenantIdReservationToken);
-    return tenantRepository.save(tenantEntity);
   }
 
   private boolean shouldOverrideSubdomain(TenantEntity tenantEntity, String mainTenantSubdomain) {

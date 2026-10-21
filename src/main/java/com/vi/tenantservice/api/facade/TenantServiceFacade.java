@@ -105,6 +105,9 @@ public class TenantServiceFacade {
   @org.springframework.beans.factory.annotation.Autowired
   private com.vi.tenantservice.config.security.TenantCreationContext creationContext;
 
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.vi.tenantservice.api.service.TenantBootstrapCreation bootstrapCreation;
+
   private static final int TECHNICAL_TENANT_ID = 0;
 
   /** AUTO create retries share the allocation service's retry budget (TEN-INV hardening). */
@@ -200,6 +203,21 @@ public class TenantServiceFacade {
       creationContext.validateConfiguration();
     }
     String reservationToken = tenantDTO.getTenantIdReservationToken();
+    if (bootstrapCreation != null && bootstrapCreation.current()) {
+      return bootstrapCreation.create(entity, reservationToken, (created, grant) -> {
+        try {
+          createDefaultConsultingTypeSettings(created, grant);
+        } catch (ConsultingTypeCreationException failure) {
+          throw new TenantBadRequestException("Owned consulting-type bootstrap could not complete");
+        }
+        recordOnboardingDpaAcceptance(
+            created, tenantDTO.getOnboardingDpaAcceptance(), reservationToken, false);
+        recordInitialLegalState(created);
+        var result = tenantConverter.toMultilingualDTO(created);
+        tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(result);
+        return result;
+      });
+    }
     TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
       createDefaultConsultingTypeSettings(createdTenant);
@@ -276,6 +294,12 @@ public class TenantServiceFacade {
    */
   private void recordOnboardingDpaAcceptance(
       TenantEntity createdTenant, OnboardingDpaAcceptanceDTO acceptance, String reservationToken) {
+    recordOnboardingDpaAcceptance(createdTenant, acceptance, reservationToken, true);
+  }
+
+  private void recordOnboardingDpaAcceptance(
+      TenantEntity createdTenant, OnboardingDpaAcceptanceDTO acceptance, String reservationToken,
+      boolean rollbackOnFailure) {
     if (acceptance == null) {
       return;
     }
@@ -302,11 +326,11 @@ public class TenantServiceFacade {
               bounded(acceptance.getLanguage(), MAX_LANGUAGE_LENGTH, "language"),
               buildOnboardingFormDataJson(acceptance)));
     } catch (RuntimeException ex) {
-      performRollback(createdTenant, reservationToken);
+      if (rollbackOnFailure) performRollback(createdTenant, reservationToken);
       log.error(
-          "Onboarding DPA acceptance could not be recorded for tenant {} — the tenant creation was"
-              + " rolled back so the acceptance is never silently lost",
+          "Onboarding DPA acceptance failed for tenant {}; local rollback requested: {}",
           createdTenant.getId(),
+          rollbackOnFailure,
           ex);
       throw ex;
     }
@@ -433,8 +457,17 @@ public class TenantServiceFacade {
 
   private void createDefaultConsultingTypeSettings(TenantEntity createdTenant)
       throws ConsultingTypeCreationException {
+    createDefaultConsultingTypeSettings(createdTenant, null);
+  }
+
+  private void createDefaultConsultingTypeSettings(
+      TenantEntity createdTenant,
+      com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant)
+      throws ConsultingTypeCreationException {
     try {
-      if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
+      if (grant != null) {
+        consultingTypeService.createDefaultConsultingTypes(grant);
+      } else if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
         consultingTypeService.createDefaultConsultingTypes(
             createdTenant.getId(), creationContext.issue(createdTenant.getId()));
       } else {

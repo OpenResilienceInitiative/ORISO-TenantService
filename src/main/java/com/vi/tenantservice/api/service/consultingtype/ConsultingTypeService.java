@@ -30,6 +30,9 @@ public class ConsultingTypeService {
   private final @NonNull TenantResolverService tenantResolverService;
   private final @NonNull ConfigurationFileLoader configurationFileLoader;
 
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.vi.tenantservice.config.security.TenantCreationContext creationContext;
+
   @Value("${default.consulting.types.json.path}")
   private String defaultConsultingTypesFilePath;
 
@@ -65,7 +68,33 @@ public class ConsultingTypeService {
     }
   }
 
+  public void createDefaultConsultingTypes(
+      com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant) {
+    long tenantId = grant.tenantId();
+    if (tenantId < 1 || tenantId > Integer.MAX_VALUE
+        || StringUtils.isBlank(defaultConsultingTypesFilePath)) {
+      throw new IllegalStateException("Owned bootstrap configuration is unavailable");
+    }
+    File file = configurationFileLoader.loadFrom(defaultConsultingTypesFilePath);
+    if (!file.isFile()) throw new IllegalStateException("Owned bootstrap configuration is unavailable");
+    try {
+      ConsultingTypeDTO dto = new ObjectMapper().readValue(file, ConsultingTypeDTO.class);
+      dto.setTenantId(Math.toIntExact(tenantId));
+      String proof = creationContext.issue(grant, dto);
+      createConsultingType(dto, proof, grant);
+    } catch (IOException failure) {
+      throw new IllegalStateException("Owned bootstrap configuration cannot be materialized");
+    }
+  }
+
   private void createConsultingType(ConsultingTypeDTO consultingTypeDTO, String creationContext)
+      throws RestClientException {
+    createConsultingType(consultingTypeDTO, creationContext, null);
+  }
+
+  private void createConsultingType(
+      ConsultingTypeDTO consultingTypeDTO, String creationContext,
+      com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant)
       throws RestClientException {
     var consultingTypeControllerApi =
         consultingTypeServiceApiControllerFactory.createControllerApi();
@@ -78,6 +107,7 @@ public class ConsultingTypeService {
           .addDefaultHeader(
               com.vi.tenantservice.config.security.TenantCreationContext.HEADER, creationContext);
     }
+    if (grant != null) grant.beginSend();
     try {
       consultingTypeControllerApi.createConsultingType(consultingTypeDTO);
     } catch (RestClientException e) {
