@@ -30,10 +30,12 @@ public class TenantCreationContext {
         .map(String::trim)
         .anyMatch("CONFIG_WIZARD"::equals)) {
       try {
-        if (Base64.getDecoder()
-                .decode(environment.getProperty("ORISO_TENANT_CREATION_CONTEXT_KEY", ""))
-                .length
-            < 32) {
+        byte[] key =
+            TaskContextProof.grouped(environment)
+                ? TaskContextProof.key(environment)
+                : Base64.getDecoder()
+                    .decode(environment.getProperty("ORISO_TENANT_CREATION_CONTEXT_KEY", ""));
+        if (key.length < 32) {
           throw new IllegalArgumentException();
         }
       } catch (IllegalArgumentException ex) {
