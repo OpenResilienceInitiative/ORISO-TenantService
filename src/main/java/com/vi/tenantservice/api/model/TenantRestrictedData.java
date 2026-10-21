@@ -6,6 +6,8 @@ public interface TenantRestrictedData {
 
   Long getId();
 
+  Boolean getActive();
+
   String getName();
 
   String getSubdomain();

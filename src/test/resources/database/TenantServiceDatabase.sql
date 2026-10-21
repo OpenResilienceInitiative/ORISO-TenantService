@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS TENANT
 (
     ID bigint NOT NULL,
+    active boolean NOT NULL DEFAULT TRUE,
     name varchar(36) NOT NULL,
     subdomain varchar(255) NOT NULL,
     licensing_allowed_users int,
