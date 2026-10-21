@@ -20,6 +20,8 @@ public class TaskServiceIdentity {
           "config-wizard",
           "INVITE_RESERVATIONS",
           "invitation-reservations",
+          "CONSULTANT_IMPORT",
+          "consultant-import",
           "NOTIFICATION_DISPATCH",
           "notification-dispatch",
           "SYSTEM_EMAIL_DELIVERY",

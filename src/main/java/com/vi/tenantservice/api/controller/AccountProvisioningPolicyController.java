@@ -23,7 +23,8 @@ public class AccountProvisioningPolicyController {
   }
 
   @GetMapping("/internal/tenants/{id}/account-provisioning-policy")
-  @PreAuthorize("@taskServiceIdentity.allows(authentication, 'CONFIG_WIZARD')")
+  @PreAuthorize(
+      "@taskServiceIdentity.allows(authentication, 'CONFIG_WIZARD') or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS') or @taskServiceIdentity.allows(authentication, 'CONSULTANT_IMPORT')")
   public ResponseEntity<AccountProvisioningPolicy> get(
       @PathVariable Long id,
       @RequestHeader(value = WizardPolicyContext.HEADER, required = false) String proof) {
