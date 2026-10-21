@@ -50,9 +50,22 @@ class C16FormatProposalControls(unittest.TestCase):
     def test_owned_allowlist_is_exactly_six_tenant_and_two_receiver_sources(self):
         self.assertEqual({"tenant", "cts"}, set(PROOF.FILES))
         self.assertEqual(6, len(PROOF.FILES["tenant"]))
-        self.assertEqual(2, len(PROOF.FILES["cts"]))
-        self.assertEqual(8, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
+        self.assertEqual(2, sum(path.startswith("src/main/") for path in PROOF.FILES["cts"]))
+        self.assertEqual(1, sum(path.startswith("src/test/") for path in PROOF.FILES["cts"]))
+        self.assertEqual(9, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
         self.assertTrue(all(path.endswith(".java") for values in PROOF.FILES.values() for path in values))
+
+    def test_only_the_explicit_owned_receiver_test_can_join_the_formatter_delta(self):
+        test = "src/test/java/de/caritas/cob/consultingtypeservice/config/security/TenantBootstrapV2ContextTest.java"
+        self.assertTrue(PROOF.owned_delta("cts", [test], ""))
+        for role, changed, untracked in (
+            ("tenant", [test], ""),
+            ("cts", [test.replace("ContextTest.java", "OtherTest.java")], ""),
+            ("cts", [test, "src/main/java/UnownedPermission.java"], ""),
+            ("cts", [test], "untracked.java"),
+        ):
+            with self.subTest(role=role, changed=changed, untracked=untracked):
+                self.assertFalse(PROOF.owned_delta(role, changed, untracked))
 
 
 if __name__ == "__main__":

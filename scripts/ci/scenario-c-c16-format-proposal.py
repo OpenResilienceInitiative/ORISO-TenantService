@@ -25,8 +25,13 @@ FILES = {
     "cts": [
         "src/main/java/de/caritas/cob/consultingtypeservice/config/security/TenantCreationContext.java",
         "src/main/java/de/caritas/cob/consultingtypeservice/api/service/TenantBootstrapService.java",
+        "src/test/java/de/caritas/cob/consultingtypeservice/config/security/TenantBootstrapV2ContextTest.java",
     ],
 }
+
+
+def owned_delta(role, changed, untracked):
+    return set(changed).issubset(FILES[role]) and not untracked
 
 
 def eligible(receipt, log):
@@ -107,7 +112,8 @@ def main():
             if result:
                 raise RuntimeError("Owned scoped formatter failed")
         changed = source.git(scratch, "diff", "--name-only").splitlines()
-        if not set(changed).issubset(paths) or source.git(scratch, "ls-files", "--others", "--exclude-standard"):
+        if not owned_delta(args.role, changed,
+                           source.git(scratch, "ls-files", "--others", "--exclude-standard")):
             raise RuntimeError("Formatter changed a path beyond owned allowlist")
         patch = subprocess.check_output(["git", "diff", "--", *paths], cwd=scratch)
         groups = [json.loads(line) for line in (evidence / "process-cleanup.jsonl").read_text().splitlines()]

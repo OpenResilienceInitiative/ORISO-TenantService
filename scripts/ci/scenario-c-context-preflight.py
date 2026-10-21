@@ -32,7 +32,7 @@ FLOORS = {
     },
     "cts": {
         "de.caritas.cob.consultingtypeservice.config.security.CreationContextKeyTest": 2,
-        "de.caritas.cob.consultingtypeservice.config.security.TenantBootstrapV2ContextTest": 3,
+        "de.caritas.cob.consultingtypeservice.config.security.TenantBootstrapV2ContextTest": 4,
     },
     "user": {
         "de.caritas.cob.userservice.api.service.accountpolicy.CheckedAccountPolicyReadsTest": 7,
