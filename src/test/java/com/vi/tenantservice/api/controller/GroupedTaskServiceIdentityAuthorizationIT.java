@@ -37,7 +37,7 @@ import org.springframework.web.context.WebApplicationContext;
     properties = {
       "spring.profiles.active=testing",
       "TASK_IDENTITY_MODEL=FIVE_ACTORS",
-      "TASK_IDENTITY_REQUIRED_TASKS=CONFIG_WIZARD,INVITE_RESERVATIONS,NOTIFICATION_DISPATCH,RUNTIME_POLICY",
+      "TASK_IDENTITY_REQUIRED_TASKS=CONFIG_WIZARD,INVITE_RESERVATIONS,CONSULTANT_IMPORT,NOTIFICATION_DISPATCH,RUNTIME_POLICY",
       "TASK_IDENTITY_AUDIENCE=tenantservice",
       "IDENTITY_SETUP_CLIENT_ID=backend-setup",
       "IDENTITY_SETUP_SERVICE_SUBJECT=setup-subject",
@@ -47,7 +47,8 @@ import org.springframework.web.context.WebApplicationContext;
       "IDENTITY_RUNTIME_SERVICE_SUBJECT=runtime-subject",
       "IDENTITY_ACCOUNT_ADMIN_CLIENT_ID=backend-account-admin",
       "IDENTITY_ACCOUNT_ADMIN_SERVICE_SUBJECT=account-admin-subject",
-      "ORISO_WIZARD_POLICY_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "ORISO_TASK_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "ORISO_WIZARD_POLICY_CONTEXT_KEY=AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
       "ORISO_TENANT_CREATION_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     })
 @Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
@@ -140,11 +141,17 @@ class GroupedTaskServiceIdentityAuthorizationIT {
     var setup = actor("setup-subject", "backend-setup", SETUP_ROLES, "tenantservice");
     String path = "/internal/tenants/1/account-provisioning-policy";
     mvc.perform(get(path).with(setup)).andExpect(status().isForbidden());
-    mvc.perform(get(path).with(setup).header("X-ORISO-Wizard-Policy-Context", policyProof(2)))
+    mvc.perform(get(path).with(setup).header("X-ORISO-Wizard-Policy-Context", policyProof(2, "INVITATION")))
         .andExpect(status().isForbidden());
-    mvc.perform(get(path).with(setup).header("X-ORISO-Wizard-Policy-Context", policyProof(1)))
+    mvc.perform(get(path).with(setup).header("X-ORISO-Wizard-Policy-Context", policyProof(1, "INVITATION")))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.id").value(1));
+        .andExpect(jsonPath("$.id").value(1))
+        .andExpect(jsonPath("$.allowedNumberOfUsers").value(5))
+        .andExpect(jsonPath("$.licensing").doesNotExist())
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+            .string("Cache-Control", "no-store"));
+    mvc.perform(get(path).with(setup).header("X-ORISO-Wizard-Policy-Context", policyProof(1, "IMPORT")))
+        .andExpect(status().isOk());
   }
 
   @Test
@@ -216,32 +223,45 @@ class GroupedTaskServiceIdentityAuthorizationIT {
         .authorities(token -> converter.convert(token).getAuthorities());
   }
 
-  private String policyProof(long tenantId) throws Exception {
+  private String policyProof(long tenantId, String kind) throws Exception {
     long now = Instant.now().getEpochSecond();
+    String source = "a".repeat(64);
+    var origin = new java.util.TreeMap<String, Object>();
+    origin.put("kind", kind);
+    origin.put("tenantId", tenantId);
+    origin.put("agencyIds", List.of(10));
+    origin.put("profile", "CONSULTANT");
+    origin.put("revision", "b".repeat(64));
+    origin.put("reference", "IMPORT".equals(kind) ? "import:" + source + ":1" : "invite:1");
+    if ("IMPORT".equals(kind)) origin.put("sourceDigest", source);
     var claims = new java.util.TreeMap<String, Object>();
     claims.put("aud", "tenantservice");
+    claims.put("actor", "SETUP");
     claims.put("azp", "backend-setup");
     claims.put("exp", now + 60);
     claims.put("iat", now);
-    claims.put("iss", "oriso-userservice");
-    claims.put("nonce", java.util.UUID.randomUUID().toString());
+    claims.put("iss", "userservice");
+    claims.put("method", "GET");
+    claims.put("nonce", java.util.UUID.randomUUID().toString().replace("-", ""));
     claims.put("operation", "wizard.account-policy.read");
+    claims.put("origin", origin);
+    claims.put("purpose", "IMPORT".equals(kind) ? "CONSULTANT_IMPORT" : "INVITE_RESERVATIONS");
     claims.put("sub", "setup-subject");
+    claims.put("target", "tenant/" + tenantId + "/account-provisioning-policy");
     claims.put("tenantId", tenantId);
     claims.put("tokenIssuer", "https://identity.example/realms/test");
-    claims.put("v", 1);
-    String payload =
-        java.util.Base64.getUrlEncoder()
-            .withoutPadding()
-            .encodeToString(
-                new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsBytes(claims));
+    claims.put("v", 2);
+    var semantic = new java.util.TreeMap<String, Object>();
+    semantic.put("tenantId", tenantId);
+    semantic.put("origin", origin);
+    semantic.put("projection", "account-provisioning-policy");
+    var json = new com.fasterxml.jackson.databind.ObjectMapper();
     var mac = javax.crypto.Mac.getInstance("HmacSHA256");
     mac.init(new javax.crypto.spec.SecretKeySpec(new byte[32], "HmacSHA256"));
-    return payload
-        + "."
-        + java.util.Base64.getUrlEncoder()
-            .withoutPadding()
-            .encodeToString(
-                mac.doFinal(payload.getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+    claims.put("payloadDigest", java.util.HexFormat.of().formatHex(mac.doFinal(
+        ("payload\n" + json.writeValueAsString(semantic)).getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+    String payload = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(json.writeValueAsBytes(claims));
+    return payload + "." + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+        mac.doFinal(("proof\n" + payload).getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
   }
 }
