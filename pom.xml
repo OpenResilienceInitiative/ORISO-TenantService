@@ -607,6 +607,8 @@
                             <!-- Native fixture suite runs explicitly in the joined real-token CI gate. -->
                             <excludes>
                                 <exclude>**/RealTaskTokenAuthorizationIT.java</exclude>
+                                <!-- Executed with a required native fixture by scenario-c-context-native.yml. -->
+                                <exclude>**/BootstrapV2CallerReceiverIT.java</exclude>
                             </excludes>
                         </configuration>
                     </execution>
