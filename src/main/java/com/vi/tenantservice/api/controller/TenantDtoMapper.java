@@ -47,6 +47,7 @@ public class TenantDtoMapper {
           var response = new AdminTenantDTO();
           response.setId((Long) tenantMap.get("id"));
           response.setName((String) tenantMap.get("name"));
+          response.setActive((Boolean) tenantMap.get("active"));
           response.setSubdomain((String) tenantMap.get("subdomain"));
           response.setBeraterCount((Integer) tenantMap.get("beraterCount"));
           response.setAdminEmails((List<String>) tenantMap.get("adminEmails"));

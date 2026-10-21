@@ -4,6 +4,7 @@ import com.vi.tenantservice.api.model.TenantDataView;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedDataView;
 import jakarta.persistence.LockModeType;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -11,10 +12,18 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
+
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query("UPDATE TenantEntity t SET t.active = :active, t.updateDate = :updatedAt WHERE t.id = :id")
+  int updateOperationalStatus(
+      @Param("id") Long id,
+      @Param("active") Boolean active,
+      @Param("updatedAt") LocalDateTime updatedAt);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT t FROM TenantEntity t WHERE t.id = :id")
@@ -73,7 +82,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.settings, "
               + "t.createDate, "
               + "t.updateDate, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t WHERE t.id = :id")
   TenantDataView findTenantDataById(@Param("id") Long id);
 
@@ -114,7 +123,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.settings, "
               + "t.createDate, "
               + "t.updateDate, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t")
   List<TenantDataView> findAllTenantData();
 
@@ -155,7 +164,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.settings, "
               + "t.createDate, "
               + "t.updateDate, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t "
               + "WHERE"
               + "  t.id != 0L "
@@ -189,7 +198,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.contentTermsAndConditions, "
               + "t.contentTermsAndConditionsActivationDate, "
               + "t.settings, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t WHERE t.subdomain = :subdomain")
   TenantRestrictedDataView findRestrictedDataBySubdomain(@Param("subdomain") String subdomain);
 
@@ -216,7 +225,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.contentTermsAndConditions, "
               + "t.contentTermsAndConditionsActivationDate, "
               + "t.settings, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t WHERE t.id = :id")
   TenantRestrictedDataView findRestrictedDataById(@Param("id") Long id);
 
@@ -243,7 +252,7 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "t.contentTermsAndConditions, "
               + "t.contentTermsAndConditionsActivationDate, "
               + "t.settings, "
-              + "t.dataProtectionOfficer) "
+              + "t.dataProtectionOfficer, t.active) "
               + "FROM TenantEntity t WHERE t.id IN :ids")
   List<TenantRestrictedDataView> findRestrictedDataByIdIn(@Param("ids") Set<Long> ids);
 
