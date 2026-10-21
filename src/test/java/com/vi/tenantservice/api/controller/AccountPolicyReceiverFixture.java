@@ -25,8 +25,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.ContentCachingResponseWrapper;
 
 /** Real isolated Tenant app; fixture observation never replaces the policy guard or its query. */
@@ -85,7 +87,8 @@ public final class AccountPolicyReceiverFixture {
                                     Files.writeString(
                                         observed, Long.toString(queries.incrementAndGet()));
                                     if ("outage".equals(Files.readString(mode)))
-                                      throw new IllegalStateException(
+                                      throw new ResponseStatusException(
+                                          HttpStatus.SERVICE_UNAVAILABLE,
                                           "Synthetic policy projection outage");
                                   }
                                   return invocation.proceed();
