@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Explicit local native gate: real Tenant caller -> real CTS receiver, isolated resources.
+"""Explicit native gate: real Tenant caller -> real CTS receiver, isolated resources.
 
 Requires an operator-granted native resource lease. No shared containers, source/targets,
 tokens in argv or durable logs. A missing fixture or skipped case fails the gate.
@@ -26,6 +26,19 @@ class FixtureError(Exception):
     pass
 
 
+resource_spec = importlib.util.spec_from_file_location(
+    "context_resource_support", Path(__file__).with_name("native_context_resources.py"))
+resources = importlib.util.module_from_spec(resource_spec)
+resource_spec.loader.exec_module(resources)
+memory_lease = None
+
+
+def configure_memory(budget_mib, evidence):
+    global memory_lease
+    memory_lease = resources.MemoryLease(budget_mib, evidence / "memory-observations.jsonl")
+    return memory_lease
+
+
 def source_manifest(root):
     names = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--exclude-standard"],
                                     cwd=root, text=True).splitlines()
@@ -36,21 +49,47 @@ def source_manifest(root):
 
 
 def free_guard():
-    result = subprocess.run(["memory_pressure", "-Q"], capture_output=True, text=True, timeout=10)
-    match = re.search(r"System-wide memory free percentage:\s*(\d+)%", result.stdout)
-    if result.returncode or not match or int(match[1]) < 25:
-        raise FixtureError("Native memory headroom is below the required25% or unavailable")
-    return int(match[1])
+    if memory_lease is None:
+        raise FixtureError("A measured native memory lease must be configured before execution")
+    try:
+        return memory_lease.check()
+    except resources.ResourceRefusal as failure:
+        raise FixtureError(str(failure)) from None
 
 
 def stop(process):
-    if process is not None and process.poll() is None:
-        os.killpg(process.pid, signal.SIGTERM)
+    if process is None:
+        return None
+
+    def group_alive():
+        # Every caller created this exact process session with start_new_session=True.
+        process.poll()
         try:
-            process.wait(timeout=20)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.wait(timeout=10)
+            os.killpg(process.pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+
+    if group_alive():
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        deadline = time.monotonic() + 20
+        while group_alive() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        if group_alive():
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            deadline = time.monotonic() + 10
+            while group_alive() and time.monotonic() < deadline:
+                time.sleep(0.1)
+    if group_alive():
+        raise FixtureError("Owned process group survived finite TERM/KILL cleanup")
+    process.wait(timeout=1)
+    return {"processGroup": process.pid, "confirmedAbsent": True}
 
 
 def private_log(path):
@@ -71,11 +110,49 @@ def bounded(command, cwd, env, log, seconds, overall):
                 time.sleep(2)
             return process.returncode
         finally:
-            stop(process)
+            cleanup = stop(process)
+            with (memory_lease.observations.parent / "process-cleanup.jsonl").open("a") as output:
+                output.write(json.dumps(cleanup) + "\n")
 
 
 def docker(*command):
     return subprocess.check_output(["docker", *command], text=True, timeout=30).strip()
+
+
+def intended_counterfactual(tree, counts, result, receipt, tenant):
+    if not result or counts != {"tests": 1, "failures": 1, "errors": 0, "skipped": 0}:
+        return False
+    cases = tree.findall("testcase")
+    method = "ownedTenantCreationUsesTheSharedV2ProofAtTheMaterializedDtoSendSeam"
+    if (len(cases) != 1 or cases[0].get("classname") !=
+            "com.vi.tenantservice.api.controller.BootstrapV2CallerReceiverIT"
+            or cases[0].get("name") not in (method, method + "()")):
+        return False
+    failures = cases[0].findall("failure")
+    if len(failures) != 1 or cases[0].find("error") is not None or cases[0].find("skipped") is not None:
+        return False
+    source = tenant / "src/test/java/com/vi/tenantservice/api/controller/BootstrapV2CallerReceiverIT.java"
+    lines = [i + 1 for i, line in enumerate(source.read_text().splitlines())
+             if "assertThat(RECEIVER_STATUS.get()).isEqualTo(200);" in line]
+    if len(lines) != 1:
+        return False
+    failure = failures[0]
+    message = failure.get("message", "") + "\n" + (failure.text or "")
+    if (not re.search(r"\bexpected:\s*200\s+but was:\s*403\b", message)
+            or method + "(BootstrapV2CallerReceiverIT.java:" + str(lines[0]) + ")" not in message):
+        return False
+    observation = receipt.get("observed", {})
+    before = receipt.get("receiverBefore", {})
+    if (observation.get("receiverStatus") != 403
+            or observation.get("receiverRequestObserved") is not True
+            or observation.get("allocationStatus") != "RESERVED"
+            or not 400 <= observation.get("tenantStatus", 0) <= 599
+            or set(before) != {"claims", "counter", "types"}
+            or before != receipt.get("receiverAfter")):
+        return False
+    return all(set(value) == {"count", "sha256"} and type(value["count"]) is int
+               and value["count"] >= 0 and re.fullmatch(r"[a-f0-9]{64}", value["sha256"])
+               for value in before.values())
 
 
 def main():
@@ -107,22 +184,51 @@ def main():
     process = None
     server_log = None
     temporary = None
-    network_created = False
+    owned = resources.OwnedDocker("oriso-context-run-id", run_id)
     overall = time.monotonic() + 1200
-    receipt = {"runId": run_id, "state": "RUNNING", "stage": "network", "image": shared.IMAGE,
-               "sourceUnchanged": False, "cleanup": [], "initialMemoryFreePercent": free_guard()}
-    if receipt["initialMemoryFreePercent"] < 40:
-        receipt["state"] = "PRESTART_REFUSAL_NO_NATIVE_EXECUTION"
-        receipt["safeFailure"] = "Native start requires fresh40% free memory"
-        (args.evidence / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
-        print(json.dumps({"state": receipt["state"], "freshMemoryFreePercent": receipt["initialMemoryFreePercent"]}))
-        return 2
+    receipt = {"runId": run_id, "state": "RUNNING", "stage": "prestart", "image": shared.IMAGE,
+               "budgetMiB": 3184, "sourceUnchanged": False, "cleanup": []}
     try:
-        docker("network", "create", "--label", label, network)
-        network_created = True
+        lease = configure_memory(3184, args.evidence)
+        receipt["initialMemoryFreePercent"] = lease.check(starting=True)
         temporary = tempfile.TemporaryDirectory(prefix="oriso-context-")
         private = Path(temporary.name).resolve()
         os.chmod(private, 0o700)
+        env = {**os.environ, "JAVA_HOME": str(args.java_home.resolve()),
+               "PATH": str(args.java_home.resolve() / "bin") + os.pathsep + os.environ["PATH"],
+               "MAVEN_OPTS": "-Xmx512m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2",
+               "GIT_CONFIG_NOSYSTEM": "1"}
+        bases = {"receiver": "53c1ab3752245e7df371a4476739de4cfeda2645",
+                 "tenant": "c0da86b50ee6537facf4af9b90eb799f5e975063"}
+        # All ordinary format/production/test compilation finishes before any container starts.
+        receipt["compiledClasses"] = {}
+        for key, root in (("receiver", receiver), ("tenant", tenant)):
+            receipt["stage"] = key + "-compile"
+            cp = private / (key + "-classpath")
+            changed = subprocess.check_output(
+                ["git", "diff", "--name-only", bases[key], "HEAD", "--", "*.java"],
+                cwd=root, text=True).splitlines()
+            scoped = [str(root / name) for name in changed if (root / name).is_file()]
+            if not scoped:
+                raise FixtureError("Changed Java inventory missing before native execution")
+            command = ["./mvnw", "-B", "-ntp", "-q",
+                       "-DspotlessFiles=" + "|".join(re.escape(name) for name in scoped),
+                       "test-compile", "dependency:build-classpath", "-Dmdep.includeScope=test",
+                       "-Dmdep.outputFile=" + str(cp)]
+            if bounded(command, root, env, private / (key + "-compile.log"), 420, overall):
+                raise FixtureError(key + " compile failed before behavioral HTTP execution")
+            compiled = (root / "target/test-classes" /
+                        ("de/caritas/cob/consultingtypeservice/api/controller/BootstrapV2ReceiverFixture.class"
+                         if key == "receiver" else
+                         "com/vi/tenantservice/api/controller/BootstrapV2CallerReceiverIT.class"))
+            data = compiled.read_bytes()
+            if not data.startswith(b"\xca\xfe\xba\xbe") or not cp.is_file():
+                raise FixtureError("Fresh compiled native fixture/classpath is missing")
+            receipt["compiledClasses"][key] = hashlib.sha256(data).hexdigest()
+        # Names are registered before the create call, even if Docker loses its response.
+        receipt["stage"] = "network"
+        owned.plan("network", network)
+        docker("network", "create", "--label", label, network)
         kc = "oriso-context-kc-" + run_id[:12]
         mongo = "oriso-context-mongo-" + run_id[:12]
         for name, options in ((kc, ["--memory=768m", "--cpus=2", "-p", "127.0.0.1::8080",
@@ -133,6 +239,7 @@ def main():
                 (mongo, ["--memory=384m", "--cpus=1", "-p", "127.0.0.1::27017", "mongo:7.0.2",
                          "--wiredTigerCacheSizeGB", "0.25"])):
             free_guard()
+            owned.plan("container", name)
             identifier = docker("run", "-d", "--name", name, "--network", network,
                                 "--label", label, *options)
             containers.append(identifier)
@@ -160,25 +267,14 @@ def main():
         with os.fdopen(descriptor, "w") as output:
             json.dump({"identityModel": "FIVE_ACTORS", "issuer": base + "/realms/" + realm,
                        "tasks": actors}, output)
-        env = {**os.environ, "JAVA_HOME": str(args.java_home.resolve()),
-               "PATH": str(args.java_home.resolve() / "bin") + os.pathsep + os.environ["PATH"],
-               "MAVEN_OPTS": "-Xmx512m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2",
-               # Scoped to Maven children: avoid the measured JGit system-config discovery wait.
-               # Spotless and all normal source checks still execute; no Git config is changed.
-               "GIT_CONFIG_NOSYSTEM": "1",
+        env.update({
                "ORISO_TASK_TOKEN_FIXTURE": str(fixture),
                "ORISO_BOOTSTRAP_SHARED_KEY": base64.b64encode(bytes([7]) * 32).decode(),
                "ORISO_BOOTSTRAP_RECEIVER_READY": str(private / "receiver-ready"),
                "ORISO_BOOTSTRAP_OBSERVED": str(private / "observed.json"),
-               "ORISO_BOOTSTRAP_MONGO_URI": "mongodb://" + docker("port", containers[1], "27017/tcp").splitlines()[0] + "/context_" + run_id}
-        for key, root in (("receiver", receiver), ("tenant", tenant)):
-            receipt["stage"] = key + "-compile"
-            cp = private / (key + "-classpath")
-            status = bounded(["./mvnw", "-q", "-Pnative-permission-matrix", "test-compile",
-                              "dependency:build-classpath", "-Dmdep.includeScope=test", "-Dmdep.outputFile=" + str(cp)],
-                             root, env, private / (key + "-compile.log"), 420, overall)
-            if status:
-                raise FixtureError(key + " compile failed before behavioral HTTP execution")
+               "ORISO_BOOTSTRAP_RECEIVER_BEFORE": str(private / "receiver-before.json"),
+               "ORISO_BOOTSTRAP_RECEIVER_AFTER": str(private / "receiver-after.json"),
+               "ORISO_BOOTSTRAP_MONGO_URI": "mongodb://" + docker("port", containers[1], "27017/tcp").splitlines()[0] + "/context_" + run_id})
         classpath = os.pathsep.join([str(receiver / "target/test-classes"), str(receiver / "target/classes"),
                                     (private / "receiver-classpath").read_text().strip()])
         server_log = private_log(private / "receiver.log")
@@ -209,24 +305,39 @@ def main():
             raise FixtureError("Fresh complete public HTTP execution XML missing")
         tree = XML.parse(report).getroot()
         counts = {k: int(tree.get(k, "0")) for k in ("tests", "failures", "errors", "skipped")}
-        if counts["tests"] != args.expected_tests or counts["skipped"]:
+        cases = tree.findall("testcase")
+        if (counts["tests"] != args.expected_tests or counts["skipped"]
+                or len(cases) != counts["tests"] or any(
+                    sum(bool(case.findall(tag)) for case in cases) != counts[key]
+                    for key, tag in (("failures", "failure"), ("errors", "error"), ("skipped", "skipped")))):
             raise FixtureError("Native fixture skipped or missed required cases")
         raw = report.read_bytes()
-        if re.search(rb"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", raw):
+        if re.search(rb"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?", raw):
             raise FixtureError("Unsafe token material in native XML; original retained privately only")
         shutil.copy2(report, args.evidence / report.name)
         observed = Path(env["ORISO_BOOTSTRAP_OBSERVED"])
         receipt["observed"] = json.loads(observed.read_text()) if observed.is_file() else {}
         receipt["counts"] = counts
+        process.stdin.close()
+        process.stdin = None
+        try:
+            process.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            raise FixtureError("Owned CTS did not finish its actual persistence snapshot") from None
+        if process.returncode:
+            raise FixtureError("Owned CTS exited before verified persistence snapshot")
+        receipt["receiverBefore"] = json.loads(Path(env["ORISO_BOOTSTRAP_RECEIVER_BEFORE"]).read_text())
+        receipt["receiverAfter"] = json.loads(Path(env["ORISO_BOOTSTRAP_RECEIVER_AFTER"]).read_text())
         after = {"tenant": source_manifest(tenant), "receiver": source_manifest(receiver),
-                 "helmFixture": before["helmFixture"]}
+                 "helmFixture": {str(p.relative_to(helm)): hashlib.sha256(p.read_bytes()).hexdigest()
+                                 for p in (helm / "tests/scenario_c_receiver_fixture.py",
+                                           helm / "tests/_keycloak_container.py")}}
         if after != before:
             raise FixtureError("Source changed during the native proof")
         receipt["sourceUnchanged"] = True
+        free_guard()
         if args.expect == "red":
-            if (not result or counts["errors"] or not counts["failures"]
-                    or receipt["observed"].get("receiverStatus") != 403
-                    or not receipt["observed"].get("receiverRequestObserved")):
+            if not intended_counterfactual(tree, counts, result, receipt, tenant):
                 raise FixtureError("Expected real CTS HTTP403 behavioral RED was not established")
             receipt["state"] = "BEHAVIORAL_RED"
         elif result or any(counts[k] for k in ("failures", "errors", "skipped")):
@@ -237,7 +348,7 @@ def main():
     except Exception as failure:
         receipt["state"] = "FIXTURE_FAILURE"
         receipt["failureType"] = type(failure).__name__
-        if isinstance(failure, FixtureError):
+        if isinstance(failure, (FixtureError, resources.ResourceRefusal)):
             receipt["safeFailure"] = str(failure)
         if temporary:
             safe = []
@@ -250,30 +361,34 @@ def main():
             receipt["safeDiagnostics"] = safe[-18:]
         return 2
     finally:
-        if process is not None:
-            if process.stdin:
-                process.stdin.close()
-            stop(process)
-        if server_log:
-            server_log.close()
-        for identifier in reversed(containers):
-            metadata = json.loads(docker("inspect", identifier))[0]
-            if metadata["Config"]["Labels"].get("oriso-context-run-id") != run_id:
-                raise FixtureError("Owned container label changed; refusing cleanup")
-            volumes = [mount["Name"] for mount in metadata.get("Mounts", []) if mount["Type"] == "volume"]
-            docker("rm", "-f", "-v", identifier)
-            receipt["cleanup"].append({"containerId": identifier, "anonymousVolumes": volumes, "removed": True})
-        if network_created:
-            metadata = json.loads(docker("network", "inspect", network))[0]
-            if metadata["Labels"].get("oriso-context-run-id") != run_id:
-                raise FixtureError("Owned network label changed; refusing cleanup")
-            docker("network", "rm", network)
-            receipt["cleanup"].append({"network": network, "removed": True})
+        cleanup_errors = []
+        try:
+            if process is not None:
+                if process.stdin:
+                    process.stdin.close()
+                receipt["processCleanup"] = stop(process)
+            if server_log:
+                server_log.close()
+        except Exception as failure:
+            cleanup_errors.append({"ownedProcess": type(failure).__name__})
+        try:
+            receipt["cleanup"] = owned.cleanup()
+        except resources.CleanupRefusal as failure:
+            cleanup_errors.extend(failure.errors)
+            receipt["cleanup"] = failure.completed
         if temporary:
-            temporary.cleanup()
+            try:
+                temporary.cleanup()
+            except Exception as failure:
+                cleanup_errors.append({"privateDirectory": type(failure).__name__})
+        if cleanup_errors:
+            receipt["state"] = "CLEANUP_FAILURE_NO_ACCEPTANCE"
+            receipt["cleanupErrors"] = cleanup_errors
         (args.evidence / "receipt.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
         print(json.dumps({"state": receipt["state"], "counts": receipt.get("counts"),
                           "observed": receipt.get("observed"), "safeFailure": receipt.get("safeFailure")}))
+        if cleanup_errors:
+            raise FixtureError("Exact owned cleanup was not confirmed; native proof is refused")
     return 0
 
 
