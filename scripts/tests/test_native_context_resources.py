@@ -248,6 +248,16 @@ class CounterfactualTests(unittest.TestCase):
     def accepts(self):
         return self.runner.intended_counterfactual(self.tree, self.counts, 1, self.receipt, self.root)
 
+    def test_separate_receiver_frames_survive_without_logging_exception_values(self):
+        log = self.root / "receiver.log"
+        log.write_text("java.lang.IllegalStateException: synthetic-sensitive-marker\n"
+                       "\tat de.caritas.cob.consultingtypeservice.config.security.TenantCreationContext.require(TenantCreationContext.java:91)\n"
+                       "Caused by: org.springframework.web.client.HttpServerErrorException: synthetic-sensitive-marker\n")
+        result = self.runner.safe_java_frames(log)
+        self.assertEqual(91, result["applicationFrames"][0]["line"])
+        self.assertIn("java.lang.IllegalStateException", result["exceptionTypes"])
+        self.assertNotIn("synthetic-sensitive-marker", json.dumps(result))
+
     def test_exact_executed_failure_requires_the_actual_source_assertion(self):
         self.assertTrue(self.accepts())
         original = self.failure.text

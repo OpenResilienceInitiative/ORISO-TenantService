@@ -155,6 +155,24 @@ def intended_counterfactual(tree, counts, result, receipt, tenant):
                for value in before.values())
 
 
+def safe_java_frames(log):
+    """Retain public application locations and exception types, excluding diagnostic values."""
+    frames, exceptions = [], []
+    for line in log.read_text(errors="replace").splitlines():
+        frame = re.search(
+            r"\bat ((?:com\.vi|de\.caritas)\.[A-Za-z0-9_.$<>]+)\(([A-Za-z0-9_$.-]+\.java):(\d+)\)", line)
+        if frame:
+            value = {"method": frame[1], "file": frame[2], "line": int(frame[3])}
+            if value not in frames:
+                frames.append(value)
+        failure = re.search(
+            r"\b((?:java|javax|jakarta|org|com|de|io)\.[A-Za-z0-9_.$]+(?:Exception|Error))(?=:|$)", line)
+        if failure and failure[1] not in exceptions:
+            exceptions.append(failure[1])
+    return {"log": log.name, "exceptionTypes": exceptions[:8],
+            "applicationFrames": frames[:8] + frames[8:][-8:]}
+
+
 def main():
     parser = argparse.ArgumentParser()
     for name in ("tenant", "receiver", "helm", "java-home", "evidence"):
@@ -352,7 +370,11 @@ def main():
             receipt["safeFailure"] = str(failure)
         if temporary:
             safe = []
+            receipt["safeApplicationDiagnostics"] = []
             for log in Path(temporary.name).glob("*.log"):
+                diagnostic = safe_java_frames(log)
+                if diagnostic["exceptionTypes"] or diagnostic["applicationFrames"]:
+                    receipt["safeApplicationDiagnostics"].append(diagnostic)
                 for line in log.read_text(errors="replace").splitlines():
                     if ("[ERROR]" in line or "Caused by:" in line or "APPLICATION FAILED" in line) and "eyJ" not in line:
                         for actor in locals().get("actors", []):
