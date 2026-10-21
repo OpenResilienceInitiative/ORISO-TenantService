@@ -818,7 +818,11 @@ public class TenantServiceFacade {
 
   public Optional<com.vi.tenantservice.api.model.AccountProvisioningPolicy>
       findAccountProvisioningPolicy(Long id) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id, "CONFIG_WIZARD");
+    if (taskIdentity == null
+        || !(taskIdentity.current("INVITE_RESERVATIONS")
+            || taskIdentity.current("CONSULTANT_IMPORT"))) {
+      tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id, "CONFIG_WIZARD");
+    }
     return tenantService
         .findTenantDataById(id)
         .map(
