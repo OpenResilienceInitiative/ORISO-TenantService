@@ -118,6 +118,10 @@ public class TenantConverter {
             settings.getFeatureAskerBrowserAgencyCounsellingEnabled())
         .featureAskerBrowserLiveChatEnabled(settings.getFeatureAskerBrowserLiveChatEnabled())
         .featureAskerBrowserSelfHelpEnabled(settings.getFeatureAskerBrowserSelfHelpEnabled())
+        .featureConsultantEmailInternalGroupEnabled(
+            settings.getFeatureConsultantEmailInternalGroupEnabled())
+        .featureConsultantBrowserInternalGroupEnabled(
+            settings.getFeatureConsultantBrowserInternalGroupEnabled())
         .featureCallsEnabled(settings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(settings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -417,6 +421,10 @@ public class TenantConverter {
             tenantSettings.getFeatureAskerBrowserAgencyCounsellingEnabled())
         .featureAskerBrowserLiveChatEnabled(tenantSettings.getFeatureAskerBrowserLiveChatEnabled())
         .featureAskerBrowserSelfHelpEnabled(tenantSettings.getFeatureAskerBrowserSelfHelpEnabled())
+        .featureConsultantEmailInternalGroupEnabled(
+            tenantSettings.getFeatureConsultantEmailInternalGroupEnabled())
+        .featureConsultantBrowserInternalGroupEnabled(
+            tenantSettings.getFeatureConsultantBrowserInternalGroupEnabled())
         .featureCallsEnabled(tenantSettings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(tenantSettings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
