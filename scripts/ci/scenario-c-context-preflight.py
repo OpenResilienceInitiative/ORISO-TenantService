@@ -13,6 +13,8 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 
+HOST_ROOT = Path(__file__).resolve().parents[2]
+
 BASES = {
     "tenant": "c0da86b50ee6537facf4af9b90eb799f5e975063",
     "cts": "53c1ab3752245e7df371a4476739de4cfeda2645",
@@ -59,6 +61,19 @@ def snapshot(root):
     }
 
 
+def host_snapshot():
+    return {
+        "commit": git(HOST_ROOT, "rev-parse", "HEAD"),
+        "inputs": {
+            name: hashlib.sha256((HOST_ROOT / name).read_bytes()).hexdigest()
+            for name in (
+                "scripts/ci/scenario-c-context-preflight.py",
+                ".github/workflows/scenario-c-context-preflight.yml",
+            )
+        },
+    }
+
+
 def execute(argv, root, destination, seconds):
     with destination.open("w") as output:
         child = subprocess.Popen(argv, cwd=root, stdout=output, stderr=subprocess.STDOUT,
@@ -91,11 +106,15 @@ def main():
     subprocess.run(["git", "merge-base", "--is-ancestor", BASES[args.role], "HEAD"],
                    cwd=root, check=True)
     before = snapshot(root)
+    host_before = host_snapshot()
+    if host_before["commit"] != os.environ.get("GITHUB_SHA"):
+        raise SystemExit("The host workflow revision must match the actual checkout")
     report = {
         "role": args.role, "commit": args.expected, "devBase": BASES[args.role],
         "expectedSuites": FLOORS[args.role], "sourceBefore": before,
         "nativeResourcesStarted": False, "accepted": False,
         "scope": "compilation and affected units only; no native HTTP or full Scenario C claim",
+        "hostBefore": host_before,
     }
     try:
         changed = git(root, "diff", "--name-only", BASES[args.role], "HEAD", "--", "*.java").splitlines()
@@ -182,7 +201,10 @@ def main():
         raise
     finally:
         report["sourceAfter"] = snapshot(root)
-        report["sourceStable"] = report["sourceAfter"] == before
+        report["hostAfter"] = host_snapshot()
+        report["sourceStable"] = (
+            report["sourceAfter"] == before and report["hostAfter"] == host_before
+        )
         if not report["sourceStable"]:
             report["accepted"] = False
             report["classification"] = "SOURCE_CHANGED_NOT_ACCEPTED"
