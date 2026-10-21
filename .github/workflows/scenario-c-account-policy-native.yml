@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-UserService
-          ref: 60c45982404378e13e979b7e4a43dfb3d0419ab2
+          ref: bdc9f51362a62f2db1be7156436505b53615fbda
           path: user
           persist-credentials: false
           fetch-depth: 0
@@ -80,7 +80,7 @@ jobs:
       - name: Compile ordinary sources before disposable actual HTTP execution
         run: |
           python scripts/ci/scenario-c-account-policy-native.py \
-            --user ../user --user-ref 60c45982404378e13e979b7e4a43dfb3d0419ab2 \
+            --user ../user --user-ref bdc9f51362a62f2db1be7156436505b53615fbda \
             --helm ../helm --helm-ref ab13d41e56f077ca85d1412e9eba2e6816554d9d \
             --evidence "$RUNNER_TEMP/scenario-c-account-policy-native"
       - name: Produce a mechanical proposal only after a pre-container formatter failure

@@ -18,7 +18,8 @@ FILES = {
         'src/test/java/com/vi/tenantservice/api/controller/AccountPolicyReceiverFixture.java',
         'src/test/java/com/vi/tenantservice/api/controller/GroupedTaskServiceIdentityAuthorizationIT.java',
         'src/test/java/com/vi/tenantservice/api/controller/AccountPolicyPurposeAuthorizationIT.java'],
-    'user': ['src/test/java/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyNativeGate.java',
+    'user': ['src/main/java/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyReads.java',
+             'src/test/java/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyNativeGate.java',
              'src/test/java/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyReadsTest.java'],
 }
 
