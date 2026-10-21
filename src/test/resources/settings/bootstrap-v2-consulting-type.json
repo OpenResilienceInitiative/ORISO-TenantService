@@ -9,7 +9,7 @@
   "isVideoCallAllowed": false,
   "roles": {
     "consultant": {
-      "roleNames": [
+      "default": [
         "consultant"
       ]
     }

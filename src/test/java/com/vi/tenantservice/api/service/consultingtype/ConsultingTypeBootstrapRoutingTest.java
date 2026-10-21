@@ -99,10 +99,12 @@ class ConsultingTypeBootstrapRoutingTest {
     var realClient = new ApiClient(transport).setBasePath("http://bootstrap-fixture");
     when(factory.createControllerApi()).thenReturn(new ConsultingTypeControllerApi(realClient));
     when(tenants.tryResolve()).thenReturn(Optional.of(7L));
+    String expectedRoles = "{\"roles\":{\"consultant\":{\"default\":[\"consultant\"]}}}";
     server
         .expect(requestTo("http://bootstrap-fixture/consultingtypes"))
         .andExpect(request -> assertThat(request.getHeaders().get("tenantId")).containsExactly("0"))
         .andExpect(content().json("{\"tenantId\":9157}"))
+        .andExpect(content().json(expectedRoles))
         .andRespond(withSuccess());
 
     service.createDefaultConsultingTypes(9157L, "synthetic-bootstrap-proof");
