@@ -36,6 +36,7 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantIdAllocationStatus;
+import com.vi.tenantservice.api.model.TenantOperationalStatusDTO;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
@@ -121,6 +122,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantInputSanitizer tenantInputSanitizer;
 
   private final @NonNull SubdomainValidator subdomainValidator;
+  @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
+
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TranslationService translationService;
@@ -178,6 +181,11 @@ public class TenantServiceFacade {
   public MultilingualTenantDTO createTenant(MultilingualTenantDTO tenantDTO) {
     log.info("Creating new tenant");
     assertCallerMayCreateThisTenant(tenantDTO);
+    if (Boolean.FALSE.equals(tenantDTO.getActive())) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "New tenants start active; the assigned Träger administrator may pause them after creation");
+    }
     MultilingualTenantDTO sanitizedTenantDTO = tenantInputSanitizer.sanitize(tenantDTO);
     validateCreateTenantInput(tenantDTO);
     // The sanitized value is the one that would be stored, so that is the one that is checked.
@@ -453,6 +461,13 @@ public class TenantServiceFacade {
     }
   }
 
+  public TenantOperationalStatusDTO updateOperationalStatus(Long id, boolean active) {
+    tenantFacadeAuthorisationService.assertUserCanManageOperationalStatus(id);
+    var saved = tenantService.updateOperationalStatus(id, active);
+    return new TenantOperationalStatusDTO(saved.getId(), saved.getActive());
+  }
+
+  @Transactional
   public MultilingualTenantDTO updateTenant(Long id, MultilingualTenantDTO tenantDTO) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
     validateTenantInput(tenantDTO);
@@ -569,6 +584,9 @@ public class TenantServiceFacade {
       Long id, MultilingualTenantDTO sanitizedTenantDTO) {
     var tenantById = tenantService.findTenantById(id);
     if (tenantById.isPresent()) {
+      // A request may already hold an old instance. Locking alone does not reread its fields.
+      // Refresh before applying metadata so an omitted status keeps the latest committed value.
+      entityManager.refresh(tenantById.get(), jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
       return updateExistingTenant(sanitizedTenantDTO, tenantById.get());
     } else {
       throw new TenantNotFoundException("Tenant with given id could not be found : " + id);
@@ -1374,6 +1392,7 @@ public class TenantServiceFacade {
     Map<String, Object> map = new HashMap<>();
     map.put("id", tenantData.getId());
     map.put("name", tenantData.getName());
+    map.put("active", tenantData.getActive());
     map.put("subdomain", tenantData.getSubdomain());
     map.put("beraterCount", tenantData.getLicensingAllowedNumberOfUsers());
     List<AdminResponseDTO> tenantAdmins = new ArrayList<>();

@@ -30,6 +30,8 @@ public class SingleDomainTenantOverrideService {
     if (isContentOverrideAllowed()) {
       overrideContent(mainTenantRestrictedDTO, overridingRestrictedTenantDTO);
     }
+    // Branding belongs to the main tenant; operational status belongs to the selected Träger.
+    mainTenantRestrictedDTO.setActive(overridingRestrictedTenantDTO.getActive());
     overrideSettings(mainTenantRestrictedDTO, overridingRestrictedTenantDTO);
     return mainTenantRestrictedDTO;
   }
