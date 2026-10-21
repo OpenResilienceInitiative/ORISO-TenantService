@@ -14,8 +14,10 @@ import uuid
 
 HOST = Path(__file__).resolve().parents[2]
 FILES = {
-    'tenant': 'src/test/java/com/vi/tenantservice/api/controller/AccountPolicyReceiverFixture.java',
-    'user': 'src/test/java/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyNativeGate.java',
+    'tenant': [
+        'src/test/java/com/vi/tenantservice/api/controller/AccountPolicyReceiverFixture.java',
+        'src/test/java/com/vi/tenantservice/api/controller/GroupedTaskServiceIdentityAuthorizationIT.java'],
+    'user': ['src/test/java/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyNativeGate.java'],
 }
 
 
@@ -65,21 +67,21 @@ def main():
             source.git(root, 'worktree', 'add', '--detach', str(scratch), ref)
             if source.git(scratch, 'rev-parse', 'HEAD') != ref:
                 raise RuntimeError('Scratch immutable source mismatch')
-            path = FILES[role]
+            paths = FILES[role]
             with tempfile.TemporaryDirectory(prefix='private-format-') as private:
                 os.chmod(private, 0o700)
                 env = {**os.environ, 'MAVEN_OPTS': '-Xmx512m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2'}
                 result = support.bounded(['./mvnw', '-B', '-ntp', '-q',
-                    '-DspotlessFiles=' + re.escape(str(scratch / path)), 'spotless:apply'],
+                    '-DspotlessFiles=' + '|'.join(re.escape(str(scratch / path)) for path in paths), 'spotless:apply'],
                     scratch, env, Path(private) / 'formatter.log', 420, overall)
                 if result:
                     raise RuntimeError('Scoped scratch formatter failed')
             changed = source.git(scratch, 'diff', '--name-only').splitlines()
-            if changed not in ([], [path]) or source.git(scratch, 'ls-files', '--others', '--exclude-standard'):
+            if not set(changed).issubset(paths) or source.git(scratch, 'ls-files', '--others', '--exclude-standard'):
                 raise RuntimeError('Formatter changed a path outside the exact owned fixture')
-            patch = subprocess.check_output(['git', 'diff', '--', path], cwd=scratch)
+            patch = subprocess.check_output(['git', 'diff', '--', *paths], cwd=scratch)
             (evidence / (role + '.patch')).write_bytes(patch)
-            receipt['patches'][role] = {'path': path, 'sha256': hashlib.sha256(patch).hexdigest(), 'bytes': len(patch)}
+            receipt['patches'][role] = {'paths': paths, 'sha256': hashlib.sha256(patch).hexdigest(), 'bytes': len(patch)}
         receipt['state'] = 'MECHANICAL_FORMAT_PROPOSAL_ONLY'
     finally:
         for root, scratch, ref in reversed(planned):
