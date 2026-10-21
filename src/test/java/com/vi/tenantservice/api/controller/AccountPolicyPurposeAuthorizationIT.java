@@ -25,15 +25,16 @@ import org.springframework.web.context.WebApplicationContext;
 
 /** The narrow projection authorizes each configured logical purpose without an unrelated task. */
 @SpringBootTest
-@TestPropertySource(properties = {
-    "spring.profiles.active=testing",
-    "TASK_IDENTITY_MODEL=FIVE_ACTORS",
-    "TASK_IDENTITY_REQUIRED_TASKS=INVITE_RESERVATIONS,CONSULTANT_IMPORT",
-    "TASK_IDENTITY_AUDIENCE=tenantservice",
-    "IDENTITY_SETUP_CLIENT_ID=backend-setup",
-    "IDENTITY_SETUP_SERVICE_SUBJECT=setup-subject",
-    "ORISO_TASK_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-})
+@TestPropertySource(
+    properties = {
+      "spring.profiles.active=testing",
+      "TASK_IDENTITY_MODEL=FIVE_ACTORS",
+      "TASK_IDENTITY_REQUIRED_TASKS=INVITE_RESERVATIONS,CONSULTANT_IMPORT",
+      "TASK_IDENTITY_AUDIENCE=tenantservice",
+      "IDENTITY_SETUP_CLIENT_ID=backend-setup",
+      "IDENTITY_SETUP_SERVICE_SUBJECT=setup-subject",
+      "ORISO_TASK_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    })
 @Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class AccountPolicyPurposeAuthorizationIT {
   @Autowired private WebApplicationContext context;
@@ -47,9 +48,12 @@ class AccountPolicyPurposeAuthorizationIT {
 
   @ParameterizedTest
   @ValueSource(strings = {"INVITATION", "IMPORT"})
-  void theConfiguredActualPurposeCanReadTheRealProjectionWithoutConfigWizard(String kind) throws Exception {
-    mvc.perform(get("/internal/tenants/1/account-provisioning-policy").with(actor("setup-subject"))
-        .header("X-ORISO-Wizard-Policy-Context", policyProof(1, kind)))
+  void theConfiguredActualPurposeCanReadTheRealProjectionWithoutConfigWizard(String kind)
+      throws Exception {
+    mvc.perform(
+            get("/internal/tenants/1/account-provisioning-policy")
+                .with(actor("setup-subject"))
+                .header("X-ORISO-Wizard-Policy-Context", policyProof(1, kind)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(1))
         .andExpect(jsonPath("$.allowedNumberOfUsers").value(5));
@@ -59,19 +63,35 @@ class AccountPolicyPurposeAuthorizationIT {
   void missingProofForeignTenantAndForeignActorStillRefuseTheProjection() throws Exception {
     String path = "/internal/tenants/1/account-provisioning-policy";
     mvc.perform(get(path).with(actor("setup-subject"))).andExpect(status().isForbidden());
-    mvc.perform(get(path).with(actor("setup-subject"))
-        .header("X-ORISO-Wizard-Policy-Context", policyProof(2, "INVITATION")))
+    mvc.perform(
+            get(path)
+                .with(actor("setup-subject"))
+                .header("X-ORISO-Wizard-Policy-Context", policyProof(2, "INVITATION")))
         .andExpect(status().isForbidden());
-    mvc.perform(get(path).with(actor("foreign-subject"))
-        .header("X-ORISO-Wizard-Policy-Context", policyProof(1, "INVITATION")))
+    mvc.perform(
+            get(path)
+                .with(actor("foreign-subject"))
+                .header("X-ORISO-Wizard-Policy-Context", policyProof(1, "INVITATION")))
         .andExpect(status().isForbidden());
   }
 
   private RequestPostProcessor actor(String subject) {
-    return jwt().jwt(token -> token.issuer("https://identity.example/realms/test")
-        .subject(subject).claim("azp", "backend-setup").audience(List.of("tenantservice"))
-        .issuedAt(Instant.now().minusSeconds(10)).expiresAt(Instant.now().plusSeconds(60))
-        .claim("realm_access", Map.of("roles", List.of("config-wizard", "invitation-reservations", "consultant-import"))))
+    return jwt()
+        .jwt(
+            token ->
+                token
+                    .issuer("https://identity.example/realms/test")
+                    .subject(subject)
+                    .claim("azp", "backend-setup")
+                    .audience(List.of("tenantservice"))
+                    .issuedAt(Instant.now().minusSeconds(10))
+                    .expiresAt(Instant.now().plusSeconds(60))
+                    .claim(
+                        "realm_access",
+                        Map.of(
+                            "roles",
+                            List.of(
+                                "config-wizard", "invitation-reservations", "consultant-import"))))
         .authorities(token -> converter.convert(token).getAuthorities());
   }
 

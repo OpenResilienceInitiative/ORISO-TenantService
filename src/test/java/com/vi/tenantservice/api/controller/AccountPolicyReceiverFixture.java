@@ -4,17 +4,30 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.TenantServiceApplication;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.sql.DataSource;
 import org.aopalliance.intercept.MethodInterceptor;
+import org.hibernate.SessionFactory;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
+import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.util.ContentCachingResponseWrapper;
 
 /** Real isolated Tenant app; fixture observation never replaces the policy guard or its query. */
 public final class AccountPolicyReceiverFixture {
@@ -52,7 +65,7 @@ public final class AccountPolicyReceiverFixture {
     Files.writeString(observed, "0");
     Path mode = Path.of(required("ORISO_POLICY_TENANT_MODE"));
     Files.writeString(mode, "live");
-    var application = new SpringApplication(TenantServiceApplication.class);
+    var application = new SpringApplication(TenantServiceApplication.class, SqlObservation.class);
     application.addInitializers(
         context ->
             context
@@ -69,9 +82,11 @@ public final class AccountPolicyReceiverFixture {
                                 invocation -> {
                                   if ("findAccountProvisioningPolicy"
                                       .equals(invocation.getMethod().getName())) {
-                                    Files.writeString(observed, Long.toString(queries.incrementAndGet()));
+                                    Files.writeString(
+                                        observed, Long.toString(queries.incrementAndGet()));
                                     if ("outage".equals(Files.readString(mode)))
-                                      throw new IllegalStateException("Synthetic policy projection outage");
+                                      throw new IllegalStateException(
+                                          "Synthetic policy projection outage");
                                   }
                                   return invocation.proceed();
                                 });
@@ -83,10 +98,46 @@ public final class AccountPolicyReceiverFixture {
               new ClassPathResource("database/TenantServiceDatabase.sql"),
               new ClassPathResource("database/MultiTenantData.sql"))
           .execute(context.getBean(DataSource.class));
+      var statistics =
+          context.getBean(EntityManagerFactory.class).unwrap(SessionFactory.class).getStatistics();
+      Files.writeString(
+          Path.of(required("ORISO_POLICY_SQL_COUNT")),
+          Long.toString(statistics.getQueryExecutionCount()));
       Files.writeString(
           Path.of(required("ORISO_POLICY_RECEIVER_READY")),
           "http://127.0.0.1:" + ((WebServerApplicationContext) context).getWebServer().getPort());
       System.in.read();
+    }
+  }
+
+  @Configuration(proxyBeanMethods = false)
+  public static class SqlObservation {
+    @Bean
+    FilterRegistrationBean<OncePerRequestFilter> policySqlObserver(EntityManagerFactory factory) {
+      var statistics = factory.unwrap(SessionFactory.class).getStatistics();
+      statistics.setStatisticsEnabled(true);
+      var filter =
+          new OncePerRequestFilter() {
+            @Override
+            protected void doFilterInternal(
+                HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+                throws ServletException, IOException {
+              var observedResponse = new ContentCachingResponseWrapper(response);
+              boolean completed = false;
+              try {
+                chain.doFilter(request, observedResponse);
+                completed = true;
+              } finally {
+                Files.writeString(
+                    Path.of(required("ORISO_POLICY_SQL_COUNT")),
+                    Long.toString(statistics.getQueryExecutionCount()));
+                if (completed) observedResponse.copyBodyToResponse();
+              }
+            }
+          };
+      var registration = new FilterRegistrationBean<>(filter);
+      registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+      return registration;
     }
   }
 
