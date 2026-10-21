@@ -647,6 +647,29 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void createTenant_Should_restoreReservationBeforePropagatingDownstreamDenial() {
+    tenantMultilingualDTO.setTenantIdReservationToken("reservation-token");
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(sanitizedTenantDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, "reservation-token")).thenReturn(tenantEntity);
+    var denied =
+        new org.springframework.web.server.ResponseStatusException(
+            org.springframework.http.HttpStatus.FORBIDDEN, "Bootstrap proof denied");
+    doThrow(denied)
+        .when(consultingTypeService)
+        .createDefaultConsultingTypes(tenantEntity.getId());
+
+    assertThat(
+            assertThrows(
+                org.springframework.web.server.ResponseStatusException.class,
+                () -> tenantServiceFacade.createTenant(tenantMultilingualDTO)))
+        .isSameAs(denied);
+    var rollback = Mockito.inOrder(tenantService, tenantIdAllocationService);
+    rollback.verify(tenantService).delete(tenantEntity);
+    rollback.verify(tenantIdAllocationService).rollbackAssignment(ID, "reservation-token");
+  }
+
+  @Test
   void createTenant_Should_keepLedgerRow_When_rollbackTenantDeleteFails() {
     // given (TEN-INV hardening: if the tenant row survives, the ASSIGNED ledger row must too)
     when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
