@@ -22,11 +22,14 @@ BASES = {
 }
 FLOORS = {
     "tenant": {
+        "com.vi.tenantservice.config.security.CreationContextKeyTest": 2,
         "com.vi.tenantservice.config.security.WizardPolicyV2ContextTest": 35,
         "com.vi.tenantservice.api.service.consultingtype.ConsultingTypeBootstrapRoutingTest": 4,
         "com.vi.tenantservice.api.facade.TenantServiceFacadeTest": 54,
     },
-    "cts": {},
+    "cts": {
+        "de.caritas.cob.consultingtypeservice.config.security.CreationContextKeyTest": 2,
+    },
     "user": {
         "de.caritas.cob.userservice.api.service.accountpolicy.CheckedAccountPolicyReadsTest": 7,
         "de.caritas.cob.userservice.api.service.ConsultantImportServiceTest": 12,
