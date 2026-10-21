@@ -21,7 +21,10 @@ BASES = {
     "user": "408d8da9ab7ce54e87af7f57e9499dbb2d3ed424",
 }
 FLOORS = {
-    "tenant": {"com.vi.tenantservice.config.security.WizardPolicyV2ContextTest": 35},
+    "tenant": {
+        "com.vi.tenantservice.config.security.WizardPolicyV2ContextTest": 35,
+        "com.vi.tenantservice.api.service.consultingtype.ConsultingTypeBootstrapRoutingTest": 3,
+    },
     "cts": {},
     "user": {
         "de.caritas.cob.userservice.api.service.accountpolicy.CheckedAccountPolicyReadsTest": 7,
