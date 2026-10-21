@@ -82,12 +82,21 @@ jobs:
             --user ../user --user-ref a1a685b567931920ca6fb032740fba4a2ec59e6f \
             --helm ../helm --helm-ref ab13d41e56f077ca85d1412e9eba2e6816554d9d \
             --evidence "$RUNNER_TEMP/scenario-c-account-policy-native"
+      - name: Produce a mechanical proposal only after a pre-container formatter failure
+        if: failure()
+        run: |
+          python scripts/ci/scenario-c-policy-format-proposal.py \
+            --source-evidence "$RUNNER_TEMP/scenario-c-account-policy-native" \
+            --user ../user --helm ../helm --evidence "$RUNNER_TEMP/policy-format-proposal"
       - name: Retain only source hashes, sanitized measurements and original safe XML
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: scenario-c-native-checked-account-policy
           path: |
+            ${{ runner.temp }}/policy-format-proposal/*.patch
+            ${{ runner.temp }}/policy-format-proposal/*.json
+            ${{ runner.temp }}/policy-format-proposal/*.jsonl
             ${{ runner.temp }}/policy-resource-controls.txt
             ${{ runner.temp }}/policy-python-dependencies.json
             ${{ runner.temp }}/scenario-c-account-policy-native/source-receipt.json
