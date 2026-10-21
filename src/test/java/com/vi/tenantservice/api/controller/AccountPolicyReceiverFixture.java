@@ -135,7 +135,7 @@ public final class AccountPolicyReceiverFixture {
               }
             }
           };
-      var registration = new FilterRegistrationBean<>(filter);
+      var registration = new FilterRegistrationBean<OncePerRequestFilter>(filter);
       registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
       return registration;
     }
