@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS tenant_bootstrap_operation (
+  claim_id VARCHAR(36) NOT NULL PRIMARY KEY,
+  account_attempt_id VARCHAR(36) NOT NULL,
+  execution_id VARCHAR(36) NOT NULL,
+  tenant_id BIGINT NOT NULL,
+  bootstrap_attempt_id VARCHAR(36) NOT NULL UNIQUE,
+  owner_issuer VARCHAR(512) NOT NULL,
+  owner_client VARCHAR(255) NOT NULL,
+  owner_subject VARCHAR(255) NOT NULL,
+  request_digest VARCHAR(64) NOT NULL,
+  capability_digest VARCHAR(64) NOT NULL,
+  snapshot_digest VARCHAR(64) NOT NULL,
+  tenant_columns INTEGER NOT NULL,
+  ledger_columns INTEGER NOT NULL,
+  cts_command LONGTEXT NOT NULL,
+  state VARCHAR(24) NOT NULL,
+  version BIGINT NOT NULL,
+  result_digest VARCHAR(64),
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

@@ -31,6 +31,7 @@ FLOORS = {
         "com.vi.tenantservice.api.service.consultingtype.ConsultingTypeBootstrapRoutingTest": 4,
         "com.vi.tenantservice.api.facade.TenantServiceFacadeTest": 66,
         "com.vi.tenantservice.api.service.TenantBootstrapCreationIT": 12,
+        "com.vi.tenantservice.api.service.TenantHeldBootstrapIT": 2,
     },
     "cts": {
         "de.caritas.cob.consultingtypeservice.config.security.CreationContextKeyTest": 5,

@@ -15,6 +15,8 @@ import uuid
 HOST = Path(__file__).resolve().parents[2]
 FILES = {
     "tenant": [
+        "src/main/java/com/vi/tenantservice/api/service/TenantHeldBootstrap.java",
+        "src/test/java/com/vi/tenantservice/api/service/TenantHeldBootstrapIT.java",
         "src/main/java/com/vi/tenantservice/api/facade/TenantServiceFacade.java",
         "src/main/java/com/vi/tenantservice/api/service/TenantService.java",
         "src/main/java/com/vi/tenantservice/api/service/TenantBootstrapCreation.java",

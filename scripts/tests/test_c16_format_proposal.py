@@ -49,11 +49,21 @@ class C16FormatProposalControls(unittest.TestCase):
 
     def test_owned_allowlist_is_exactly_the_reviewed_c16_sources(self):
         self.assertEqual({"tenant", "cts"}, set(PROOF.FILES))
-        self.assertEqual(14, len(PROOF.FILES["tenant"]))
+        self.assertEqual(16, len(PROOF.FILES["tenant"]))
         self.assertEqual(13, sum(path.startswith("src/main/") for path in PROOF.FILES["cts"]))
         self.assertEqual(5, sum(path.startswith("src/test/") for path in PROOF.FILES["cts"]))
-        self.assertEqual(32, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
+        self.assertEqual(34, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
         self.assertTrue(all(path.endswith(".java") for values in PROOF.FILES.values() for path in values))
+
+    def test_held_replay_formatter_extension_is_only_its_two_owned_java_paths(self):
+        for path in ("src/main/java/com/vi/tenantservice/api/service/TenantHeldBootstrap.java",
+                     "src/test/java/com/vi/tenantservice/api/service/TenantHeldBootstrapIT.java"):
+            with self.subTest(path=path):
+                self.assertTrue(PROOF.owned_delta("tenant", [path], ""))
+                self.assertFalse(PROOF.owned_delta("cts", [path], ""))
+                self.assertFalse(PROOF.owned_delta("tenant", [path.replace("TenantHeldBootstrap", "OtherAuthority")], ""))
+                self.assertFalse(PROOF.owned_delta("tenant", [path, "src/main/java/UnownedPermission.java"], ""))
+                self.assertFalse(PROOF.owned_delta("tenant", [path], "untracked.java"))
 
     def test_only_the_literal_current_cts_grouped_fixture_can_join_formatter(self):
         path = "src/test/java/de/caritas/cob/consultingtypeservice/api/controller/GroupedTaskServiceIdentityAuthorizationIT.java"
