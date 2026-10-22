@@ -95,7 +95,9 @@ public class ConsultingTypeService {
       }
       String proof = creationContext.issue(grant, dto);
       FullConsultingTypeResponseDTO response = createConsultingType(dto, proof, grant);
-      if (response == null || response.getId() == null || response.getId() < 0
+      if (response == null
+          || response.getId() == null
+          || response.getId() < 0
           || !dto.getTenantId().equals(response.getTenantId()))
         throw new IllegalStateException("Owned bootstrap readback is not verified");
       return new BootstrapSuccess(this, grant, new ObjectMapper().writeValueAsBytes(dto));
@@ -140,8 +142,10 @@ public class ConsultingTypeService {
     private final com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant;
     private final byte[] command;
 
-    private BootstrapSuccess(ConsultingTypeService owner,
-        com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant, byte[] command) {
+    private BootstrapSuccess(
+        ConsultingTypeService owner,
+        com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant,
+        byte[] command) {
       this.owner = owner;
       this.grant = grant;
       this.command = command.clone();
@@ -154,17 +158,22 @@ public class ConsultingTypeService {
         var api = owner.consultingTypeServiceApiControllerFactory.createControllerApi();
         owner.addDefaultHeaders(api.getApiClient());
         api.getApiClient().addDefaultHeader("tenantId", "0");
-        api.getApiClient().addDefaultHeader(
-            com.vi.tenantservice.config.security.TenantCreationContext.HEADER, proof);
+        api.getApiClient()
+            .addDefaultHeader(
+                com.vi.tenantservice.config.security.TenantCreationContext.HEADER, proof);
         var response = api.compensateTenantBootstrapWithHttpInfo(dto);
         if (response.getStatusCode().value() != 204)
-          throw new IllegalStateException("Owned bootstrap terminal acknowledgement is unavailable");
+          throw new IllegalStateException(
+              "Owned bootstrap terminal acknowledgement is unavailable");
       } catch (IOException malformed) {
         throw new IllegalStateException("Owned bootstrap command cannot be read");
       }
     }
 
-    @Override public String toString() { return "<owned bootstrap HTTP success>"; }
+    @Override
+    public String toString() {
+      return "<owned bootstrap HTTP success>";
+    }
   }
 
   public FullConsultingTypeResponseDTO patchConsultingType(

@@ -200,27 +200,68 @@ class TenantBootstrapCreationIT {
                     "{\"tenantId\":" + target + ",\"id\":" + (target + 100000) + "}",
                     org.springframework.http.MediaType.APPLICATION_JSON));
       }
-      server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
-              "http://local-bootstrap-precondition/consultingtypes/bootstrap-compensation"))
-          .andExpect(sent -> {
-            assertThat(sent.getMethod() == org.springframework.http.HttpMethod.POST).isTrue();
-            assertThat("0".equals(sent.getHeaders().getFirst("tenantId"))).isTrue();
-            assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
-            try {
-              var body = json.readTree(((org.springframework.mock.http.client.MockClientHttpRequest) sent).getBodyAsString());
-              String proof = sent.getHeaders().getFirst(com.vi.tenantservice.config.security.TenantCreationContext.HEADER);
-              var claims = com.vi.tenantservice.config.security.TaskContextProof.verify(new byte[32], proof);
-              String marker = sql.queryForObject("SELECT bootstrap_attempt_id FROM tenant WHERE id=9158", String.class);
-              assertThat(body.path("tenantId").asLong() == 9158L).isTrue();
-              assertThat(claims.size()).isEqualTo(16);
-              assertThat(claims.path("operation").asText().equals("tenant.consulting-type.compensate")).isTrue();
-              assertThat(claims.path("target").asText().equals("tenant/9158/consulting-type/default/compensation")).isTrue();
-              assertThat(claims.path("nonce").asText().equals(marker.replace("-", ""))).isTrue();
-              assertThat(claims.path("payloadDigest").asText().equals(com.vi.tenantservice.config.security.TaskContextProof.digest(new byte[32], body))).isTrue();
-              assertThat(sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE id=9158", Integer.class)).isEqualTo(1);
-            } catch (Exception invalid) { throw new AssertionError("Owned compensation wire precondition refused"); }
-          })
-          .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(org.springframework.http.HttpStatus.NO_CONTENT));
+      server
+          .expect(
+              org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
+                  "http://local-bootstrap-precondition/consultingtypes/bootstrap-compensation"))
+          .andExpect(
+              sent -> {
+                assertThat(sent.getMethod() == org.springframework.http.HttpMethod.POST).isTrue();
+                assertThat("0".equals(sent.getHeaders().getFirst("tenantId"))).isTrue();
+                assertThat(
+                        org.springframework.transaction.support.TransactionSynchronizationManager
+                            .isActualTransactionActive())
+                    .isFalse();
+                try {
+                  var body =
+                      json.readTree(
+                          ((org.springframework.mock.http.client.MockClientHttpRequest) sent)
+                              .getBodyAsString());
+                  String proof =
+                      sent.getHeaders()
+                          .getFirst(
+                              com.vi.tenantservice.config.security.TenantCreationContext.HEADER);
+                  var claims =
+                      com.vi.tenantservice.config.security.TaskContextProof.verify(
+                          new byte[32], proof);
+                  String marker =
+                      sql.queryForObject(
+                          "SELECT bootstrap_attempt_id FROM tenant WHERE id=9158", String.class);
+                  assertThat(body.path("tenantId").asLong() == 9158L).isTrue();
+                  assertThat(claims.size()).isEqualTo(16);
+                  assertThat(
+                          claims
+                              .path("operation")
+                              .asText()
+                              .equals("tenant.consulting-type.compensate"))
+                      .isTrue();
+                  assertThat(
+                          claims
+                              .path("target")
+                              .asText()
+                              .equals("tenant/9158/consulting-type/default/compensation"))
+                      .isTrue();
+                  assertThat(claims.path("nonce").asText().equals(marker.replace("-", "")))
+                      .isTrue();
+                  assertThat(
+                          claims
+                              .path("payloadDigest")
+                              .asText()
+                              .equals(
+                                  com.vi.tenantservice.config.security.TaskContextProof.digest(
+                                      new byte[32], body)))
+                      .isTrue();
+                  assertThat(
+                          sql.queryForObject(
+                              "SELECT COUNT(*) FROM tenant WHERE id=9158", Integer.class))
+                      .isEqualTo(1);
+                } catch (Exception invalid) {
+                  throw new AssertionError("Owned compensation wire precondition refused");
+                }
+              })
+          .andRespond(
+              org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(
+                  org.springframework.http.HttpStatus.NO_CONTENT));
       var facade = application.getBean(com.vi.tenantservice.api.facade.TenantServiceFacade.class);
       var first =
           new com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder()
@@ -267,7 +308,13 @@ class TenantBootstrapCreationIT {
       assertThat(
               sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE subdomain=''", Integer.class))
           .isEqualTo(1);
-      assertThat("RESERVED".equals(sql.queryForObject("SELECT status FROM tenant_id_reservation WHERE tenant_id=9158", String.class))).isTrue();
+      assertThat(
+              "RESERVED"
+                  .equals(
+                      sql.queryForObject(
+                          "SELECT status FROM tenant_id_reservation WHERE tenant_id=9158",
+                          String.class)))
+          .isTrue();
       server.verify();
     } finally {
       transport.setRequestFactory(originalTransport);

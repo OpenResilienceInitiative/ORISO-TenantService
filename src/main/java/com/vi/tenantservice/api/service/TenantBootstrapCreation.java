@@ -42,8 +42,10 @@ public class TenantBootstrapCreation {
   private final DataSource dataSource;
   private final JdbcTemplate sql;
   private final TransactionTemplate transaction;
+
   @org.springframework.beans.factory.annotation.Autowired
   private com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService consultingTypes;
+
   @PersistenceContext private EntityManager entities;
 
   public TenantBootstrapCreation(
@@ -131,7 +133,8 @@ public class TenantBootstrapCreation {
               // Exact terminal acknowledgement precedes the existing locked SQL ownership check.
               resolveBeforeSend(attempt, failure);
             } catch (RuntimeException unresolved) {
-              failure.addSuppressed(new AccessDeniedException("Owned remote bootstrap requires reconciliation"));
+              failure.addSuppressed(
+                  new AccessDeniedException("Owned remote bootstrap requires reconciliation"));
             }
           }
           throw failure;
@@ -353,7 +356,8 @@ public class TenantBootstrapCreation {
     private final long expires = Instant.now().getEpochSecond() + 60;
     private boolean active = true;
     private String payloadDigest;
-    private com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService.BootstrapSuccess remote;
+    private com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService.BootstrapSuccess
+        remote;
 
     private Grant(TenantBootstrapCreation authority, Attempt attempt) {
       this.authority = authority;

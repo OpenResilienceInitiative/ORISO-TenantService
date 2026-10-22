@@ -140,9 +140,17 @@ public class TenantCreationContext {
     claims.put("aud", "consultingtypeservice");
     claims.put("actor", "SETUP");
     claims.put("purpose", "CONFIG_WIZARD");
-    claims.put("operation", compensation ? "tenant.consulting-type.compensate" : "tenant.consulting-type.bootstrap");
+    claims.put(
+        "operation",
+        compensation ? "tenant.consulting-type.compensate" : "tenant.consulting-type.bootstrap");
     claims.put("method", "POST");
-    claims.put("target", "tenant/" + tenantId + (compensation ? "/consulting-type/default/compensation" : "/consulting-type/default"));
+    claims.put(
+        "target",
+        "tenant/"
+            + tenantId
+            + (compensation
+                ? "/consulting-type/default/compensation"
+                : "/consulting-type/default"));
     try {
       byte[] key = TaskContextProof.key(environment);
       String digest = TaskContextProof.digest(key, dto);
