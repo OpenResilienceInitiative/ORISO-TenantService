@@ -1,8 +1,10 @@
 name: Scenario C native bootstrap counterfactual
 
 on:
+  pull_request:
+    branches: [dev]
   push:
-    branches: [codex/367-c-context-tenant-20261021]
+    branches: [codex/367-c-context-tenant-20261021, dev]
 
 permissions:
   contents: read
