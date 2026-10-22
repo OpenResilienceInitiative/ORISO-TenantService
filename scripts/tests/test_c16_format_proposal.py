@@ -49,11 +49,23 @@ class C16FormatProposalControls(unittest.TestCase):
 
     def test_owned_allowlist_is_exactly_the_reviewed_c16_sources(self):
         self.assertEqual({"tenant", "cts"}, set(PROOF.FILES))
-        self.assertEqual(7, len(PROOF.FILES["tenant"]))
+        self.assertEqual(9, len(PROOF.FILES["tenant"]))
         self.assertEqual(11, sum(path.startswith("src/main/") for path in PROOF.FILES["cts"]))
-        self.assertEqual(2, sum(path.startswith("src/test/") for path in PROOF.FILES["cts"]))
-        self.assertEqual(20, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
+        self.assertEqual(4, sum(path.startswith("src/test/") for path in PROOF.FILES["cts"]))
+        self.assertEqual(24, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
         self.assertTrue(all(path.endswith(".java") for values in PROOF.FILES.values() for path in values))
+
+    def test_audience_and_startup_extension_is_only_four_explicit_owned_tests(self):
+        packages = {"tenant": "com/vi/tenantservice", "cts": "de/caritas/cob/consultingtypeservice"}
+        for role, package in packages.items():
+            for name in ("TaskServiceIdentityTest", "CreationContextKeyTest"):
+                path = "src/test/java/" + package + "/config/security/" + name + ".java"
+                with self.subTest(role=role, path=path):
+                    self.assertTrue(PROOF.owned_delta(role, [path], ""))
+                    self.assertFalse(PROOF.owned_delta("cts" if role == "tenant" else "tenant", [path], ""))
+                    self.assertFalse(PROOF.owned_delta(role, [path.replace(name, "OtherAuthorityTest")], ""))
+                    self.assertFalse(PROOF.owned_delta(role, [path, "src/main/java/UnownedPermission.java"], ""))
+                    self.assertFalse(PROOF.owned_delta(role, [path], "untracked.java"))
 
     def test_only_the_explicit_owned_receiver_test_can_join_the_formatter_delta(self):
         test = "src/test/java/de/caritas/cob/consultingtypeservice/config/security/TenantBootstrapV2ContextTest.java"

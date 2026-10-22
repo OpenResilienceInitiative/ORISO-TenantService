@@ -23,7 +23,8 @@ BASES = {
 FLOORS = {
     "tenant": {
         "com.vi.tenantservice.api.controller.AccountPolicyPurposeAuthorizationIT": 3,
-        "com.vi.tenantservice.config.security.CreationContextKeyTest": 2,
+        "com.vi.tenantservice.config.security.CreationContextKeyTest": 5,
+        "com.vi.tenantservice.config.security.TaskServiceIdentityTest": 16,
         "com.vi.tenantservice.config.security.TenantBootstrapAuthorityTest": 2,
         "com.vi.tenantservice.config.security.WizardPolicyV2ContextTest": 35,
         "com.vi.tenantservice.api.service.consultingtype.ConsultingTypeBootstrapRoutingTest": 4,
@@ -31,7 +32,8 @@ FLOORS = {
         "com.vi.tenantservice.api.service.TenantBootstrapCreationIT": 12,
     },
     "cts": {
-        "de.caritas.cob.consultingtypeservice.config.security.CreationContextKeyTest": 2,
+        "de.caritas.cob.consultingtypeservice.config.security.CreationContextKeyTest": 5,
+        "de.caritas.cob.consultingtypeservice.config.security.TaskServiceIdentityTest": 16,
         "de.caritas.cob.consultingtypeservice.config.security.TenantBootstrapV2ContextTest": 24,
     },
     "user": {

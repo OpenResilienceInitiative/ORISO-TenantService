@@ -22,6 +22,8 @@ FILES = {
         "src/main/java/com/vi/tenantservice/config/security/TenantCreationContext.java",
         "src/test/java/com/vi/tenantservice/api/service/TenantBootstrapCreationIT.java",
         "src/test/java/com/vi/tenantservice/api/controller/BootstrapV2CallerReceiverIT.java",
+        "src/test/java/com/vi/tenantservice/config/security/TaskServiceIdentityTest.java",
+        "src/test/java/com/vi/tenantservice/config/security/CreationContextKeyTest.java",
     ],
     "cts": [
         "src/main/java/de/caritas/cob/consultingtypeservice/config/security/TenantCreationContext.java",
@@ -37,6 +39,8 @@ FILES = {
         "src/main/java/de/caritas/cob/consultingtypeservice/api/consultingtypes/ConsultingTypeTenantAwareRepository.java",
         "src/test/java/de/caritas/cob/consultingtypeservice/config/security/TenantBootstrapV2ContextTest.java",
         "src/test/java/de/caritas/cob/consultingtypeservice/api/controller/BootstrapV2ReceiverFixture.java",
+        "src/test/java/de/caritas/cob/consultingtypeservice/config/security/TaskServiceIdentityTest.java",
+        "src/test/java/de/caritas/cob/consultingtypeservice/config/security/CreationContextKeyTest.java",
     ],
 }
 
