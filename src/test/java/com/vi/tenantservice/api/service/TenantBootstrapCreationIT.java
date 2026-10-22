@@ -2,20 +2,27 @@ package com.vi.tenantservice.api.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.vi.tenantservice.api.controller.AccountPolicyReceiverFixture;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.config.security.TaskServiceIdentity;
+import jakarta.persistence.EntityManagerFactory;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.concurrent.atomic.AtomicReference;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -48,6 +55,7 @@ class TenantBootstrapCreationIT {
   @Autowired private TenantIdAllocationService allocation;
   @Autowired private TenantRepository tenants;
   @Autowired private JdbcTemplate sql;
+  @Autowired private ApplicationContext application;
   @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
   @MockitoBean private TaskServiceIdentity identity;
 
@@ -68,6 +76,25 @@ class TenantBootstrapCreationIT {
   @AfterEach
   void clearCaller() {
     SecurityContextHolder.clearContext();
+  }
+
+  @Test
+  void anUnrelatedBootstrapContextCannotInstallTheNativePolicyObserver() {
+    assertThat(application.containsBean("policySqlObserver")).isFalse();
+  }
+
+  @Test
+  void theIntendedPolicyFixtureCanExplicitlyRegisterItsNativeSqlObserver() {
+    var factory = mock(EntityManagerFactory.class);
+    var session = mock(SessionFactory.class);
+    when(factory.unwrap(SessionFactory.class)).thenReturn(session);
+    when(session.getStatistics()).thenReturn(mock(Statistics.class));
+    try (var explicit = new AnnotationConfigApplicationContext()) {
+      explicit.registerBean(EntityManagerFactory.class, () -> factory);
+      explicit.register(AccountPolicyReceiverFixture.SqlObservation.class);
+      explicit.refresh();
+      assertThat(explicit.containsBean("policySqlObserver")).isTrue();
+    }
   }
 
   @Test
