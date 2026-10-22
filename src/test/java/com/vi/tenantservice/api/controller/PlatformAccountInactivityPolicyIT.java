@@ -51,10 +51,13 @@ class PlatformAccountInactivityPolicyIT {
   void actualRuntimeReadsOnlyTheCurrentAuthoritativePlatformDefaultsWithoutStore()
       throws Exception {
     var prior = controls.getAccountInactivitySettings();
-    controls.updateAccountInactivitySettings(new com.vi.tenantservice.api.model.AccountInactivitySettings(7, 11, 18, prior.getRevision()));
+    controls.updateAccountInactivitySettings(
+        new com.vi.tenantservice.api.model.AccountInactivitySettings(
+            7, 11, 18, prior.getRevision()));
     var authoritative = controls.getAccountInactivitySettings();
     org.assertj.core.api.Assertions.assertThat(authoritative.getOtherMonths()).isEqualTo(18);
-    org.assertj.core.api.Assertions.assertThat(authoritative.getRevision()).isGreaterThan(prior.getRevision());
+    org.assertj.core.api.Assertions.assertThat(authoritative.getRevision())
+        .isGreaterThan(prior.getRevision());
     var result =
         mvc.perform(
                 get(PATH)

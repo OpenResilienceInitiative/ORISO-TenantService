@@ -40,12 +40,12 @@ FLOORS = {
         "de.caritas.cob.consultingtypeservice.config.security.TenantBootstrapV2ContextTest": 24,
     },
     "user": {
-        "de.caritas.cob.userservice.api.service.accountpolicy.CheckedAccountPolicyReadsTest": 7,
+        "de.caritas.cob.userservice.api.service.accountpolicy.CheckedAccountPolicyReadsTest": 31,
         "de.caritas.cob.userservice.api.service.ConsultantImportServiceTest": 15,
         "de.caritas.cob.userservice.api.service.accountinvite.onboarding.ReservedTenantBootstrapTest": 4,
         "de.caritas.cob.userservice.api.service.accountpolicy.CheckedPlatformInactivityPolicyReadsTest": 3,
         "de.caritas.cob.userservice.api.service.accountinvite.CounsellorInviteProvisioningServiceTest": 26,
-        "de.caritas.cob.userservice.api.admin.service.consultant.create.CreateConsultantSagaTest": 41,
+        "de.caritas.cob.userservice.api.admin.service.consultant.create.CreateConsultantSagaTest": 43,
     },
 }
 COMPILED = {
@@ -74,6 +74,7 @@ COMPILED = {
         "target/test-classes/de/caritas/cob/userservice/api/service/accountpolicy/CheckedPlatformInactivityPolicyReadsTest.class",
         "target/classes/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyReads.class",
         "target/test-classes/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyReadsTest.class",
+        "target/test-classes/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyNativeGate.class",
     ],
 }
 
