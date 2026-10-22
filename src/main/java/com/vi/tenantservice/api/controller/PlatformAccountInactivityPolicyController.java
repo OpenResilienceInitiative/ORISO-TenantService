@@ -16,17 +16,19 @@ public class PlatformAccountInactivityPolicyController {
   private final TaskServiceIdentity identity;
   private final TenantAdminControlsService controls;
 
-  public PlatformAccountInactivityPolicyController(Environment environment,
-      TaskServiceIdentity identity, TenantAdminControlsService controls) {
+  public PlatformAccountInactivityPolicyController(
+      Environment environment, TaskServiceIdentity identity, TenantAdminControlsService controls) {
     this.environment = environment;
     this.identity = identity;
     this.controls = controls;
   }
 
   @GetMapping("/internal/platform/account-inactivity-policy")
-  @org.springframework.security.access.prepost.PreAuthorize("@taskServiceIdentity.allows(authentication, 'RUNTIME_POLICY')")
+  @org.springframework.security.access.prepost.PreAuthorize(
+      "@taskServiceIdentity.allows(authentication, 'RUNTIME_POLICY')")
   public ResponseEntity<Policy> get(@RequestHeader(value = HEADER, required = false) String proof) {
-    throw new org.springframework.security.access.AccessDeniedException("Checked platform policy required");
+    throw new org.springframework.security.access.AccessDeniedException(
+        "Checked platform policy required");
   }
 
   public record Policy(int otherMonths, long revision) {}

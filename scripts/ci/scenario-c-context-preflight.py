@@ -18,7 +18,7 @@ HOST_ROOT = Path(__file__).resolve().parents[2]
 BASES = {
     "tenant": "c0da86b50ee6537facf4af9b90eb799f5e975063",
     "cts": "53c1ab3752245e7df371a4476739de4cfeda2645",
-    "user": "408d8da9ab7ce54e87af7f57e9499dbb2d3ed424",
+    "user": "c944417d9d664d35d63b31bb57c55f852c2d783c",
 }
 FLOORS = {
     "tenant": {
