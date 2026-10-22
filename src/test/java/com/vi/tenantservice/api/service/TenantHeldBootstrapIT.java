@@ -53,6 +53,7 @@ import org.springframework.web.server.ResponseStatusException;
     })
 class TenantHeldBootstrapIT {
   @Autowired private TenantHeldBootstrap bootstrap;
+  @Autowired private TenantAdminControlsService controls;
   @Autowired private TenantIdAllocationService allocation;
   @Autowired private ApplicationContext application;
   @Autowired private JdbcTemplate sql;
@@ -112,7 +113,14 @@ class TenantHeldBootstrapIT {
         sql.queryForObject("SELECT bootstrap_attempt_id FROM tenant WHERE id=9157", String.class);
     var restarted =
         application.getAutowireCapableBeanFactory().createBean(TenantHeldBootstrap.class);
-    var replay = restarted.create(request.deepCopy());
+    var prior = controls.getAccountInactivitySettings();
+    var changedPolicy = controls.updateAccountInactivitySettings(
+        new com.vi.tenantservice.api.model.AccountInactivitySettings(7, 11, 18, prior.getRevision()));
+    assertThat(changedPolicy.getRevision()).isGreaterThan(prior.getRevision());
+    var replay =
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(
+            () -> restarted.create(request.deepCopy()),
+            "Unrelated global defaults must not invalidate the owned creation replay");
     assertThat(replay != null && first.receipt().equals(replay.receipt())).isTrue();
     assertThat(
             TaskContextProof.digest(new byte[32], json.valueToTree(first.tenant()))

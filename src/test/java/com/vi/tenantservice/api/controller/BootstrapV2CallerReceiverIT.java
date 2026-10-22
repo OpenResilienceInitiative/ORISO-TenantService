@@ -109,6 +109,7 @@ class BootstrapV2CallerReceiverIT {
   private static HttpServer gateway;
   @LocalServerPort private int port;
   @Autowired private TenantIdAllocationService allocation;
+  @Autowired private com.vi.tenantservice.api.service.TenantAdminControlsService controls;
   @Autowired private jakarta.validation.Validator validator;
 
   @MockitoBean
@@ -615,6 +616,11 @@ class BootstrapV2CallerReceiverIT {
           .as("actual Tenant200 was lost on its return wire")
           .isTrue();
       assertThat(upstreamStatus.get()).isEqualTo(200);
+      var priorPolicy = controls.getAccountInactivitySettings();
+      var changedPolicy = controls.updateAccountInactivitySettings(
+          new com.vi.tenantservice.api.model.AccountInactivitySettings(
+              7, 11, 18, priorPolicy.getRevision()));
+      assertThat(changedPolicy.getRevision()).isGreaterThan(priorPolicy.getRevision());
       loseTenantReply.set(false);
       var finalReply = heldPost(proxy, request.toString(), bearer);
       verifyHeldReceipt(request, JSON.readTree(finalReply.body()), bearer);
