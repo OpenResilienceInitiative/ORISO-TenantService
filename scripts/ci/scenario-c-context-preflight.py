@@ -23,6 +23,7 @@ BASES = {
 FLOORS = {
     "tenant": {
         "com.vi.tenantservice.api.controller.AccountPolicyPurposeAuthorizationIT": 3,
+        "com.vi.tenantservice.api.controller.GroupedTaskServiceIdentityAuthorizationIT": 5,
         "com.vi.tenantservice.config.security.CreationContextKeyTest": 5,
         "com.vi.tenantservice.config.security.TaskServiceIdentityTest": 16,
         "com.vi.tenantservice.config.security.TenantBootstrapAuthorityTest": 2,

@@ -49,11 +49,30 @@ class C16FormatProposalControls(unittest.TestCase):
 
     def test_owned_allowlist_is_exactly_the_reviewed_c16_sources(self):
         self.assertEqual({"tenant", "cts"}, set(PROOF.FILES))
-        self.assertEqual(9, len(PROOF.FILES["tenant"]))
-        self.assertEqual(11, sum(path.startswith("src/main/") for path in PROOF.FILES["cts"]))
+        self.assertEqual(14, len(PROOF.FILES["tenant"]))
+        self.assertEqual(13, sum(path.startswith("src/main/") for path in PROOF.FILES["cts"]))
         self.assertEqual(4, sum(path.startswith("src/test/") for path in PROOF.FILES["cts"]))
-        self.assertEqual(24, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
+        self.assertEqual(31, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
         self.assertTrue(all(path.endswith(".java") for values in PROOF.FILES.values() for path in values))
+
+    def test_exact_audience_effect_extension_excludes_authority_neighbors(self):
+        paths = {
+            "tenant": ["src/main/java/com/vi/tenantservice/config/security/TaskServiceActor.java",
+                       "src/main/java/com/vi/tenantservice/config/security/TaskServiceIdentity.java",
+                       "src/test/java/com/vi/tenantservice/config/security/WizardPolicyV2ContextTest.java",
+                       "src/test/java/com/vi/tenantservice/api/controller/AccountPolicyPurposeAuthorizationIT.java",
+                       "src/test/java/com/vi/tenantservice/api/controller/GroupedTaskServiceIdentityAuthorizationIT.java"],
+            "cts": ["src/main/java/de/caritas/cob/consultingtypeservice/config/security/TaskServiceActor.java",
+                    "src/main/java/de/caritas/cob/consultingtypeservice/config/security/TaskServiceIdentity.java"],
+        }
+        for role, owned in paths.items():
+            for path in owned:
+                with self.subTest(role=role, path=path):
+                    self.assertTrue(PROOF.owned_delta(role, [path], ""))
+                    self.assertFalse(PROOF.owned_delta("cts" if role == "tenant" else "tenant", [path], ""))
+                    neighbor = path.rsplit("/", 1)[0] + "/UnownedAuthority.java"
+                    self.assertFalse(PROOF.owned_delta(role, [path, neighbor], ""))
+                    self.assertFalse(PROOF.owned_delta(role, [path], "untracked.java"))
 
     def test_audience_and_startup_extension_is_only_four_explicit_owned_tests(self):
         packages = {"tenant": "com/vi/tenantservice", "cts": "de/caritas/cob/consultingtypeservice"}

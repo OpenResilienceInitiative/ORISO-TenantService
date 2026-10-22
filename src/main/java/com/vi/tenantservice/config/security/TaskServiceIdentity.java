@@ -111,7 +111,9 @@ public class TaskServiceIdentity {
         || audience.isBlank()
         || !subject.equals(jwt.getSubject())
         || !client.equals(jwt.getClaimAsString("azp"))
-        || !jwt.getAudience().contains(audience)
+        || !(grouped
+            ? exactActorAudience(jwt, task, audience)
+            : jwt.getAudience().contains(audience))
         || jwt.getExpiresAt() == null
         || !jwt.getExpiresAt().isAfter(Instant.now())) return false;
     Object realm = jwt.getClaims().get("realm_access");
@@ -172,6 +174,17 @@ public class TaskServiceIdentity {
               return (!client.isBlank() && client.equals(jwt.getClaimAsString("azp")))
                   || (!subject.isBlank() && subject.equals(jwt.getSubject()));
             });
+  }
+
+  private boolean exactActorAudience(Jwt jwt, String task, String receiver) {
+    Set<String> expected = TaskServiceActor.forPurpose(task).audiences();
+    Object raw = jwt.getClaims().get("aud");
+    if (!(raw instanceof java.util.List<?>)) return false;
+    java.util.List<?> audiences = (java.util.List<?>) raw;
+    return expected.contains(receiver)
+        && audiences.size() == expected.size()
+        && audiences.stream().allMatch(String.class::isInstance)
+        && expected.equals(new HashSet<>(audiences));
   }
 
   private Set<String> allowedRoles(String task, String role) {

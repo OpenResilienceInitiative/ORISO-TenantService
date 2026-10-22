@@ -223,12 +223,23 @@ class GroupedTaskServiceIdentityAuthorizationIT {
                     .issuer("https://identity.example/realms/test")
                     .subject(subject)
                     .claim("azp", client)
-                    .audience(List.of(audience))
+                    .audience(actorAudiences(client, audience))
                     .issuedAt(Instant.now().minusSeconds(10))
                     .expiresAt(Instant.now().plusSeconds(60))
                     .claim("tenantId", 0L)
                     .claim("realm_access", Map.of("roles", roles)))
         .authorities(token -> converter.convert(token).getAuthorities());
+  }
+
+  private List<String> actorAudiences(String client, String requested) {
+    if (!"tenantservice".equals(requested)) return List.of(requested);
+    if ("backend-setup".equals(client))
+      return List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice");
+    if ("backend-mail".equals(client))
+      return List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice", "oriso-task-commands");
+    if ("backend-runtime".equals(client))
+      return List.of("tenantservice", "agencyservice", "appointmentservice");
+    return List.of(requested);
   }
 
   private String policyProof(long tenantId, String kind) throws Exception {
