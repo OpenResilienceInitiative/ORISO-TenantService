@@ -82,6 +82,17 @@ public class ConsultingTypeService {
     try {
       ConsultingTypeDTO dto = new ObjectMapper().readValue(file, ConsultingTypeDTO.class);
       dto.setTenantId(Math.toIntExact(tenantId));
+      if (dto.getSlug() == null
+          || dto.getRoles() == null
+          || dto.getRoles().getConsultant() == null
+          || dto.getUrls() == null
+          || dto.getRegistration() == null
+          || dto.getRegistration().getNotes() == null
+          || dto.getRegistration().getMandatoryFields() == null
+          || dto.getRegistration().getMandatoryFields().getAge() == null
+          || dto.getRegistration().getMandatoryFields().getState() == null) {
+        throw new IllegalStateException("Owned bootstrap configuration lacks required settings");
+      }
       String proof = creationContext.issue(grant, dto);
       createConsultingType(dto, proof, grant);
     } catch (IOException failure) {
