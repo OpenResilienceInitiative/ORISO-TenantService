@@ -14,6 +14,7 @@ helper = importlib.util.module_from_spec(OBS)
 OBS.loader.exec_module(helper)
 POSITIVE = 'ownedTenantCreationUsesTheSharedV2ProofAtTheMaterializedDtoSendSeam'
 PAIRED = 'aLaterTenantFailureRetiresOnlyItsIssuedAttemptAndReusesTheExactReservation'
+HELD = 'anExactHeldTenantOperationSurvivesBothActualCtsAndTenantLostReplies'
 
 
 class PairedNativeInventoryAndPrivacyControls(unittest.TestCase):
@@ -58,6 +59,28 @@ class PairedNativeInventoryAndPrivacyControls(unittest.TestCase):
                               (self.counts(), None), (self.counts(), [None, {}]),
                               (self.counts(), [{'name': 7}, self.cases()[1]])):
             self.assertFalse(driver.exact_native_inventory(counts, cases, 2))
+
+    def test_held_case_requires_original_pair_and_every_owned_wire_and_storage_observation(self):
+        cases = self.cases() + [{"name": HELD, "outcome": "pass"}]
+        self.assertTrue(driver.exact_native_inventory(self.counts(3), cases, 3))
+        self.assertFalse(driver.exact_native_inventory(self.counts(3), cases[:-1], 3))
+        held = {"firstStatus": 503, "secondStatus": 200, "finalStatus": 200, "ctsAttempts": 2,
+                "ctsReplyLost": True, "tenantReplyLost": True, "sameCtsCommandAndNonce": True,
+                "allThreeMongoUnchanged": True, "sameResultAndReceipt": True,
+                "receiptAuthenticated": True, "allocationAssigned": True, "singleTenantAndJournal": True}
+        value = dict(self.observation(), held=held)
+        self.assert_safe(value)
+        self.assertTrue(driver.held_success(value))
+        for key in held:
+            invalid = copy.deepcopy(value)
+            invalid["held"][key] = False
+            self.assertFalse(driver.held_success(invalid))
+        for key, secret in (("receipt", "synthetic-private-proof"), ("tenant", {"reservation": "synthetic-private"})):
+            invalid = copy.deepcopy(value)
+            invalid["held"][key] = secret
+            self.assertFalse(driver.held_success(invalid))
+            with self.assertRaises(helper.FixtureError):
+                helper.safe_observation(invalid)
 
     def observation(self):
         return {'receiverStatus': 200, 'tenantStatus': 200,

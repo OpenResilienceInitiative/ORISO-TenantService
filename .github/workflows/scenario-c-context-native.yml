@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-ConsultingTypeService
-          ref: 01b98ba103b5e0b881aa0a5d6aa9e27fbcc75309
+          ref: 54d9bea7415647affdc18d418989392767c94103
           path: receiver
           persist-credentials: false
           fetch-depth: 0
@@ -82,9 +82,9 @@ jobs:
       - name: Compile ordinary sources before disposable actual HTTP execution
         run: |
           python scripts/ci/scenario-c-context-native.py \
-            --receiver ../receiver --receiver-ref 01b98ba103b5e0b881aa0a5d6aa9e27fbcc75309 \
+            --receiver ../receiver --receiver-ref 54d9bea7415647affdc18d418989392767c94103 \
             --helm ../helm --helm-ref ab13d41e56f077ca85d1412e9eba2e6816554d9d \
-            --expect green --expected-tests 2 --v1-baseline compensated-routed-policy --evidence "$RUNNER_TEMP/scenario-c-context-native"
+            --expect green --expected-tests 3 --v1-baseline compensated-routed-policy --evidence "$RUNNER_TEMP/scenario-c-context-native"
       - name: Retain only source hashes, sanitized measurements and original safe XML
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

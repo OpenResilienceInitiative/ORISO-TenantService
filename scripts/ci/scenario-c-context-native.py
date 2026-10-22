@@ -101,11 +101,12 @@ def safe_early_failure(log):
 NATIVE_CASES = (
     "ownedTenantCreationUsesTheSharedV2ProofAtTheMaterializedDtoSendSeam",
     "aLaterTenantFailureRetiresOnlyItsIssuedAttemptAndReusesTheExactReservation",
+    "anExactHeldTenantOperationSurvivesBothActualCtsAndTenantLostReplies",
 )
 
 
 def exact_native_inventory(counts, cases, number):
-    if type(number) is not int or number not in (1, 2):
+    if type(number) is not int or number not in (1, 2, 3):
         return False
     if not isinstance(counts, dict) or not isinstance(cases, list):
         return False
@@ -122,6 +123,17 @@ def exact_native_inventory(counts, cases, number):
     return (len(set(names)) == number and set(names) == set(NATIVE_CASES[:number])
             and all(outcome in ("pass", "failure") for outcome in outcomes)
             and outcomes.count("failure") == counts["failures"])
+
+
+def held_success(observed):
+    value = observed.get("held") if isinstance(observed, dict) else None
+    status = {"firstStatus": 503, "secondStatus": 200, "finalStatus": 200, "ctsAttempts": 2}
+    flags = {"ctsReplyLost", "tenantReplyLost", "sameCtsCommandAndNonce",
+             "allThreeMongoUnchanged", "sameResultAndReceipt", "receiptAuthenticated",
+             "allocationAssigned", "singleTenantAndJournal"}
+    return (isinstance(value, dict) and set(value) == set(status) | flags
+            and all(type(value[key]) is int and value[key] == number for key, number in status.items())
+            and all(value[key] is True for key in flags))
 
 
 def paired_success(observed):
@@ -177,7 +189,7 @@ def main():
     parser.add_argument("--expect", choices=("red", "green"), required=True)
     parser.add_argument("--v1-baseline", choices=("original", "routed", "compensated-routed", "compensated-routed-policy"),
                         default="original")
-    parser.add_argument("--expected-tests", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--expected-tests", type=int, choices=(1, 2, 3), default=1)
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
     if os.environ.get("CI") != "true" or os.environ.get("RUNNER_OS") != "Linux":
@@ -243,8 +255,10 @@ def main():
                         and set(native.get("receiverBefore", {})) == {"claims", "counter", "types"})
         else:
             expected = expected and counts.get("failures") == 0
-            if args.expected_tests == 2:
+            if args.expected_tests >= 2:
                 expected = expected and paired_success(native.get("observed"))
+            if args.expected_tests >= 3:
+                expected = expected and held_success(native.get("observed"))
         cleanup = native.get("cleanup", [])
         run_id = native.get("runId", "")
         expected_resources = {("network", "oriso-context-" + run_id[:12]),

@@ -179,7 +179,7 @@ def safe_observation(value):
     def refuse():
         raise FixtureError("Native observation shape refused; no private values exported")
     required = {"receiverStatus", "tenantStatus", "receiverRequestObserved", "allocationStatus"}
-    if not isinstance(value, dict) or not required.issubset(value) or set(value) - required - {"paired"}:
+    if not isinstance(value, dict) or not required.issubset(value) or set(value) - required - {"paired", "held"}:
         refuse()
     def status(number):
         return type(number) is int and (number == -1 or 100 <= number <= 599)
@@ -187,6 +187,17 @@ def safe_observation(value):
             or type(value["receiverRequestObserved"]) is not bool
             or value["allocationStatus"] not in ("ASSIGNED", "RESERVED", "FREE", "EXPIRED", "CANCELLED")):
         refuse()
+    if "held" in value:
+        held = value["held"]
+        statuses = {"firstStatus", "secondStatus", "finalStatus"}
+        booleans = {"ctsReplyLost", "tenantReplyLost", "sameCtsCommandAndNonce",
+                    "allThreeMongoUnchanged", "sameResultAndReceipt", "receiptAuthenticated",
+                    "allocationAssigned", "singleTenantAndJournal"}
+        if (not isinstance(held, dict) or not {"firstStatus", "ctsReplyLost"}.issubset(held)
+                or set(held) - statuses - booleans - {"ctsAttempts"}): refuse()
+        if any(not status(held[key]) for key in statuses & set(held)): refuse()
+        if any(type(held[key]) is not bool for key in booleans & set(held)): refuse()
+        if "ctsAttempts" in held and (type(held["ctsAttempts"]) is not int or not 0 <= held["ctsAttempts"] <= 2): refuse()
     if "paired" not in value:
         return value
     paired = value["paired"]
