@@ -355,10 +355,14 @@ class BootstrapV2CallerReceiverIT {
     assertThat(JSON.readTree(SENT_BODY.get()).path("tenantId").asLong()).isEqualTo(tenantId);
     JsonNode configured = JSON.readTree(SENT_BODY.get());
     assertThat(configured.path("registration").path("minPostcodeSize").asInt()).isEqualTo(8);
-    assertThat(configured.path("registration").path("autoSelectAgency").isNull()
-        || configured.path("registration").path("autoSelectAgency").isMissingNode()).isTrue();
-    assertThat(configured.path("registration").path("autoSelectPostcode").isNull()
-        || configured.path("registration").path("autoSelectPostcode").isMissingNode()).isTrue();
+    assertThat(
+            configured.path("registration").path("autoSelectAgency").isNull()
+                || configured.path("registration").path("autoSelectAgency").isMissingNode())
+        .isTrue();
+    assertThat(
+            configured.path("registration").path("autoSelectPostcode").isNull()
+                || configured.path("registration").path("autoSelectPostcode").isMissingNode())
+        .isTrue();
     assertThat(configured.path("groups").size()).isEqualTo(1);
     JsonNode readback = JSON.readTree(RECEIVED_BODY.get()).path("registration");
     assertThat(readback.path("minPostcodeSize").isIntegralNumber()).isTrue();

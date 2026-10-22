@@ -62,6 +62,7 @@ COMPILED = {
         "target/test-classes/com/vi/tenantservice/config/security/WizardPolicyV2ContextTest.class",
     ],
     "cts": [
+        "target/classes/de/caritas/cob/consultingtypeservice/api/service/TenantBootstrapService.class",
         "target/test-classes/de/caritas/cob/consultingtypeservice/api/controller/BootstrapV2ReceiverFixture.class",
         "target/test-classes/de/caritas/cob/consultingtypeservice/config/security/TenantBootstrapV2ContextTest.class",
         "target/classes/de/caritas/cob/consultingtypeservice/config/security/TenantCreationContext.class",
