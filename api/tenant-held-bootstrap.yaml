@@ -36,4 +36,4 @@ paths:
         '400': {description: Invalid exact request shape or DTO}
         '401': {description: Missing or invalid bearer}
         '403': {description: Foreign actor, owner, causal tuple, body, reservation or current state}
-        '500': {description: Unresolved downstream or local outcome; retain occupied state and retry only this exact operation}
+        '503': {description: Unresolved owning downstream or local outcome; retain occupied state and retry only this exact operation}

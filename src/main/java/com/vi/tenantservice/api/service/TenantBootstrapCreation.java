@@ -158,6 +158,8 @@ public class TenantBootstrapCreation {
                         attempt.snapshot.ledger().size());
                   return fresh;
                 });
+        if (operation != null && attempt.completion == TransactionSynchronization.STATUS_UNKNOWN)
+          throw TenantHeldBootstrap.pending();
         if (attempt.completion != TransactionSynchronization.STATUS_COMMITTED) throw denied();
         requireSnapshot(attempt);
         Grant grant = new Grant(this, attempt);

@@ -62,9 +62,28 @@ public class TenantHeldBootstrap {
       if (row == null) throw TenantHeldBootstrapJournal.denied();
       if (!"COMPLETE".equals(row.state())) creation.completeHeld(operation, resultDigest);
       return new Result(result, journal.receipt(operation, resultDigest));
+    } catch (org.springframework.security.access.AccessDeniedException denied) {
+      throw denied;
+    } catch (RuntimeException failure) {
+      TenantHeldBootstrapJournal.Row pending;
+      try {
+        pending = journal.read(operation, false);
+      } catch (org.springframework.security.access.AccessDeniedException denied) {
+        throw denied;
+      } catch (RuntimeException unknown) {
+        throw pending();
+      }
+      if (pending != null && !"COMPLETE".equals(pending.state())) throw pending();
+      throw failure;
     } finally {
       operation.open = false;
     }
+  }
+
+  static org.springframework.web.server.ResponseStatusException pending() {
+    return new org.springframework.web.server.ResponseStatusException(
+        org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
+        "Held tenant creation outcome is pending");
   }
 
   public record Result(MultilingualTenantDTO tenant, String receipt) {
