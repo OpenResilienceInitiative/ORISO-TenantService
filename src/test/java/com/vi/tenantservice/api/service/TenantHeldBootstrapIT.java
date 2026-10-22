@@ -27,6 +27,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.server.ResponseStatusException;
 
 @SpringBootTest(
     properties = {
@@ -153,12 +154,16 @@ class TenantHeldBootstrapIT {
     expectCreate(calls, originalWire, true);
     expectCreate(calls, originalWire, false);
     ObjectNode request = request();
-    assertThatThrownBy(() -> bootstrap.create(request)).isInstanceOf(RuntimeException.class);
+    var unknown = org.assertj.core.api.Assertions.catchThrowable(() -> bootstrap.create(request));
+    assertThat(unknown).isInstanceOf(RuntimeException.class);
+    assertThat(calls.get()).isEqualTo(1);
     assertThat(sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE id=9157", Integer.class))
         .isEqualTo(1);
     String marker =
         sql.queryForObject("SELECT bootstrap_attempt_id FROM tenant WHERE id=9157", String.class);
     assertThat(allocation.getStatus(9157L).name()).isEqualTo("ASSIGNED");
+    assertThat(unknown instanceof ResponseStatusException).isTrue();
+    assertThat(((ResponseStatusException) unknown).getStatusCode().value()).isEqualTo(503);
     var consulting =
         application.getBean(
             com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService.class);
