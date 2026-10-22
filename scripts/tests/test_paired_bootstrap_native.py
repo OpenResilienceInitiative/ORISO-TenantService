@@ -17,6 +17,15 @@ PAIRED = 'aLaterTenantFailureRetiresOnlyItsIssuedAttemptAndReusesTheExactReserva
 
 
 class PairedNativeInventoryAndPrivacyControls(unittest.TestCase):
+    def assert_safe(self, value):
+        try:
+            actual = helper.safe_observation(value)
+            accepted = True
+        except helper.FixtureError:
+            actual, accepted = None, False
+        self.assertTrue(accepted, 'Finite reviewed count/boolean observation must be accepted')
+        self.assertEqual(value, actual)
+
     def counts(self, number=2):
         return {'tests': number, 'failures': 0, 'errors': 0, 'skipped': 0}
 
@@ -56,7 +65,7 @@ class PairedNativeInventoryAndPrivacyControls(unittest.TestCase):
 
     def test_original_observation_remains_valid_and_unknown_or_private_values_refuse(self):
         value = self.observation()
-        self.assertEqual(value, helper.safe_observation(value))
+        self.assert_safe(value)
         for key, private in (('unexpected', 'synthetic-private-config'),
                              ('allocationStatus', 'https://synthetic-private-link'),
                              ('receiverStatus', 'eyJsynthetic.private.signature'),
@@ -90,7 +99,7 @@ class PairedNativeInventoryAndPrivacyControls(unittest.TestCase):
                  'staleCaptured': True, 'ordinaryPreserved': False,
                  'newAttemptDistinct': False, 'newResultDistinct': False,
                  'counterUnchangedSinceCapture': True, 'counterNeverRewound': True,
-                 'counterAdvancedExactlyOnce': False}
+                 'counterAdvancedExactlyOnce': False, 'terminalRetryUnchanged': True}
         retired = dict(stage, actualInsertCalls=2, delayedInsertDuplicate=True)
         stale = dict(retired, conditionalWriteAttempts=2, conditionalWritesBlocked=2,
                      staleUpdateRefusals=2, retiredReadChecks=20, retiredReadsHidden=True,
@@ -101,7 +110,9 @@ class PairedNativeInventoryAndPrivacyControls(unittest.TestCase):
                      counterAdvancedExactlyOnce=True, counterUnchangedSinceCapture=False)
         value = self.observation()
         value['paired'] = {'tenantFailureStatus': 400, 'createStatus': 200,
-                           'compensationStatus': 204, 'delayedReplyStatus': 409,
+                           'compensationStatus': 204, 'compensationAttempts': 2,
+                           'compensationReplyLost': True, 'sameCompensationAttemptAndPayload': True,
+                           'delayedReplyStatus': 409,
                            'newTenantStatus': 200, 'oldReplayStatus': 409,
                            'allocationRestored': True, 'allocationRestoredThenReassigned': True,
                            'beforeDelayedRelease': stage, 'terminalRace': retired,
@@ -110,7 +121,7 @@ class PairedNativeInventoryAndPrivacyControls(unittest.TestCase):
 
     def test_real_delayed_insert_and_conditional_write_evidence_are_required(self):
         value = self.successful_pair()
-        self.assertEqual(value, helper.safe_observation(value))
+        self.assert_safe(value)
         self.assertTrue(driver.paired_success(value))
         for section, field, wrong in (
                 ('beforeDelayedRelease', 'delayedInsertReached', False),
@@ -149,6 +160,28 @@ class PairedNativeInventoryAndPrivacyControls(unittest.TestCase):
             self.assertFalse(driver.paired_success(changed))
             with self.assertRaises(helper.FixtureError):
                 helper.safe_observation(changed)
+
+    def test_lost_reply_requires_exactly_two_same_attempt_calls_and_unchanged_terminal_database(self):
+        value = self.successful_pair()
+        self.assert_safe(value)
+        self.assertTrue(driver.paired_success(value))
+        for field, wrong in (('compensationAttempts', 1), ('compensationAttempts', 3),
+                             ('compensationAttempts', True), ('compensationReplyLost', False),
+                             ('sameCompensationAttemptAndPayload', False)):
+            changed = copy.deepcopy(value)
+            changed['paired'][field] = wrong
+            self.assertFalse(driver.paired_success(changed))
+        for section in ('beforeDelayedRelease', 'terminalRace', 'staleWrites', 'newAttempt'):
+            changed = copy.deepcopy(value)
+            changed['paired'][section]['terminalRetryUnchanged'] = False
+            self.assertFalse(driver.paired_success(changed))
+        for key, private in (('compensationAttempts', 'synthetic-private-count'),
+                             ('compensationReplyLost', 'synthetic-private-proof')):
+            changed = copy.deepcopy(value)
+            changed['paired'][key] = private
+            with self.assertRaises(helper.FixtureError) as error:
+                helper.safe_observation(changed)
+            self.assertNotIn(private, str(error.exception))
 
     def test_actual_nested_fixture_bytes_and_present_jar_are_bound_without_private_paths(self):
         with tempfile.TemporaryDirectory() as directory:

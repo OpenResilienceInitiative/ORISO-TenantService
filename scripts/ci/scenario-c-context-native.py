@@ -137,13 +137,16 @@ def paired_success(observed):
     status = {"tenantFailureStatus": 400, "createStatus": 200, "compensationStatus": 204,
               "delayedReplyStatus": 409, "newTenantStatus": 200, "oldReplayStatus": 409}
     stages = {"beforeDelayedRelease", "terminalRace", "staleWrites", "newAttempt"}
-    flags = {"allocationRestored", "allocationRestoredThenReassigned"}
-    if (not isinstance(pair, dict) or set(pair) != set(status) | stages | flags
+    flags = {"allocationRestored", "allocationRestoredThenReassigned",
+             "compensationReplyLost", "sameCompensationAttemptAndPayload"}
+    counts = {"compensationAttempts": 2}
+    if (not isinstance(pair, dict) or set(pair) != set(status) | stages | flags | set(counts)
             or any(type(pair[key]) is not int or pair[key] != value for key, value in status.items())
-            or any(pair[key] is not True for key in flags)):
+            or any(pair[key] is not True for key in flags)
+            or any(type(pair[key]) is not int or pair[key] != expected for key, expected in counts.items())):
         return False
     reached = {"primaryInsertReached", "delayedInsertReached", "primaryInsertCompleted",
-               "staleCaptured", "counterNeverRewound"}
+               "staleCaptured", "counterNeverRewound", "terminalRetryUnchanged"}
     if not matches(pair["beforeDelayedRelease"],
                    {"actualInsertCalls": 1, "liveTypes": 0, "terminalTypes": 1},
                    reached | {"counterUnchangedSinceCapture"}):

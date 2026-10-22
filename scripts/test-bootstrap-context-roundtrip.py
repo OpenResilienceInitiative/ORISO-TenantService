@@ -192,14 +192,18 @@ def safe_observation(value):
     paired = value["paired"]
     status_fields = {"tenantFailureStatus", "createStatus", "compensationStatus", "delayedReplyStatus",
                      "newTenantStatus", "oldReplayStatus"}
-    boolean_fields = {"allocationRestored", "allocationRestoredThenReassigned"}
+    boolean_fields = {"allocationRestored", "allocationRestoredThenReassigned",
+                      "compensationReplyLost", "sameCompensationAttemptAndPayload"}
+    pair_counts = {"compensationAttempts"}
     stages = {"beforeDelayedRelease", "terminalRace", "staleWrites", "newAttempt"}
-    if (not isinstance(paired, dict) or set(paired) - status_fields - boolean_fields - stages
+    if (not isinstance(paired, dict) or set(paired) - status_fields - boolean_fields - pair_counts - stages
             or not {"tenantFailureStatus", "createStatus", "compensationStatus", "allocationRestored",
                     "beforeDelayedRelease"}.issubset(paired)):
         refuse()
     for field in status_fields & set(paired):
         if not status(paired[field]): refuse()
+    for field in pair_counts & set(paired):
+        if type(paired[field]) is not int or not 0 <= paired[field] <= 2: refuse()
     for field in boolean_fields & set(paired):
         if type(paired[field]) is not bool: refuse()
     counts = {"sequence", "actualInsertCalls", "conditionalWriteAttempts", "conditionalWritesBlocked",
@@ -208,7 +212,8 @@ def safe_observation(value):
                 "delayedInsertDuplicate", "staleCaptured", "ordinaryPreserved", "newAttemptDistinct",
                 "newResultDistinct", "counterUnchangedSinceCapture", "counterNeverRewound",
                 "counterAdvancedExactlyOnce", "awareConditionalWriteAttempted", "awareConditionalWriteBlocked",
-                "unawareConditionalWriteAttempted", "unawareConditionalWriteBlocked", "retiredReadsHidden"}
+                "unawareConditionalWriteAttempted", "unawareConditionalWriteBlocked", "retiredReadsHidden",
+                "terminalRetryUnchanged"}
     for field in stages & set(paired):
         stage = paired[field]
         if not isinstance(stage, dict) or set(stage) != counts | booleans | {"state"}:
