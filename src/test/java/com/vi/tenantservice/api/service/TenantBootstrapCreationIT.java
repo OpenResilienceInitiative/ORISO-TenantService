@@ -60,17 +60,21 @@ class TenantBootstrapCreationIT {
   @Autowired private ApplicationContext application;
   @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
   @MockitoBean private TaskServiceIdentity identity;
+
   @MockitoBean
   private com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService settings;
 
   @BeforeEach
   void caller() {
     when(identity.current("CONFIG_WIZARD")).thenReturn(true);
-    when(settings.getApplicationSettings()).thenReturn(
-        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.ApplicationSettingsDTO()
-            .mainTenantSubdomainForSingleDomainMultitenancy(
-                new com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO()
-                    .value("app")));
+    when(settings.getApplicationSettings())
+        .thenReturn(
+            new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+                    .ApplicationSettingsDTO()
+                .mainTenantSubdomainForSingleDomainMultitenancy(
+                    new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+                            .SettingDTO()
+                        .value("app")));
     var jwt =
         Jwt.withTokenValue("synthetic-no-wire-token")
             .header("alg", "RS256")
@@ -132,7 +136,8 @@ class TenantBootstrapCreationIT {
     nativeSchemaPopulation().execute(dataSource);
     var transport = application.getBean(org.springframework.web.client.RestTemplate.class);
     var originalTransport = transport.getRequestFactory();
-    var server = org.springframework.test.web.client.MockRestServiceServer.bindTo(transport).build();
+    var server =
+        org.springframework.test.web.client.MockRestServiceServer.bindTo(transport).build();
     var request = new org.springframework.mock.web.MockHttpServletRequest();
     request.setUserPrincipal(SecurityContextHolder.getContext().getAuthentication());
     org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
@@ -141,60 +146,105 @@ class TenantBootstrapCreationIT {
     var json = new com.fasterxml.jackson.databind.ObjectMapper();
     try {
       for (long target : new long[] {9157L, 9158L}) {
-        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers
-            .requestTo("http://local-bootstrap-precondition/consultingtypes"))
-            .andExpect(sent -> {
-              assertThat(sent.getMethod() == org.springframework.http.HttpMethod.POST).isTrue();
-              assertThat("0".equals(sent.getHeaders().getFirst("tenantId"))).isTrue();
-              assertThat(org.springframework.transaction.support.TransactionSynchronizationManager
-                  .isActualTransactionActive()).isFalse();
-              try {
-                var body = json.readTree(((org.springframework.mock.http.client.MockClientHttpRequest) sent)
-                    .getBodyAsString());
-                assertThat(body.path("tenantId").asLong() == target).isTrue();
-                String proof = sent.getHeaders().getFirst(
-                    com.vi.tenantservice.config.security.TenantCreationContext.HEADER);
-                assertThat(proof != null).isTrue();
-                var claims = json.readTree(java.util.Base64.getUrlDecoder().decode(proof.split("\\.", -1)[0]));
-                String marker = sql.queryForObject(
-                    "SELECT bootstrap_attempt_id FROM tenant WHERE id=?", String.class, target);
-                assertThat(marker != null && claims.path("nonce").asText()
-                    .equals(marker.replace("-", ""))).isTrue();
-                assertThat(claims.size()).isEqualTo(16);
-                assertThat("ASSIGNED".equals(sql.queryForObject(
-                    "SELECT status FROM tenant_id_reservation WHERE tenant_id=?", String.class, target)))
-                    .isTrue();
-                reached.incrementAndGet();
-              } catch (java.io.IOException malformed) {
-                throw new AssertionError("Local generated request shape refused");
-              }
-            }).andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
-                .withSuccess("{\"tenantId\":" + target + ",\"id\":" + (target + 100000) + "}",
+        server
+            .expect(
+                org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
+                    "http://local-bootstrap-precondition/consultingtypes"))
+            .andExpect(
+                sent -> {
+                  assertThat(sent.getMethod() == org.springframework.http.HttpMethod.POST).isTrue();
+                  assertThat("0".equals(sent.getHeaders().getFirst("tenantId"))).isTrue();
+                  assertThat(
+                          org.springframework.transaction.support.TransactionSynchronizationManager
+                              .isActualTransactionActive())
+                      .isFalse();
+                  try {
+                    var body =
+                        json.readTree(
+                            ((org.springframework.mock.http.client.MockClientHttpRequest) sent)
+                                .getBodyAsString());
+                    assertThat(body.path("tenantId").asLong() == target).isTrue();
+                    String proof =
+                        sent.getHeaders()
+                            .getFirst(
+                                com.vi.tenantservice.config.security.TenantCreationContext.HEADER);
+                    assertThat(proof != null).isTrue();
+                    var claims =
+                        json.readTree(
+                            java.util.Base64.getUrlDecoder().decode(proof.split("\\.", -1)[0]));
+                    String marker =
+                        sql.queryForObject(
+                            "SELECT bootstrap_attempt_id FROM tenant WHERE id=?",
+                            String.class,
+                            target);
+                    assertThat(
+                            marker != null
+                                && claims.path("nonce").asText().equals(marker.replace("-", "")))
+                        .isTrue();
+                    assertThat(claims.size()).isEqualTo(16);
+                    assertThat(
+                            "ASSIGNED"
+                                .equals(
+                                    sql.queryForObject(
+                                        "SELECT status FROM tenant_id_reservation WHERE tenant_id=?",
+                                        String.class,
+                                        target)))
+                        .isTrue();
+                    reached.incrementAndGet();
+                  } catch (java.io.IOException malformed) {
+                    throw new AssertionError("Local generated request shape refused");
+                  }
+                })
+            .andRespond(
+                org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess(
+                    "{\"tenantId\":" + target + ",\"id\":" + (target + 100000) + "}",
                     org.springframework.http.MediaType.APPLICATION_JSON));
       }
       var facade = application.getBean(com.vi.tenantservice.api.facade.TenantServiceFacade.class);
-      var first = new com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder()
-          .withId(9157L).withName("Local First").withSubdomain("local-first").withLicensing()
-          .withTenantIdReservationToken(allocation.reserve(9157L, "local-first").getToken()).build();
-      var second = new com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder()
-          .withId(9158L).withName("Local Pair").withSubdomain("local-pair").withLicensing()
-          .withTenantIdReservationToken(allocation.reserve(9158L, "local-pair").getToken()).build();
-      second.setOnboardingDpaAcceptance(new com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO()
-          .accepted(false).signerUserId("synthetic-local-signer").signerName("Synthetic Local Signer"));
+      var first =
+          new com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder()
+              .withId(9157L)
+              .withName("Local First")
+              .withSubdomain("local-first")
+              .withLicensing()
+              .withTenantIdReservationToken(allocation.reserve(9157L, "local-first").getToken())
+              .build();
+      var second =
+          new com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder()
+              .withId(9158L)
+              .withName("Local Pair")
+              .withSubdomain("local-pair")
+              .withLicensing()
+              .withTenantIdReservationToken(allocation.reserve(9158L, "local-pair").getToken())
+              .build();
+      second.setOnboardingDpaAcceptance(
+          new com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO()
+              .accepted(false)
+              .signerUserId("synthetic-local-signer")
+              .signerName("Synthetic Local Signer"));
       var validation = application.getBean(jakarta.validation.Validator.class);
-      assertThat(validation.validate(first).isEmpty() && validation.validate(second).isEmpty()).isTrue();
+      assertThat(validation.validate(first).isEmpty() && validation.validate(second).isEmpty())
+          .isTrue();
       var created = new AtomicReference<com.vi.tenantservice.api.model.MultilingualTenantDTO>();
-      Throwable firstFailure = org.assertj.core.api.Assertions.catchThrowable(
-          () -> created.set(facade.createTenant(first)));
-      assertThat(firstFailure == null).as("first real local creation completes; failure type %s",
-          firstFailure == null ? "NONE" : firstFailure.getClass().getName()).isTrue();
+      Throwable firstFailure =
+          org.assertj.core.api.Assertions.catchThrowable(
+              () -> created.set(facade.createTenant(first)));
+      assertThat(firstFailure == null)
+          .as(
+              "first real local creation completes; failure type %s",
+              firstFailure == null ? "NONE" : firstFailure.getClass().getName())
+          .isTrue();
       assertThat(Long.valueOf(9157L).equals(created.get().getId())).isTrue();
-      Throwable later = org.assertj.core.api.Assertions.catchThrowable(() -> facade.createTenant(second));
+      Throwable later =
+          org.assertj.core.api.Assertions.catchThrowable(() -> facade.createTenant(second));
       assertThat(later instanceof com.vi.tenantservice.api.exception.TenantBadRequestException)
-          .as("actual later DPA domain refusal after successful owned HTTP; failure type %s",
-              later == null ? "NONE" : later.getClass().getName()).isTrue();
+          .as(
+              "actual later DPA domain refusal after successful owned HTTP; failure type %s",
+              later == null ? "NONE" : later.getClass().getName())
+          .isTrue();
       assertThat(reached.get()).isEqualTo(2);
-      assertThat(sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE subdomain=''", Integer.class))
+      assertThat(
+              sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE subdomain=''", Integer.class))
           .isEqualTo(2);
       server.verify();
     } finally {
@@ -461,8 +511,8 @@ class TenantBootstrapCreationIT {
     }
   }
 
-  private org.springframework.jdbc.datasource.init.ResourceDatabasePopulator nativeSchemaPopulation()
-      throws ClassNotFoundException {
+  private org.springframework.jdbc.datasource.init.ResourceDatabasePopulator
+      nativeSchemaPopulation() throws ClassNotFoundException {
     var nativeType =
         Class.forName(
             "com.vi.tenantservice.api.controller.BootstrapV2CallerReceiverIT",
