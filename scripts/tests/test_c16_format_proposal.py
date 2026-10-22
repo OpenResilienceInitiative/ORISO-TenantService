@@ -48,11 +48,12 @@ class C16FormatProposalControls(unittest.TestCase):
                     self.assertEqual("DEADLINE_FAILURE_NO_ACCEPTANCE", receipt["state"])
 
     def test_owned_allowlist_is_exactly_the_reviewed_c16_sources(self):
-        self.assertEqual({"tenant", "cts"}, set(PROOF.FILES))
-        self.assertEqual(18, len(PROOF.FILES["tenant"]))
+        self.assertEqual({"tenant", "cts", "user"}, set(PROOF.FILES))
+        self.assertEqual(20, len(PROOF.FILES["tenant"]))
+        self.assertEqual(15, len(PROOF.FILES["user"]))
         self.assertEqual(13, sum(path.startswith("src/main/") for path in PROOF.FILES["cts"]))
         self.assertEqual(5, sum(path.startswith("src/test/") for path in PROOF.FILES["cts"]))
-        self.assertEqual(36, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
+        self.assertEqual(53, len(set(path for values in PROOF.FILES.values() for path in values)))
         self.assertTrue(all(path.endswith(".java") for values in PROOF.FILES.values() for path in values))
 
     def test_held_replay_formatter_extension_is_only_its_four_owned_java_paths(self):
@@ -66,6 +67,15 @@ class C16FormatProposalControls(unittest.TestCase):
                 self.assertFalse(PROOF.owned_delta("tenant", [path.replace("TenantHeldBootstrap", "OtherAuthority")], ""))
                 self.assertFalse(PROOF.owned_delta("tenant", [path, "src/main/java/UnownedPermission.java"], ""))
                 self.assertFalse(PROOF.owned_delta("tenant", [path], "untracked.java"))
+
+    def test_user_and_platform_projection_extension_has_no_neighbor_authority(self):
+        for role, paths in (("user", PROOF.FILES["user"]), ("tenant", PROOF.FILES["tenant"][:2])):
+            for path in paths:
+                self.assertTrue(PROOF.owned_delta(role, [path], ""))
+                self.assertFalse(PROOF.owned_delta("cts", [path], ""))
+                self.assertFalse(PROOF.owned_delta(role, [path.replace(".java", "Neighbor.java")], ""))
+                self.assertFalse(PROOF.owned_delta(role, [path, "src/main/java/Unowned.java"], ""))
+                self.assertFalse(PROOF.owned_delta(role, [path], "untracked.java"))
 
     def test_only_the_literal_current_cts_grouped_fixture_can_join_formatter(self):
         path = "src/test/java/de/caritas/cob/consultingtypeservice/api/controller/GroupedTaskServiceIdentityAuthorizationIT.java"

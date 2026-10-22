@@ -32,6 +32,7 @@ FLOORS = {
         "com.vi.tenantservice.api.facade.TenantServiceFacadeTest": 66,
         "com.vi.tenantservice.api.service.TenantBootstrapCreationIT": 12,
         "com.vi.tenantservice.api.service.TenantHeldBootstrapIT": 2,
+        "com.vi.tenantservice.api.controller.PlatformAccountInactivityPolicyIT": 3,
     },
     "cts": {
         "de.caritas.cob.consultingtypeservice.config.security.CreationContextKeyTest": 5,
@@ -40,13 +41,17 @@ FLOORS = {
     },
     "user": {
         "de.caritas.cob.userservice.api.service.accountpolicy.CheckedAccountPolicyReadsTest": 7,
-        "de.caritas.cob.userservice.api.service.ConsultantImportServiceTest": 12,
+        "de.caritas.cob.userservice.api.service.ConsultantImportServiceTest": 15,
+        "de.caritas.cob.userservice.api.service.accountinvite.onboarding.ReservedTenantBootstrapTest": 4,
+        "de.caritas.cob.userservice.api.service.accountpolicy.CheckedPlatformInactivityPolicyReadsTest": 3,
         "de.caritas.cob.userservice.api.service.accountinvite.CounsellorInviteProvisioningServiceTest": 26,
         "de.caritas.cob.userservice.api.admin.service.consultant.create.CreateConsultantSagaTest": 41,
     },
 }
 COMPILED = {
     "tenant": [
+        "target/classes/com/vi/tenantservice/api/controller/PlatformAccountInactivityPolicyController.class",
+        "target/test-classes/com/vi/tenantservice/api/controller/PlatformAccountInactivityPolicyIT.class",
         "target/classes/com/vi/tenantservice/api/controller/TenantHeldBootstrapController.class",
         "target/classes/com/vi/tenantservice/api/service/TenantHeldBootstrap.class",
         "target/classes/com/vi/tenantservice/api/service/TenantHeldBootstrapJournal.class",
@@ -63,6 +68,10 @@ COMPILED = {
         "target/test-classes/de/caritas/cob/consultingtypeservice/api/controller/ScenarioCMailNativeServer.class",
     ],
     "user": [
+        "target/classes/de/caritas/cob/userservice/api/service/accountinvite/onboarding/ReservedTenantBootstrap.class",
+        "target/classes/de/caritas/cob/userservice/api/service/accountpolicy/CheckedPlatformInactivityPolicyReads.class",
+        "target/test-classes/de/caritas/cob/userservice/api/service/accountinvite/onboarding/ReservedTenantBootstrapTest.class",
+        "target/test-classes/de/caritas/cob/userservice/api/service/accountpolicy/CheckedPlatformInactivityPolicyReadsTest.class",
         "target/classes/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyReads.class",
         "target/test-classes/de/caritas/cob/userservice/api/service/accountpolicy/CheckedAccountPolicyReadsTest.class",
     ],

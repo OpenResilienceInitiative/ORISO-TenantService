@@ -30,7 +30,7 @@ jobs:
           - role: user
             source: subject
             repository: OpenResilienceInitiative/ORISO-UserService
-            ref: 461f5a684c62108e3881905f49be251251e88c28
+            ref: 8aab24d613ec7772500d6de448c3be1dc887881e
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       MAVEN_OPTS: -Xmx512m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2
@@ -81,7 +81,7 @@ jobs:
             --source "$PREFLIGHT_SOURCE_PATH" --expected "$PREFLIGHT_REF" \
             --evidence "$RUNNER_TEMP/context-preflight-$PREFLIGHT_ROLE"
       - name: Produce only a scoped mechanical proposal after confirmed formatter failure
-        if: failure() && (matrix.role == 'tenant' || matrix.role == 'cts')
+        if: failure()
         env:
           PREFLIGHT_ROLE: ${{ matrix.role }}
         run: |
