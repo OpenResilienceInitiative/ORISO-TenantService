@@ -64,7 +64,8 @@ import org.springframework.test.context.jdbc.Sql;
       "ORISO_WIZARD_POLICY_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       "ORISO_TENANT_CREATION_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     })
-@Sql(executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS,
+@Sql(
+    executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS,
     scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class BootstrapV2CallerReceiverIT {
   private static final ObjectMapper JSON = new ObjectMapper();
@@ -73,10 +74,13 @@ class BootstrapV2CallerReceiverIT {
   private static final AtomicReference<String> SENT_PROOF = new AtomicReference<>();
   private static final AtomicReference<byte[]> SENT_BODY = new AtomicReference<>();
   private static final AtomicInteger RECEIVER_STATUS = new AtomicInteger(-1);
-  private static final java.util.concurrent.atomic.AtomicBoolean PAIR_ARMED = new java.util.concurrent.atomic.AtomicBoolean();
+  private static final java.util.concurrent.atomic.AtomicBoolean PAIR_ARMED =
+      new java.util.concurrent.atomic.AtomicBoolean();
   private static final AtomicReference<ReplayPacket> REPLAY = new AtomicReference<>();
-  private static final java.util.concurrent.CountDownLatch OWNER_RESPONSE_READY = new java.util.concurrent.CountDownLatch(1);
-  private static final java.util.concurrent.CountDownLatch OWNER_RESPONSE_RELEASE = new java.util.concurrent.CountDownLatch(1);
+  private static final java.util.concurrent.CountDownLatch OWNER_RESPONSE_READY =
+      new java.util.concurrent.CountDownLatch(1);
+  private static final java.util.concurrent.CountDownLatch OWNER_RESPONSE_RELEASE =
+      new java.util.concurrent.CountDownLatch(1);
   private static final AtomicInteger COMPENSATION_STATUS = new AtomicInteger(-1);
   private static long controlSequence;
   private static HttpServer gateway;
@@ -146,12 +150,17 @@ class BootstrapV2CallerReceiverIT {
             if (value != null) request.header(header, value);
           }
           request.method(exchange.getRequestMethod(), HttpRequest.BodyPublishers.ofByteArray(body));
-          boolean pairedCreate = PAIR_ARMED.get() && "POST".equals(exchange.getRequestMethod())
-              && "/consultingtypes".equals(exchange.getRequestURI().getPath())
-              && JSON.readTree(body).path("tenantId").asInt() == 9158;
-          if (pairedCreate) REPLAY.set(new ReplayPacket(body.clone(),
-              exchange.getRequestHeaders().getFirst("Authorization"),
-              exchange.getRequestHeaders().getFirst("X-ORISO-Tenant-Creation-Context")));
+          boolean pairedCreate =
+              PAIR_ARMED.get()
+                  && "POST".equals(exchange.getRequestMethod())
+                  && "/consultingtypes".equals(exchange.getRequestURI().getPath())
+                  && JSON.readTree(body).path("tenantId").asInt() == 9158;
+          if (pairedCreate)
+            REPLAY.set(
+                new ReplayPacket(
+                    body.clone(),
+                    exchange.getRequestHeaders().getFirst("Authorization"),
+                    exchange.getRequestHeaders().getFirst("X-ORISO-Tenant-Creation-Context")));
           try {
             var response = HTTP.send(request.build(), HttpResponse.BodyHandlers.ofByteArray());
             if ("POST".equals(exchange.getRequestMethod())
@@ -161,7 +170,8 @@ class BootstrapV2CallerReceiverIT {
                   exchange.getRequestHeaders().getFirst("X-ORISO-Tenant-Creation-Context"));
               RECEIVER_STATUS.set(response.statusCode());
             }
-            if ("/consultingtypes/bootstrap-compensation".equals(exchange.getRequestURI().getPath()))
+            if ("/consultingtypes/bootstrap-compensation"
+                .equals(exchange.getRequestURI().getPath()))
               COMPENSATION_STATUS.set(response.statusCode());
             if (pairedCreate) {
               OWNER_RESPONSE_READY.countDown();
@@ -169,7 +179,8 @@ class BootstrapV2CallerReceiverIT {
                 throw fixtureRefusal();
             }
             exchange.getResponseHeaders().add("Content-Type", "application/json");
-            exchange.sendResponseHeaders(response.statusCode(), response.statusCode() == 204 ? -1 : response.body().length);
+            exchange.sendResponseHeaders(
+                response.statusCode(), response.statusCode() == 204 ? -1 : response.body().length);
             if (response.body().length > 0) exchange.getResponseBody().write(response.body());
           } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
@@ -279,20 +290,36 @@ class BootstrapV2CallerReceiverIT {
     assertThat(claims.path("target").asText()).isEqualTo("tenant/9157/consulting-type/default");
     assertThat(claims.path("payloadDigest").asText()).matches("[a-f0-9]{64}");
   }
+
   @Test
   @org.junit.jupiter.api.Order(2)
-  void aLaterTenantFailureRetiresOnlyItsIssuedAttemptAndReusesTheExactReservation() throws Exception {
+  void aLaterTenantFailureRetiresOnlyItsIssuedAttemptAndReusesTheExactReservation()
+      throws Exception {
     long tenantId = 9158L;
     String reservation = allocation.reserve(tenantId, "native-paired-bootstrap").getToken();
-    String base = new MultilingualTenantTestDataBuilder().withName("Paired Bootstrap")
-        .withSubdomain("pairedbootstrap").withLicensing().withId(tenantId)
-        .withTenantIdReservationToken(reservation).jsonify();
+    String base =
+        new MultilingualTenantTestDataBuilder()
+            .withName("Paired Bootstrap")
+            .withSubdomain("pairedbootstrap")
+            .withLicensing()
+            .withId(tenantId)
+            .withTenantIdReservationToken(reservation)
+            .jsonify();
     var invalid = (com.fasterxml.jackson.databind.node.ObjectNode) JSON.readTree(base);
-    invalid.set("onboardingDpaAcceptance", JSON.createObjectNode().put("accepted", false)
-        .put("signerUserId", "synthetic-paired-signer").put("signerName", "Synthetic Pair Signer"));
-    assertThat(validator.validate(JSON.treeToValue(invalid,
-        com.vi.tenantservice.api.model.MultilingualTenantDTO.class)).isEmpty())
-        .as("actual required API fields are satisfied before the later domain denial").isTrue();
+    invalid.set(
+        "onboardingDpaAcceptance",
+        JSON.createObjectNode()
+            .put("accepted", false)
+            .put("signerUserId", "synthetic-paired-signer")
+            .put("signerName", "Synthetic Pair Signer"));
+    assertThat(
+            validator
+                .validate(
+                    JSON.treeToValue(
+                        invalid, com.vi.tenantservice.api.model.MultilingualTenantDTO.class))
+                .isEmpty())
+        .as("actual required API fields are satisfied before the later domain denial")
+        .isTrue();
     command("ARM");
     PAIR_ARMED.set(true);
     var executor = java.util.concurrent.Executors.newFixedThreadPool(2);
@@ -309,7 +336,8 @@ class BootstrapV2CallerReceiverIT {
       assertThat(reached.path("delayedInsertReached").asBoolean()).isTrue();
       command("RELEASE_PRIMARY");
       assertThat(OWNER_RESPONSE_READY.await(20, java.util.concurrent.TimeUnit.SECONDS))
-          .as("actual successful owner response reached observing proxy").isTrue();
+          .as("actual successful owner response reached observing proxy")
+          .isTrue();
       assertThat(RECEIVER_STATUS.get()).isEqualTo(200);
       JsonNode captured = command("CAPTURE_STALE");
       assertThat(captured.path("staleCaptured").asBoolean()).isTrue();
@@ -326,10 +354,12 @@ class BootstrapV2CallerReceiverIT {
       assertThat(COMPENSATION_STATUS.get()).as("exact terminal acknowledgement").isEqualTo(204);
       assertThat(allocation.getStatus(tenantId).name()).isEqualTo("RESERVED");
       command("RELEASE_DELAYED");
-      assertThat(delayed.get(20, java.util.concurrent.TimeUnit.SECONDS).statusCode()).isEqualTo(409);
+      assertThat(delayed.get(20, java.util.concurrent.TimeUnit.SECONDS).statusCode())
+          .isEqualTo(409);
       JsonNode retired = command("OBSERVE");
       assertThat(retired.path("delayedInsertDuplicate").asBoolean())
-          .as("validated old request attempted real Mongo INSERT and lost to terminal id fence").isTrue();
+          .as("validated old request attempted real Mongo INSERT and lost to terminal id fence")
+          .isTrue();
       assertThat(retired.path("actualInsertCalls").asInt()).isEqualTo(2);
       assertThat(retired.path("liveTypes").asInt()).isZero();
       assertThat(retired.path("terminalTypes").asInt()).isEqualTo(1);
@@ -339,9 +369,13 @@ class BootstrapV2CallerReceiverIT {
       assertThat(stale.path("conditionalWritesBlocked").asInt()).isEqualTo(2);
       assertThat(stale.path("unconditionalSaveAttempts").asInt()).isZero();
       assertThat(stale.path("staleUpdateRefusals").asInt()).isEqualTo(2);
-      for (String field : List.of("awareConditionalWriteAttempted", "awareConditionalWriteBlocked",
-          "unawareConditionalWriteAttempted", "unawareConditionalWriteBlocked", "retiredReadsHidden"))
-        assertThat(stale.path(field).asBoolean()).as(field).isTrue();
+      for (String field :
+          List.of(
+              "awareConditionalWriteAttempted",
+              "awareConditionalWriteBlocked",
+              "unawareConditionalWriteAttempted",
+              "unawareConditionalWriteBlocked",
+              "retiredReadsHidden")) assertThat(stale.path(field).asBoolean()).as(field).isTrue();
       assertThat(stale.path("retiredReadChecks").asInt()).isEqualTo(20);
       assertThat(stale.path("liveTypes").asInt()).isZero();
       assertThat(stale.path("counterUnchangedSinceCapture").asBoolean()).isTrue();
@@ -358,9 +392,11 @@ class BootstrapV2CallerReceiverIT {
       assertThat(newAttempt.path("terminalTypes").asInt()).isEqualTo(1);
       assertThat(replay(original).statusCode()).isEqualTo(409);
       JsonNode afterOldReplay = command("OBSERVE");
-      for (String field : List.of("liveTypes", "terminalTypes", "actualInsertCalls", "counterAdvancedExactlyOnce"))
+      for (String field :
+          List.of("liveTypes", "terminalTypes", "actualInsertCalls", "counterAdvancedExactlyOnce"))
         assertThat(afterOldReplay.path(field).equals(newAttempt.path(field)))
-            .as("retired packet cannot create another result or invoke Mongo insert").isTrue();
+            .as("retired packet cannot create another result or invoke Mongo insert")
+            .isTrue();
       paired.put("delayedReplyStatus", 409);
       paired.put("newTenantStatus", recreated.statusCode());
       paired.put("oldReplayStatus", 409);
@@ -371,10 +407,13 @@ class BootstrapV2CallerReceiverIT {
       savePaired(paired);
     } finally {
       OWNER_RESPONSE_RELEASE.countDown();
-      try { command("RELEASE_PRIMARY"); command("RELEASE_DELAYED"); }
-      finally {
+      try {
+        command("RELEASE_PRIMARY");
+        command("RELEASE_DELAYED");
+      } finally {
         executor.shutdownNow();
-        if (!executor.awaitTermination(3, java.util.concurrent.TimeUnit.SECONDS)) throw fixtureRefusal();
+        if (!executor.awaitTermination(3, java.util.concurrent.TimeUnit.SECONDS))
+          throw fixtureRefusal();
       }
     }
   }
@@ -383,8 +422,12 @@ class BootstrapV2CallerReceiverIT {
     Path directory = Path.of(required("ORISO_BOOTSTRAP_CONTROL_PATH"));
     long sequence = ++controlSequence;
     Path temporary = directory.resolve("request.tmp");
-    Files.writeString(temporary, JSON.writeValueAsString(Map.of("sequence", sequence, "command", action)));
-    Files.move(temporary, directory.resolve("request.json"), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+    Files.writeString(
+        temporary, JSON.writeValueAsString(Map.of("sequence", sequence, "command", action)));
+    Files.move(
+        temporary,
+        directory.resolve("request.json"),
+        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
         java.nio.file.StandardCopyOption.ATOMIC_MOVE);
     long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
     while (System.nanoTime() < deadline) {
@@ -392,8 +435,8 @@ class BootstrapV2CallerReceiverIT {
       if (Files.isRegularFile(response)) {
         JsonNode value = JSON.readTree(Files.readString(response));
         if (value.path("state").asText().equals("FIXTURE_FAILURE")) throw fixtureRefusal();
-        if (value.path("sequence").asLong() == sequence && value.path("state").asText().equals("ACK"))
-          return value;
+        if (value.path("sequence").asLong() == sequence
+            && value.path("state").asText().equals("ACK")) return value;
       }
       Thread.sleep(20);
     }
@@ -412,44 +455,70 @@ class BootstrapV2CallerReceiverIT {
 
   private static HttpResponse<byte[]> replay(ReplayPacket original) {
     try {
-      return HTTP.send(HttpRequest.newBuilder(
-          URI.create(required("ORISO_CTS_BOOTSTRAP_RECEIVER_URL") + "/consultingtypes"))
-          .timeout(Duration.ofSeconds(30)).header("Authorization", original.authorization)
-          .header("Content-Type", "application/json").header("tenantId", "0")
-          .header("csrfHeader", "test").header("Cookie", "csrfCookie=test")
-          .header("X-ORISO-Tenant-Creation-Context", original.proof)
-          .POST(HttpRequest.BodyPublishers.ofByteArray(original.body)).build(), HttpResponse.BodyHandlers.ofByteArray());
-    } catch (Exception failure) { throw fixtureRefusal(); }
+      return HTTP.send(
+          HttpRequest.newBuilder(
+                  URI.create(required("ORISO_CTS_BOOTSTRAP_RECEIVER_URL") + "/consultingtypes"))
+              .timeout(Duration.ofSeconds(30))
+              .header("Authorization", original.authorization)
+              .header("Content-Type", "application/json")
+              .header("tenantId", "0")
+              .header("csrfHeader", "test")
+              .header("Cookie", "csrfCookie=test")
+              .header("X-ORISO-Tenant-Creation-Context", original.proof)
+              .POST(HttpRequest.BodyPublishers.ofByteArray(original.body))
+              .build(),
+          HttpResponse.BodyHandlers.ofByteArray());
+    } catch (Exception failure) {
+      throw fixtureRefusal();
+    }
   }
 
   private HttpResponse<byte[]> publicCreate(String body, String bearer) {
     try {
-      return HTTP.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/tenantadmin"))
-          .timeout(Duration.ofSeconds(60)).header("Content-Type", "application/json")
-          .header("Authorization", "Bearer " + bearer).header("tenantId", "0")
-          .header("csrfHeader", "test").header("Cookie", "csrfCookie=test")
-          .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofByteArray());
-    } catch (Exception failure) { throw fixtureRefusal(); }
+      return HTTP.send(
+          HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/tenantadmin"))
+              .timeout(Duration.ofSeconds(60))
+              .header("Content-Type", "application/json")
+              .header("Authorization", "Bearer " + bearer)
+              .header("tenantId", "0")
+              .header("csrfHeader", "test")
+              .header("Cookie", "csrfCookie=test")
+              .POST(HttpRequest.BodyPublishers.ofString(body))
+              .build(),
+          HttpResponse.BodyHandlers.ofByteArray());
+    } catch (Exception failure) {
+      throw fixtureRefusal();
+    }
   }
 
   private static String setupBearer() throws Exception {
     JsonNode setup = null;
-    for (JsonNode actor : fixture().path("tasks")) if (actor.path("key").asText().equals("SETUP")) setup = actor;
+    for (JsonNode actor : fixture().path("tasks"))
+      if (actor.path("key").asText().equals("SETUP")) setup = actor;
     if (setup == null) throw fixtureRefusal();
-    String form = "grant_type=client_credentials&client_id="
-        + URLEncoder.encode(setup.path("clientId").asText(), StandardCharsets.UTF_8)
-        + "&client_secret=" + URLEncoder.encode(setup.path("secret").asText(), StandardCharsets.UTF_8);
-    var response = HTTP.send(HttpRequest.newBuilder(URI.create(
-        fixture().path("issuer").asText() + "/protocol/openid-connect/token"))
-        .header("Content-Type", "application/x-www-form-urlencoded").timeout(Duration.ofSeconds(30))
-        .POST(HttpRequest.BodyPublishers.ofString(form)).build(), HttpResponse.BodyHandlers.ofString());
+    String form =
+        "grant_type=client_credentials&client_id="
+            + URLEncoder.encode(setup.path("clientId").asText(), StandardCharsets.UTF_8)
+            + "&client_secret="
+            + URLEncoder.encode(setup.path("secret").asText(), StandardCharsets.UTF_8);
+    var response =
+        HTTP.send(
+            HttpRequest.newBuilder(
+                    URI.create(
+                        fixture().path("issuer").asText() + "/protocol/openid-connect/token"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .timeout(Duration.ofSeconds(30))
+                .POST(HttpRequest.BodyPublishers.ofString(form))
+                .build(),
+            HttpResponse.BodyHandlers.ofString());
     if (response.statusCode() != 200) throw fixtureRefusal();
     return JSON.readTree(response.body()).path("access_token").asText();
   }
 
   private static void savePaired(JsonNode paired) throws Exception {
     Path path = Path.of(required("ORISO_BOOTSTRAP_OBSERVED"));
-    var value = (com.fasterxml.jackson.databind.node.ObjectNode) JSON.readTree(Files.readString(path));
+    var value =
+        (com.fasterxml.jackson.databind.node.ObjectNode) JSON.readTree(Files.readString(path));
     value.set("paired", paired);
     Files.writeString(path, JSON.writeValueAsString(value));
   }
@@ -461,12 +530,16 @@ class BootstrapV2CallerReceiverIT {
   private static final class ReplayPacket {
     private final byte[] body;
     private final String authorization, proof;
+
     private ReplayPacket(byte[] body, String authorization, String proof) {
       this.body = body;
       this.authorization = authorization;
       this.proof = proof;
     }
-    @Override public String toString() { return "<private actually issued request>"; }
-  }
 
+    @Override
+    public String toString() {
+      return "<private actually issued request>";
+    }
+  }
 }
