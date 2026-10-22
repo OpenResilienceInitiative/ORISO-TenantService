@@ -52,7 +52,8 @@ public final class AccountPolicyReceiverFixture {
         "spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
         issuer + "/protocol/openid-connect/certs");
     System.setProperty("TASK_IDENTITY_MODEL", "FIVE_ACTORS");
-    System.setProperty("TASK_IDENTITY_REQUIRED_TASKS", "INVITE_RESERVATIONS,CONSULTANT_IMPORT,RUNTIME_POLICY");
+    System.setProperty(
+        "TASK_IDENTITY_REQUIRED_TASKS", "INVITE_RESERVATIONS,CONSULTANT_IMPORT,RUNTIME_POLICY");
     System.setProperty("TASK_IDENTITY_AUDIENCE", "tenantservice");
     System.setProperty("ORISO_TASK_CONTEXT_KEY", required("ORISO_POLICY_SHARED_KEY"));
     // A C policy read must neither validate nor fall back to this deliberately unusable v1 key.
