@@ -114,8 +114,10 @@ class TenantHeldBootstrapIT {
     var restarted =
         application.getAutowireCapableBeanFactory().createBean(TenantHeldBootstrap.class);
     var prior = controls.getAccountInactivitySettings();
-    var changedPolicy = controls.updateAccountInactivitySettings(
-        new com.vi.tenantservice.api.model.AccountInactivitySettings(7, 11, 18, prior.getRevision()));
+    var changedPolicy =
+        controls.updateAccountInactivitySettings(
+            new com.vi.tenantservice.api.model.AccountInactivitySettings(
+                7, 11, 18, prior.getRevision()));
     assertThat(changedPolicy.getRevision()).isGreaterThan(prior.getRevision());
     var replay =
         org.junit.jupiter.api.Assertions.assertDoesNotThrow(

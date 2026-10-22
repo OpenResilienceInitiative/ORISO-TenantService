@@ -617,9 +617,10 @@ class BootstrapV2CallerReceiverIT {
           .isTrue();
       assertThat(upstreamStatus.get()).isEqualTo(200);
       var priorPolicy = controls.getAccountInactivitySettings();
-      var changedPolicy = controls.updateAccountInactivitySettings(
-          new com.vi.tenantservice.api.model.AccountInactivitySettings(
-              7, 11, 18, priorPolicy.getRevision()));
+      var changedPolicy =
+          controls.updateAccountInactivitySettings(
+              new com.vi.tenantservice.api.model.AccountInactivitySettings(
+                  7, 11, 18, priorPolicy.getRevision()));
       assertThat(changedPolicy.getRevision()).isGreaterThan(priorPolicy.getRevision());
       loseTenantReply.set(false);
       var finalReply = heldPost(proxy, request.toString(), bearer);
