@@ -47,6 +47,10 @@ FLOORS = {
 }
 COMPILED = {
     "tenant": [
+        "target/classes/com/vi/tenantservice/api/controller/TenantHeldBootstrapController.class",
+        "target/classes/com/vi/tenantservice/api/service/TenantHeldBootstrap.class",
+        "target/classes/com/vi/tenantservice/api/service/TenantHeldBootstrapJournal.class",
+        "target/test-classes/com/vi/tenantservice/api/service/TenantHeldBootstrapIT.class",
         "target/test-classes/com/vi/tenantservice/api/controller/BootstrapV2CallerReceiverIT.class",
         "target/test-classes/com/vi/tenantservice/api/service/TenantBootstrapCreationIT.class",
         "target/classes/com/vi/tenantservice/api/service/TenantBootstrapCreation.class",

@@ -77,23 +77,32 @@ public class TenantBootstrapCreation {
     return createInternal(input, reservationToken, null, callback);
   }
 
-  public void requireHeldInput(TenantHeldBootstrapJournal.Operation operation,
+  public void requireHeldInput(
+      TenantHeldBootstrapJournal.Operation operation,
       com.vi.tenantservice.api.model.MultilingualTenantDTO input) {
     heldJournal.require(operation);
-    if (!operation.inputDigest.equals(heldJournal.digest("tenant-held-bootstrap-input/v1",
-        TenantHeldBootstrapJournal.JSON.valueToTree(input)))) throw denied();
+    if (!operation.inputDigest.equals(
+        heldJournal.digest(
+            "tenant-held-bootstrap-input/v1", TenantHeldBootstrapJournal.JSON.valueToTree(input))))
+      throw denied();
   }
 
-  public <T> T createHeld(TenantEntity input, String reservationToken,
-      TenantHeldBootstrapJournal.Operation operation, BiFunction<TenantEntity, Grant, T> callback) {
+  public <T> T createHeld(
+      TenantEntity input,
+      String reservationToken,
+      TenantHeldBootstrapJournal.Operation operation,
+      BiFunction<TenantEntity, Grant, T> callback) {
     heldJournal.require(operation);
     if (!operation.input.getId().equals(input.getId())
         || !operation.input.getTenantIdReservationToken().equals(reservationToken)) throw denied();
     return createInternal(input, reservationToken, operation, callback);
   }
 
-  private <T> T createInternal(TenantEntity input, String reservationToken,
-      TenantHeldBootstrapJournal.Operation operation, BiFunction<TenantEntity, Grant, T> callback) {
+  private <T> T createInternal(
+      TenantEntity input,
+      String reservationToken,
+      TenantHeldBootstrapJournal.Operation operation,
+      BiFunction<TenantEntity, Grant, T> callback) {
     noAmbientTransaction();
     Binding owner = caller();
     TaskContextProof.key(environment);
@@ -140,8 +149,13 @@ public class TenantBootstrapCreation {
                       || !"ASSIGNED".equals(value(attempt.snapshot.ledger(), "status"))) {
                     throw denied();
                   }
-                  if (operation != null) heldJournal.insert(operation, attempt.marker,
-                      heldFingerprint(attempt.snapshot), attempt.snapshot.tenant().size(), attempt.snapshot.ledger().size());
+                  if (operation != null)
+                    heldJournal.insert(
+                        operation,
+                        attempt.marker,
+                        heldFingerprint(attempt.snapshot),
+                        attempt.snapshot.tenant().size(),
+                        attempt.snapshot.ledger().size());
                   return fresh;
                 });
         if (attempt.completion != TransactionSynchronization.STATUS_COMMITTED) throw denied();
@@ -179,17 +193,21 @@ public class TenantBootstrapCreation {
     throw new TenantIdAllocationExhaustedException("AUTO tenant ID contention exhausted", conflict);
   }
 
-  public <T> T resumeHeld(TenantHeldBootstrapJournal.Operation operation,
-      BiFunction<TenantEntity, Grant, T> callback) {
+  public <T> T resumeHeld(
+      TenantHeldBootstrapJournal.Operation operation, BiFunction<TenantEntity, Grant, T> callback) {
     Attempt attempt = heldAttempt(operation);
     var row = heldJournal.read(operation, false);
     if ("COMPLETE".equals(row.state())) throw denied();
     Grant grant = new Grant(this, attempt);
-    try { return callback.apply(heldEntity(attempt.snapshot), grant); }
-    finally { grant.active = false; }
+    try {
+      return callback.apply(heldEntity(attempt.snapshot), grant);
+    } finally {
+      grant.active = false;
+    }
   }
 
-  public <T> T readHeld(TenantHeldBootstrapJournal.Operation operation,
+  public <T> T readHeld(
+      TenantHeldBootstrapJournal.Operation operation,
       java.util.function.Function<TenantEntity, T> reader) {
     Attempt attempt = heldAttempt(operation);
     T result = reader.apply(heldEntity(attempt.snapshot));
@@ -199,10 +217,11 @@ public class TenantBootstrapCreation {
 
   public void completeHeld(TenantHeldBootstrapJournal.Operation operation, String resultDigest) {
     Attempt attempt = heldAttempt(operation);
-    transaction.executeWithoutResult(status -> {
-      if (!attempt.snapshot.equals(transactionalSnapshot(attempt.id, true))) throw denied();
-      heldJournal.complete(operation, resultDigest);
-    });
+    transaction.executeWithoutResult(
+        status -> {
+          if (!attempt.snapshot.equals(transactionalSnapshot(attempt.id, true))) throw denied();
+          heldJournal.complete(operation, resultDigest);
+        });
   }
 
   private Attempt heldAttempt(TenantHeldBootstrapJournal.Operation operation) {
@@ -224,12 +243,16 @@ public class TenantBootstrapCreation {
     var rows = new TreeMap<String, Object>();
     for (var entry : Map.of("tenant", snapshot.tenant(), "ledger", snapshot.ledger()).entrySet()) {
       var columns = new TreeMap<String, Object>();
-      entry.getValue().forEach((name, cell) -> {
-        var value = new TreeMap<String, Object>();
-        value.put("jdbcType", cell.jdbcType()); value.put("javaType", cell.javaType());
-        value.put("value", cell.value() == null ? null : cell.value().toString());
-        columns.put(name, value);
-      });
+      entry
+          .getValue()
+          .forEach(
+              (name, cell) -> {
+                var value = new TreeMap<String, Object>();
+                value.put("jdbcType", cell.jdbcType());
+                value.put("javaType", cell.javaType());
+                value.put("value", cell.value() == null ? null : cell.value().toString());
+                columns.put(name, value);
+              });
       rows.put(entry.getKey(), columns);
     }
     return heldJournal.digest("tenant-held-bootstrap-state/v1", rows);
@@ -242,9 +265,10 @@ public class TenantBootstrapCreation {
       for (var field : TenantEntity.class.getDeclaredFields()) {
         var column = field.getAnnotation(jakarta.persistence.Column.class);
         if (column == null || java.lang.reflect.Modifier.isStatic(field.getModifiers())) continue;
-        String name = column.name().isEmpty()
-            ? field.getName().replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase(Locale.ROOT)
-            : column.name().toLowerCase(Locale.ROOT);
+        String name =
+            column.name().isEmpty()
+                ? field.getName().replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase(Locale.ROOT)
+                : column.name().toLowerCase(Locale.ROOT);
         Cell cell = snapshot.tenant().get(name);
         if (cell == null) throw denied();
         Object value = cell.value();
@@ -253,10 +277,13 @@ public class TenantBootstrapCreation {
           else if (field.getType() == Integer.class) value = Math.toIntExact(number.longValue());
           else if (field.getType() == Long.class) value = number.longValue();
         }
-        field.setAccessible(true); field.set(result, value);
+        field.setAccessible(true);
+        field.set(result, value);
       }
       return result;
-    } catch (ReflectiveOperationException | IllegalArgumentException invalid) { throw denied(); }
+    } catch (ReflectiveOperationException | IllegalArgumentException invalid) {
+      throw denied();
+    }
   }
 
   private Binding caller() {
@@ -278,7 +305,8 @@ public class TenantBootstrapCreation {
     noAmbientTransaction();
     if (attempt.operation != null) {
       var row = heldJournal.read(attempt.operation, false);
-      if (row == null || !row.marker().equals(attempt.marker)
+      if (row == null
+          || !row.marker().equals(attempt.marker)
           || !row.snapshotDigest().equals(heldFingerprint(attempt.snapshot))) throw denied();
     }
     if (!attempt.owner.equals(caller())
@@ -287,9 +315,13 @@ public class TenantBootstrapCreation {
   }
 
   private Snapshot freshSnapshot(Attempt attempt) {
-    Snapshot actual = freshSnapshot(attempt.id, attempt.snapshot.tenant().size(), attempt.snapshot.ledger().size());
-    if (!actual.tenant().isEmpty() && (!actual.tenant().keySet().equals(attempt.snapshot.tenant().keySet())
-        || !actual.ledger().keySet().equals(attempt.snapshot.ledger().keySet()))) throw denied();
+    Snapshot actual =
+        freshSnapshot(
+            attempt.id, attempt.snapshot.tenant().size(), attempt.snapshot.ledger().size());
+    if (!actual.tenant().isEmpty()
+        && (!actual.tenant().keySet().equals(attempt.snapshot.tenant().keySet())
+            || !actual.ledger().keySet().equals(attempt.snapshot.ledger().keySet())))
+      throw denied();
     return actual;
   }
 
@@ -458,7 +490,9 @@ public class TenantBootstrapCreation {
 
     private Attempt(Binding owner, String marker, TenantHeldBootstrapJournal.Operation operation) {
       if (!UUID.fromString(marker).toString().equals(marker)) throw denied();
-      this.owner = owner; this.marker = marker; this.operation = operation;
+      this.owner = owner;
+      this.marker = marker;
+      this.operation = operation;
     }
   }
 
@@ -491,10 +525,13 @@ public class TenantBootstrapCreation {
       requireLive();
       if (attempt.sendStarted || remote != null) throw denied();
       remote = authority.consultingTypes.createDefaultConsultingTypes(this);
-      if (attempt.operation != null) authority.transaction.executeWithoutResult(status -> {
-        if (!attempt.snapshot.equals(authority.transactionalSnapshot(attempt.id, true))) throw denied();
-        authority.heldJournal.stage(attempt.operation, "CTS_VERIFIED");
-      });
+      if (attempt.operation != null)
+        authority.transaction.executeWithoutResult(
+            status -> {
+              if (!attempt.snapshot.equals(authority.transactionalSnapshot(attempt.id, true)))
+                throw denied();
+              authority.heldJournal.stage(attempt.operation, "CTS_VERIFIED");
+            });
     }
 
     public byte[] frozenBootstrapCommand() {
@@ -533,11 +570,16 @@ public class TenantBootstrapCreation {
           || (payloadDigest != null && !payloadDigest.equals(digest))) throw denied();
       if (attempt.operation != null) {
         try {
-          String frozen = TaskContextProof.digest(TaskContextProof.key(authority.environment),
-              TenantHeldBootstrapJournal.JSON.readTree(attempt.operation.command));
+          String frozen =
+              TaskContextProof.digest(
+                  TaskContextProof.key(authority.environment),
+                  TenantHeldBootstrapJournal.JSON.readTree(attempt.operation.command));
           if (!digest.equals(frozen)) throw denied();
-        } catch (java.io.IOException invalid) { throw denied(); }
-        catch (Exception invalid) { throw denied(); }
+        } catch (java.io.IOException invalid) {
+          throw denied();
+        } catch (Exception invalid) {
+          throw denied();
+        }
       }
       payloadDigest = digest;
     }
@@ -545,10 +587,13 @@ public class TenantBootstrapCreation {
     public void beginSend() {
       requireLive();
       if (payloadDigest == null) throw denied();
-      if (attempt.operation != null) authority.transaction.executeWithoutResult(status -> {
-        if (!attempt.snapshot.equals(authority.transactionalSnapshot(attempt.id, true))) throw denied();
-        authority.heldJournal.stage(attempt.operation, "CTS_PENDING");
-      });
+      if (attempt.operation != null)
+        authority.transaction.executeWithoutResult(
+            status -> {
+              if (!attempt.snapshot.equals(authority.transactionalSnapshot(attempt.id, true)))
+                throw denied();
+              authority.heldJournal.stage(attempt.operation, "CTS_PENDING");
+            });
       attempt.sendStarted = true;
     }
 

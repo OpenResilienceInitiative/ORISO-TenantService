@@ -73,13 +73,18 @@ public class ConsultingTypeService {
     long tenantId = grant.tenantId();
     try {
       byte[] frozen = grant.frozenBootstrapCommand();
-      ConsultingTypeDTO dto = new ObjectMapper().readValue(
-          frozen == null ? freezeBootstrapCommand(tenantId) : frozen, ConsultingTypeDTO.class);
+      ConsultingTypeDTO dto =
+          new ObjectMapper()
+              .readValue(
+                  frozen == null ? freezeBootstrapCommand(tenantId) : frozen,
+                  ConsultingTypeDTO.class);
       if (!Long.valueOf(tenantId).equals(dto.getTenantId().longValue()))
         throw new IllegalStateException("Owned bootstrap target differs");
       String proof = creationContext.issue(grant, dto);
       FullConsultingTypeResponseDTO response = createConsultingType(dto, proof, grant);
-      if (response == null || response.getId() == null || response.getId() < 0
+      if (response == null
+          || response.getId() == null
+          || response.getId() < 0
           || !dto.getTenantId().equals(response.getTenantId()))
         throw new IllegalStateException("Owned bootstrap readback is not verified");
       return new BootstrapSuccess(this, grant, new ObjectMapper().writeValueAsBytes(dto));
