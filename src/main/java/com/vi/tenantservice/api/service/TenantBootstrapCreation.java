@@ -42,6 +42,8 @@ public class TenantBootstrapCreation {
   private final DataSource dataSource;
   private final JdbcTemplate sql;
   private final TransactionTemplate transaction;
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService consultingTypes;
   @PersistenceContext private EntityManager entities;
 
   public TenantBootstrapCreation(
@@ -120,6 +122,19 @@ public class TenantBootstrapCreation {
         Grant grant = new Grant(this, attempt);
         try {
           return callback.apply(created, grant);
+        } catch (RuntimeException failure) {
+          if (grant.remote != null) {
+            try {
+              grant.requireLive();
+              grant.remote.compensate();
+              grant.requireLive();
+              // Exact terminal acknowledgement precedes the existing locked SQL ownership check.
+              resolveBeforeSend(attempt, failure);
+            } catch (RuntimeException unresolved) {
+              failure.addSuppressed(new AccessDeniedException("Owned remote bootstrap requires reconciliation"));
+            }
+          }
+          throw failure;
         } finally {
           grant.active = false;
         }
@@ -338,6 +353,7 @@ public class TenantBootstrapCreation {
     private final long expires = Instant.now().getEpochSecond() + 60;
     private boolean active = true;
     private String payloadDigest;
+    private com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService.BootstrapSuccess remote;
 
     private Grant(TenantBootstrapCreation authority, Attempt attempt) {
       this.authority = authority;
@@ -350,6 +366,12 @@ public class TenantBootstrapCreation {
           || System.nanoTime() - started >= 60_000_000_000L
           || Instant.now().getEpochSecond() >= expires) throw denied();
       authority.requireSnapshot(attempt);
+    }
+
+    public void createDefaultConsultingTypes() {
+      requireLive();
+      if (attempt.sendStarted || remote != null) throw denied();
+      remote = authority.consultingTypes.createDefaultConsultingTypes(this);
     }
 
     public long tenantId() {

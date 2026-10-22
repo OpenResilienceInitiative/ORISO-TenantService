@@ -472,7 +472,7 @@ public class TenantServiceFacade {
       throws ConsultingTypeCreationException {
     try {
       if (grant != null) {
-        consultingTypeService.createDefaultConsultingTypes(grant);
+        grant.createDefaultConsultingTypes();
       } else if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
         consultingTypeService.createDefaultConsultingTypes(
             createdTenant.getId(), creationContext.issue(createdTenant.getId()));

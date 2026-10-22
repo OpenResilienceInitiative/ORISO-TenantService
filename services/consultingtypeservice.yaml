@@ -199,6 +199,27 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
         - Bearer: []
+  /consultingtypes/bootstrap-compensation:
+    post:
+      tags:
+        - consulting-type-controller
+      summary: Retire only the exact privately issued bootstrap attempt
+      operationId: compensateTenantBootstrap
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultingTypeDTO'
+        required: true
+      responses:
+        '204':
+          description: Exact owned bootstrap attempt is terminal
+        '403':
+          description: Invalid current SETUP identity or compensation context
+        '409':
+          description: Ownership, payload or current result differs
+      security:
+        - Bearer: []
   /consultingtypes/{id}:
     patch:
       tags:
