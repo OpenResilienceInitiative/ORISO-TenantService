@@ -99,28 +99,35 @@ class TenantBootstrapCreationIT {
 
   @Test
   void theActualNativeSchemaCanStoreBothSingleDomainTenantRows() throws Exception {
-    var nativeType = Class.forName(
-        "com.vi.tenantservice.api.controller.BootstrapV2CallerReceiverIT", false,
-        getClass().getClassLoader());
+    var nativeType =
+        Class.forName(
+            "com.vi.tenantservice.api.controller.BootstrapV2CallerReceiverIT",
+            false,
+            getClass().getClassLoader());
     Sql nativeSchema = nativeType.getAnnotation(Sql.class);
     var population = new org.springframework.jdbc.datasource.init.ResourceDatabasePopulator();
     for (String script : nativeSchema.scripts()) {
       population.addScript(new org.springframework.core.io.ClassPathResource(script));
     }
     for (String statement : nativeSchema.statements()) {
-      population.addScript(new org.springframework.core.io.ByteArrayResource(
-          statement.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+      population.addScript(
+          new org.springframework.core.io.ByteArrayResource(
+              statement.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
     }
-    var dataSource = new org.springframework.jdbc.datasource.DriverManagerDataSource(
-        "jdbc:h2:mem:native-single-domain-schema;MODE=MySQL", "sa", "");
+    var dataSource =
+        new org.springframework.jdbc.datasource.DriverManagerDataSource(
+            "jdbc:h2:mem:native-single-domain-schema;MODE=MySQL", "sa", "");
     try (var connection = dataSource.getConnection()) {
       population.execute(dataSource);
       var database = new JdbcTemplate(dataSource);
-      org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> {
-        String insert = "INSERT INTO tenant (id,name,subdomain,create_date) VALUES (?,?,'',CURRENT_TIMESTAMP)";
-        database.update(insert, 9157L, "synthetic first native tenant");
-        database.update(insert, 9158L, "synthetic paired native tenant");
-      }, "Actual single-domain fixture must preserve the production subdomain constraint removal");
+      org.junit.jupiter.api.Assertions.assertDoesNotThrow(
+          () -> {
+            String insert =
+                "INSERT INTO tenant (id,name,subdomain,create_date) VALUES (?,?,'',CURRENT_TIMESTAMP)";
+            database.update(insert, 9157L, "synthetic first native tenant");
+            database.update(insert, 9158L, "synthetic paired native tenant");
+          },
+          "Actual single-domain fixture must preserve the production subdomain constraint removal");
     }
   }
 
