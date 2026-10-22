@@ -48,6 +48,7 @@ FILES = {
         "src/test/java/de/caritas/cob/consultingtypeservice/config/security/CreationContextKeyTest.java",
         "src/main/java/de/caritas/cob/consultingtypeservice/config/security/TaskServiceActor.java",
         "src/main/java/de/caritas/cob/consultingtypeservice/config/security/TaskServiceIdentity.java",
+        "src/test/java/de/caritas/cob/consultingtypeservice/api/controller/GroupedTaskServiceIdentityAuthorizationIT.java",
     ],
 }
 

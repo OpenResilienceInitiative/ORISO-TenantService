@@ -51,9 +51,17 @@ class C16FormatProposalControls(unittest.TestCase):
         self.assertEqual({"tenant", "cts"}, set(PROOF.FILES))
         self.assertEqual(14, len(PROOF.FILES["tenant"]))
         self.assertEqual(13, sum(path.startswith("src/main/") for path in PROOF.FILES["cts"]))
-        self.assertEqual(4, sum(path.startswith("src/test/") for path in PROOF.FILES["cts"]))
-        self.assertEqual(31, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
+        self.assertEqual(5, sum(path.startswith("src/test/") for path in PROOF.FILES["cts"]))
+        self.assertEqual(32, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
         self.assertTrue(all(path.endswith(".java") for values in PROOF.FILES.values() for path in values))
+
+    def test_only_the_literal_current_cts_grouped_fixture_can_join_formatter(self):
+        path = "src/test/java/de/caritas/cob/consultingtypeservice/api/controller/GroupedTaskServiceIdentityAuthorizationIT.java"
+        self.assertTrue(PROOF.owned_delta("cts", [path], ""))
+        self.assertFalse(PROOF.owned_delta("tenant", [path], ""))
+        self.assertFalse(PROOF.owned_delta("cts", [path.replace("GroupedTaskServiceIdentityAuthorizationIT", "OtherAuthorityIT")], ""))
+        self.assertFalse(PROOF.owned_delta("cts", [path, "src/main/java/UnownedPermission.java"], ""))
+        self.assertFalse(PROOF.owned_delta("cts", [path], "untracked.java"))
 
     def test_exact_audience_effect_extension_excludes_authority_neighbors(self):
         paths = {
