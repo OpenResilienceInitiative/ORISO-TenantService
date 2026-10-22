@@ -200,6 +200,10 @@ class TenantBootstrapCreationIT {
                     "{\"tenantId\":" + target + ",\"id\":" + (target + 100000) + "}",
                     org.springframework.http.MediaType.APPLICATION_JSON));
       }
+      var frozenCommand = new AtomicReference<String>();
+      var compensationRequests = new java.util.concurrent.atomic.AtomicInteger();
+      for (int repeat = 0; repeat < 2; repeat++) {
+        boolean loseReply = repeat == 0;
       server
           .expect(
               org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
@@ -213,6 +217,10 @@ class TenantBootstrapCreationIT {
                             .isActualTransactionActive())
                     .isFalse();
                 try {
+                  compensationRequests.incrementAndGet();
+                  String currentCommand = ((org.springframework.mock.http.client.MockClientHttpRequest) sent).getBodyAsString();
+                  if (frozenCommand.get() == null) frozenCommand.set(currentCommand);
+                  else assertThat(frozenCommand.get().equals(currentCommand)).isTrue();
                   var body =
                       json.readTree(
                           ((org.springframework.mock.http.client.MockClientHttpRequest) sent)
@@ -259,9 +267,12 @@ class TenantBootstrapCreationIT {
                   throw new AssertionError("Owned compensation wire precondition refused");
                 }
               })
-          .andRespond(
-              org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(
-                  org.springframework.http.HttpStatus.NO_CONTENT));
+          .andRespond(terminal -> {
+            if (loseReply) throw new java.io.IOException("Synthetic lost terminal acknowledgement");
+            return org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(
+                org.springframework.http.HttpStatus.NO_CONTENT).createResponse(terminal);
+          });
+      }
       var facade = application.getBean(com.vi.tenantservice.api.facade.TenantServiceFacade.class);
       var first =
           new com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder()
@@ -305,6 +316,7 @@ class TenantBootstrapCreationIT {
               later == null ? "NONE" : later.getClass().getName())
           .isTrue();
       assertThat(reached.get()).isEqualTo(2);
+      assertThat(compensationRequests.get()).isEqualTo(2);
       assertThat(
               sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE subdomain=''", Integer.class))
           .isEqualTo(1);
@@ -319,6 +331,55 @@ class TenantBootstrapCreationIT {
     } finally {
       transport.setRequestFactory(originalTransport);
       org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+    }
+  }
+
+  @Test
+  void unresolvedOrRejectedCompensationCannotReleaseCurrentSqlOwnership() throws Exception {
+    for (int failureMode : new int[] {0, 1, 2, 3}) {
+      when(identity.current("CONFIG_WIZARD")).thenReturn(true);
+      boolean twoUnknown = failureMode == 0;
+      boolean explicitRejection = failureMode == 1;
+      boolean callerChanged = failureMode == 2;
+      boolean rowChanged = failureMode == 3;
+      nativeSchemaPopulation().execute(application.getBean(javax.sql.DataSource.class));
+      var transport = application.getBean(org.springframework.web.client.RestTemplate.class);
+      var originalTransport = transport.getRequestFactory();
+      var server = org.springframework.test.web.client.MockRestServiceServer.bindTo(transport).build();
+      var request = new org.springframework.mock.web.MockHttpServletRequest();
+      request.setUserPrincipal(SecurityContextHolder.getContext().getAuthentication());
+      org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
+          new org.springframework.web.context.request.ServletRequestAttributes(request));
+      try {
+        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
+            "http://local-bootstrap-precondition/consultingtypes"))
+            .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess(
+                "{\"tenantId\":9158,\"id\":109158}", org.springframework.http.MediaType.APPLICATION_JSON));
+        for (int attempt = 0; attempt < (twoUnknown ? 2 : 1); attempt++) {
+          server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
+              "http://local-bootstrap-precondition/consultingtypes/bootstrap-compensation"))
+              .andExpect(sent -> assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse())
+              .andRespond(terminal -> {
+                if (callerChanged) when(identity.current("CONFIG_WIZARD")).thenReturn(false);
+                if (rowChanged) assertThat(sql.update("UPDATE tenant SET name='current foreign drift' WHERE id=9158")).isEqualTo(1);
+                if (!explicitRejection) throw new java.io.IOException("Synthetic unresolved terminal acknowledgement");
+                return org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(
+                    org.springframework.http.HttpStatus.CONFLICT).createResponse(terminal);
+              });
+        }
+        String token = allocation.reserve(9158L, "local-unknown-ack").getToken();
+        var original = new IllegalStateException("Synthetic later callback failure");
+        Throwable failed = org.assertj.core.api.Assertions.catchThrowable(() -> creation.create(input(9158L), token,
+            (created, grant) -> { grant.createDefaultConsultingTypes(); throw original; }));
+        assertThat(failed).isSameAs(original);
+        assertThat(sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE id=9158", Integer.class)).isEqualTo(1);
+        assertThat("ASSIGNED".equals(sql.queryForObject("SELECT status FROM tenant_id_reservation WHERE tenant_id=9158", String.class))).isTrue();
+        assertThat(token.equals(sql.queryForObject("SELECT token FROM tenant_id_reservation WHERE tenant_id=9158", String.class))).isTrue();
+        server.verify();
+      } finally {
+        transport.setRequestFactory(originalTransport);
+        org.springframework.web.context.request.RequestContextHolder.resetRequestAttributes();
+      }
     }
   }
 

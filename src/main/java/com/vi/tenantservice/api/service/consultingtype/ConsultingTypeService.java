@@ -152,6 +152,19 @@ public class ConsultingTypeService {
     }
 
     public void compensate() {
+      for (int attempt = 0; attempt < 2; attempt++) {
+        try {
+          compensateOnce();
+          return;
+        } catch (org.springframework.web.client.ResourceAccessException unknown) {
+          if (attempt == 1) throw unknown;
+          // Only this exact terminal operation is retryable, while the same private grant is live.
+          grant.claims();
+        }
+      }
+    }
+
+    private void compensateOnce() {
       try {
         ConsultingTypeDTO dto = new ObjectMapper().readValue(command, ConsultingTypeDTO.class);
         String proof = owner.creationContext.issueCompensation(grant, dto);
