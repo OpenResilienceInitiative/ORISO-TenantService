@@ -125,29 +125,38 @@ class TenantBootstrapCreationIT {
   void everyProofForTheLiveCreationKeepsTheActualPrivateInsertAttemptNonce() throws Exception {
     String token = allocation.reserve(9157L, "synthetic-bootstrap").getToken();
     var json = new com.fasterxml.jackson.databind.ObjectMapper();
-    var dto = json.readValue(
-        TenantBootstrapCreationIT.class.getResourceAsStream(
-            "/settings/bootstrap-v2-complete-consulting-type.json"),
-        com.vi.tenantservice.consultingtypeservice.generated.web.model.ConsultingTypeDTO.class);
+    var dto =
+        json.readValue(
+            TenantBootstrapCreationIT.class.getResourceAsStream(
+                "/settings/bootstrap-v2-complete-consulting-type.json"),
+            com.vi.tenantservice.consultingtypeservice.generated.web.model.ConsultingTypeDTO.class);
     dto.setTenantId(9157);
-    var signer = application.getBean(com.vi.tenantservice.config.security.TenantCreationContext.class);
-    creation.create(input(9157L), token, (created, grant) -> {
-      String first = signer.issue(grant, dto);
-      String second = signer.issue(grant, dto);
-      try {
-        var firstClaims = json.readTree(java.util.Base64.getUrlDecoder().decode(first.split("\\.", -1)[0]));
-        var secondClaims = json.readTree(java.util.Base64.getUrlDecoder().decode(second.split("\\.", -1)[0]));
-        String marker = sql.queryForObject(
-            "SELECT bootstrap_attempt_id FROM tenant WHERE id=9157", String.class);
-        assertThat(firstClaims.path("nonce").asText()).isEqualTo(marker.replace("-", ""));
-        assertThat(secondClaims.path("nonce").asText()).isEqualTo(firstClaims.path("nonce").asText());
-        assertThat(firstClaims.size()).isEqualTo(16);
-        assertThat(secondClaims.size()).isEqualTo(16);
-      } catch (java.io.IOException failure) {
-        throw new AssertionError("Synthetic proof could not be inspected", failure);
-      }
-      return null;
-    });
+    var signer =
+        application.getBean(com.vi.tenantservice.config.security.TenantCreationContext.class);
+    creation.create(
+        input(9157L),
+        token,
+        (created, grant) -> {
+          String first = signer.issue(grant, dto);
+          String second = signer.issue(grant, dto);
+          try {
+            var firstClaims =
+                json.readTree(java.util.Base64.getUrlDecoder().decode(first.split("\\.", -1)[0]));
+            var secondClaims =
+                json.readTree(java.util.Base64.getUrlDecoder().decode(second.split("\\.", -1)[0]));
+            String marker =
+                sql.queryForObject(
+                    "SELECT bootstrap_attempt_id FROM tenant WHERE id=9157", String.class);
+            assertThat(firstClaims.path("nonce").asText()).isEqualTo(marker.replace("-", ""));
+            assertThat(secondClaims.path("nonce").asText())
+                .isEqualTo(firstClaims.path("nonce").asText());
+            assertThat(firstClaims.size()).isEqualTo(16);
+            assertThat(secondClaims.size()).isEqualTo(16);
+          } catch (java.io.IOException failure) {
+            throw new AssertionError("Synthetic proof could not be inspected", failure);
+          }
+          return null;
+        });
   }
 
   @Test
