@@ -142,7 +142,13 @@ public class EffectivePermissionSettingsApplier {
               Settings::setFeatureAskerBrowserLiveChatEnabled),
           Map.entry(
               "featureAskerBrowserSelfHelpEnabled",
-              Settings::setFeatureAskerBrowserSelfHelpEnabled));
+              Settings::setFeatureAskerBrowserSelfHelpEnabled),
+          Map.entry(
+              "featureConsultantEmailInternalGroupEnabled",
+              Settings::setFeatureConsultantEmailInternalGroupEnabled),
+          Map.entry(
+              "featureConsultantBrowserInternalGroupEnabled",
+              Settings::setFeatureConsultantBrowserInternalGroupEnabled));
 
   private record ToggleBinding(
       Function<TenantAdminAllowedPermissionToggles, Boolean> getter,

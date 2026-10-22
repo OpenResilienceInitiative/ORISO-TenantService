@@ -36,6 +36,7 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantIdAllocationStatus;
+import com.vi.tenantservice.api.model.TenantOperationalStatusDTO;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
@@ -121,6 +122,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantInputSanitizer tenantInputSanitizer;
 
   private final @NonNull SubdomainValidator subdomainValidator;
+  @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
+
   private final @NonNull TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TranslationService translationService;
@@ -178,6 +181,11 @@ public class TenantServiceFacade {
   public MultilingualTenantDTO createTenant(MultilingualTenantDTO tenantDTO) {
     log.info("Creating new tenant");
     assertCallerMayCreateThisTenant(tenantDTO);
+    if (Boolean.FALSE.equals(tenantDTO.getActive())) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "New tenants start active; the assigned Träger administrator may pause them after creation");
+    }
     MultilingualTenantDTO sanitizedTenantDTO = tenantInputSanitizer.sanitize(tenantDTO);
     validateCreateTenantInput(tenantDTO);
     // The sanitized value is the one that would be stored, so that is the one that is checked.
@@ -453,6 +461,13 @@ public class TenantServiceFacade {
     }
   }
 
+  public TenantOperationalStatusDTO updateOperationalStatus(Long id, boolean active) {
+    tenantFacadeAuthorisationService.assertUserCanManageOperationalStatus(id);
+    var saved = tenantService.updateOperationalStatus(id, active);
+    return new TenantOperationalStatusDTO(saved.getId(), saved.getActive());
+  }
+
+  @Transactional
   public MultilingualTenantDTO updateTenant(Long id, MultilingualTenantDTO tenantDTO) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
     validateTenantInput(tenantDTO);
@@ -569,6 +584,9 @@ public class TenantServiceFacade {
       Long id, MultilingualTenantDTO sanitizedTenantDTO) {
     var tenantById = tenantService.findTenantById(id);
     if (tenantById.isPresent()) {
+      // A request may already hold an old instance. Locking alone does not reread its fields.
+      // Refresh before applying metadata so an omitted status keeps the latest committed value.
+      entityManager.refresh(tenantById.get(), jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
       return updateExistingTenant(sanitizedTenantDTO, tenantById.get());
     } else {
       throw new TenantNotFoundException("Tenant with given id could not be found : " + id);
@@ -868,7 +886,8 @@ public class TenantServiceFacade {
     return toTenantPermissionPolicies(
         tenantId,
         tenantPermissionPolicyService.getResolvedPolicies(tenantId),
-        tenantPermissionPolicyService.getResolvedCaseHandoverPolicies(tenantId));
+        tenantPermissionPolicyService.getResolvedCaseHandoverPolicies(tenantId),
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(tenantId));
   }
 
   public TenantPermissionPolicies updateTenantPermissionPolicies(
@@ -888,14 +907,16 @@ public class TenantServiceFacade {
                             entry.getValue().getValue(),
                             com.vi.tenantservice.api.policy.PermissionPolicyMode.valueOf(
                                 entry.getValue().getMode().name())))),
-        request.getCaseHandoverPolicies());
+        request.getCaseHandoverPolicies(),
+        request.getInternalGroupChat());
     return getTenantPermissionPolicies(tenantId);
   }
 
   private TenantPermissionPolicies toTenantPermissionPolicies(
       Long tenantId,
       Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> policies,
-      com.vi.tenantservice.api.model.CaseHandoverPolicies caseHandoverPolicies) {
+      com.vi.tenantservice.api.model.CaseHandoverPolicies caseHandoverPolicies,
+      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat) {
     return new TenantPermissionPolicies(
             tenantId,
             policies.entrySet().stream()
@@ -908,7 +929,8 @@ public class TenantServiceFacade {
                                     com.vi.tenantservice.api.model.PermissionPolicyMode.valueOf(
                                         entry.getValue().mode().name()))
                                 .inherited(entry.getValue().inherited()))))
-        .caseHandoverPolicies(caseHandoverPolicies);
+        .caseHandoverPolicies(caseHandoverPolicies)
+        .internalGroupChat(internalGroupChat);
   }
 
   private void assertSuperAdmin() {
@@ -995,6 +1017,8 @@ public class TenantServiceFacade {
             .collect(java.util.stream.Collectors.toSet());
     Map<Long, Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>>>
         policiesByTenant = tenantPermissionPolicyService.getResolvedPolicies(resolvedTenantIds);
+    Map<Long, com.vi.tenantservice.api.model.InternalGroupChatPolicies> internalGroupChatByTenant =
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantIds);
     return tenants.stream()
         .map(
             dto ->
@@ -1002,7 +1026,8 @@ public class TenantServiceFacade {
                     dto,
                     controls,
                     platformTheming,
-                    policiesByTenant.getOrDefault(dto.getId(), Map.of())))
+                    policiesByTenant.getOrDefault(dto.getId(), Map.of()),
+                    internalGroupChatByTenant.get(dto.getId())))
         .toList();
   }
 
@@ -1012,6 +1037,17 @@ public class TenantServiceFacade {
    * controls themselves. See ADR-013 P4.
    */
   private RestrictedTenantDTO withEffectivePermissions(RestrictedTenantDTO dto) {
+    return dto == null ? null : withEffectivePermissions(dto, dto.getId());
+  }
+
+  /**
+   * Same as {@link #withEffectivePermissions(RestrictedTenantDTO)} for the single-domain override
+   * paths, where the DTO keeps the main tenant's id although its settings belong to the resolved
+   * tenant. The recipient scope of internal group chats is a privacy boundary, so it is resolved
+   * for {@code resolvedTenantId}, never for the main tenant (#319).
+   */
+  private RestrictedTenantDTO withEffectivePermissions(
+      RestrictedTenantDTO dto, Long resolvedTenantId) {
     if (dto == null) {
       return null;
     }
@@ -1020,7 +1056,8 @@ public class TenantServiceFacade {
         dto,
         tenantAdminControlsService.getControls(),
         getPlatformTheming(lang),
-        tenantPermissionPolicyService.getResolvedPolicies(dto.getId()));
+        tenantPermissionPolicyService.getResolvedPolicies(dto.getId()),
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantId));
   }
 
   /**
@@ -1038,8 +1075,10 @@ public class TenantServiceFacade {
       RestrictedTenantDTO dto,
       TenantAdminControls controls,
       Theming platformTheming,
-      Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies) {
+      Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies,
+      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat) {
     if (dto != null) {
+      dto.setInternalGroupChat(internalGroupChat);
       Map<String, BooleanPermissionPolicy> policies =
           resolvedPolicies.entrySet().stream()
               .collect(
@@ -1247,7 +1286,8 @@ public class TenantServiceFacade {
         tenantService.findRestrictedTenantDataById(actualTenantId).orElseThrow();
     return withEffectivePermissions(
         singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-            mainTenant, actualTenant));
+            mainTenant, actualTenant),
+        actualTenantId);
   }
 
   public Optional<RestrictedTenantDTO> getTenantDataWithOverride(
@@ -1265,7 +1305,8 @@ public class TenantServiceFacade {
     return Optional.of(
         withEffectivePermissions(
             singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
-                mainTenantForSingleDomainMultitenancy.get(), tenantToOverridePrivacy.get())));
+                mainTenantForSingleDomainMultitenancy.get(), tenantToOverridePrivacy.get()),
+            resolvedTenantId));
   }
 
   public Optional<RestrictedTenantDTO> getSingleTenant() {
@@ -1351,6 +1392,7 @@ public class TenantServiceFacade {
     Map<String, Object> map = new HashMap<>();
     map.put("id", tenantData.getId());
     map.put("name", tenantData.getName());
+    map.put("active", tenantData.getActive());
     map.put("subdomain", tenantData.getSubdomain());
     map.put("beraterCount", tenantData.getLicensingAllowedNumberOfUsers());
     List<AdminResponseDTO> tenantAdmins = new ArrayList<>();

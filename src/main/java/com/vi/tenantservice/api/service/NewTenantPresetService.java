@@ -146,7 +146,13 @@ public class NewTenantPresetService {
               "featureMediaAiScanSupervisionChatsEnabled",
               TenantSettings::setFeatureMediaAiScanSupervisionChatsEnabled),
           Map.entry("featureDisplayNameEditable", TenantSettings::setFeatureDisplayNameEditable),
-          Map.entry("featureAskerEmailEnabled", TenantSettings::setFeatureAskerEmailEnabled));
+          Map.entry("featureAskerEmailEnabled", TenantSettings::setFeatureAskerEmailEnabled),
+          Map.entry(
+              "featureConsultantEmailInternalGroupEnabled",
+              TenantSettings::setFeatureConsultantEmailInternalGroupEnabled),
+          Map.entry(
+              "featureConsultantBrowserInternalGroupEnabled",
+              TenantSettings::setFeatureConsultantBrowserInternalGroupEnabled));
 
   /** Conversation features: without an explicit preset entry they start on. */
   private static final Set<String> CONVERSATION_FEATURES =

@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.service;
 import static com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason.SUBDOMAIN_NOT_UNIQUE;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
@@ -104,6 +105,17 @@ public class TenantService {
     return existingTenantId != null && !existingTenantId.equals(tenantEntity.getId());
   }
 
+  @Transactional
+  public TenantEntity updateOperationalStatus(Long id, boolean active) {
+    if (tenantRepository.updateOperationalStatus(id, active, LocalDateTime.now(ZoneOffset.UTC))
+        == 0) {
+      throw new TenantNotFoundException("Tenant not found: " + id);
+    }
+    return tenantRepository
+        .findById(id)
+        .orElseThrow(() -> new TenantNotFoundException("Tenant not found: " + id));
+  }
+
   public TenantEntity update(TenantEntity tenantEntity) {
     validateTenant(tenantEntity);
     overrideSubdomainIfNeededForSingleDomainMultitenancy(tenantEntity);
@@ -111,6 +123,8 @@ public class TenantService {
     return tenantRepository.save(tenantEntity);
   }
 
+  // Keep loaded entities managed through the save: detached merge can copy a stale own status.
+  @Transactional
   public void updateTenantSettingsBatch(Map<Long, String> settingsByTenantId) {
     if (settingsByTenantId == null || settingsByTenantId.isEmpty()) {
       return;
