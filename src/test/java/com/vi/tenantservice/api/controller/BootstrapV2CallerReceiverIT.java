@@ -66,7 +66,11 @@ import org.springframework.test.context.jdbc.Sql;
     })
 @Sql(
     executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS,
-    scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql", "/held-bootstrap-operation.sql"},
+    scripts = {
+      "/database/TenantServiceDatabase.sql",
+      "/database/MultiTenantData.sql",
+      "/held-bootstrap-operation.sql"
+    },
     statements = "ALTER TABLE tenant DROP CONSTRAINT IF EXISTS unique_subdomain")
 class BootstrapV2CallerReceiverIT {
   private static final ObjectMapper JSON = new ObjectMapper();
@@ -89,12 +93,16 @@ class BootstrapV2CallerReceiverIT {
   private static final java.util.concurrent.atomic.AtomicBoolean SAME_COMPENSATION =
       new java.util.concurrent.atomic.AtomicBoolean();
   private static final AtomicReference<ReplayPacket> COMPENSATION_PACKET = new AtomicReference<>();
-  private static final java.util.concurrent.atomic.AtomicBoolean HELD_ARMED = new java.util.concurrent.atomic.AtomicBoolean();
+  private static final java.util.concurrent.atomic.AtomicBoolean HELD_ARMED =
+      new java.util.concurrent.atomic.AtomicBoolean();
   private static final AtomicInteger HELD_CREATES = new AtomicInteger();
   private static final AtomicReference<ReplayPacket> HELD_PACKET = new AtomicReference<>();
-  private static final java.util.concurrent.atomic.AtomicBoolean HELD_CTS_LOST = new java.util.concurrent.atomic.AtomicBoolean();
-  private static final java.util.concurrent.atomic.AtomicBoolean HELD_SAME_COMMAND = new java.util.concurrent.atomic.AtomicBoolean();
-  private static final java.util.concurrent.atomic.AtomicBoolean HELD_MONGO_UNCHANGED = new java.util.concurrent.atomic.AtomicBoolean();
+  private static final java.util.concurrent.atomic.AtomicBoolean HELD_CTS_LOST =
+      new java.util.concurrent.atomic.AtomicBoolean();
+  private static final java.util.concurrent.atomic.AtomicBoolean HELD_SAME_COMMAND =
+      new java.util.concurrent.atomic.AtomicBoolean();
+  private static final java.util.concurrent.atomic.AtomicBoolean HELD_MONGO_UNCHANGED =
+      new java.util.concurrent.atomic.AtomicBoolean();
   @Autowired private org.springframework.jdbc.core.JdbcTemplate heldSql;
   private static long controlSequence;
   private static HttpServer gateway;
@@ -184,12 +192,16 @@ class BootstrapV2CallerReceiverIT {
                   exchange.getRequestHeaders().getFirst("X-ORISO-Tenant-Creation-Context"));
               RECEIVER_STATUS.set(response.statusCode());
             }
-            if (HELD_ARMED.get() && "POST".equals(exchange.getRequestMethod())
+            if (HELD_ARMED.get()
+                && "POST".equals(exchange.getRequestMethod())
                 && "/consultingtypes".equals(exchange.getRequestURI().getPath())
                 && JSON.readTree(body).path("tenantId").asLong() == 9159L) {
               int number = HELD_CREATES.incrementAndGet();
-              var packet = new ReplayPacket(body.clone(), exchange.getRequestHeaders().getFirst("Authorization"),
-                  exchange.getRequestHeaders().getFirst("X-ORISO-Tenant-Creation-Context"));
+              var packet =
+                  new ReplayPacket(
+                      body.clone(),
+                      exchange.getRequestHeaders().getFirst("Authorization"),
+                      exchange.getRequestHeaders().getFirst("X-ORISO-Tenant-Creation-Context"));
               if (number == 1 && response.statusCode() == 200) {
                 HELD_PACKET.set(packet);
                 terminalCheckpoint("CAPTURE_HELD");
@@ -198,8 +210,10 @@ class BootstrapV2CallerReceiverIT {
               }
               if (number == 2 && response.statusCode() == 200) {
                 ReplayPacket first = HELD_PACKET.get();
-                HELD_SAME_COMMAND.set(first != null && java.util.Arrays.equals(first.body, packet.body)
-                    && proofNonce(first.proof).equals(proofNonce(packet.proof)));
+                HELD_SAME_COMMAND.set(
+                    first != null
+                        && java.util.Arrays.equals(first.body, packet.body)
+                        && proofNonce(first.proof).equals(proofNonce(packet.proof)));
                 HELD_MONGO_UNCHANGED.set(heldUnchanged());
               }
             }
@@ -501,12 +515,19 @@ class BootstrapV2CallerReceiverIT {
   void anExactHeldTenantOperationSurvivesBothActualCtsAndTenantLostReplies() throws Exception {
     long tenantId = 9159L;
     String reservation = allocation.reserve(tenantId, "native-held-replay").getToken();
-    String original = new MultilingualTenantTestDataBuilder().withName("Held Replay")
-        .withSubdomain("heldreplay").withLicensing().withId(tenantId)
-        .withTenantIdReservationToken(reservation).jsonify();
-    var request = JSON.createObjectNode().put("claimId", java.util.UUID.randomUUID().toString())
-        .put("accountAttemptId", java.util.UUID.randomUUID().toString())
-        .put("executionId", java.util.UUID.randomUUID().toString());
+    String original =
+        new MultilingualTenantTestDataBuilder()
+            .withName("Held Replay")
+            .withSubdomain("heldreplay")
+            .withLicensing()
+            .withId(tenantId)
+            .withTenantIdReservationToken(reservation)
+            .jsonify();
+    var request =
+        JSON.createObjectNode()
+            .put("claimId", java.util.UUID.randomUUID().toString())
+            .put("accountAttemptId", java.util.UUID.randomUUID().toString())
+            .put("executionId", java.util.UUID.randomUUID().toString());
     request.set("tenant", JSON.readTree(original));
     String bearer = setupBearer();
     HELD_ARMED.set(true);
@@ -522,37 +543,57 @@ class BootstrapV2CallerReceiverIT {
       observed.put("firstStatus", first.statusCode());
       observed.put("ctsReplyLost", HELD_CTS_LOST.get());
       saveHeld(observed);
-      assertThat(HELD_CTS_LOST.get()).as("actual CTS200 was lost before Tenant received it").isTrue();
+      assertThat(HELD_CTS_LOST.get())
+          .as("actual CTS200 was lost before Tenant received it")
+          .isTrue();
       assertThat(first.statusCode()).isEqualTo(503);
       assertThat(allocation.getStatus(tenantId).name()).isEqualTo("ASSIGNED");
       frontdoor = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-      frontdoor.createContext("/tenantadmin/bootstrap", exchange -> {
-        try {
-          var response = heldPost("http://127.0.0.1:" + port,
-              new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8), bearer);
-          upstreamStatus.set(response.statusCode());
-          if (response.statusCode() == 200) {
-            if (firstComplete.compareAndSet(null, response.body())) {
-              verifyHeldReceipt(request, JSON.readTree(response.body()), bearer);
-            } else stable.set(stable.get() && java.util.Arrays.equals(firstComplete.get(), response.body()));
-            if (loseTenantReply.get()) { tenantReplyLost.set(true); return; }
-          }
-          exchange.getResponseHeaders().add("Content-Type", "application/json");
-          exchange.sendResponseHeaders(response.statusCode(), response.body().length);
-          exchange.getResponseBody().write(response.body());
-        } catch (Exception refused) {
-          exchange.sendResponseHeaders(503, -1);
-        } finally { exchange.close(); }
-      });
+      frontdoor.createContext(
+          "/tenantadmin/bootstrap",
+          exchange -> {
+            try {
+              var response =
+                  heldPost(
+                      "http://127.0.0.1:" + port,
+                      new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8),
+                      bearer);
+              upstreamStatus.set(response.statusCode());
+              if (response.statusCode() == 200) {
+                if (firstComplete.compareAndSet(null, response.body())) {
+                  verifyHeldReceipt(request, JSON.readTree(response.body()), bearer);
+                } else
+                  stable.set(
+                      stable.get()
+                          && java.util.Arrays.equals(firstComplete.get(), response.body()));
+                if (loseTenantReply.get()) {
+                  tenantReplyLost.set(true);
+                  return;
+                }
+              }
+              exchange.getResponseHeaders().add("Content-Type", "application/json");
+              exchange.sendResponseHeaders(response.statusCode(), response.body().length);
+              exchange.getResponseBody().write(response.body());
+            } catch (Exception refused) {
+              exchange.sendResponseHeaders(503, -1);
+            } finally {
+              exchange.close();
+            }
+          });
       frontdoor.start();
       String proxy = "http://127.0.0.1:" + frontdoor.getAddress().getPort();
       boolean ioLost = false;
-      try { heldPost(proxy, request.toString(), bearer); }
-      catch (java.io.IOException lost) { ioLost = true; }
+      try {
+        heldPost(proxy, request.toString(), bearer);
+      } catch (java.io.IOException lost) {
+        ioLost = true;
+      }
       observed.put("secondStatus", upstreamStatus.get());
       observed.put("tenantReplyLost", tenantReplyLost.get() && ioLost);
       saveHeld(observed);
-      assertThat(tenantReplyLost.get() && ioLost).as("actual Tenant200 was lost on its return wire").isTrue();
+      assertThat(tenantReplyLost.get() && ioLost)
+          .as("actual Tenant200 was lost on its return wire")
+          .isTrue();
       assertThat(upstreamStatus.get()).isEqualTo(200);
       loseTenantReply.set(false);
       var finalReply = heldPost(proxy, request.toString(), bearer);
@@ -561,15 +602,31 @@ class BootstrapV2CallerReceiverIT {
       observed.put("ctsAttempts", HELD_CREATES.get());
       observed.put("sameCtsCommandAndNonce", HELD_SAME_COMMAND.get());
       observed.put("allThreeMongoUnchanged", HELD_MONGO_UNCHANGED.get());
-      observed.put("sameResultAndReceipt", stable.get() && java.util.Arrays.equals(firstComplete.get(), finalReply.body()));
+      observed.put(
+          "sameResultAndReceipt",
+          stable.get() && java.util.Arrays.equals(firstComplete.get(), finalReply.body()));
       observed.put("receiptAuthenticated", true);
       observed.put("allocationAssigned", allocation.getStatus(tenantId).name().equals("ASSIGNED"));
-      observed.put("singleTenantAndJournal", heldSql.queryForObject("SELECT COUNT(*) FROM tenant WHERE id=?", Long.class, tenantId) == 1
-          && heldSql.queryForObject("SELECT COUNT(*) FROM tenant_bootstrap_operation WHERE claim_id=? AND state='COMPLETE'", Long.class, request.path("claimId").asText()) == 1);
+      observed.put(
+          "singleTenantAndJournal",
+          heldSql.queryForObject("SELECT COUNT(*) FROM tenant WHERE id=?", Long.class, tenantId)
+                  == 1
+              && heldSql.queryForObject(
+                      "SELECT COUNT(*) FROM tenant_bootstrap_operation WHERE claim_id=? AND state='COMPLETE'",
+                      Long.class,
+                      request.path("claimId").asText())
+                  == 1);
       saveHeld(observed);
       assertThat(finalReply.statusCode()).isEqualTo(200);
       assertThat(HELD_CREATES.get()).isEqualTo(2);
-      for (String field : List.of("sameCtsCommandAndNonce", "allThreeMongoUnchanged", "sameResultAndReceipt", "receiptAuthenticated", "allocationAssigned", "singleTenantAndJournal"))
+      for (String field :
+          List.of(
+              "sameCtsCommandAndNonce",
+              "allThreeMongoUnchanged",
+              "sameResultAndReceipt",
+              "receiptAuthenticated",
+              "allocationAssigned",
+              "singleTenantAndJournal"))
         assertThat(observed.path(field).asBoolean()).as(field).isTrue();
     } finally {
       HELD_ARMED.set(false);
@@ -577,64 +634,122 @@ class BootstrapV2CallerReceiverIT {
     }
   }
 
-  private static HttpResponse<byte[]> heldPost(String base, String body, String bearer) throws Exception {
-    return HTTP.send(HttpRequest.newBuilder(URI.create(base + "/tenantadmin/bootstrap"))
-        .timeout(Duration.ofSeconds(30)).header("Content-Type", "application/json")
-        .header("Authorization", "Bearer " + bearer).header("tenantId", "0")
-        .header("csrfHeader", "test").header("Cookie", "csrfCookie=test")
-        .POST(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofByteArray());
+  private static HttpResponse<byte[]> heldPost(String base, String body, String bearer)
+      throws Exception {
+    return HTTP.send(
+        HttpRequest.newBuilder(URI.create(base + "/tenantadmin/bootstrap"))
+            .timeout(Duration.ofSeconds(30))
+            .header("Content-Type", "application/json")
+            .header("Authorization", "Bearer " + bearer)
+            .header("tenantId", "0")
+            .header("csrfHeader", "test")
+            .header("Cookie", "csrfCookie=test")
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build(),
+        HttpResponse.BodyHandlers.ofByteArray());
   }
 
   private static boolean heldUnchanged() {
-    try { return command("CHECK_HELD").path("terminalRetryUnchanged").asBoolean(); }
-    catch (Exception refused) { throw fixtureRefusal(); }
+    try {
+      return command("CHECK_HELD").path("terminalRetryUnchanged").asBoolean();
+    } catch (Exception refused) {
+      throw fixtureRefusal();
+    }
   }
 
-  private static void verifyHeldReceipt(JsonNode request, JsonNode response, String bearer) throws Exception {
+  private static void verifyHeldReceipt(JsonNode request, JsonNode response, String bearer)
+      throws Exception {
     assertThat(response.size()).isEqualTo(2);
     String[] proof = response.path("receipt").asText().split("\\.", -1);
     assertThat(proof.length).isEqualTo(2);
-    assertThat(proof[1].equals(heldMac("tenant-held-bootstrap-receipt/v1\n" + proof[0]))).as("actual receipt MAC authenticates").isTrue();
+    assertThat(proof[1].equals(heldMac("tenant-held-bootstrap-receipt/v1\n" + proof[0])))
+        .as("actual receipt MAC authenticates")
+        .isTrue();
     JsonNode claims = JSON.readTree(Base64.getUrlDecoder().decode(proof[0]));
     JsonNode token = JSON.readTree(Base64.getUrlDecoder().decode(bearer.split("\\.")[1]));
     assertThat(claims.size()).isEqualTo(12);
     assertThat(claims.path("v").isIntegralNumber() && claims.path("v").longValue() == 1).isTrue();
     assertThat(claims.path("state").asText()).isEqualTo("COMPLETE");
     for (String field : List.of("claimId", "accountAttemptId", "executionId"))
-      assertThat(claims.path(field).asText().equals(request.path(field).asText())).as(field).isTrue();
+      assertThat(claims.path(field).asText().equals(request.path(field).asText()))
+          .as(field)
+          .isTrue();
     String marker = claims.path("bootstrapAttemptId").asText();
-    assertThat(java.util.UUID.fromString(marker).toString().equals(marker)).as("canonical actual INSERT marker").isTrue();
-    assertThat(claims.path("ownerIssuer").asText().equals(token.path("iss").asText())).as("ownerIssuer").isTrue();
-    assertThat(claims.path("ownerClient").asText().equals(token.path("azp").asText())).as("ownerClient").isTrue();
-    assertThat(claims.path("ownerSubject").asText().equals(token.path("sub").asText())).as("ownerSubject").isTrue();
+    assertThat(java.util.UUID.fromString(marker).toString().equals(marker))
+        .as("canonical actual INSERT marker")
+        .isTrue();
+    assertThat(claims.path("ownerIssuer").asText().equals(token.path("iss").asText()))
+        .as("ownerIssuer")
+        .isTrue();
+    assertThat(claims.path("ownerClient").asText().equals(token.path("azp").asText()))
+        .as("ownerClient")
+        .isTrue();
+    assertThat(claims.path("ownerSubject").asText().equals(token.path("sub").asText()))
+        .as("ownerSubject")
+        .isTrue();
     assertThat(claims.path("tenantId").isIntegralNumber()).isTrue();
     assertThat(claims.path("tenantId").longValue()).isEqualTo(9159L);
-    assertThat(claims.path("requestDigest").asText().equals(heldMac("tenant-held-bootstrap-request/v1\n" + heldCanonical(request)))).as("requestDigest").isTrue();
-    assertThat(claims.path("resultDigest").asText().equals(heldMac("tenant-held-bootstrap-result/v1\n" + heldCanonical(response.path("tenant"))))).as("resultDigest").isTrue();
+    assertThat(
+            claims
+                .path("requestDigest")
+                .asText()
+                .equals(heldMac("tenant-held-bootstrap-request/v1\n" + heldCanonical(request))))
+        .as("requestDigest")
+        .isTrue();
+    assertThat(
+            claims
+                .path("resultDigest")
+                .asText()
+                .equals(
+                    heldMac(
+                        "tenant-held-bootstrap-result/v1\n"
+                            + heldCanonical(response.path("tenant")))))
+        .as("resultDigest")
+        .isTrue();
   }
 
   private static String heldMac(String value) throws Exception {
     var mac = javax.crypto.Mac.getInstance("HmacSHA256");
-    mac.init(new javax.crypto.spec.SecretKeySpec(Base64.getDecoder().decode(required("ORISO_BOOTSTRAP_SHARED_KEY")), "HmacSHA256"));
+    mac.init(
+        new javax.crypto.spec.SecretKeySpec(
+            Base64.getDecoder().decode(required("ORISO_BOOTSTRAP_SHARED_KEY")), "HmacSHA256"));
     return java.util.HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
   }
 
   private static String heldCanonical(JsonNode value) throws Exception {
     if (value.isObject()) {
       var fields = new java.util.TreeMap<String, JsonNode>();
-      value.fields().forEachRemaining(entry -> { if (!entry.getValue().isNull()) fields.put(entry.getKey(), entry.getValue()); });
+      value
+          .fields()
+          .forEachRemaining(
+              entry -> {
+                if (!entry.getValue().isNull()) fields.put(entry.getKey(), entry.getValue());
+              });
       var out = new StringBuilder("{");
-      for (var entry : fields.entrySet()) { if (out.length() > 1) out.append(','); out.append(JSON.writeValueAsString(entry.getKey())).append(':').append(heldCanonical(entry.getValue())); }
+      for (var entry : fields.entrySet()) {
+        if (out.length() > 1) out.append(',');
+        out.append(JSON.writeValueAsString(entry.getKey()))
+            .append(':')
+            .append(heldCanonical(entry.getValue()));
+      }
       return out.append('}').toString();
     }
-    if (value.isArray()) { var out = new StringBuilder("["); for (var entry : value) { if (out.length() > 1) out.append(','); out.append(heldCanonical(entry)); } return out.append(']').toString(); }
+    if (value.isArray()) {
+      var out = new StringBuilder("[");
+      for (var entry : value) {
+        if (out.length() > 1) out.append(',');
+        out.append(heldCanonical(entry));
+      }
+      return out.append(']').toString();
+    }
     if (value.isNumber()) return value.decimalValue().stripTrailingZeros().toPlainString();
     return JSON.writeValueAsString(value);
   }
 
   private static void saveHeld(JsonNode held) throws Exception {
     Path path = Path.of(required("ORISO_BOOTSTRAP_OBSERVED"));
-    var value = (com.fasterxml.jackson.databind.node.ObjectNode) JSON.readTree(Files.readString(path));
+    var value =
+        (com.fasterxml.jackson.databind.node.ObjectNode) JSON.readTree(Files.readString(path));
     value.set("held", held);
     Files.writeString(path, JSON.writeValueAsString(value));
   }
