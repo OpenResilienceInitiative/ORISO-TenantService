@@ -19,10 +19,10 @@ import org.hibernate.SessionFactory;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.web.server.context.WebServerApplicationContext;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
@@ -113,7 +113,7 @@ public final class AccountPolicyReceiverFixture {
     }
   }
 
-  @Configuration(proxyBeanMethods = false)
+  @TestConfiguration(proxyBeanMethods = false)
   public static class SqlObservation {
     @Bean
     FilterRegistrationBean<OncePerRequestFilter> policySqlObserver(EntityManagerFactory factory) {
