@@ -182,6 +182,33 @@ public class TenantServiceFacade {
       new java.util.concurrent.atomic.AtomicReference<>();
 
   public MultilingualTenantDTO createTenant(MultilingualTenantDTO tenantDTO) {
+    return createTenant(tenantDTO, null);
+  }
+
+  public MultilingualTenantDTO createHeldTenant(MultilingualTenantDTO tenantDTO,
+      com.vi.tenantservice.api.service.TenantHeldBootstrapJournal.Operation operation) {
+    bootstrapCreation.requireHeldInput(operation, tenantDTO);
+    return createTenant(tenantDTO, operation);
+  }
+
+  public MultilingualTenantDTO resumeHeldTenant(MultilingualTenantDTO tenantDTO,
+      com.vi.tenantservice.api.service.TenantHeldBootstrapJournal.Operation operation) {
+    bootstrapCreation.requireHeldInput(operation, tenantDTO);
+    return bootstrapCreation.resumeHeld(operation,
+        (created, grant) -> finishOwnedTenant(tenantDTO, created, grant));
+  }
+
+  public MultilingualTenantDTO readHeldTenant(
+      com.vi.tenantservice.api.service.TenantHeldBootstrapJournal.Operation operation) {
+    return bootstrapCreation.readHeld(operation, created -> {
+      var result = tenantConverter.toMultilingualDTO(created);
+      tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(result);
+      return result;
+    });
+  }
+
+  private MultilingualTenantDTO createTenant(MultilingualTenantDTO tenantDTO,
+      com.vi.tenantservice.api.service.TenantHeldBootstrapJournal.Operation operation) {
     log.info("Creating new tenant");
     assertCallerMayCreateThisTenant(tenantDTO);
     if (Boolean.FALSE.equals(tenantDTO.getActive())) {
@@ -204,23 +231,10 @@ public class TenantServiceFacade {
     }
     String reservationToken = tenantDTO.getTenantIdReservationToken();
     if (bootstrapCreation != null && bootstrapCreation.current()) {
-      return bootstrapCreation.create(
-          entity,
-          reservationToken,
-          (created, grant) -> {
-            try {
-              createDefaultConsultingTypeSettings(created, grant);
-            } catch (ConsultingTypeCreationException failure) {
-              throw new TenantBadRequestException(
-                  "Owned consulting-type bootstrap could not complete");
-            }
-            recordOnboardingDpaAcceptance(
-                created, tenantDTO.getOnboardingDpaAcceptance(), reservationToken, false);
-            recordInitialLegalState(created);
-            var result = tenantConverter.toMultilingualDTO(created);
-            tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(result);
-            return result;
-          });
+      if (operation != null) return bootstrapCreation.createHeld(entity, reservationToken, operation,
+          (created, grant) -> finishOwnedTenant(tenantDTO, created, grant));
+      return bootstrapCreation.create(entity, reservationToken,
+          (created, grant) -> finishOwnedTenant(tenantDTO, created, grant));
     }
     TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
@@ -244,6 +258,20 @@ public class TenantServiceFacade {
     var createdTenantDto = tenantConverter.toMultilingualDTO(createdTenant);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(createdTenantDto);
     return createdTenantDto;
+  }
+
+  private MultilingualTenantDTO finishOwnedTenant(MultilingualTenantDTO original, TenantEntity created,
+      com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant) {
+    try { createDefaultConsultingTypeSettings(created, grant); }
+    catch (ConsultingTypeCreationException failure) {
+      throw new TenantBadRequestException("Owned consulting-type bootstrap could not complete");
+    }
+    recordOnboardingDpaAcceptance(created, original.getOnboardingDpaAcceptance(),
+        original.getTenantIdReservationToken(), false);
+    recordInitialLegalState(created);
+    var result = tenantConverter.toMultilingualDTO(created);
+    tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(result);
+    return result;
   }
 
   /**

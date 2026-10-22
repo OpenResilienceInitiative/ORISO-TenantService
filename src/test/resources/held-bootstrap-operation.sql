@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS tenant_bootstrap_operation (
   tenant_columns INTEGER NOT NULL,
   ledger_columns INTEGER NOT NULL,
   cts_command LONGTEXT NOT NULL,
+  cts_command_digest VARCHAR(64) NOT NULL,
   state VARCHAR(24) NOT NULL,
   version BIGINT NOT NULL,
   result_digest VARCHAR(64),

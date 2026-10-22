@@ -71,6 +71,25 @@ public class ConsultingTypeService {
   public BootstrapSuccess createDefaultConsultingTypes(
       com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant) {
     long tenantId = grant.tenantId();
+    try {
+      byte[] frozen = grant.frozenBootstrapCommand();
+      ConsultingTypeDTO dto = new ObjectMapper().readValue(
+          frozen == null ? freezeBootstrapCommand(tenantId) : frozen, ConsultingTypeDTO.class);
+      if (!Long.valueOf(tenantId).equals(dto.getTenantId().longValue()))
+        throw new IllegalStateException("Owned bootstrap target differs");
+      String proof = creationContext.issue(grant, dto);
+      FullConsultingTypeResponseDTO response = createConsultingType(dto, proof, grant);
+      if (response == null || response.getId() == null || response.getId() < 0
+          || !dto.getTenantId().equals(response.getTenantId()))
+        throw new IllegalStateException("Owned bootstrap readback is not verified");
+      return new BootstrapSuccess(this, grant, new ObjectMapper().writeValueAsBytes(dto));
+    } catch (IOException failure) {
+      throw new IllegalStateException("Owned bootstrap configuration cannot be materialized");
+    }
+  }
+
+  /** Data only; issuing authority still belongs to the private actual-INSERT grant. */
+  public byte[] freezeBootstrapCommand(long tenantId) {
     if (tenantId < 1
         || tenantId > Integer.MAX_VALUE
         || StringUtils.isBlank(defaultConsultingTypesFilePath)) {
@@ -93,14 +112,7 @@ public class ConsultingTypeService {
           || dto.getRegistration().getMandatoryFields().getState() == null) {
         throw new IllegalStateException("Owned bootstrap configuration lacks required settings");
       }
-      String proof = creationContext.issue(grant, dto);
-      FullConsultingTypeResponseDTO response = createConsultingType(dto, proof, grant);
-      if (response == null
-          || response.getId() == null
-          || response.getId() < 0
-          || !dto.getTenantId().equals(response.getTenantId()))
-        throw new IllegalStateException("Owned bootstrap readback is not verified");
-      return new BootstrapSuccess(this, grant, new ObjectMapper().writeValueAsBytes(dto));
+      return new ObjectMapper().writeValueAsBytes(dto);
     } catch (IOException failure) {
       throw new IllegalStateException("Owned bootstrap configuration cannot be materialized");
     }

@@ -1,0 +1,39 @@
+openapi: 3.0.1
+info:
+  title: Exact held Tenant bootstrap replay
+  version: 1.0.0
+paths:
+  /tenantadmin/bootstrap:
+    post:
+      operationId: createReservedTenant
+      tags: [tenant-held-bootstrap-controller]
+      description: Current registered SETUP/CONFIG_WIZARD and the exact authoritative held reservation are required. An exact original causal tuple and complete body can reconcile only its own durable actual-INSERT operation. Human and LEGACY create remain at /tenantadmin.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [claimId, accountAttemptId, executionId, tenant]
+              properties:
+                claimId: {type: string, format: uuid}
+                accountAttemptId: {type: string, format: uuid}
+                executionId: {type: string, format: uuid}
+                tenant: {$ref: './tenantservice.yaml#/components/schemas/MultilingualTenantDTO'}
+      responses:
+        '200':
+          description: Known committed result of this exact held operation; no-store. Receipt binds the complete original request and result with the sole task context key.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [tenant, receipt]
+                properties:
+                  tenant: {$ref: './tenantservice.yaml#/components/schemas/MultilingualTenantDTO'}
+                  receipt: {type: string, maxLength: 16384}
+        '400': {description: Invalid exact request shape or DTO}
+        '401': {description: Missing or invalid bearer}
+        '403': {description: Foreign actor, owner, causal tuple, body, reservation or current state}
+        '500': {description: Unresolved downstream or local outcome; retain occupied state and retry only this exact operation}
