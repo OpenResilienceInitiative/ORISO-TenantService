@@ -84,8 +84,10 @@ class BootstrapV2CallerReceiverIT {
       new java.util.concurrent.CountDownLatch(1);
   private static final AtomicInteger COMPENSATION_STATUS = new AtomicInteger(-1);
   private static final AtomicInteger COMPENSATION_ATTEMPTS = new AtomicInteger();
-  private static final java.util.concurrent.atomic.AtomicBoolean COMPENSATION_REPLY_LOST = new java.util.concurrent.atomic.AtomicBoolean();
-  private static final java.util.concurrent.atomic.AtomicBoolean SAME_COMPENSATION = new java.util.concurrent.atomic.AtomicBoolean();
+  private static final java.util.concurrent.atomic.AtomicBoolean COMPENSATION_REPLY_LOST =
+      new java.util.concurrent.atomic.AtomicBoolean();
+  private static final java.util.concurrent.atomic.AtomicBoolean SAME_COMPENSATION =
+      new java.util.concurrent.atomic.AtomicBoolean();
   private static final AtomicReference<ReplayPacket> COMPENSATION_PACKET = new AtomicReference<>();
   private static long controlSequence;
   private static HttpServer gateway;
@@ -175,23 +177,30 @@ class BootstrapV2CallerReceiverIT {
                   exchange.getRequestHeaders().getFirst("X-ORISO-Tenant-Creation-Context"));
               RECEIVER_STATUS.set(response.statusCode());
             }
-            if ("/consultingtypes/bootstrap-compensation".equals(exchange.getRequestURI().getPath())) {
+            if ("/consultingtypes/bootstrap-compensation"
+                .equals(exchange.getRequestURI().getPath())) {
               COMPENSATION_STATUS.set(response.statusCode());
-              if (PAIR_ARMED.get() && "POST".equals(exchange.getRequestMethod())
+              if (PAIR_ARMED.get()
+                  && "POST".equals(exchange.getRequestMethod())
                   && JSON.readTree(body).path("tenantId").asInt() == 9158) {
                 int number = COMPENSATION_ATTEMPTS.incrementAndGet();
-                var packet = new ReplayPacket(body.clone(), exchange.getRequestHeaders().getFirst("Authorization"),
-                    exchange.getRequestHeaders().getFirst("X-ORISO-Tenant-Creation-Context"));
+                var packet =
+                    new ReplayPacket(
+                        body.clone(),
+                        exchange.getRequestHeaders().getFirst("Authorization"),
+                        exchange.getRequestHeaders().getFirst("X-ORISO-Tenant-Creation-Context"));
                 if (number == 1) COMPENSATION_PACKET.set(packet);
                 if (response.statusCode() == 204 && number == 1) {
                   terminalCheckpoint("CAPTURE_TERMINAL");
                   COMPENSATION_REPLY_LOST.set(true);
-                  return; // Close the real exchange AFTER actual CTS204, before delivering its acknowledgement.
+                  return; // Close the real exchange AFTER actual CTS204, before delivering its
+                  // acknowledgement.
                 }
                 if (response.statusCode() == 204 && number == 2) {
                   ReplayPacket first = COMPENSATION_PACKET.get();
-                  SAME_COMPENSATION.set(java.util.Arrays.equals(first.body, packet.body)
-                      && proofNonce(first.proof).equals(proofNonce(packet.proof)));
+                  SAME_COMPENSATION.set(
+                      java.util.Arrays.equals(first.body, packet.body)
+                          && proofNonce(first.proof).equals(proofNonce(packet.proof)));
                   terminalCheckpoint("CHECK_TERMINAL");
                 }
               }
@@ -377,11 +386,18 @@ class BootstrapV2CallerReceiverIT {
       paired.set("beforeDelayedRelease", command("OBSERVE"));
       savePaired(paired);
       assertThat(failed.statusCode()).isEqualTo(400);
-      assertThat(COMPENSATION_REPLY_LOST.get()).as("first real CTS204 was lost at the observing transport").isTrue();
-      assertThat(COMPENSATION_ATTEMPTS.get()).as("same live attempt recovers one lost terminal reply").isEqualTo(2);
-      assertThat(SAME_COMPENSATION.get()).as("retry retains original nonce and complete raw command").isTrue();
+      assertThat(COMPENSATION_REPLY_LOST.get())
+          .as("first real CTS204 was lost at the observing transport")
+          .isTrue();
+      assertThat(COMPENSATION_ATTEMPTS.get())
+          .as("same live attempt recovers one lost terminal reply")
+          .isEqualTo(2);
+      assertThat(SAME_COMPENSATION.get())
+          .as("retry retains original nonce and complete raw command")
+          .isTrue();
       assertThat(COMPENSATION_STATUS.get()).as("exact terminal acknowledgement").isEqualTo(204);
-      assertThat(paired.path("beforeDelayedRelease").path("terminalRetryUnchanged").asBoolean()).isTrue();
+      assertThat(paired.path("beforeDelayedRelease").path("terminalRetryUnchanged").asBoolean())
+          .isTrue();
       assertThat(allocation.getStatus(tenantId).name()).isEqualTo("RESERVED");
       command("RELEASE_DELAYED");
       assertThat(delayed.get(20, java.util.concurrent.TimeUnit.SECONDS).statusCode())
@@ -449,12 +465,15 @@ class BootstrapV2CallerReceiverIT {
   }
 
   private static String proofNonce(String proof) throws java.io.IOException {
-    return JSON.readTree(Base64.getUrlDecoder().decode(proof.split("\\.", -1)[0])).path("nonce").asText();
+    return JSON.readTree(Base64.getUrlDecoder().decode(proof.split("\\.", -1)[0]))
+        .path("nonce")
+        .asText();
   }
 
   private static void terminalCheckpoint(String action) {
-    try { command(action); }
-    catch (Exception refused) {
+    try {
+      command(action);
+    } catch (Exception refused) {
       if (refused instanceof InterruptedException) Thread.currentThread().interrupt();
       throw fixtureRefusal();
     }
