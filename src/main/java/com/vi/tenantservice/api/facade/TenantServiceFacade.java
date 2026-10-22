@@ -206,7 +206,6 @@ public class TenantServiceFacade {
         operation,
         created -> {
           var result = tenantConverter.toMultilingualDTO(created);
-          tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(result);
           return result;
         });
   }
