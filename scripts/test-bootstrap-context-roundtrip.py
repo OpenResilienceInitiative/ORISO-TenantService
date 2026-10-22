@@ -408,6 +408,7 @@ def main():
             receipt["state"] = "BEHAVIORAL_RED"
         elif result or any(counts[k] for k in ("failures", "errors", "skipped")):
             receipt["state"] = "EXECUTED_FAILURE"
+            receipt["safeApplicationDiagnostics"] = [safe_java_frames(private / "caller.log")]
             return 1
         else:
             receipt["state"] = "PASS"
