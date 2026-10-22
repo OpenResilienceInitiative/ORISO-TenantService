@@ -66,7 +66,8 @@ import org.springframework.test.context.jdbc.Sql;
     })
 @Sql(
     executionPhase = Sql.ExecutionPhase.BEFORE_TEST_CLASS,
-    scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
+    scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"},
+    statements = "ALTER TABLE tenant DROP CONSTRAINT IF EXISTS unique_subdomain")
 class BootstrapV2CallerReceiverIT {
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final HttpClient HTTP =
