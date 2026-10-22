@@ -173,6 +173,76 @@ def safe_java_frames(log):
             "applicationFrames": frames[:8] + frames[8:][-8:]}
 
 
+
+def safe_observation(value):
+    """Only fixed labels and bounded booleans/counts may leave the private fixture."""
+    def refuse():
+        raise FixtureError("Native observation shape refused; no private values exported")
+    required = {"receiverStatus", "tenantStatus", "receiverRequestObserved", "allocationStatus"}
+    if not isinstance(value, dict) or not required.issubset(value) or set(value) - required - {"paired"}:
+        refuse()
+    def status(number):
+        return type(number) is int and (number == -1 or 100 <= number <= 599)
+    if (not status(value["receiverStatus"]) or not status(value["tenantStatus"])
+            or type(value["receiverRequestObserved"]) is not bool
+            or value["allocationStatus"] not in ("ASSIGNED", "RESERVED", "FREE", "EXPIRED", "CANCELLED")):
+        refuse()
+    if "paired" not in value:
+        return value
+    paired = value["paired"]
+    status_fields = {"tenantFailureStatus", "createStatus", "compensationStatus", "delayedReplyStatus",
+                     "newTenantStatus", "oldReplayStatus"}
+    boolean_fields = {"allocationRestored", "allocationRestoredThenReassigned"}
+    stages = {"beforeDelayedRelease", "terminalRace", "staleWrites", "newAttempt"}
+    if (not isinstance(paired, dict) or set(paired) - status_fields - boolean_fields - stages
+            or not {"tenantFailureStatus", "createStatus", "compensationStatus", "allocationRestored",
+                    "beforeDelayedRelease"}.issubset(paired)):
+        refuse()
+    for field in status_fields & set(paired):
+        if not status(paired[field]): refuse()
+    for field in boolean_fields & set(paired):
+        if type(paired[field]) is not bool: refuse()
+    counts = {"sequence", "actualInsertCalls", "conditionalWriteAttempts", "conditionalWritesBlocked",
+              "unconditionalSaveAttempts", "staleUpdateRefusals", "retiredReadChecks", "liveTypes", "terminalTypes"}
+    booleans = {"primaryInsertReached", "delayedInsertReached", "primaryInsertCompleted",
+                "delayedInsertDuplicate", "staleCaptured", "ordinaryPreserved", "newAttemptDistinct",
+                "newResultDistinct", "counterUnchangedSinceCapture", "counterNeverRewound",
+                "counterAdvancedExactlyOnce", "awareConditionalWriteAttempted", "awareConditionalWriteBlocked",
+                "unawareConditionalWriteAttempted", "unawareConditionalWriteBlocked", "retiredReadsHidden"}
+    for field in stages & set(paired):
+        stage = paired[field]
+        if not isinstance(stage, dict) or set(stage) != counts | booleans | {"state"}:
+            refuse()
+        if stage["state"] not in ("ACK", "FIXTURE_FAILURE"):
+            refuse()
+        if any(type(stage[key]) is not int or not 0 <= stage[key] <= 10000 for key in counts):
+            refuse()
+        if any(type(stage[key]) is not bool for key in booleans):
+            refuse()
+    return value
+
+
+def compiled_fixture_inventory(root, compiled, classpath):
+    fixtures = {}
+    for path in sorted(compiled.parent.glob(compiled.stem + "*.class")):
+        data = path.read_bytes()
+        if not data.startswith(b"\xca\xfe\xba\xbe"):
+            raise FixtureError("Actual compiled fixture required")
+        fixtures[str(path.relative_to(root))] = hashlib.sha256(data).hexdigest()
+    if not fixtures:
+        raise FixtureError("Complete compiled fixture inventory required")
+    dependencies = []
+    for item in classpath.read_text().strip().split(os.pathsep):
+        path = Path(item)
+        if not path.is_file() or not re.fullmatch(r"[A-Za-z0-9_.+\-]+\.jar", path.name):
+            raise FixtureError("Present bounded classpath JAR name required")
+        with path.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        dependencies.append({"jar": path.name, "sha256": digest, "bytes": path.stat().st_size})
+    return {"fixture": fixtures, "classpathSHA256": hashlib.sha256(classpath.read_bytes()).hexdigest(),
+            "dependencies": dependencies}
+
+
 def owned_memory_snapshot(owned, name, proc_root=Path("/proc"),
                           cgroup_root=Path("/sys/fs/cgroup")):
     """Read only this labelled container's numeric memory counters before removal."""
@@ -291,6 +361,7 @@ def main():
             if not data.startswith(b"\xca\xfe\xba\xbe") or not cp.is_file():
                 raise FixtureError("Fresh compiled native fixture/classpath is missing")
             receipt["compiledClasses"][key] = hashlib.sha256(data).hexdigest()
+            receipt.setdefault("compiledFixtureClasses", {})[key] = compiled_fixture_inventory(root, compiled, cp)
         # Names are registered before the create call, even if Docker loses its response.
         receipt["stage"] = "network"
         owned.plan("network", network)
@@ -333,7 +404,10 @@ def main():
         with os.fdopen(descriptor, "w") as output:
             json.dump({"identityModel": "FIVE_ACTORS", "issuer": base + "/realms/" + realm,
                        "tasks": actors}, output)
+        control = private / "paired-control"
+        control.mkdir(mode=0o700)
         env.update({
+               "ORISO_BOOTSTRAP_CONTROL_PATH": str(control),
                "ORISO_TASK_TOKEN_FIXTURE": str(fixture),
                "ORISO_BOOTSTRAP_SHARED_KEY": base64.b64encode(bytes([7]) * 32).decode(),
                "ORISO_BOOTSTRAP_RECEIVER_READY": str(private / "receiver-ready"),
@@ -382,8 +456,10 @@ def main():
             raise FixtureError("Unsafe token material in native XML; original retained privately only")
         shutil.copy2(report, args.evidence / report.name)
         observed = Path(env["ORISO_BOOTSTRAP_OBSERVED"])
-        receipt["observed"] = json.loads(observed.read_text()) if observed.is_file() else {}
         receipt["counts"] = counts
+        receipt["cases"] = [{"name": case.get("name"), "outcome": next((tag for tag in
+            ("failure", "error", "skipped") if case.find(tag) is not None), "pass")} for case in cases]
+        receipt["observed"] = safe_observation(json.loads(observed.read_text())) if observed.is_file() else {}
         process.stdin.close()
         process.stdin = None
         try:

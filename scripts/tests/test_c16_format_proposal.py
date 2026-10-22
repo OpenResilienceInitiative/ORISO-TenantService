@@ -47,12 +47,12 @@ class C16FormatProposalControls(unittest.TestCase):
                 if not accepted:
                     self.assertEqual("DEADLINE_FAILURE_NO_ACCEPTANCE", receipt["state"])
 
-    def test_owned_allowlist_is_exactly_six_tenant_and_two_receiver_sources(self):
+    def test_owned_allowlist_is_exactly_the_reviewed_c16_sources(self):
         self.assertEqual({"tenant", "cts"}, set(PROOF.FILES))
-        self.assertEqual(6, len(PROOF.FILES["tenant"]))
+        self.assertEqual(7, len(PROOF.FILES["tenant"]))
         self.assertEqual(4, sum(path.startswith("src/main/") for path in PROOF.FILES["cts"]))
-        self.assertEqual(1, sum(path.startswith("src/test/") for path in PROOF.FILES["cts"]))
-        self.assertEqual(11, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
+        self.assertEqual(2, sum(path.startswith("src/test/") for path in PROOF.FILES["cts"]))
+        self.assertEqual(13, len(set(PROOF.FILES["tenant"] + PROOF.FILES["cts"])))
         self.assertTrue(all(path.endswith(".java") for values in PROOF.FILES.values() for path in values))
 
     def test_only_the_explicit_owned_receiver_test_can_join_the_formatter_delta(self):
@@ -91,6 +91,16 @@ class C16FormatProposalControls(unittest.TestCase):
         ):
             with self.subTest(role=role, changed=changed, untracked=untracked):
                 self.assertFalse(PROOF.owned_delta(role, changed, untracked))
+
+    def test_native_fixture_formatting_cannot_include_a_neighbor_or_wrong_repository(self):
+        tenant = "src/test/java/com/vi/tenantservice/api/controller/BootstrapV2CallerReceiverIT.java"
+        receiver = "src/test/java/de/caritas/cob/consultingtypeservice/api/controller/BootstrapV2ReceiverFixture.java"
+        for role, path, other in (("tenant", tenant, "cts"), ("cts", receiver, "tenant")):
+            self.assertTrue(PROOF.owned_delta(role, [path], ""))
+            self.assertFalse(PROOF.owned_delta(other, [path], ""))
+            self.assertFalse(PROOF.owned_delta(role, [path.replace(".java", "Neighbor.java")], ""))
+            self.assertFalse(PROOF.owned_delta(role, [path, "src/main/java/Permission.java"], ""))
+            self.assertFalse(PROOF.owned_delta(role, [path], "untracked.java"))
 
 
 if __name__ == "__main__":

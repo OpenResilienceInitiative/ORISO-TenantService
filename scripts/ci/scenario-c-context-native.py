@@ -98,6 +98,73 @@ def safe_early_failure(log):
     return result
 
 
+NATIVE_CASES = (
+    "ownedTenantCreationUsesTheSharedV2ProofAtTheMaterializedDtoSendSeam",
+    "aLaterTenantFailureRetiresOnlyItsIssuedAttemptAndReusesTheExactReservation",
+)
+
+
+def exact_native_inventory(counts, cases, number):
+    if type(number) is not int or number not in (1, 2):
+        return False
+    if not isinstance(counts, dict) or not isinstance(cases, list):
+        return False
+    if set(counts) != {"tests", "failures", "errors", "skipped"} or any(
+            type(value) is not int or value < 0 for value in counts.values()):
+        return False
+    if counts["tests"] != number or counts["errors"] or counts["skipped"] or len(cases) != number:
+        return False
+    if any(not isinstance(case, dict) or set(case) != {"name", "outcome"}
+           or not isinstance(case["name"], str) for case in cases):
+        return False
+    names = [case["name"].removesuffix("()") for case in cases]
+    outcomes = [case.get("outcome") for case in cases]
+    return (len(set(names)) == number and set(names) == set(NATIVE_CASES[:number])
+            and all(outcome in ("pass", "failure") for outcome in outcomes)
+            and outcomes.count("failure") == counts["failures"])
+
+
+def paired_success(observed):
+    """Count only a complete native storage fence, never an authorization-only refusal."""
+    def matches(stage, numbers, flags):
+        return (isinstance(stage, dict) and stage.get("state") == "ACK"
+                and all(type(stage.get(key)) is int and stage[key] == value
+                        for key, value in numbers.items())
+                and all(stage.get(key) is True for key in flags))
+    if not isinstance(observed, dict):
+        return False
+    pair = observed.get("paired")
+    status = {"tenantFailureStatus": 400, "createStatus": 200, "compensationStatus": 204,
+              "delayedReplyStatus": 409, "newTenantStatus": 200, "oldReplayStatus": 409}
+    stages = {"beforeDelayedRelease", "terminalRace", "staleWrites", "newAttempt"}
+    flags = {"allocationRestored", "allocationRestoredThenReassigned"}
+    if (not isinstance(pair, dict) or set(pair) != set(status) | stages | flags
+            or any(type(pair[key]) is not int or pair[key] != value for key, value in status.items())
+            or any(pair[key] is not True for key in flags)):
+        return False
+    reached = {"primaryInsertReached", "delayedInsertReached", "primaryInsertCompleted",
+               "staleCaptured", "counterNeverRewound"}
+    if not matches(pair["beforeDelayedRelease"],
+                   {"actualInsertCalls": 1, "liveTypes": 0, "terminalTypes": 1},
+                   reached | {"counterUnchangedSinceCapture"}):
+        return False
+    retired = reached | {"delayedInsertDuplicate", "counterUnchangedSinceCapture"}
+    if not matches(pair["terminalRace"],
+                   {"actualInsertCalls": 2, "liveTypes": 0, "terminalTypes": 1}, retired):
+        return False
+    writes = {"conditionalWriteAttempts": 2, "conditionalWritesBlocked": 2,
+              "unconditionalSaveAttempts": 0, "staleUpdateRefusals": 2, "retiredReadChecks": 20}
+    retired |= {"awareConditionalWriteAttempted", "awareConditionalWriteBlocked",
+                "unawareConditionalWriteAttempted", "unawareConditionalWriteBlocked", "retiredReadsHidden"}
+    return (matches(pair["staleWrites"],
+                    dict(writes, actualInsertCalls=2, liveTypes=0, terminalTypes=1), retired)
+            and matches(pair["newAttempt"],
+                        dict(writes, actualInsertCalls=3, liveTypes=1, terminalTypes=1),
+                        retired - {"counterUnchangedSinceCapture"} | {"ordinaryPreserved",
+                                   "newAttemptDistinct", "newResultDistinct",
+                                   "counterAdvancedExactlyOnce"}))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--receiver", type=Path, required=True)
@@ -107,6 +174,7 @@ def main():
     parser.add_argument("--expect", choices=("red", "green"), required=True)
     parser.add_argument("--v1-baseline", choices=("original", "routed", "compensated-routed", "compensated-routed-policy"),
                         default="original")
+    parser.add_argument("--expected-tests", type=int, choices=(1, 2), default=1)
     parser.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
     if os.environ.get("CI") != "true" or os.environ.get("RUNNER_OS") != "Linux":
@@ -125,7 +193,7 @@ def main():
     evidence.mkdir(parents=True, exist_ok=False)
     before = {role: support.snapshot(root) for role, root in roots.items()}
     report = {"state": "STARTED_NOT_ACCEPTED", "refs": refs, "expect": args.expect,
-              "v1Baseline": args.v1_baseline,
+              "v1Baseline": args.v1_baseline, "expectedTests": args.expected_tests,
               "sourceBefore": before, "scope": "CTX1 native slice only; not whole Scenario C"}
     java_home = Path(os.environ["JAVA_HOME"])
     version = subprocess.check_output([str(java_home / "bin/java"), "--version"], text=True)
@@ -138,7 +206,7 @@ def main():
             child = subprocess.Popen(
                 [sys.executable, str(HOST / "scripts/test-bootstrap-context-roundtrip.py"),
                  "--tenant", str(HOST), "--receiver", str(roots["cts"]), "--helm", str(roots["helm"]),
-                 "--java-home", str(java_home), "--expect", args.expect, "--expected-tests", "1",
+                 "--java-home", str(java_home), "--expect", args.expect, "--expected-tests", str(args.expected_tests),
                  "--evidence", str(evidence / "native")], cwd=HOST, stdout=output,
                 stderr=subprocess.STDOUT, start_new_session=True,
             )
@@ -163,8 +231,7 @@ def main():
         report["nativeReceipt"] = native
         wanted = "BEHAVIORAL_RED" if args.expect == "red" else "PASS"
         counts = native.get("counts", {})
-        expected = (counts.get("tests") == 1 and not counts.get("errors", 1)
-                    and not counts.get("skipped", 1))
+        expected = exact_native_inventory(counts, native.get("cases", []), args.expected_tests)
         if args.expect == "red":
             expected = (expected and counts.get("failures") == 1
                         and native.get("observed", {}).get("receiverStatus") == 403
@@ -173,6 +240,8 @@ def main():
                         and set(native.get("receiverBefore", {})) == {"claims", "counter", "types"})
         else:
             expected = expected and counts.get("failures") == 0
+            if args.expected_tests == 2:
+                expected = expected and paired_success(native.get("observed"))
         cleanup = native.get("cleanup", [])
         run_id = native.get("runId", "")
         expected_resources = {("network", "oriso-context-" + run_id[:12]),
