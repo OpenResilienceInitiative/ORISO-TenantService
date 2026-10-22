@@ -83,7 +83,12 @@ class AccountPolicyPurposeAuthorizationIT {
                     .issuer("https://identity.example/realms/test")
                     .subject(subject)
                     .claim("azp", "backend-setup")
-                    .audience(List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice"))
+                    .audience(
+                        List.of(
+                            "tenantservice",
+                            "agencyservice",
+                            "consultingtypeservice",
+                            "userservice"))
                     .issuedAt(Instant.now().minusSeconds(10))
                     .expiresAt(Instant.now().plusSeconds(60))
                     .claim(

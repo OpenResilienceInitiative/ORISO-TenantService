@@ -19,11 +19,13 @@ enum TaskServiceActor {
   MAIL(
       Set.of("SMTP_SYNC", "SYSTEM_EMAIL_DELIVERY", "NOTIFICATION_DISPATCH"),
       Set.of(
-          "smtp-sync",
-          "system-email-delivery",
-          "notification-dispatch",
-          "notifications-technical"),
-      Set.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice", "oriso-task-commands")),
+          "smtp-sync", "system-email-delivery", "notification-dispatch", "notifications-technical"),
+      Set.of(
+          "tenantservice",
+          "agencyservice",
+          "consultingtypeservice",
+          "userservice",
+          "oriso-task-commands")),
   RUNTIME(
       Set.of("RUNTIME_POLICY", "MATRIX_AGENCY", "APPOINTMENT_SYNC", "APPOINTMENT_CLEANUP"),
       Set.of(

@@ -236,7 +236,12 @@ class GroupedTaskServiceIdentityAuthorizationIT {
     if ("backend-setup".equals(client))
       return List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice");
     if ("backend-mail".equals(client))
-      return List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice", "oriso-task-commands");
+      return List.of(
+          "tenantservice",
+          "agencyservice",
+          "consultingtypeservice",
+          "userservice",
+          "oriso-task-commands");
     if ("backend-runtime".equals(client))
       return List.of("tenantservice", "agencyservice", "appointmentservice");
     return List.of(requested);
