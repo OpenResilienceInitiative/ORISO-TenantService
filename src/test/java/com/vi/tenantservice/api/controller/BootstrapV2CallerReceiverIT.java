@@ -78,6 +78,7 @@ class BootstrapV2CallerReceiverIT {
       HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
   private static final AtomicReference<String> SENT_PROOF = new AtomicReference<>();
   private static final AtomicReference<byte[]> SENT_BODY = new AtomicReference<>();
+  private static final AtomicReference<byte[]> RECEIVED_BODY = new AtomicReference<>();
   private static final AtomicInteger RECEIVER_STATUS = new AtomicInteger(-1);
   private static final java.util.concurrent.atomic.AtomicBoolean PAIR_ARMED =
       new java.util.concurrent.atomic.AtomicBoolean();
@@ -148,7 +149,7 @@ class BootstrapV2CallerReceiverIT {
     properties.add(
         "default.consulting.types.json.path",
         () ->
-            Path.of("src/test/resources/settings/bootstrap-v2-complete-consulting-type.json")
+            Path.of("src/test/resources/settings/bootstrap-v2-valid-registration-variants.json")
                 .toAbsolutePath()
                 .toString());
     String receiver = required("ORISO_CTS_BOOTSTRAP_RECEIVER_URL");
@@ -188,6 +189,7 @@ class BootstrapV2CallerReceiverIT {
             if ("POST".equals(exchange.getRequestMethod())
                 && "/consultingtypes".equals(exchange.getRequestURI().getPath())) {
               SENT_BODY.set(body);
+              RECEIVED_BODY.set(response.body().clone());
               SENT_PROOF.set(
                   exchange.getRequestHeaders().getFirst("X-ORISO-Tenant-Creation-Context"));
               RECEIVER_STATUS.set(response.statusCode());
@@ -351,6 +353,20 @@ class BootstrapV2CallerReceiverIT {
     assertThat(RECEIVER_STATUS.get()).isEqualTo(200);
     assertThat(created.statusCode()).isEqualTo(200);
     assertThat(JSON.readTree(SENT_BODY.get()).path("tenantId").asLong()).isEqualTo(tenantId);
+    JsonNode configured = JSON.readTree(SENT_BODY.get());
+    assertThat(configured.path("registration").path("minPostcodeSize").asInt()).isEqualTo(8);
+    assertThat(configured.path("registration").path("autoSelectAgency").isNull()
+        || configured.path("registration").path("autoSelectAgency").isMissingNode()).isTrue();
+    assertThat(configured.path("registration").path("autoSelectPostcode").isNull()
+        || configured.path("registration").path("autoSelectPostcode").isMissingNode()).isTrue();
+    assertThat(configured.path("groups").size()).isEqualTo(1);
+    JsonNode readback = JSON.readTree(RECEIVED_BODY.get()).path("registration");
+    assertThat(readback.path("minPostcodeSize").isIntegralNumber()).isTrue();
+    assertThat(readback.path("minPostcodeSize").intValue()).isEqualTo(8);
+    for (String field : List.of("autoSelectAgency", "autoSelectPostcode")) {
+      var value = readback.path(field);
+      assertThat(value.isBoolean() && !value.booleanValue()).isTrue();
+    }
     String proof = SENT_PROOF.get();
     assertThat(proof).isNotBlank();
     JsonNode claims = JSON.readTree(Base64.getUrlDecoder().decode(proof.split("\\.", -1)[0]));
