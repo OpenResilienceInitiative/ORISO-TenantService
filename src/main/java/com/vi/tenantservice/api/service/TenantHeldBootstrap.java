@@ -12,6 +12,9 @@ public class TenantHeldBootstrap {
   }
 
   public record Result(MultilingualTenantDTO tenant, String receipt) {
-    @Override public String toString() { return "HeldTenantBootstrapResult[redacted]"; }
+    @Override
+    public String toString() {
+      return "HeldTenantBootstrapResult[redacted]";
+    }
   }
 }
