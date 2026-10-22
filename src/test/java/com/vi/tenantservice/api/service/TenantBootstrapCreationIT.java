@@ -204,74 +204,79 @@ class TenantBootstrapCreationIT {
       var compensationRequests = new java.util.concurrent.atomic.AtomicInteger();
       for (int repeat = 0; repeat < 2; repeat++) {
         boolean loseReply = repeat == 0;
-      server
-          .expect(
-              org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
-                  "http://local-bootstrap-precondition/consultingtypes/bootstrap-compensation"))
-          .andExpect(
-              sent -> {
-                assertThat(sent.getMethod() == org.springframework.http.HttpMethod.POST).isTrue();
-                assertThat("0".equals(sent.getHeaders().getFirst("tenantId"))).isTrue();
-                assertThat(
-                        org.springframework.transaction.support.TransactionSynchronizationManager
-                            .isActualTransactionActive())
-                    .isFalse();
-                try {
-                  compensationRequests.incrementAndGet();
-                  String currentCommand = ((org.springframework.mock.http.client.MockClientHttpRequest) sent).getBodyAsString();
-                  if (frozenCommand.get() == null) frozenCommand.set(currentCommand);
-                  else assertThat(frozenCommand.get().equals(currentCommand)).isTrue();
-                  var body =
-                      json.readTree(
-                          ((org.springframework.mock.http.client.MockClientHttpRequest) sent)
-                              .getBodyAsString());
-                  String proof =
-                      sent.getHeaders()
-                          .getFirst(
-                              com.vi.tenantservice.config.security.TenantCreationContext.HEADER);
-                  var claims =
-                      com.vi.tenantservice.config.security.TaskContextProof.verify(
-                          new byte[32], proof);
-                  String marker =
-                      sql.queryForObject(
-                          "SELECT bootstrap_attempt_id FROM tenant WHERE id=9158", String.class);
-                  assertThat(body.path("tenantId").asLong() == 9158L).isTrue();
-                  assertThat(claims.size()).isEqualTo(16);
+        server
+            .expect(
+                org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
+                    "http://local-bootstrap-precondition/consultingtypes/bootstrap-compensation"))
+            .andExpect(
+                sent -> {
+                  assertThat(sent.getMethod() == org.springframework.http.HttpMethod.POST).isTrue();
+                  assertThat("0".equals(sent.getHeaders().getFirst("tenantId"))).isTrue();
                   assertThat(
-                          claims
-                              .path("operation")
-                              .asText()
-                              .equals("tenant.consulting-type.compensate"))
-                      .isTrue();
-                  assertThat(
-                          claims
-                              .path("target")
-                              .asText()
-                              .equals("tenant/9158/consulting-type/default/compensation"))
-                      .isTrue();
-                  assertThat(claims.path("nonce").asText().equals(marker.replace("-", "")))
-                      .isTrue();
-                  assertThat(
-                          claims
-                              .path("payloadDigest")
-                              .asText()
-                              .equals(
-                                  com.vi.tenantservice.config.security.TaskContextProof.digest(
-                                      new byte[32], body)))
-                      .isTrue();
-                  assertThat(
-                          sql.queryForObject(
-                              "SELECT COUNT(*) FROM tenant WHERE id=9158", Integer.class))
-                      .isEqualTo(1);
-                } catch (Exception invalid) {
-                  throw new AssertionError("Owned compensation wire precondition refused");
-                }
-              })
-          .andRespond(terminal -> {
-            if (loseReply) throw new java.io.IOException("Synthetic lost terminal acknowledgement");
-            return org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(
-                org.springframework.http.HttpStatus.NO_CONTENT).createResponse(terminal);
-          });
+                          org.springframework.transaction.support.TransactionSynchronizationManager
+                              .isActualTransactionActive())
+                      .isFalse();
+                  try {
+                    compensationRequests.incrementAndGet();
+                    String currentCommand =
+                        ((org.springframework.mock.http.client.MockClientHttpRequest) sent)
+                            .getBodyAsString();
+                    if (frozenCommand.get() == null) frozenCommand.set(currentCommand);
+                    else assertThat(frozenCommand.get().equals(currentCommand)).isTrue();
+                    var body =
+                        json.readTree(
+                            ((org.springframework.mock.http.client.MockClientHttpRequest) sent)
+                                .getBodyAsString());
+                    String proof =
+                        sent.getHeaders()
+                            .getFirst(
+                                com.vi.tenantservice.config.security.TenantCreationContext.HEADER);
+                    var claims =
+                        com.vi.tenantservice.config.security.TaskContextProof.verify(
+                            new byte[32], proof);
+                    String marker =
+                        sql.queryForObject(
+                            "SELECT bootstrap_attempt_id FROM tenant WHERE id=9158", String.class);
+                    assertThat(body.path("tenantId").asLong() == 9158L).isTrue();
+                    assertThat(claims.size()).isEqualTo(16);
+                    assertThat(
+                            claims
+                                .path("operation")
+                                .asText()
+                                .equals("tenant.consulting-type.compensate"))
+                        .isTrue();
+                    assertThat(
+                            claims
+                                .path("target")
+                                .asText()
+                                .equals("tenant/9158/consulting-type/default/compensation"))
+                        .isTrue();
+                    assertThat(claims.path("nonce").asText().equals(marker.replace("-", "")))
+                        .isTrue();
+                    assertThat(
+                            claims
+                                .path("payloadDigest")
+                                .asText()
+                                .equals(
+                                    com.vi.tenantservice.config.security.TaskContextProof.digest(
+                                        new byte[32], body)))
+                        .isTrue();
+                    assertThat(
+                            sql.queryForObject(
+                                "SELECT COUNT(*) FROM tenant WHERE id=9158", Integer.class))
+                        .isEqualTo(1);
+                  } catch (Exception invalid) {
+                    throw new AssertionError("Owned compensation wire precondition refused");
+                  }
+                })
+            .andRespond(
+                terminal -> {
+                  if (loseReply)
+                    throw new java.io.IOException("Synthetic lost terminal acknowledgement");
+                  return org.springframework.test.web.client.response.MockRestResponseCreators
+                      .withStatus(org.springframework.http.HttpStatus.NO_CONTENT)
+                      .createResponse(terminal);
+                });
       }
       var facade = application.getBean(com.vi.tenantservice.api.facade.TenantServiceFacade.class);
       var first =
@@ -345,36 +350,76 @@ class TenantBootstrapCreationIT {
       nativeSchemaPopulation().execute(application.getBean(javax.sql.DataSource.class));
       var transport = application.getBean(org.springframework.web.client.RestTemplate.class);
       var originalTransport = transport.getRequestFactory();
-      var server = org.springframework.test.web.client.MockRestServiceServer.bindTo(transport).build();
+      var server =
+          org.springframework.test.web.client.MockRestServiceServer.bindTo(transport).build();
       var request = new org.springframework.mock.web.MockHttpServletRequest();
       request.setUserPrincipal(SecurityContextHolder.getContext().getAuthentication());
       org.springframework.web.context.request.RequestContextHolder.setRequestAttributes(
           new org.springframework.web.context.request.ServletRequestAttributes(request));
       try {
-        server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
-            "http://local-bootstrap-precondition/consultingtypes"))
-            .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess(
-                "{\"tenantId\":9158,\"id\":109158}", org.springframework.http.MediaType.APPLICATION_JSON));
+        server
+            .expect(
+                org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
+                    "http://local-bootstrap-precondition/consultingtypes"))
+            .andRespond(
+                org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess(
+                    "{\"tenantId\":9158,\"id\":109158}",
+                    org.springframework.http.MediaType.APPLICATION_JSON));
         for (int attempt = 0; attempt < (twoUnknown ? 2 : 1); attempt++) {
-          server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
-              "http://local-bootstrap-precondition/consultingtypes/bootstrap-compensation"))
-              .andExpect(sent -> assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse())
-              .andRespond(terminal -> {
-                if (callerChanged) when(identity.current("CONFIG_WIZARD")).thenReturn(false);
-                if (rowChanged) assertThat(sql.update("UPDATE tenant SET name='current foreign drift' WHERE id=9158")).isEqualTo(1);
-                if (!explicitRejection) throw new java.io.IOException("Synthetic unresolved terminal acknowledgement");
-                return org.springframework.test.web.client.response.MockRestResponseCreators.withStatus(
-                    org.springframework.http.HttpStatus.CONFLICT).createResponse(terminal);
-              });
+          server
+              .expect(
+                  org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo(
+                      "http://local-bootstrap-precondition/consultingtypes/bootstrap-compensation"))
+              .andExpect(
+                  sent ->
+                      assertThat(
+                              org.springframework.transaction.support
+                                  .TransactionSynchronizationManager.isActualTransactionActive())
+                          .isFalse())
+              .andRespond(
+                  terminal -> {
+                    if (callerChanged) when(identity.current("CONFIG_WIZARD")).thenReturn(false);
+                    if (rowChanged)
+                      assertThat(
+                              sql.update(
+                                  "UPDATE tenant SET name='current foreign drift' WHERE id=9158"))
+                          .isEqualTo(1);
+                    if (!explicitRejection)
+                      throw new java.io.IOException(
+                          "Synthetic unresolved terminal acknowledgement");
+                    return org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withStatus(org.springframework.http.HttpStatus.CONFLICT)
+                        .createResponse(terminal);
+                  });
         }
         String token = allocation.reserve(9158L, "local-unknown-ack").getToken();
         var original = new IllegalStateException("Synthetic later callback failure");
-        Throwable failed = org.assertj.core.api.Assertions.catchThrowable(() -> creation.create(input(9158L), token,
-            (created, grant) -> { grant.createDefaultConsultingTypes(); throw original; }));
+        Throwable failed =
+            org.assertj.core.api.Assertions.catchThrowable(
+                () ->
+                    creation.create(
+                        input(9158L),
+                        token,
+                        (created, grant) -> {
+                          grant.createDefaultConsultingTypes();
+                          throw original;
+                        }));
         assertThat(failed).isSameAs(original);
-        assertThat(sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE id=9158", Integer.class)).isEqualTo(1);
-        assertThat("ASSIGNED".equals(sql.queryForObject("SELECT status FROM tenant_id_reservation WHERE tenant_id=9158", String.class))).isTrue();
-        assertThat(token.equals(sql.queryForObject("SELECT token FROM tenant_id_reservation WHERE tenant_id=9158", String.class))).isTrue();
+        assertThat(sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE id=9158", Integer.class))
+            .isEqualTo(1);
+        assertThat(
+                "ASSIGNED"
+                    .equals(
+                        sql.queryForObject(
+                            "SELECT status FROM tenant_id_reservation WHERE tenant_id=9158",
+                            String.class)))
+            .isTrue();
+        assertThat(
+                token.equals(
+                    sql.queryForObject(
+                        "SELECT token FROM tenant_id_reservation WHERE tenant_id=9158",
+                        String.class)))
+            .isTrue();
         server.verify();
       } finally {
         transport.setRequestFactory(originalTransport);
