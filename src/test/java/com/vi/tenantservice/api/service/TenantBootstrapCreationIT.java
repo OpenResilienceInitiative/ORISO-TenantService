@@ -134,6 +134,30 @@ class TenantBootstrapCreationIT {
   }
 
   @Test
+  void invalidConfiguredDefaultCannotLeaveAnOwnedTenantOrReachTheOutboundClient() {
+    String token = allocation.reserve(9157L, "synthetic-bootstrap").getToken();
+    var factory = org.mockito.Mockito.mock(
+        com.vi.tenantservice.api.config.apiclient.ConsultingTypeServiceApiControllerFactory.class);
+    var service = new com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService(
+        factory, org.mockito.Mockito.mock(com.vi.tenantservice.api.service.httpheader.SecurityHeaderSupplier.class),
+        org.mockito.Mockito.mock(com.vi.tenantservice.api.tenant.TenantResolverService.class),
+        new ConfigurationFileLoader());
+    org.springframework.test.util.ReflectionTestUtils.setField(service, "defaultConsultingTypesFilePath",
+        "src/test/resources/settings/bootstrap-v2-consulting-type.json");
+    var signer = org.mockito.Mockito.mock(com.vi.tenantservice.config.security.TenantCreationContext.class);
+    org.springframework.test.util.ReflectionTestUtils.setField(service, "creationContext", signer);
+    assertThatThrownBy(() -> creation.create(input(9157L), token, (created, grant) -> {
+      service.createDefaultConsultingTypes(grant);
+      return null;
+    })).isInstanceOf(IllegalStateException.class);
+    org.mockito.Mockito.verifyNoInteractions(signer, factory);
+    assertThat(tenants.existsById(9157L)).isFalse();
+    assertThat(allocation.getStatus(9157L).name()).isEqualTo("RESERVED");
+    assertThat(sql.queryForObject("SELECT token FROM tenant_id_reservation WHERE tenant_id=9157", String.class))
+        .isEqualTo(token);
+  }
+
+  @Test
   void nativeScalarMutationRevokesTheGrantAndCannotAuthorizeCompensation() {
     String token = allocation.reserve(9157L, "synthetic-bootstrap").getToken();
     assertThatThrownBy(

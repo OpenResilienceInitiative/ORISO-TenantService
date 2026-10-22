@@ -113,7 +113,7 @@ class BootstrapV2CallerReceiverIT {
     properties.add(
         "default.consulting.types.json.path",
         () ->
-            Path.of("src/test/resources/settings/bootstrap-v2-consulting-type.json")
+            Path.of("src/test/resources/settings/bootstrap-v2-complete-consulting-type.json")
                 .toAbsolutePath()
                 .toString());
     String receiver = required("ORISO_CTS_BOOTSTRAP_RECEIVER_URL");
