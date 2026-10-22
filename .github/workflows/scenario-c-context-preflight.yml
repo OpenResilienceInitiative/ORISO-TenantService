@@ -30,7 +30,7 @@ jobs:
           - role: user
             source: subject
             repository: OpenResilienceInitiative/ORISO-UserService
-            ref: ecce9c0e032d5132644d54225f3a8ad16772d9a5
+            ref: 136f28020527a51722ae31e98b5954e57f7700da
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       MAVEN_OPTS: -Xmx512m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2

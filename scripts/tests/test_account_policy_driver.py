@@ -12,6 +12,7 @@ class PolicyReceiptControls(unittest.TestCase):
     def receipt(self):
         run = 'a' * 32
         return {'state': 'PASS', 'sourceUnchanged': True, 'runId': run,
+                'observed': {'platformRuntimeRead': True},
                 'counts': {'tests': 5, 'failures': 0, 'errors': 0, 'skipped': 0},
                 'cases': [{'name': name, 'outcome': 'pass'} for name in driver.CASES],
                 'cleanup': [
@@ -27,6 +28,13 @@ class PolicyReceiptControls(unittest.TestCase):
 
     def test_complete_actual_native_receipt(self):
         self.assertTrue(driver.complete(self.receipt(), self.groups(), 0))
+
+    def test_platform_native_read_must_be_an_explicit_true_observation(self):
+        for observed in ({}, {"platformRuntimeRead": False}, {"platformRuntimeRead": 1},
+                         {"platformRuntimeRead": "true"}):
+            value = self.receipt()
+            value["observed"] = observed
+            self.assertFalse(driver.complete(value, self.groups(), 0))
 
     def test_safe_absence_does_not_supply_missing_runtime(self):
         value = self.receipt()

@@ -52,7 +52,7 @@ public final class AccountPolicyReceiverFixture {
         "spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
         issuer + "/protocol/openid-connect/certs");
     System.setProperty("TASK_IDENTITY_MODEL", "FIVE_ACTORS");
-    System.setProperty("TASK_IDENTITY_REQUIRED_TASKS", "INVITE_RESERVATIONS,CONSULTANT_IMPORT");
+    System.setProperty("TASK_IDENTITY_REQUIRED_TASKS", "INVITE_RESERVATIONS,CONSULTANT_IMPORT,RUNTIME_POLICY");
     System.setProperty("TASK_IDENTITY_AUDIENCE", "tenantservice");
     System.setProperty("ORISO_TASK_CONTEXT_KEY", required("ORISO_POLICY_SHARED_KEY"));
     // A C policy read must neither validate nor fall back to this deliberately unusable v1 key.
@@ -101,6 +101,12 @@ public final class AccountPolicyReceiverFixture {
               new ClassPathResource("database/TenantServiceDatabase.sql"),
               new ClassPathResource("database/MultiTenantData.sql"))
           .execute(context.getBean(DataSource.class));
+      var controls =
+          context.getBean(com.vi.tenantservice.api.service.TenantAdminControlsService.class);
+      var prior = controls.getAccountInactivitySettings();
+      controls.updateAccountInactivitySettings(
+          new com.vi.tenantservice.api.model.AccountInactivitySettings(
+              7, 11, 18, prior.getRevision()));
       var statistics =
           context.getBean(EntityManagerFactory.class).unwrap(SessionFactory.class).getStatistics();
       Files.writeString(

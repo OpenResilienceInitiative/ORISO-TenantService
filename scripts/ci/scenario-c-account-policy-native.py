@@ -35,6 +35,7 @@ def complete(native, groups, exit_code):
     classes = native.get('compiledClasses', {})
     return bool(
         exit_code == 0 and native.get('state') == 'PASS' and native.get('sourceUnchanged') is True
+        and native.get('observed', {}).get('platformRuntimeRead') is True
         and re.fullmatch('[a-f0-9]{32}', run)
         and counts == {'tests': 5, 'failures': 0, 'errors': 0, 'skipped': 0}
         and len(cases) == 5 and {c.get('name', '').removesuffix('()') for c in cases} == CASES
