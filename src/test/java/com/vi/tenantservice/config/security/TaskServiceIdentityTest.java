@@ -157,7 +157,8 @@ class TaskServiceIdentityTest {
             .header("alg", "none")
             .subject("setup-subject")
             .claim("azp", "backend-setup")
-            .audience(List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice"))
+            .audience(
+                List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice"))
             .expiresAt(Instant.now().plusSeconds(60))
             .claim("realm_access", Map.of("roles", roles))
             .build(),
@@ -179,7 +180,8 @@ class TaskServiceIdentityTest {
             .header("alg", "none")
             .subject("setup-subject")
             .claim("azp", "backend-setup")
-            .audience(List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice"))
+            .audience(
+                List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice"))
             .expiresAt(Instant.now().plusSeconds(60))
             .claim(
                 "realm_access",
@@ -273,8 +275,7 @@ class TaskServiceIdentityTest {
             .isEqualTo(routed);
         var reordered = new java.util.ArrayList<>(vector.audiences());
         java.util.Collections.reverse(reordered);
-        assertThat(identity.allows(audienceCaller(vector, reordered), purpose))
-            .isEqualTo(routed);
+        assertThat(identity.allows(audienceCaller(vector, reordered), purpose)).isEqualTo(routed);
       }
     }
   }
@@ -287,8 +288,11 @@ class TaskServiceIdentityTest {
         var missing = new java.util.ArrayList<>(vector.audiences());
         missing.remove(index);
         var identity = new TaskServiceIdentity(audienceBindings(vector, vector.purposes().get(0)));
-        checks.add(() -> assertThat(identity.allows(
-            audienceCaller(vector, missing), vector.purposes().get(0))).isFalse());
+        checks.add(
+            () ->
+                assertThat(
+                        identity.allows(audienceCaller(vector, missing), vector.purposes().get(0)))
+                    .isFalse());
       }
     }
     org.junit.jupiter.api.Assertions.assertAll(checks);
@@ -308,8 +312,11 @@ class TaskServiceIdentityTest {
       broadened.add("tenantservice");
       for (var invalid : List.of(extra, duplicate, differentCase, broadened)) {
         var identity = new TaskServiceIdentity(audienceBindings(vector, vector.purposes().get(0)));
-        checks.add(() -> assertThat(identity.allows(
-            audienceCaller(vector, invalid), vector.purposes().get(0))).isFalse());
+        checks.add(
+            () ->
+                assertThat(
+                        identity.allows(audienceCaller(vector, invalid), vector.purposes().get(0)))
+                    .isFalse());
       }
     }
     org.junit.jupiter.api.Assertions.assertAll(checks);
@@ -329,8 +336,12 @@ class TaskServiceIdentityTest {
     malformed.add(List.of());
     var checks = new java.util.ArrayList<org.junit.jupiter.api.function.Executable>();
     for (Object invalid : malformed) {
-      checks.add(() -> assertThat(org.junit.jupiter.api.Assertions.assertDoesNotThrow(
-          () -> identity.allows(audienceCaller(vector, invalid), "CONFIG_WIZARD"))).isFalse());
+      checks.add(
+          () ->
+              assertThat(
+                      org.junit.jupiter.api.Assertions.assertDoesNotThrow(
+                          () -> identity.allows(audienceCaller(vector, invalid), "CONFIG_WIZARD")))
+                  .isFalse());
     }
     org.junit.jupiter.api.Assertions.assertAll(checks);
   }
@@ -339,11 +350,12 @@ class TaskServiceIdentityTest {
   void defaultLegacyAudienceMatchingRetainsItsExistingContainsBehavior() {
     var identity = new TaskServiceIdentity(bindings());
     var original = token(List.of("config-wizard"));
-    var jwt = Jwt.withTokenValue("fixture")
-        .headers(headers -> headers.putAll(original.getHeaders()))
-        .claims(claims -> claims.putAll(original.getClaims()))
-        .audience(List.of("receiver", "legacy-other-receiver"))
-        .build();
+    var jwt =
+        Jwt.withTokenValue("fixture")
+            .headers(headers -> headers.putAll(original.getHeaders()))
+            .claims(claims -> claims.putAll(original.getClaims()))
+            .audience(List.of("receiver", "legacy-other-receiver"))
+            .build();
     assertThat(identity.allows(new JwtAuthenticationToken(jwt, List.of()), "CONFIG_WIZARD"))
         .isTrue();
   }
@@ -358,36 +370,66 @@ class TaskServiceIdentityTest {
   }
 
   private JwtAuthenticationToken audienceCaller(AudienceVector vector, Object audience) {
-    var jwt = Jwt.withTokenValue("fixture")
-        .header("alg", "none")
-        .subject(vector.subject())
-        .claim("azp", vector.client())
-        .expiresAt(Instant.now().plusSeconds(60))
-        .claim("realm_access", Map.of("roles", vector.roles()))
-        .claims(claims -> {
-          if (audience == null) claims.remove("aud");
-          else claims.put("aud", audience);
-        })
-        .build();
+    var jwt =
+        Jwt.withTokenValue("fixture")
+            .header("alg", "none")
+            .subject(vector.subject())
+            .claim("azp", vector.client())
+            .expiresAt(Instant.now().plusSeconds(60))
+            .claim("realm_access", Map.of("roles", vector.roles()))
+            .claims(
+                claims -> {
+                  if (audience == null) claims.remove("aud");
+                  else claims.put("aud", audience);
+                })
+            .build();
     return new JwtAuthenticationToken(jwt, List.of());
   }
 
   private List<AudienceVector> audienceVectors() {
     return List.of(
-        new AudienceVector("SETUP", "backend-setup", "setup-subject",
+        new AudienceVector(
+            "SETUP",
+            "backend-setup",
+            "setup-subject",
             List.of("config-wizard", "invitation-reservations", "consultant-import"),
             List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice"),
             List.of("CONFIG_WIZARD", "INVITE_RESERVATIONS", "CONSULTANT_IMPORT")),
-        new AudienceVector("MAIL", "backend-mail", "mail-subject",
-            List.of("smtp-sync", "system-email-delivery", "notification-dispatch", "notifications-technical"),
-            List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice", "oriso-task-commands"),
+        new AudienceVector(
+            "MAIL",
+            "backend-mail",
+            "mail-subject",
+            List.of(
+                "smtp-sync",
+                "system-email-delivery",
+                "notification-dispatch",
+                "notifications-technical"),
+            List.of(
+                "tenantservice",
+                "agencyservice",
+                "consultingtypeservice",
+                "userservice",
+                "oriso-task-commands"),
             List.of("SMTP_SYNC", "SYSTEM_EMAIL_DELIVERY", "NOTIFICATION_DISPATCH")),
-        new AudienceVector("RUNTIME", "backend-runtime", "runtime-subject",
-            List.of("runtime-policy", "matrix-agency", "matrix-agency-provision", "appointment-sync", "appointment-participant-cleanup"),
+        new AudienceVector(
+            "RUNTIME",
+            "backend-runtime",
+            "runtime-subject",
+            List.of(
+                "runtime-policy",
+                "matrix-agency",
+                "matrix-agency-provision",
+                "appointment-sync",
+                "appointment-participant-cleanup"),
             List.of("tenantservice", "agencyservice", "appointmentservice"),
             List.of("RUNTIME_POLICY", "MATRIX_AGENCY")));
   }
 
-  private record AudienceVector(String actor, String client, String subject,
-      List<String> roles, List<String> audiences, List<String> purposes) {}
+  private record AudienceVector(
+      String actor,
+      String client,
+      String subject,
+      List<String> roles,
+      List<String> audiences,
+      List<String> purposes) {}
 }
