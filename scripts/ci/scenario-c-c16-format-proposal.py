@@ -25,6 +25,7 @@ FILES = {
     "cts": [
         "src/main/java/de/caritas/cob/consultingtypeservice/config/security/TenantCreationContext.java",
         "src/main/java/de/caritas/cob/consultingtypeservice/api/service/TenantBootstrapService.java",
+        "src/main/java/de/caritas/cob/consultingtypeservice/api/model/TenantBootstrapClaim.java",
         "src/main/java/de/caritas/cob/consultingtypeservice/api/consultingtypes/ConsultingTypeValidator.java",
         "src/test/java/de/caritas/cob/consultingtypeservice/config/security/TenantBootstrapV2ContextTest.java",
     ],

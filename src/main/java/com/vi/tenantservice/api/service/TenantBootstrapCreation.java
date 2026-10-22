@@ -368,6 +368,8 @@ public class TenantBootstrapCreation {
           attempt.owner.subject(),
           "tokenIssuer",
           attempt.owner.issuer(),
+          "nonce",
+          attempt.marker.replace("-", ""),
           "iat",
           Instant.now().getEpochSecond(),
           "exp",

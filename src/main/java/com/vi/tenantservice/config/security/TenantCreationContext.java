@@ -130,7 +130,6 @@ public class TenantCreationContext {
     claims.put("operation", "tenant.consulting-type.bootstrap");
     claims.put("method", "POST");
     claims.put("target", "tenant/" + tenantId + "/consulting-type/default");
-    claims.put("nonce", UUID.randomUUID().toString().replace("-", ""));
     try {
       byte[] key = TaskContextProof.key(environment);
       String digest = TaskContextProof.digest(key, dto);
