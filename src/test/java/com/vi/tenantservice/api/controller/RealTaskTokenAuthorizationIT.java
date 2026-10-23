@@ -82,9 +82,43 @@ class RealTaskTokenAuthorizationIT {
     }
   }
 
+  private static boolean groupedFixture(JsonNode fixture) {
+    var actors = java.util.Set.of("SETUP", "ACCOUNT_CREATE", "ACCOUNT_ADMIN", "MAIL", "RUNTIME");
+    boolean grouped = fixture.has("identityModel");
+    if (grouped && !"FIVE_ACTORS".equals(fixture.path("identityModel").asText())) {
+      throw new IllegalStateException("Unsupported synthetic fixture identity model");
+    }
+    var keys = new java.util.HashSet<String>();
+    for (JsonNode binding : fixture.path("tasks")) {
+      String key = binding.path("key").asText();
+      if (!keys.add(key) || (grouped != actors.contains(key))) {
+        throw new IllegalStateException("Mixed or duplicate synthetic identity fixture bindings");
+      }
+    }
+    return grouped;
+  }
+
+  private static String fixtureKey(String purpose) {
+    if (!groupedFixture(fixture())) {
+      return purpose;
+    }
+    return switch (purpose) {
+      case "CONFIG_WIZARD", "INVITE_RESERVATIONS" -> "SETUP";
+      case "NOTIFICATION_DISPATCH", "SYSTEM_EMAIL_DELIVERY", "SMTP_SYNC" -> "MAIL";
+      case "RUNTIME_POLICY", "MATRIX_AGENCY" -> "RUNTIME";
+      default -> throw new IllegalArgumentException("Unsupported receiver purpose fixture");
+    };
+  }
+
   @DynamicPropertySource
   static void nativeBindings(DynamicPropertyRegistry properties) {
     JsonNode fixture = fixture();
+    if (groupedFixture(fixture)) {
+      properties.add("TASK_IDENTITY_MODEL", () -> "FIVE_ACTORS");
+      properties.add(
+          "TASK_IDENTITY_REQUIRED_TASKS",
+          () -> "CONFIG_WIZARD,INVITE_RESERVATIONS,NOTIFICATION_DISPATCH,RUNTIME_POLICY");
+    }
     String issuer = fixture.path("issuer").asText();
     properties.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> issuer);
     properties.add(
@@ -101,7 +135,7 @@ class RealTaskTokenAuthorizationIT {
     JsonNode fixture = fixture();
     JsonNode task = null;
     for (JsonNode candidate : fixture.path("tasks")) {
-      if (key.equals(candidate.path("key").asText())) {
+      if (fixtureKey(key).equals(candidate.path("key").asText())) {
         task = candidate;
       }
     }
@@ -231,7 +265,8 @@ class RealTaskTokenAuthorizationIT {
   @Test
   void realSignedWrongBindingsOrUnrelatedGrantsCannotUseTaskOrHumanBranch() throws Exception {
     for (String fault : List.of("mixedRoles", "wrongAudience", "wrongSubject")) {
-      String actor = fixture().path("variants").path("RUNTIME_POLICY").path(fault).asText();
+      String actor =
+          fixture().path("variants").path(fixtureKey("RUNTIME_POLICY")).path(fault).asText();
       assertThat(actor).isNotBlank();
       assertThat(call("GET", "/tenantadmin/1/dpa/gate", actor, null).statusCode()).isEqualTo(403);
       assertThat(call("GET", "/tenant", actor, null).statusCode()).isEqualTo(403);

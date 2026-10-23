@@ -46,9 +46,16 @@ public class TaskServiceIdentity {
           "*",
           "wildcard");
   private final Environment environment;
+  private final boolean grouped;
+  private final Set<String> requiredTasks = new HashSet<>();
 
   public TaskServiceIdentity(Environment environment) {
     this.environment = environment;
+    String model = environment.getProperty("TASK_IDENTITY_MODEL");
+    if (model != null && !"FIVE_ACTORS".equals(model)) {
+      throw new IllegalStateException("Unknown task identity model: " + model);
+    }
+    this.grouped = model != null;
     String required = environment.getProperty("TASK_IDENTITY_REQUIRED_TASKS", "");
     for (String name : required.split(",")) {
       String task = name.trim();
@@ -59,14 +66,25 @@ public class TaskServiceIdentity {
               || environment.getProperty("TASK_IDENTITY_AUDIENCE", "").isBlank())) {
         throw new IllegalStateException("Required task identity is not configured: " + task);
       }
+      if (!task.isEmpty()) {
+        requiredTasks.add(task);
+      }
     }
     Set<String> clients = new HashSet<>();
     Set<String> subjects = new HashSet<>();
-    for (String task : ROLES.keySet()) {
-      String client = configured(task, "CLIENT_ID");
-      String subject = configured(task, "SERVICE_SUBJECT");
+    Set<String> bindingNames = new HashSet<>();
+    if (grouped) {
+      for (TaskServiceActor actor : TaskServiceActor.values()) {
+        bindingNames.add(actor.name());
+      }
+    } else {
+      bindingNames.addAll(ROLES.keySet());
+    }
+    for (String binding : bindingNames) {
+      String client = bindingValue(binding, "CLIENT_ID");
+      String subject = bindingValue(binding, "SERVICE_SUBJECT");
       if (client.isBlank() != subject.isBlank())
-        throw new IllegalStateException("Incomplete task identity binding: " + task);
+        throw new IllegalStateException("Incomplete task identity binding: " + binding);
       if (!client.isBlank() && (!clients.add(client) || !subjects.add(subject)))
         throw new IllegalStateException("Task identity bindings must be distinct");
     }
@@ -79,6 +97,7 @@ public class TaskServiceIdentity {
   public boolean allows(Authentication authentication, String task) {
     String role = ROLES.get(task);
     if (role == null
+        || (grouped && !requiredTasks.contains(task))
         || authentication == null
         || !authentication.isAuthenticated()
         || !(authentication.getPrincipal() instanceof Jwt jwt)) return false;
@@ -98,15 +117,14 @@ public class TaskServiceIdentity {
         || !(access.get("roles") instanceof Collection<?> roles)
         || !roles.contains(role)
         || roles.stream().anyMatch(FORBIDDEN::contains)) return false;
-    Set<String> allowedRoles =
-        switch (task) {
-          case "NOTIFICATION_DISPATCH" ->
-              Set.of("notification-dispatch", "notifications-technical");
-          case "MATRIX_AGENCY" -> Set.of("matrix-agency", "matrix-agency-provision");
-          default -> Set.of(role);
-        };
+    Set<String> allowedRoles = allowedRoles(task, role);
     if (roles.stream().anyMatch(grant -> !allowedRoles.contains(grant))) return false;
+    if (grouped && !new HashSet<>(roles).equals(allowedRoles)) return false;
     Object resources = jwt.getClaims().get("resource_access");
+    if (grouped) {
+      return resources == null
+          || (resources instanceof Map<?, ?> resourceAccess && resourceAccess.isEmpty());
+    }
     return !(resources instanceof Map<?, ?> resourceAccess)
         || !resourceAccess.containsKey("realm-management");
   }
@@ -133,6 +151,17 @@ public class TaskServiceIdentity {
     if (hasTaskRole(jwt)) {
       return true;
     }
+    if (grouped) {
+      for (TaskServiceActor actor : TaskServiceActor.values()) {
+        String client = bindingValue(actor.name(), "CLIENT_ID");
+        String subject = bindingValue(actor.name(), "SERVICE_SUBJECT");
+        if ((!client.isBlank() && client.equals(jwt.getClaimAsString("azp")))
+            || (!subject.isBlank() && subject.equals(jwt.getSubject()))) {
+          return true;
+        }
+      }
+      return false;
+    }
     return ROLES.keySet().stream()
         .anyMatch(
             task -> {
@@ -143,7 +172,24 @@ public class TaskServiceIdentity {
             });
   }
 
+  private Set<String> allowedRoles(String task, String role) {
+    if (grouped) {
+      return TaskServiceActor.forPurpose(task).roles();
+    }
+    if ("NOTIFICATION_DISPATCH".equals(task)) {
+      return Set.of("notification-dispatch", "notifications-technical");
+    }
+    if ("MATRIX_AGENCY".equals(task)) {
+      return Set.of("matrix-agency", "matrix-agency-provision");
+    }
+    return Set.of(role);
+  }
+
   private String configured(String task, String suffix) {
-    return environment.getProperty("IDENTITY_" + task + "_" + suffix, "").trim();
+    return bindingValue(grouped ? TaskServiceActor.forPurpose(task).name() : task, suffix);
+  }
+
+  private String bindingValue(String binding, String suffix) {
+    return environment.getProperty("IDENTITY_" + binding + "_" + suffix, "").trim();
   }
 }
