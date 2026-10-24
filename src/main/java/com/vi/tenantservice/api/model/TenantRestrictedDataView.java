@@ -29,4 +29,5 @@ public class TenantRestrictedDataView implements TenantRestrictedData {
   private final LocalDateTime contentTermsAndConditionsActivationDate;
   private final String settings;
   private final String dataProtectionOfficer;
+  private final Boolean active;
 }

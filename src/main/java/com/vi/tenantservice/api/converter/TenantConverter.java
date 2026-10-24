@@ -119,6 +119,10 @@ public class TenantConverter {
             settings.getFeatureAskerBrowserAgencyCounsellingEnabled())
         .featureAskerBrowserLiveChatEnabled(settings.getFeatureAskerBrowserLiveChatEnabled())
         .featureAskerBrowserSelfHelpEnabled(settings.getFeatureAskerBrowserSelfHelpEnabled())
+        .featureConsultantEmailInternalGroupEnabled(
+            settings.getFeatureConsultantEmailInternalGroupEnabled())
+        .featureConsultantBrowserInternalGroupEnabled(
+            settings.getFeatureConsultantBrowserInternalGroupEnabled())
         .featureCallsEnabled(settings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(settings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -220,7 +224,11 @@ public class TenantConverter {
         "contentErstantwortEmergencyAddition",
         "contentErstantwortFreeNotice",
         "contentErstantwortClosing",
-        "erstantwortResponseDeadlineDays");
+        "erstantwortResponseDeadlineDays",
+        "active");
+    if (tenantDTO.getActive() != null) {
+      targetEntity.setActive(tenantDTO.getActive());
+    }
     applyLegalNameAndContact(targetEntity, tenantDTO);
     applyErstantwort(targetEntity, tenantDTO);
     return targetEntity;
@@ -426,6 +434,7 @@ public class TenantConverter {
         new MultilingualTenantDTO(tenant.getName())
             .id(tenant.getId())
             .subdomain(tenant.getSubdomain())
+            .active(tenant.getActive())
             .address(tenant.getAddress())
             .description(tenant.getDescription())
             .legalName(tenant.getLegalName())
@@ -448,6 +457,7 @@ public class TenantConverter {
   public TenantDTO toDTO(TenantData tenant, String lang) {
     var tenantDTO =
         new TenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
+            .active(tenant.getActive())
             .address(tenant.getAddress())
             .description(tenant.getDescription())
             .legalName(tenant.getLegalName())
@@ -500,6 +510,10 @@ public class TenantConverter {
             tenantSettings.getFeatureAskerBrowserAgencyCounsellingEnabled())
         .featureAskerBrowserLiveChatEnabled(tenantSettings.getFeatureAskerBrowserLiveChatEnabled())
         .featureAskerBrowserSelfHelpEnabled(tenantSettings.getFeatureAskerBrowserSelfHelpEnabled())
+        .featureConsultantEmailInternalGroupEnabled(
+            tenantSettings.getFeatureConsultantEmailInternalGroupEnabled())
+        .featureConsultantBrowserInternalGroupEnabled(
+            tenantSettings.getFeatureConsultantBrowserInternalGroupEnabled())
         .featureCallsEnabled(tenantSettings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(tenantSettings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -596,6 +610,7 @@ public class TenantConverter {
             toEnforcedPermissionTogglesSettings(tenantAdminControls.getEnforcedPermissionToggles()))
         .permissionPolicies(toPermissionPolicySettings(tenantAdminControls.getPermissionPolicies()))
         .caseHandoverPolicies(tenantAdminControls.getCaseHandoverPolicies())
+        .internalGroupChat(tenantAdminControls.getInternalGroupChat())
         .chatRecoverySettings(tenantAdminControls.getChatRecoverySettings())
         .accountInactivitySettings(tenantAdminControls.getAccountInactivitySettings())
         .build();
@@ -688,6 +703,7 @@ public class TenantConverter {
         .permissionPolicies(
             toBooleanPermissionPolicies(tenantAdminControlsSettings.getPermissionPolicies()))
         .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies())
+        .internalGroupChat(tenantAdminControlsSettings.getInternalGroupChat())
         .chatRecoverySettings(tenantAdminControlsSettings.getChatRecoverySettings())
         .accountInactivitySettings(tenantAdminControlsSettings.getAccountInactivitySettings());
   }
@@ -1037,6 +1053,7 @@ public class TenantConverter {
         .content(content)
         .theming(toThemingDTO(tenant))
         .subdomain(tenant.getSubdomain())
+        .active(tenant.getActive())
         .settings(getRestrictedPublicSettings(tenant));
   }
 
@@ -1224,6 +1241,7 @@ public class TenantConverter {
   public AdminTenantDTO toAdminTenantDTO(TenantData tenant) {
     var adminTenantDTO =
         new AdminTenantDTO(tenant.getId(), tenant.getName(), tenant.getSubdomain())
+            .active(tenant.getActive())
             .address(tenant.getAddress())
             .description(tenant.getDescription())
             .beraterCount(tenant.getLicensingAllowedNumberOfUsers());

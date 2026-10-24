@@ -483,6 +483,10 @@ paths:
       tags:
         - tenant-controller
       summary: Updates tenant-scoped permission policy overrides
+      description: >-
+        Omitting `internalGroupChat` keeps the stored override. A platform requirement (ENFORCED)
+        of `internalGroupChat.recipientScope` cannot be changed: an unchanged echo of it is
+        accepted and discarded, a changed value or mode is refused with 400 and nothing is stored.
       operationId: updateTenantPermissionPolicies
       requestBody:
         required: true
@@ -497,6 +501,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TenantPermissionPolicies'
+        400:
+          description: BAD REQUEST - the body tries to change an ENFORCED internalGroupChat.recipientScope
         403:
           description: FORBIDDEN - tenant admins can update only their own tenant
   /tenantadmin/dpia:
@@ -693,6 +699,32 @@ paths:
                 $ref: '#/components/schemas/TranslationErrorDTO'
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/{id}/status:
+    put:
+      tags: [tenant-controller]
+      summary: Change only the selected Träger's operational status
+      operationId: updateTenantOperationalStatus
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: integer, format: int64, minimum: 1}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TenantOperationalStatusUpdateDTO'}
+      responses:
+        '200':
+          description: Persisted operational status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TenantOperationalStatusDTO'}
+        '400': {description: Invalid status request}
+        '403': {description: Only a matching Träger administrator may change status}
+        '404': {description: Tenant not found}
+      security:
+        - Bearer: []
   /tenantadmin/{id}:
     put:
       tags:
@@ -1702,6 +1734,17 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
 components:
   schemas:
+    TenantOperationalStatusUpdateDTO:
+      type: object
+      required: [active]
+      properties:
+        active: {type: boolean}
+    TenantOperationalStatusDTO:
+      type: object
+      required: [id, active]
+      properties:
+        id: {type: integer, format: int64}
+        active: {type: boolean}
     TranslationApiKeysDTO:
       type: object
       description: 'Masked machine-translation provider API keys. A key is shown as its first
@@ -2051,6 +2094,9 @@ components:
         - name
         - subdomain
       properties:
+        active:
+          type: boolean
+          description: Operational status of this Träger. Existing and new tenants start active; omission on update preserves the stored status. Only the matching Träger-admin may change status after creation. Independent of legal agreement state.
         id:
           type: integer
           format: int64
@@ -2112,6 +2158,9 @@ components:
           required:
             - name
           properties:
+            active:
+              type: boolean
+              description: Operational status of this Träger. Existing and new tenants start active; omission on update preserves the stored status. Only the matching Träger-admin may change status after creation. Independent of legal agreement state.
             id:
               type: integer
               format: int64
@@ -2274,6 +2323,9 @@ components:
         - id
         - name
       properties:
+        active:
+          type: boolean
+          description: Operational status of this Träger. Existing and new tenants start active; omission on update preserves the stored status. Only the matching Träger-admin may change status after creation. Independent of legal agreement state.
         id:
           type: integer
           format: int64
@@ -2303,6 +2355,11 @@ components:
           description: Resolved boolean policies for downstream services. Suggestions are not applied to settings.
           additionalProperties:
             $ref: '#/components/schemas/BooleanPermissionPolicy'
+        internalGroupChat:
+          allOf:
+            - $ref: '#/components/schemas/InternalGroupChatPolicies'
+          readOnly: true
+          description: Resolved internal group chat policies (recipient scope) for downstream services.
     Licensing:
       type: object
       required:
@@ -2552,6 +2609,14 @@ components:
           type: boolean
           default: true
           description: "Effective advice-seeker notification channel permission for BrowserSelfHelp. Email additionally requires featureAskerEmailEnabled."
+        featureConsultantEmailInternalGroupEnabled:
+          type: boolean
+          default: true
+          description: "Effective counsellor notification channel permission: e-mail for new messages in internal group chats (FE#1725 story 40). Opt-out: defaults to true."
+        featureConsultantBrowserInternalGroupEnabled:
+          type: boolean
+          default: true
+          description: "Effective counsellor notification channel permission: browser notification for new messages in internal group chats (FE#1725 story 40). Opt-out: defaults to true."
         featureCallsEnabled:
           type: boolean
           example: "true"
@@ -2954,6 +3019,8 @@ components:
             $ref: '#/components/schemas/BooleanPermissionPolicy'
         caseHandoverPolicies:
           $ref: '#/components/schemas/CaseHandoverPolicies'
+        internalGroupChat:
+          $ref: '#/components/schemas/InternalGroupChatPolicies'
 
     PermissionPolicyMode:
       type: string
@@ -3038,6 +3105,40 @@ components:
         inherited:
           type: boolean
           readOnly: true
+
+    InternalGroupChatRecipientScope:
+      type: string
+      description: >-
+        Whom a counsellor may pick as recipient of an internal group chat. PLATFORM = any counsellor
+        of the platform, TENANT = counsellors of the same Traeger, AGENCY = counsellors of the same
+        counselling centre only. Unset means AGENCY (the most restrictive).
+      enum:
+        - PLATFORM
+        - TENANT
+        - AGENCY
+
+    RecipientScopePermissionPolicy:
+      type: object
+      required: [value, mode]
+      properties:
+        value:
+          $ref: '#/components/schemas/InternalGroupChatRecipientScope'
+        mode:
+          $ref: '#/components/schemas/PermissionPolicyMode'
+        inherited:
+          type: boolean
+          readOnly: true
+          description: True when the resolved tenant value comes from the platform policy.
+
+    InternalGroupChatPolicies:
+      type: object
+      description: >-
+        Functionality Access policies for internal group chats that are not on/off switches
+        (ORISO-TenantService#319). ENFORCED = requirement the Traeger admin cannot change,
+        SUGGESTED = recommendation the Traeger admin may override.
+      properties:
+        recipientScope:
+          $ref: '#/components/schemas/RecipientScopePermissionPolicy'
 
     CaseHandoverReasonPolicy:
       type: object
@@ -3144,6 +3245,8 @@ components:
         - featureAskerBrowserAgencyCounsellingEnabled
         - featureAskerBrowserLiveChatEnabled
         - featureAskerBrowserSelfHelpEnabled
+        - featureConsultantEmailInternalGroupEnabled
+        - featureConsultantBrowserInternalGroupEnabled
         - caseHandoverEnabled
 
     TenantLegalDraftDTO:
@@ -3332,6 +3435,8 @@ components:
             $ref: '#/components/schemas/BooleanPermissionPolicy'
         caseHandoverPolicies:
           $ref: '#/components/schemas/CaseHandoverPolicies'
+        internalGroupChat:
+          $ref: '#/components/schemas/InternalGroupChatPolicies'
 
     TenantAdminAllowedPermissionToggles:
       type: object
@@ -3678,6 +3783,9 @@ components:
         - name
         - subdomain
       properties:
+        active:
+          type: boolean
+          description: Operational status of this Träger. Existing and new tenants start active; omission on update preserves the stored status. Only the matching Träger-admin may change status after creation. Independent of legal agreement state.
         id:
           type: integer
           format: int64

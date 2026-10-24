@@ -69,6 +69,15 @@ class PlatformLogoFromMainTenantIT {
   @MockitoBean SubdomainExtractor subdomainExtractor;
   private MockMvc mvc;
 
+  @Test
+  void overriddenPublicTenant_Should_keepOwnOperationalStatusWithPlatformBranding()
+      throws Exception {
+    jdbc.update("UPDATE TENANT SET active = FALSE WHERE id = 1");
+    mvc.perform(get("/tenant/public/" + MAIN_TENANT_SUBDOMAIN).param("tenantId", "1"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.active").value(false));
+  }
+
   @BeforeEach
   void setup() {
     mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();

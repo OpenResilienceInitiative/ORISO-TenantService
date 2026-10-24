@@ -56,6 +56,7 @@ public class TenantInputSanitizer {
   private MultilingualTenantDTO copyNotSanitizedAttributes(MultilingualTenantDTO input) {
     MultilingualTenantDTO output = new MultilingualTenantDTO();
     output.setId(input.getId());
+    output.setActive(input.getActive());
     output.setCreateDate(input.getCreateDate());
     output.setUpdateDate(input.getUpdateDate());
     output.setContent(new MultilingualContent());
