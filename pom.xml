@@ -15,7 +15,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.1</version>
+        <version>4.1.2</version>
         <relativePath/>
     </parent>
 
@@ -28,28 +28,28 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>21</java.version>
-        <keycloak.version>17.0.0</keycloak.version>
+        <keycloak.version>17.0.1</keycloak.version>
         <swagger.version>3.0.0</swagger.version>
-        <h2.version>2.1.214</h2.version>
+        <h2.version>2.5.252</h2.version>
         <!-- Same version as ORISO-UserService, which already uses this pin. -->
         <testcontainers.version>1.21.4</testcontainers.version>
-        <owasp.java.html.sanitizer>20211018.1</owasp.java.html.sanitizer>
-        <liquibase.maven.plugin.version>4.23.2</liquibase.maven.plugin.version>
-        <openapi.generator.maven.version>7.17.0</openapi.generator.maven.version>
-        <jackson.databind.nullable.version>0.2.3</jackson.databind.nullable.version>
+        <owasp.java.html.sanitizer>20211018.2</owasp.java.html.sanitizer>
+        <liquibase.maven.plugin.version>4.33.0</liquibase.maven.plugin.version>
+        <openapi.generator.maven.version>7.26.0</openapi.generator.maven.version>
+        <jackson.databind.nullable.version>0.2.13</jackson.databind.nullable.version>
         <springfox.boot.starter.version>3.0.0</springfox.boot.starter.version>
-        <lombok.version>1.18.38</lombok.version>
-        <commons-lang3.version>3.12.0</commons-lang3.version>
-        <commons-collections4.version>4.4</commons-collections4.version>
-        <awaitility.version>4.2.0</awaitility.version>
+        <lombok.version>1.18.48</lombok.version>
+        <commons-lang3.version>3.21.0</commons-lang3.version>
+        <commons-collections4.version>4.6.0</commons-collections4.version>
+        <awaitility.version>4.3.0</awaitility.version>
         <awaitility-proxy.version>3.1.6</awaitility-proxy.version>
         <easy-random-core.version>5.0.0</easy-random-core.version>
-        <assertj-core.version>3.23.1</assertj-core.version>
-        <spring-security-oauth2-test-webmvc-addons.version>3.0.1</spring-security-oauth2-test-webmvc-addons.version>
-        <liquibase-core.version>4.23.2</liquibase-core.version>
+        <assertj-core.version>3.27.7</assertj-core.version>
+        <spring-security-oauth2-test-webmvc-addons.version>3.2.1</spring-security-oauth2-test-webmvc-addons.version>
+        <liquibase-core.version>4.33.0</liquibase-core.version>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
-        <mockito.version>5.20.0</mockito.version>
+        <mockito.version>5.24.0</mockito.version>
 
     </properties>
 
@@ -151,7 +151,7 @@
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
-            <version>7.0.1</version>
+            <version>7.4</version>
         </dependency>
 
         <!-- Spring actuator  -->
@@ -249,7 +249,7 @@
         <dependency>
             <groupId>io.swagger.core.v3</groupId>
             <artifactId>swagger-annotations</artifactId>
-            <version>2.2.15</version>
+            <version>2.2.55</version>
         </dependency>
         <dependency>
             <groupId>io.springfox</groupId>
@@ -269,12 +269,12 @@
         <dependency>
             <groupId>io.swagger.parser.v3</groupId>
             <artifactId>swagger-parser</artifactId>
-            <version>2.1.15</version>
+            <version>2.1.48</version>
         </dependency>
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
-            <version>2.0</version>
+            <version>2.7</version>
         </dependency>
 
         <!-- Keycloak dependencies -->
@@ -403,13 +403,13 @@
         <dependency>
             <groupId>org.wiremock</groupId>
             <artifactId>wiremock-standalone</artifactId>
-            <version>3.3.1</version>
+            <version>3.13.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
-            <version>1.14.5</version>
+            <version>1.18.16</version>
         </dependency>
         <dependency>
             <!-- required only for WebMvc "fluent" API -->
@@ -615,7 +615,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
-                <version>3.1.0</version>
+                <version>3.2.0</version>
                 <executions>
                     <execution>
                         <id>spring-7-openapi-client-compatibility</id>
@@ -647,7 +647,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
-                <version>2.43.0</version>
+                <version>2.46.1</version>
                 <configuration>
                     <java>
                         <toggleOffOn />
@@ -691,7 +691,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.10</version>
+                <version>0.8.15</version>
                 <configuration>
                     <excludes>
                         <exclude>**/*generated*/**</exclude>
