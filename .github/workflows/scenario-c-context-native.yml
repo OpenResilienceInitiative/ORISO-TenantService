@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-Helm
-          ref: 7d0593eb47f43f933f9895c5de0f175d3112b2d9
+          ref: b3720fa6ceacbc383372d1b0fb0c41325c55d1bb
           path: helm
           persist-credentials: false
           fetch-depth: 0
@@ -85,7 +85,7 @@ jobs:
         run: |
           python scripts/ci/scenario-c-context-native.py \
             --receiver ../receiver --receiver-ref 370af51cd7951e568d1493ddbd84d34faa72dbf3 \
-            --helm ../helm --helm-ref 7d0593eb47f43f933f9895c5de0f175d3112b2d9 \
+            --helm ../helm --helm-ref b3720fa6ceacbc383372d1b0fb0c41325c55d1bb \
             --expect green --expected-tests 3 --v1-baseline compensated-routed-policy --evidence "$RUNNER_TEMP/scenario-c-context-native"
       - name: Retain only source hashes, sanitized measurements and original safe XML
         if: always()

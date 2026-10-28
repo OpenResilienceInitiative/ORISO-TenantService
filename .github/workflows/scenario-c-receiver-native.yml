@@ -24,7 +24,7 @@ jobs:
       JAVA_TOOL_OPTIONS: -Xmx512m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2
       CTS_REF: 370af51cd7951e568d1493ddbd84d34faa72dbf3
       AGENCY_REF: 88a35892fa68a63f8733c290df0e5e31d2587a15
-      HELM_REF: 7d0593eb47f43f933f9895c5de0f175d3112b2d9
+      HELM_REF: b3720fa6ceacbc383372d1b0fb0c41325c55d1bb
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
