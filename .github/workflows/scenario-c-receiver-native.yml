@@ -22,9 +22,9 @@ jobs:
       ORISO_REQUIRE_KEYCLOAK_DOCKER: '1'
       MAVEN_OPTS: -Xmx1024m -XX:ActiveProcessorCount=2
       JAVA_TOOL_OPTIONS: -Xmx512m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2
-      CTS_REF: e5cd83bec1f76996e0ec0dbb9f95742dd106cf6e
+      CTS_REF: 370af51cd7951e568d1493ddbd84d34faa72dbf3
       AGENCY_REF: 88a35892fa68a63f8733c290df0e5e31d2587a15
-      HELM_REF: 2737ed928a46ad18e3ee8fed52a60524bf3b9a5a
+      HELM_REF: 5035ea0dc09c1080d398ca525fa5de9e21536090
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:

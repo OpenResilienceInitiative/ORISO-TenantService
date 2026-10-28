@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-UserService
-          ref: 37353307b7a6d1d2e5c9bc6dc5b9ae6abfd98920
+          ref: 8f15651874fbd113677bf902b005f7b9cc7d278f
           path: user
           persist-credentials: false
           fetch-depth: 0
@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-Helm
-          ref: 2737ed928a46ad18e3ee8fed52a60524bf3b9a5a
+          ref: 5035ea0dc09c1080d398ca525fa5de9e21536090
           path: helm
           persist-credentials: false
           fetch-depth: 0
@@ -82,8 +82,8 @@ jobs:
       - name: Compile ordinary sources before disposable actual HTTP execution
         run: |
           python scripts/ci/scenario-c-account-policy-native.py \
-            --user ../user --user-ref 37353307b7a6d1d2e5c9bc6dc5b9ae6abfd98920 \
-            --helm ../helm --helm-ref 2737ed928a46ad18e3ee8fed52a60524bf3b9a5a \
+            --user ../user --user-ref 8f15651874fbd113677bf902b005f7b9cc7d278f \
+            --helm ../helm --helm-ref 5035ea0dc09c1080d398ca525fa5de9e21536090 \
             --evidence "$RUNNER_TEMP/scenario-c-account-policy-native"
       - name: Produce a mechanical proposal only after a pre-container formatter failure
         if: failure()
