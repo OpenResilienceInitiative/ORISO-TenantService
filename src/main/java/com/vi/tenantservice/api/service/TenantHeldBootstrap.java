@@ -78,6 +78,7 @@ public class TenantHeldBootstrap {
       } catch (org.springframework.security.access.AccessDeniedException denied) {
         throw denied;
       } catch (RuntimeException unknown) {
+        if (unknown != failure) unknown.addSuppressed(failure);
         throw pending(unknown);
       }
       if (pending != null && !"COMPLETE".equals(pending.state())) throw pending(failure);
