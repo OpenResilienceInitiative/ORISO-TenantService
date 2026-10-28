@@ -1,0 +1,133 @@
+name: Scenario C actual three receiver token matrix
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [dev, codex/367-c-c16-roundtrip-20261022]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scenario-c-three-receivers-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  native-receivers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      ORISO_REQUIRE_KEYCLOAK_DOCKER: '1'
+      MAVEN_OPTS: -Xmx1024m -XX:ActiveProcessorCount=2
+      JAVA_TOOL_OPTIONS: -Xmx512m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2
+      CTS_REF: e5cd83bec1f76996e0ec0dbb9f95742dd106cf6e
+      AGENCY_REF: 37086b7b1070cbf28fd2557811f3e40193287108
+      HELM_REF: 1c69588bfbfb27d6073d944ab152464b226c1265
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: tenant
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: OpenResilienceInitiative/ORISO-ConsultingTypeService
+          ref: ${{ env.CTS_REF }}
+          path: cts
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: OpenResilienceInitiative/ORISO-AgencyService
+          ref: ${{ env.AGENCY_REF }}
+          path: agency
+          persist-credentials: false
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: OpenResilienceInitiative/ORISO-Helm
+          ref: ${{ env.HELM_REF }}
+          path: helm
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21.0.12+8.0.LTS'
+          cache: maven
+          cache-dependency-path: |
+            tenant/pom.xml
+            cts/pom.xml
+            agency/pom.xml
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: 3.12.13
+      - name: Install the existing native fixture dependency
+        run: python -m pip install --disable-pip-version-check -r helm/requirements-ci.txt
+      - name: Verify the retained fresh-report controls
+        working-directory: helm
+        run: python -m unittest discover -s tests -p test_scenario_c_receiver_fixture.py -q
+      - name: Run all fifteen real bearer and HTTP cases on the immutable sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess, sys
+          import xml.etree.ElementTree as ET
+
+          root = pathlib.Path.cwd()
+          evidence = root / 'receiver-evidence'
+          evidence.mkdir()
+          refs = {'tenant': os.environ['GITHUB_SHA'], 'cts': os.environ['CTS_REF'],
+                  'agency': os.environ['AGENCY_REF'], 'helm': os.environ['HELM_REF']}
+          def source(name):
+              repo = root / name
+              head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip()
+              assert head == refs[name], 'Unexpected native receiver source'
+              names = subprocess.check_output(['git', 'ls-files', '-z'], cwd=repo).decode().split('\0')
+              return {p: hashlib.sha256((b'symlink\0' + os.readlink(repo / p).encode())
+                      if (repo / p).is_symlink() else (repo / p).read_bytes()).hexdigest()
+                      for p in sorted(p for p in names if p)}
+          before = {name: source(name) for name in refs}
+          (evidence / 'source-before.json').write_text(json.dumps(before, indent=2) + '\n')
+          (evidence / 'checkout.json').write_text(json.dumps(refs, indent=2) + '\n')
+          sys.path.insert(0, str(root / 'helm/tests'))
+          import scenario_c_receiver_fixture as native
+          suites = {'tenant': 'com.vi.tenantservice.api.controller.RealTaskTokenAuthorizationIT',
+                    'cts': 'de.caritas.cob.consultingtypeservice.api.controller.RealTaskTokenAuthorizationIT',
+                    'agency': 'de.caritas.cob.agencyservice.api.admin.controller.RealTaskTokenAuthorizationIT'}
+          accepted = False
+          try:
+              with native.fixture_file() as fixture:
+                  results = native.run_receivers([root / name for name in suites], fixture,
+                                                  pathlib.Path(os.environ['JAVA_HOME']), expected_tests=5)
+              assert len(results) == 3
+              for name, suite in suites.items():
+                  raw = root / name / 'target/failsafe-reports' / ('TEST-' + suite + '.xml')
+                  report = ET.parse(raw).getroot()
+                  assert {k: int(report.get(k, '0')) for k in ('tests', 'failures', 'errors', 'skipped')} == {
+                      'tests': 5, 'failures': 0, 'errors': 0, 'skipped': 0}
+                  cases = list(report.iter('testcase'))
+                  assert len(cases) == len({(q.get('classname'), q.get('name')) for q in cases}) == 5
+                  assert not any(q.find(tag) is not None for q in cases for tag in ('failure', 'error', 'skipped'))
+                  clean = ET.Element('testsuite', name=suite, tests='5', failures='0', errors='0', skipped='0')
+                  for case in cases:
+                      ET.SubElement(clean, 'testcase', classname=case.get('classname'), name=case.get('name'))
+                  ET.ElementTree(clean).write(evidence / (name + '.xml'), encoding='utf-8', xml_declaration=True)
+              accepted = True
+          finally:
+              after = {name: source(name) for name in refs}
+              (evidence / 'source-after.json').write_text(json.dumps(after, indent=2) + '\n')
+              stable = before == after
+              (evidence / 'result.json').write_text(json.dumps({'accepted': accepted and stable,
+                  'sourceStable': stable, 'refs': refs, 'expectedReceivers': 3,
+                  'expectedCasesPerReceiver': 5, 'nativeCases': 15 if accepted else 0,
+                  'scope': 'Native issued tokens and real HTTP receivers; no deployment or final User application acceptance'}, indent=2) + '\n')
+              assert stable, 'Source changed during native receiver proof'
+          PY
+      - name: Retain source receipts and sanitized exact native case inventories
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scenario-c-three-native-receivers
+          path: receiver-evidence/
+          if-no-files-found: error
+          retention-days: 14

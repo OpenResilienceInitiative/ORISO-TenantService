@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [dev]
   push:
-    branches: [codex/367-c-policy-tenant-20261021, dev]
+    branches: [codex/367-c-policy-tenant-20261021, codex/367-c-c16-roundtrip-20261022, dev]
 
 permissions:
   contents: read
@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-UserService
-          ref: e1ad503df59474db70aaac14597f5cf93a68c7ca
+          ref: 8a12fd6cc00d0b78a5565721cee49847a9b590b7
           path: user
           persist-credentials: false
           fetch-depth: 0
@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-Helm
-          ref: ab13d41e56f077ca85d1412e9eba2e6816554d9d
+          ref: 1c69588bfbfb27d6073d944ab152464b226c1265
           path: helm
           persist-credentials: false
           fetch-depth: 0
@@ -82,8 +82,8 @@ jobs:
       - name: Compile ordinary sources before disposable actual HTTP execution
         run: |
           python scripts/ci/scenario-c-account-policy-native.py \
-            --user ../user --user-ref e1ad503df59474db70aaac14597f5cf93a68c7ca \
-            --helm ../helm --helm-ref ab13d41e56f077ca85d1412e9eba2e6816554d9d \
+            --user ../user --user-ref 8a12fd6cc00d0b78a5565721cee49847a9b590b7 \
+            --helm ../helm --helm-ref 1c69588bfbfb27d6073d944ab152464b226c1265 \
             --evidence "$RUNNER_TEMP/scenario-c-account-policy-native"
       - name: Produce a mechanical proposal only after a pre-container formatter failure
         if: failure()

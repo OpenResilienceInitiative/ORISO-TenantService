@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [dev]
   push:
-    branches: [codex/367-c-context-tenant-20261021, dev]
+    branches: [codex/367-c-context-tenant-20261021, codex/367-c-c16-roundtrip-20261022, dev]
 
 permissions:
   contents: read
@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-ConsultingTypeService
-          ref: 903eb68cb6b28bb8f67111186649354fefd4315d
+          ref: e5cd83bec1f76996e0ec0dbb9f95742dd106cf6e
           path: receiver
           persist-credentials: false
           fetch-depth: 0
@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-Helm
-          ref: ab13d41e56f077ca85d1412e9eba2e6816554d9d
+          ref: 1c69588bfbfb27d6073d944ab152464b226c1265
           path: helm
           persist-credentials: false
           fetch-depth: 0
@@ -84,8 +84,8 @@ jobs:
       - name: Compile ordinary sources before disposable actual HTTP execution
         run: |
           python scripts/ci/scenario-c-context-native.py \
-            --receiver ../receiver --receiver-ref 903eb68cb6b28bb8f67111186649354fefd4315d \
-            --helm ../helm --helm-ref ab13d41e56f077ca85d1412e9eba2e6816554d9d \
+            --receiver ../receiver --receiver-ref e5cd83bec1f76996e0ec0dbb9f95742dd106cf6e \
+            --helm ../helm --helm-ref 1c69588bfbfb27d6073d944ab152464b226c1265 \
             --expect green --expected-tests 3 --v1-baseline compensated-routed-policy --evidence "$RUNNER_TEMP/scenario-c-context-native"
       - name: Retain only source hashes, sanitized measurements and original safe XML
         if: always()
