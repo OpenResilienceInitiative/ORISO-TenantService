@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           python - <<'PY'
-          import hashlib, json, os, pathlib, subprocess, sys
+          import hashlib, json, os, pathlib, re, subprocess, sys, time
           import xml.etree.ElementTree as ET
 
           root = pathlib.Path.cwd()
@@ -95,6 +95,26 @@ jobs:
                     'cts': 'de.caritas.cob.consultingtypeservice.api.controller.RealTaskTokenAuthorizationIT',
                     'agency': 'de.caritas.cob.agencyservice.api.admin.controller.RealTaskTokenAuthorizationIT'}
           accepted = False
+          started = time.time()
+          def save_inventory(name, suite):
+              raw = root / name / 'target/failsafe-reports' / ('TEST-' + suite + '.xml')
+              if not raw.is_file() or raw.stat().st_mtime < started:
+                  return {'receiver': name, 'freshReport': False, 'executed': 0}
+              report = ET.parse(raw).getroot()
+              counts = {k: int(report.get(k, '0')) for k in ('tests', 'failures', 'errors', 'skipped')}
+              cases = list(report.iter('testcase'))
+              clean = ET.Element('testsuite', name=suite, **{k: str(v) for k, v in counts.items()})
+              locations = set()
+              for case in cases:
+                  child = ET.SubElement(clean, 'testcase', classname=case.get('classname'), name=case.get('name'))
+                  for tag in ('failure', 'error', 'skipped'):
+                      detail = case.find(tag)
+                      if detail is not None:
+                          ET.SubElement(child, tag, message='Sensitive diagnostic omitted')
+                          locations.update(re.findall(r'(RealTaskTokenAuthorizationIT\.java:\d+)', detail.text or ''))
+              ET.ElementTree(clean).write(evidence / (name + '.xml'), encoding='utf-8', xml_declaration=True)
+              return {'receiver': name, 'freshReport': True, 'counts': counts, 'executed': len(cases),
+                      'failureLocations': sorted(locations), 'rawXmlSha256': hashlib.sha256(raw.read_bytes()).hexdigest()}
           try:
               with native.fixture_file() as fixture:
                   results = native.run_receivers([root / name for name in suites], fixture,
@@ -108,18 +128,16 @@ jobs:
                   cases = list(report.iter('testcase'))
                   assert len(cases) == len({(q.get('classname'), q.get('name')) for q in cases}) == 5
                   assert not any(q.find(tag) is not None for q in cases for tag in ('failure', 'error', 'skipped'))
-                  clean = ET.Element('testsuite', name=suite, tests='5', failures='0', errors='0', skipped='0')
-                  for case in cases:
-                      ET.SubElement(clean, 'testcase', classname=case.get('classname'), name=case.get('name'))
-                  ET.ElementTree(clean).write(evidence / (name + '.xml'), encoding='utf-8', xml_declaration=True)
               accepted = True
           finally:
+              inventories = [save_inventory(name, suite) for name, suite in suites.items()]
               after = {name: source(name) for name in refs}
               (evidence / 'source-after.json').write_text(json.dumps(after, indent=2) + '\n')
               stable = before == after
               (evidence / 'result.json').write_text(json.dumps({'accepted': accepted and stable,
                   'sourceStable': stable, 'refs': refs, 'expectedReceivers': 3,
-                  'expectedCasesPerReceiver': 5, 'nativeCases': 15 if accepted else 0,
+                  'expectedCasesPerReceiver': 5, 'nativeCases': sum(q['executed'] for q in inventories),
+                  'inventories': inventories,
                   'scope': 'Native issued tokens and real HTTP receivers; no deployment or final User application acceptance'}, indent=2) + '\n')
               assert stable, 'Source changed during native receiver proof'
           PY
