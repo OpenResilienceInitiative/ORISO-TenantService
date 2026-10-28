@@ -163,9 +163,14 @@ class DirectInvitePermissionIT {
                 .content(
                     "{\"tenantId\":1,\"policies\":{\"featureDirectInviteChatEnabled\":"
                         + "{\"value\":true,\"mode\":\"SUGGESTED\"}}}"))
-        // refused; the status is 500 today for every enforced boolean (follow-up: map it to 400)
-        .andExpect(result -> assertThat(result.getResponse().getStatus()).isNotEqualTo(200));
+        // refused with 500 today for every enforced boolean (follow-up: map it to 400)
+        .andExpect(status().isInternalServerError());
 
+    assertThat(tenantPolicyRepository.findAll()).isEmpty();
+    mvc.perform(get(TENANT_1_POLICIES).with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.policies.featureDirectInviteChatEnabled.value", is(false)))
+        .andExpect(jsonPath("$.policies.featureDirectInviteChatEnabled.inherited", is(true)));
     mvc.perform(get(PUBLIC_TENANT_1))
         .andExpect(jsonPath("$.settings.featureDirectInviteChatEnabled", is(false)));
   }

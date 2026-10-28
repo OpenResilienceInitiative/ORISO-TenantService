@@ -700,6 +700,43 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.settings.featureSelfHelpGroupsEnabled", is(true)));
   }
 
+  @Test
+  void updateTenant_Should_keepStoredDirectInviteFlags_When_updateOmitsThem() throws Exception {
+    // TS#331: store direct links off for audio only.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withDirectInvites(true, false, true)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureDirectInviteAudioEnabled", is(false)));
+
+    // An older client saves the Träger without the fields; the stored false must survive.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withDirectInvites(null, null, null)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureDirectInviteAudioEnabled", is(false)));
+
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureDirectInviteChatEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureDirectInviteAudioEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureDirectInviteVideoEnabled", is(true)));
+
+    // An explicit value still overrides the stored one.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withDirectInvites(null, true, null)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureDirectInviteAudioEnabled", is(true)));
+  }
+
   private org.springframework.test.web.servlet.ResultActions putTenant1AsTenantAdmin(
       String jsonRequest) throws Exception {
     when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
