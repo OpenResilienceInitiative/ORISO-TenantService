@@ -39,7 +39,7 @@ jobs:
       uses: actions/checkout@v6
       with:
         repository: OpenResilienceInitiative/ORISO-ConsultingTypeService
-        ref: pre-dev
+        ref: 370af51cd7951e568d1493ddbd84d34faa72dbf3
         path: .providers/consulting
 
     - name: Checkout UserService provider

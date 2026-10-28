@@ -36,6 +36,7 @@ public class TenantHeldBootstrap {
       var dpa = operation.input.getOnboardingDpaAcceptance();
       if (dpa != null && (!Boolean.TRUE.equals(dpa.getAccepted()) || dpa.getDpaVersion() == null))
         throw TenantHeldBootstrapJournal.denied();
+      tenants.validateOnboardingDpaAcceptance(dpa);
       var row = journal.read(operation, false);
       MultilingualTenantDTO original;
       try {

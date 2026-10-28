@@ -2,19 +2,31 @@ package com.vi.tenantservice.api.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.config.security.TaskContextProof;
 import com.vi.tenantservice.config.security.TaskServiceIdentity;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
@@ -59,6 +71,7 @@ class TenantHeldBootstrapIT {
   @Autowired private JdbcTemplate sql;
   @Autowired private RestTemplate transport;
   @MockitoBean private TaskServiceIdentity identity;
+  @MockitoBean private TenantDpaStatusService dpaStatus;
 
   @MockitoBean
   private com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService settings;
@@ -155,6 +168,77 @@ class TenantHeldBootstrapIT {
     assertThat(calls.get()).isEqualTo(1);
     assertThat(allocation.getStatus(9157L).name()).isEqualTo("ASSIGNED");
     server.verify();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"dpaVersion", "signerUserId", "signerName"})
+  void invalidDpaLeavesTheHeldClaimUnusedAndCorrectedBodyCanComplete(String field) {
+    var calls = new AtomicInteger();
+    expectCreate(calls, new AtomicReference<>(), false);
+    ObjectNode valid = request();
+    acceptance(valid).put("dpaVersion", "2026-07-01T12:00:00");
+    ObjectNode invalid = valid.deepCopy();
+    ((ObjectNode) invalid.path("tenant").path("onboardingDpaAcceptance"))
+        .put(field, "dpaVersion".equals(field) ? "not-a-date" : " \t ");
+
+    var failure = org.assertj.core.api.Assertions.catchThrowable(() -> bootstrap.create(invalid));
+
+    assertThat(
+            List.<Object>of(
+                sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE id=9157", Integer.class),
+                sql.queryForObject(
+                    "SELECT COUNT(*) FROM tenant_bootstrap_operation", Integer.class),
+                calls.get(),
+                allocation.getStatus(9157L).name()))
+        .as("Invalid acceptance must leave tenant, journal, CTS and reservation untouched")
+        .containsExactly(0, 0, 0, "RESERVED");
+    assertThat(failure).isInstanceOf(TenantBadRequestException.class);
+
+    var created = bootstrap.create(valid);
+    assertThat(created.tenant().getId()).isEqualTo(9157L);
+    assertThat(allocation.getStatus(9157L).name()).isEqualTo("ASSIGNED");
+    assertThat(
+            sql.queryForObject(
+                "SELECT COUNT(*) FROM tenant_bootstrap_operation WHERE state='COMPLETE'",
+                Integer.class))
+        .isEqualTo(1);
+    assertThat(bootstrap.create(valid.deepCopy()).receipt()).isEqualTo(created.receipt());
+    assertThat(calls.get()).isEqualTo(1);
+    server.verify();
+  }
+
+  @ParameterizedTest
+  @MethodSource("acceptedVersions")
+  void heldAcceptanceRetainsExistingBlankAndTrimmedVersionSemantics(
+      String version, LocalDateTime expectedVersion) {
+    var calls = new AtomicInteger();
+    expectCreate(calls, new AtomicReference<>(), false);
+    ObjectNode request = request();
+    acceptance(request).put("dpaVersion", version);
+
+    var created = bootstrap.create(request);
+
+    assertThat(created.tenant().getId()).isEqualTo(9157L);
+    assertThat(bootstrap.create(request.deepCopy()).receipt()).isEqualTo(created.receipt());
+    verify(dpaStatus)
+        .signOnboarding(eq(9157L), eq("held-admin"), isNull(), eq(expectedVersion), any());
+    assertThat(calls.get()).isEqualTo(1);
+    server.verify();
+  }
+
+  private static Stream<Arguments> acceptedVersions() {
+    return Stream.of(
+        Arguments.of("", null),
+        Arguments.of(" \t ", null),
+        Arguments.of(" 2026-07-01T12:00:00 ", LocalDateTime.of(2026, 7, 1, 12, 0)));
+  }
+
+  private ObjectNode acceptance(ObjectNode request) {
+    return ((ObjectNode) request.path("tenant"))
+        .putObject("onboardingDpaAcceptance")
+        .put("accepted", true)
+        .put("signerUserId", "held-admin")
+        .put("signerName", "Held & Signer <Admin>");
   }
 
   @Test

@@ -354,26 +354,18 @@ public class TenantServiceFacade {
       return;
     }
     try {
-      if (!Boolean.TRUE.equals(acceptance.getAccepted())
-          || isBlank(acceptance.getSignerUserId())
-          || isBlank(acceptance.getSignerName())) {
-        throw new TenantBadRequestException(
-            "onboardingDpaAcceptance requires accepted=true, signerUserId and signerName");
-      }
+      LocalDateTime version = validateOnboardingDpaAcceptance(acceptance);
       tenantDpaStatusService.signOnboarding(
           createdTenant.getId(),
-          bounded(acceptance.getSignerUserId(), MAX_SIGNER_FIELD_LENGTH, "signerUserId"),
-          bounded(acceptance.getSignerUsername(), MAX_SIGNER_FIELD_LENGTH, "signerUsername"),
-          parseDpaVersion(acceptance.getDpaVersion()),
+          acceptance.getSignerUserId(),
+          acceptance.getSignerUsername(),
+          version,
           new AdminSignatureForm(
-              bounded(acceptance.getSignerName(), MAX_SIGNER_FIELD_LENGTH, "signerName"),
-              bounded(acceptance.getSignerPosition(), MAX_SIGNER_FIELD_LENGTH, "signerPosition"),
-              bounded(acceptance.getSignerEmail(), MAX_SIGNER_FIELD_LENGTH, "signerEmail"),
-              bounded(
-                  acceptance.getSignerOrganisation(),
-                  MAX_SIGNER_FIELD_LENGTH,
-                  "signerOrganisation"),
-              bounded(acceptance.getLanguage(), MAX_LANGUAGE_LENGTH, "language"),
+              acceptance.getSignerName(),
+              acceptance.getSignerPosition(),
+              acceptance.getSignerEmail(),
+              acceptance.getSignerOrganisation(),
+              acceptance.getLanguage(),
               buildOnboardingFormDataJson(acceptance)));
     } catch (RuntimeException ex) {
       if (rollbackOnFailure) performRollback(createdTenant, reservationToken);
@@ -384,6 +376,28 @@ public class TenantServiceFacade {
           ex);
       throw ex;
     }
+  }
+
+  /** Deterministic acceptance checks shared by held preflight and the actual signature write. */
+  public LocalDateTime validateOnboardingDpaAcceptance(OnboardingDpaAcceptanceDTO acceptance) {
+    if (acceptance == null) {
+      return null;
+    }
+    if (!Boolean.TRUE.equals(acceptance.getAccepted())
+        || isBlank(acceptance.getSignerUserId())
+        || isBlank(acceptance.getSignerName())) {
+      throw new TenantBadRequestException(
+          "onboardingDpaAcceptance requires accepted=true, signerUserId and signerName");
+    }
+    bounded(acceptance.getSignerUserId(), MAX_SIGNER_FIELD_LENGTH, "signerUserId");
+    bounded(acceptance.getSignerUsername(), MAX_SIGNER_FIELD_LENGTH, "signerUsername");
+    LocalDateTime version = parseDpaVersion(acceptance.getDpaVersion());
+    bounded(acceptance.getSignerName(), MAX_SIGNER_FIELD_LENGTH, "signerName");
+    bounded(acceptance.getSignerPosition(), MAX_SIGNER_FIELD_LENGTH, "signerPosition");
+    bounded(acceptance.getSignerEmail(), MAX_SIGNER_FIELD_LENGTH, "signerEmail");
+    bounded(acceptance.getSignerOrganisation(), MAX_SIGNER_FIELD_LENGTH, "signerOrganisation");
+    bounded(acceptance.getLanguage(), MAX_LANGUAGE_LENGTH, "language");
+    return version;
   }
 
   /** Verbatim JSON snapshot of the submitted onboarding acceptance (audit evidence). */
