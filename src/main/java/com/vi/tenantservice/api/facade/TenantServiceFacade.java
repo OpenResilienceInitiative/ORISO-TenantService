@@ -378,6 +378,16 @@ public class TenantServiceFacade {
     }
   }
 
+  /** Refuse unpublished onboarding agreements before consuming a held reservation. */
+  public void validateHeldOnboardingDpaAcceptance(OnboardingDpaAcceptanceDTO acceptance) {
+    LocalDateTime version = validateOnboardingDpaAcceptance(acceptance);
+    if (acceptance != null
+        && !tenantDpaStatusService.isOnboardingVersionPublishedForUnregisteredTenant(version)) {
+      throw new TenantBadRequestException(
+          "onboardingDpaAcceptance requires a published governing DPA version");
+    }
+  }
+
   /** Deterministic acceptance checks shared by held preflight and the actual signature write. */
   public LocalDateTime validateOnboardingDpaAcceptance(OnboardingDpaAcceptanceDTO acceptance) {
     if (acceptance == null) {

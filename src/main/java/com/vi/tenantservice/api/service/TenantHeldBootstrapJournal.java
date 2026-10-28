@@ -87,6 +87,8 @@ public final class TenantHeldBootstrapJournal {
       Row row = read(operation, false);
       if (row != null) operation.command = row.command.getBytes(StandardCharsets.UTF_8);
       return operation;
+    } catch (org.springframework.dao.DataAccessException unavailable) {
+      throw unavailable;
     } catch (Exception failure) {
       throw denied();
     }

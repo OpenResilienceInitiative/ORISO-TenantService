@@ -360,7 +360,8 @@ public class TenantBootstrapCreation {
         }
       }
     } catch (SQLException failure) {
-      throw denied();
+      throw new org.springframework.dao.DataAccessResourceFailureException(
+          "Owned tenant state could not be read", failure);
     }
   }
 

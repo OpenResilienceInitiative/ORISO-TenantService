@@ -30,7 +30,12 @@ public class TenantHeldBootstrap {
   }
 
   public Result create(JsonNode command) {
-    var operation = journal.prepare(command);
+    TenantHeldBootstrapJournal.Operation operation;
+    try {
+      operation = journal.prepare(command);
+    } catch (org.springframework.dao.DataAccessException unavailable) {
+      throw pending(unavailable);
+    }
     try {
       if (!validator.validate(operation.input).isEmpty()) throw TenantHeldBootstrapJournal.denied();
       var dpa = operation.input.getOnboardingDpaAcceptance();
@@ -48,6 +53,7 @@ public class TenantHeldBootstrap {
         throw TenantHeldBootstrapJournal.denied();
       }
       if (row == null) {
+        tenants.validateHeldOnboardingDpaAcceptance(dpa);
         journal.freeze(operation, consulting.freezeBootstrapCommand(operation.input.getId()));
         tenants.createHeldTenant(original, operation);
       } else if (!"COMPLETE".equals(row.state())) {
@@ -72,9 +78,9 @@ public class TenantHeldBootstrap {
       } catch (org.springframework.security.access.AccessDeniedException denied) {
         throw denied;
       } catch (RuntimeException unknown) {
-        throw pending();
+        throw pending(unknown);
       }
-      if (pending != null && !"COMPLETE".equals(pending.state())) throw pending();
+      if (pending != null && !"COMPLETE".equals(pending.state())) throw pending(failure);
       throw failure;
     } finally {
       operation.open = false;
@@ -82,9 +88,14 @@ public class TenantHeldBootstrap {
   }
 
   static org.springframework.web.server.ResponseStatusException pending() {
+    return pending(null);
+  }
+
+  private static org.springframework.web.server.ResponseStatusException pending(Throwable cause) {
     return new org.springframework.web.server.ResponseStatusException(
         org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
-        "Held tenant creation outcome is pending");
+        "Held tenant creation outcome is pending",
+        cause);
   }
 
   public record Result(MultilingualTenantDTO tenant, String receipt) {

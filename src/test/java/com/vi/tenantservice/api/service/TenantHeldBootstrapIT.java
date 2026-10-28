@@ -83,6 +83,8 @@ class TenantHeldBootstrapIT {
   @BeforeEach
   void caller() {
     when(identity.current("CONFIG_WIZARD")).thenReturn(true);
+    // Publication is a fixture here; TenantHeldDpaPublicationIT uses the real DPA service.
+    when(dpaStatus.isOnboardingVersionPublishedForUnregisteredTenant(any())).thenReturn(true);
     when(settings.getApplicationSettings())
         .thenReturn(
             new com.vi.tenantservice.applicationsettingsservice.generated.web.model
@@ -151,20 +153,25 @@ class TenantHeldBootstrapIT {
     for (String field : new String[] {"claimId", "accountAttemptId", "executionId"}) {
       ObjectNode changed = request.deepCopy();
       changed.put(field, UUID.randomUUID().toString());
-      assertThatThrownBy(() -> restarted.create(changed)).isInstanceOf(RuntimeException.class);
+      assertThatThrownBy(() -> restarted.create(changed))
+          .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     }
     ObjectNode changed = request.deepCopy();
     ((ObjectNode) changed.path("tenant")).put("name", "foreign");
-    assertThatThrownBy(() -> restarted.create(changed)).isInstanceOf(RuntimeException.class);
+    assertThatThrownBy(() -> restarted.create(changed))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     ObjectNode wrongPair = request.deepCopy();
     ((ObjectNode) wrongPair.path("tenant"))
         .put("tenantIdReservationToken", UUID.randomUUID().toString());
-    assertThatThrownBy(() -> restarted.create(wrongPair)).isInstanceOf(RuntimeException.class);
+    assertThatThrownBy(() -> restarted.create(wrongPair))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     when(identity.current("CONFIG_WIZARD")).thenReturn(false);
-    assertThatThrownBy(() -> restarted.create(request)).isInstanceOf(RuntimeException.class);
+    assertThatThrownBy(() -> restarted.create(request))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     when(identity.current("CONFIG_WIZARD")).thenReturn(true);
     sql.update("UPDATE tenant SET name='changed current row' WHERE id=9157");
-    assertThatThrownBy(() -> restarted.create(request)).isInstanceOf(RuntimeException.class);
+    assertThatThrownBy(() -> restarted.create(request))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
     assertThat(calls.get()).isEqualTo(1);
     assertThat(allocation.getStatus(9157L).name()).isEqualTo("ASSIGNED");
     server.verify();
@@ -289,6 +296,88 @@ class TenantHeldBootstrapIT {
           "defaultConsultingTypesFilePath",
           "src/test/resources/settings/bootstrap-v2-complete-consulting-type.json");
     }
+  }
+
+  @Test
+  void postCommitSqlFailureRetainsPendingAndExactRetryCompletes() {
+    var calls = new AtomicInteger();
+    expectCreate(calls, new AtomicReference<>(), false);
+    ObjectNode request = request();
+    var creation = application.getBean(TenantBootstrapCreation.class);
+    var originalSource =
+        (javax.sql.DataSource)
+            org.springframework.test.util.ReflectionTestUtils.getField(creation, "dataSource");
+    var unavailable =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(originalSource) {
+          @Override
+          public java.sql.Connection getConnection() throws java.sql.SQLException {
+            throw new java.sql.SQLTransientConnectionException("Synthetic post-commit read outage");
+          }
+        };
+    Throwable failure;
+    org.springframework.test.util.ReflectionTestUtils.setField(creation, "dataSource", unavailable);
+    try {
+      failure = org.assertj.core.api.Assertions.catchThrowable(() -> bootstrap.create(request));
+    } finally {
+      org.springframework.test.util.ReflectionTestUtils.setField(
+          creation, "dataSource", originalSource);
+    }
+    assertThat(failure).isInstanceOf(ResponseStatusException.class);
+    assertThat(((ResponseStatusException) failure).getStatusCode().value()).isEqualTo(503);
+    assertThat(failure)
+        .hasCauseInstanceOf(org.springframework.dao.DataAccessException.class)
+        .hasRootCauseInstanceOf(java.sql.SQLTransientConnectionException.class);
+    assertThat(calls.get()).isZero();
+    assertThat(sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE id=9157", Integer.class))
+        .isEqualTo(1);
+    assertThat(sql.queryForObject("SELECT state FROM tenant_bootstrap_operation", String.class))
+        .isEqualTo("SQL_CREATED");
+    assertThat(allocation.getStatus(9157L).name()).isEqualTo("ASSIGNED");
+
+    var recovered = bootstrap.create(request.deepCopy());
+    assertThat(bootstrap.create(request.deepCopy()).receipt()).isEqualTo(recovered.receipt());
+    assertThat(calls.get()).isEqualTo(1);
+    server.verify();
+  }
+
+  @Test
+  void unavailableJournalDuringPrepareIsInfrastructureAndLeavesClaimUnused() {
+    var calls = new AtomicInteger();
+    expectCreate(calls, new AtomicReference<>(), false);
+    ObjectNode request = request();
+    var journal = application.getBean(TenantHeldBootstrapJournal.class);
+    var originalSql =
+        (JdbcTemplate) org.springframework.test.util.ReflectionTestUtils.getField(journal, "sql");
+    var unavailable =
+        new org.springframework.jdbc.datasource.DelegatingDataSource(sql.getDataSource()) {
+          @Override
+          public java.sql.Connection getConnection() throws java.sql.SQLException {
+            throw new java.sql.SQLTransientConnectionException("Synthetic journal read outage");
+          }
+        };
+    Throwable failure;
+    org.springframework.test.util.ReflectionTestUtils.setField(
+        journal, "sql", new JdbcTemplate(unavailable));
+    try {
+      failure = org.assertj.core.api.Assertions.catchThrowable(() -> bootstrap.create(request));
+    } finally {
+      org.springframework.test.util.ReflectionTestUtils.setField(journal, "sql", originalSql);
+    }
+    assertThat(failure).isInstanceOf(ResponseStatusException.class);
+    assertThat(((ResponseStatusException) failure).getStatusCode().value()).isEqualTo(503);
+    assertThat(failure)
+        .hasCauseInstanceOf(org.springframework.dao.DataAccessException.class)
+        .hasRootCauseInstanceOf(java.sql.SQLTransientConnectionException.class);
+    assertThat(calls.get()).isZero();
+    assertThat(sql.queryForObject("SELECT COUNT(*) FROM tenant WHERE id=9157", Integer.class))
+        .isZero();
+    assertThat(sql.queryForObject("SELECT COUNT(*) FROM tenant_bootstrap_operation", Integer.class))
+        .isZero();
+    assertThat(allocation.getStatus(9157L).name()).isEqualTo("RESERVED");
+
+    assertThat(bootstrap.create(request.deepCopy()).tenant().getId()).isEqualTo(9157L);
+    assertThat(calls.get()).isEqualTo(1);
+    server.verify();
   }
 
   private ObjectNode request() {
