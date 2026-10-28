@@ -152,7 +152,15 @@ public class NewTenantPresetService {
               TenantSettings::setFeatureConsultantEmailInternalGroupEnabled),
           Map.entry(
               "featureConsultantBrowserInternalGroupEnabled",
-              TenantSettings::setFeatureConsultantBrowserInternalGroupEnabled));
+              TenantSettings::setFeatureConsultantBrowserInternalGroupEnabled),
+          Map.entry(
+              "featureDirectInviteChatEnabled", TenantSettings::setFeatureDirectInviteChatEnabled),
+          Map.entry(
+              "featureDirectInviteAudioEnabled",
+              TenantSettings::setFeatureDirectInviteAudioEnabled),
+          Map.entry(
+              "featureDirectInviteVideoEnabled",
+              TenantSettings::setFeatureDirectInviteVideoEnabled));
 
   /** Conversation features: without an explicit preset entry they start on. */
   private static final Set<String> CONVERSATION_FEATURES =

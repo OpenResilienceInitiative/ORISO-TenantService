@@ -123,6 +123,9 @@ public class TenantConverter {
             settings.getFeatureConsultantEmailInternalGroupEnabled())
         .featureConsultantBrowserInternalGroupEnabled(
             settings.getFeatureConsultantBrowserInternalGroupEnabled())
+        .featureDirectInviteChatEnabled(settings.getFeatureDirectInviteChatEnabled())
+        .featureDirectInviteAudioEnabled(settings.getFeatureDirectInviteAudioEnabled())
+        .featureDirectInviteVideoEnabled(settings.getFeatureDirectInviteVideoEnabled())
         .featureCallsEnabled(settings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(settings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -514,6 +517,9 @@ public class TenantConverter {
             tenantSettings.getFeatureConsultantEmailInternalGroupEnabled())
         .featureConsultantBrowserInternalGroupEnabled(
             tenantSettings.getFeatureConsultantBrowserInternalGroupEnabled())
+        .featureDirectInviteChatEnabled(tenantSettings.getFeatureDirectInviteChatEnabled())
+        .featureDirectInviteAudioEnabled(tenantSettings.getFeatureDirectInviteAudioEnabled())
+        .featureDirectInviteVideoEnabled(tenantSettings.getFeatureDirectInviteVideoEnabled())
         .featureCallsEnabled(tenantSettings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(tenantSettings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(

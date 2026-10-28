@@ -2617,6 +2617,18 @@ components:
           type: boolean
           default: true
           description: "Effective counsellor notification channel permission: browser notification for new messages in internal group chats (FE#1725 story 40). Opt-out: defaults to true."
+        featureDirectInviteChatEnabled:
+          type: boolean
+          default: true
+          description: "Effective \"Direkteinladung erlauben\" permission for the chat type (TS#331, ADR-029 §6): may counsellors create and may guests redeem direct links. Inherited platform -> Träger -> Beratungsstelle. Opt-out: defaults to true."
+        featureDirectInviteAudioEnabled:
+          type: boolean
+          default: true
+          description: "Effective \"Direkteinladung erlauben\" permission for the audio call type (TS#331, ADR-029 §6): may counsellors create and may guests redeem direct links. Inherited platform -> Träger -> Beratungsstelle. Opt-out: defaults to true."
+        featureDirectInviteVideoEnabled:
+          type: boolean
+          default: true
+          description: "Effective \"Direkteinladung erlauben\" permission for the video call type (TS#331, ADR-029 §6): may counsellors create and may guests redeem direct links. Inherited platform -> Träger -> Beratungsstelle. Opt-out: defaults to true."
         featureCallsEnabled:
           type: boolean
           example: "true"
@@ -3247,6 +3259,9 @@ components:
         - featureAskerBrowserSelfHelpEnabled
         - featureConsultantEmailInternalGroupEnabled
         - featureConsultantBrowserInternalGroupEnabled
+        - featureDirectInviteChatEnabled
+        - featureDirectInviteAudioEnabled
+        - featureDirectInviteVideoEnabled
         - caseHandoverEnabled
 
     TenantLegalDraftDTO:
