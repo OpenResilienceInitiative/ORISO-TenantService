@@ -55,13 +55,22 @@ class WizardPolicyV2ContextTest {
             .subject("setup-subject")
             .claim("azp", "backend-setup")
             .audience(
-                List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice"))
+                List.of(
+                    "tenantservice",
+                    "agencyservice",
+                    "consultingtypeservice",
+                    "userservice",
+                    "oriso-task-commands"))
             .expiresAt(Instant.now().plusSeconds(120))
             .claim(
                 "realm_access",
                 Map.of(
                     "roles",
-                    List.of("config-wizard", "invitation-reservations", "consultant-import")))
+                    List.of(
+                        "config-wizard",
+                        "invitation-reservations",
+                        "consultant-import",
+                        "smtp-sync")))
             .build();
     SecurityContextHolder.getContext()
         .setAuthentication(new JwtAuthenticationToken(jwt, List.of()));
@@ -214,13 +223,22 @@ class WizardPolicyV2ContextTest {
             .subject("setup-subject")
             .claim("azp", "backend-setup")
             .audience(
-                List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice"))
+                List.of(
+                    "tenantservice",
+                    "agencyservice",
+                    "consultingtypeservice",
+                    "userservice",
+                    "oriso-task-commands"))
             .expiresAt(Instant.now().plusSeconds(120))
             .claim(
                 "realm_access",
                 Map.of(
                     "roles",
-                    List.of("config-wizard", "invitation-reservations", "consultant-import")))
+                    List.of(
+                        "config-wizard",
+                        "invitation-reservations",
+                        "consultant-import",
+                        "smtp-sync")))
             .build();
     SecurityContextHolder.getContext()
         .setAuthentication(new JwtAuthenticationToken(jwt, List.of()));

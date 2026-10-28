@@ -88,7 +88,8 @@ class AccountPolicyPurposeAuthorizationIT {
                             "tenantservice",
                             "agencyservice",
                             "consultingtypeservice",
-                            "userservice"))
+                            "userservice",
+                            "oriso-task-commands"))
                     .issuedAt(Instant.now().minusSeconds(10))
                     .expiresAt(Instant.now().plusSeconds(60))
                     .claim(
@@ -96,7 +97,10 @@ class AccountPolicyPurposeAuthorizationIT {
                         Map.of(
                             "roles",
                             List.of(
-                                "config-wizard", "invitation-reservations", "consultant-import"))))
+                                "config-wizard",
+                                "invitation-reservations",
+                                "consultant-import",
+                                "smtp-sync"))))
         .authorities(token -> converter.convert(token).getAuthorities());
   }
 

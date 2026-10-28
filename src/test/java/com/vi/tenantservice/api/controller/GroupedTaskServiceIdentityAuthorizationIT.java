@@ -54,10 +54,9 @@ import org.springframework.web.context.WebApplicationContext;
 @Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class GroupedTaskServiceIdentityAuthorizationIT {
   private static final List<String> SETUP_ROLES =
-      List.of("config-wizard", "invitation-reservations", "consultant-import");
+      List.of("config-wizard", "invitation-reservations", "consultant-import", "smtp-sync");
   private static final List<String> MAIL_ROLES =
-      List.of(
-          "smtp-sync", "system-email-delivery", "notification-dispatch", "notifications-technical");
+      List.of("system-email-delivery", "notification-dispatch", "notifications-technical");
   private static final List<String> RUNTIME_ROLES =
       List.of(
           "runtime-policy",
@@ -234,14 +233,14 @@ class GroupedTaskServiceIdentityAuthorizationIT {
   private List<String> actorAudiences(String client, String requested) {
     if (!"tenantservice".equals(requested)) return List.of(requested);
     if ("backend-setup".equals(client))
-      return List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice");
-    if ("backend-mail".equals(client))
       return List.of(
           "tenantservice",
           "agencyservice",
           "consultingtypeservice",
           "userservice",
           "oriso-task-commands");
+    if ("backend-mail".equals(client))
+      return List.of("tenantservice", "agencyservice", "consultingtypeservice", "userservice");
     if ("backend-runtime".equals(client))
       return List.of("tenantservice", "agencyservice", "appointmentservice");
     return List.of(requested);
