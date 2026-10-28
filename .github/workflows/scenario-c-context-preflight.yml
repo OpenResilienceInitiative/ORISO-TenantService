@@ -28,11 +28,11 @@ jobs:
           - role: cts
             source: subject
             repository: OpenResilienceInitiative/ORISO-ConsultingTypeService
-            ref: 903eb68cb6b28bb8f67111186649354fefd4315d
+            ref: e5cd83bec1f76996e0ec0dbb9f95742dd106cf6e
           - role: user
             source: subject
             repository: OpenResilienceInitiative/ORISO-UserService
-            ref: e1ad503df59474db70aaac14597f5cf93a68c7ca
+            ref: 6b37b3fe4de013c8b3f47196d2a3b571352add3c
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       MAVEN_OPTS: -Xmx512m -XX:MaxMetaspaceSize=192m -XX:ActiveProcessorCount=2
