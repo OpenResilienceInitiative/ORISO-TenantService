@@ -1075,7 +1075,7 @@ public class TenantServiceFacade {
   }
 
   public Optional<MultilingualTenantDTO> findMultilingualTenantById(Long id) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id);
     var tenantById = tenantService.findTenantDataById(id);
     return tenantById.isEmpty()
         ? Optional.empty()
