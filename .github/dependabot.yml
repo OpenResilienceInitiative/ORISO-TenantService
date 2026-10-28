@@ -80,6 +80,18 @@ updates:
       directories:
           - '/'
           - '/.github/actions/*'
+      schedule:
+          interval: 'monthly'
+      open-pull-requests-limit: 0 # version updates live in the dev entry below
+      groups:
+          github-actions-security:
+              applies-to: security-updates
+              patterns: ['*']
+
+    - package-ecosystem: 'github-actions'
+      directories:
+          - '/'
+          - '/.github/actions/*'
       target-branch: 'dev'
       schedule:
           interval: 'monthly'
@@ -93,6 +105,16 @@ updates:
           # Majors are upgraded deliberately, never by bot.
           - dependency-name: '*'
             update-types: ['version-update:semver-major']
+
+    - package-ecosystem: 'docker'
+      directory: '/'
+      schedule:
+          interval: 'monthly'
+      open-pull-requests-limit: 0 # version updates live in the dev entry below
+      groups:
+          docker-security:
+              applies-to: security-updates
+              patterns: ['*']
 
     - package-ecosystem: 'docker'
       directory: '/'
