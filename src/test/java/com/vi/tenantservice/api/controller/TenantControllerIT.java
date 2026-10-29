@@ -700,6 +700,58 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.settings.featureSelfHelpGroupsEnabled", is(true)));
   }
 
+  @Test
+  void updateTenant_Should_keepStoredDirectInviteFlags_When_updateOmitsThem() throws Exception {
+    // TS#331: store direct links off for audio and video.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withDirectInvites(true, false, false)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureDirectInviteAudioEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureDirectInviteVideoEnabled", is(false)));
+
+    // An older client saves the Träger without the keys at all; the stored values must survive.
+    var request =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(multilingualTenantTestDataBuilder.tenantDTO().withSettings().jsonify());
+    var settings = (com.fasterxml.jackson.databind.node.ObjectNode) request.get("settings");
+    settings.remove(
+        java.util.List.of(
+            "featureDirectInviteChatEnabled",
+            "featureDirectInviteAudioEnabled",
+            "featureDirectInviteVideoEnabled"));
+    putTenant1AsTenantAdmin(request.toString())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureDirectInviteAudioEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureDirectInviteVideoEnabled", is(false)));
+
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureDirectInviteChatEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureDirectInviteAudioEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureDirectInviteVideoEnabled", is(false)));
+
+    // An explicit value still overrides the stored one; the omitted video keeps its stored false.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withDirectInvites(null, true, null)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureDirectInviteAudioEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureDirectInviteVideoEnabled", is(false)));
+
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureDirectInviteAudioEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureDirectInviteVideoEnabled", is(false)));
+  }
+
   private org.springframework.test.web.servlet.ResultActions putTenant1AsTenantAdmin(
       String jsonRequest) throws Exception {
     when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);

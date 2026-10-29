@@ -136,6 +136,19 @@ public class MultilingualTenantTestDataBuilder {
     return this;
   }
 
+  public MultilingualTenantTestDataBuilder withDirectInvites(
+      Boolean chat, Boolean audio, Boolean video) {
+    if (tenantMultilingualDTO.getSettings() == null) {
+      withSettings();
+    }
+    tenantMultilingualDTO
+        .getSettings()
+        .featureDirectInviteChatEnabled(chat)
+        .featureDirectInviteAudioEnabled(audio)
+        .featureDirectInviteVideoEnabled(video);
+    return this;
+  }
+
   private static Settings getSettings() {
     return new Settings()
         .featureTopicsEnabled(true)

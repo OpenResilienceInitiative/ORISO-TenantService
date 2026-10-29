@@ -148,7 +148,12 @@ public class EffectivePermissionSettingsApplier {
               Settings::setFeatureConsultantEmailInternalGroupEnabled),
           Map.entry(
               "featureConsultantBrowserInternalGroupEnabled",
-              Settings::setFeatureConsultantBrowserInternalGroupEnabled));
+              Settings::setFeatureConsultantBrowserInternalGroupEnabled),
+          Map.entry("featureDirectInviteChatEnabled", Settings::setFeatureDirectInviteChatEnabled),
+          Map.entry(
+              "featureDirectInviteAudioEnabled", Settings::setFeatureDirectInviteAudioEnabled),
+          Map.entry(
+              "featureDirectInviteVideoEnabled", Settings::setFeatureDirectInviteVideoEnabled));
 
   private record ToggleBinding(
       Function<TenantAdminAllowedPermissionToggles, Boolean> getter,
