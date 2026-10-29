@@ -21,6 +21,7 @@ class TenantHeldBootstrapFailureTest {
     var recovery = sameFailure ? primary : new IllegalStateException("Synthetic recovery failure");
     var journal = mock(TenantHeldBootstrapJournal.class);
     var operation = mock(TenantHeldBootstrapJournal.Operation.class);
+    operation.open = true;
     var validator = mock(Validator.class);
     var command = JsonNodeFactory.instance.objectNode();
     when(journal.prepare(command)).thenReturn(operation);
