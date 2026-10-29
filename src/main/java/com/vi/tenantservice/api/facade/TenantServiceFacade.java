@@ -649,6 +649,7 @@ public class TenantServiceFacade {
     preserveStoredSmtpMode(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     validateSelectedOwnSmtp(updatedEntity, existingSettingsJson, sanitizedTenantDTO);
     preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
+    preserveStoredDirectInviteFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     var entityToSave = updatedEntity;
     updatedEntity =
@@ -784,6 +785,41 @@ public class TenantServiceFacade {
     if (selfHelpOmitted) {
       updatedSettings.setFeatureSelfHelpGroupsEnabled(
           existingSettings.getFeatureSelfHelpGroupsEnabled());
+    }
+    updatedEntity.setSettings(convertToJson(updatedSettings));
+  }
+
+  /**
+   * TS#331: the "Direkteinladung erlauben" flags are stored opt-outs. A request that omits them
+   * (any client that predates the fields) must not blank a stored {@code false}, which {@link
+   * TenantSettings#applyDefaults()} would then read back as {@code true}. A non-null request value
+   * still overrides the stored one.
+   */
+  private void preserveStoredDirectInviteFlags(
+      String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
+    if (existingSettingsJson == null || updatedEntity.getSettings() == null) {
+      return;
+    }
+    Settings request = tenantDTO.getSettings();
+    boolean chatOmitted = request == null || request.getFeatureDirectInviteChatEnabled() == null;
+    boolean audioOmitted = request == null || request.getFeatureDirectInviteAudioEnabled() == null;
+    boolean videoOmitted = request == null || request.getFeatureDirectInviteVideoEnabled() == null;
+    if (!chatOmitted && !audioOmitted && !videoOmitted) {
+      return;
+    }
+    TenantSettings existingSettings = convertFromJson(existingSettingsJson);
+    TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
+    if (chatOmitted) {
+      updatedSettings.setFeatureDirectInviteChatEnabled(
+          existingSettings.getFeatureDirectInviteChatEnabled());
+    }
+    if (audioOmitted) {
+      updatedSettings.setFeatureDirectInviteAudioEnabled(
+          existingSettings.getFeatureDirectInviteAudioEnabled());
+    }
+    if (videoOmitted) {
+      updatedSettings.setFeatureDirectInviteVideoEnabled(
+          existingSettings.getFeatureDirectInviteVideoEnabled());
     }
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }
@@ -985,7 +1021,7 @@ public class TenantServiceFacade {
   }
 
   public Optional<MultilingualTenantDTO> findMultilingualTenantById(Long id) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id);
     var tenantById = tenantService.findTenantDataById(id);
     return tenantById.isEmpty()
         ? Optional.empty()

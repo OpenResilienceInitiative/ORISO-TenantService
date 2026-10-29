@@ -43,6 +43,7 @@ import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
 import com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens;
 import com.vi.tenantservice.api.util.JsonConverter;
+import com.vi.tenantservice.api.util.TranslationMetaUtil;
 import freemarker.template.TemplateException;
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -122,6 +123,9 @@ public class TenantConverter {
             settings.getFeatureConsultantEmailInternalGroupEnabled())
         .featureConsultantBrowserInternalGroupEnabled(
             settings.getFeatureConsultantBrowserInternalGroupEnabled())
+        .featureDirectInviteChatEnabled(settings.getFeatureDirectInviteChatEnabled())
+        .featureDirectInviteAudioEnabled(settings.getFeatureDirectInviteAudioEnabled())
+        .featureDirectInviteVideoEnabled(settings.getFeatureDirectInviteVideoEnabled())
         .featureCallsEnabled(settings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(settings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -199,6 +203,9 @@ public class TenantConverter {
         .build();
   }
 
+  /** Explicit "no Antwortfrist" signal for erstantwortResponseDeadlineDays (valid range 0-30). */
+  private static final int ERSTANTWORT_DEADLINE_CLEAR = 0;
+
   public TenantEntity toEntity(TenantEntity targetEntity, MultilingualTenantDTO tenantDTO) {
     var sourceEntity = toEntity(tenantDTO);
     BeanUtils.copyProperties(
@@ -215,12 +222,91 @@ public class TenantConverter {
         "contactEmail",
         "contactPhone",
         "dataProtectionOfficer",
+        "contentErstantwortGreeting",
+        "contentErstantwortWhoReadsAlong",
+        "contentErstantwortEmergencyAddition",
+        "contentErstantwortFreeNotice",
+        "contentErstantwortClosing",
+        "erstantwortResponseDeadlineDays",
         "active");
     if (tenantDTO.getActive() != null) {
       targetEntity.setActive(tenantDTO.getActive());
     }
     applyLegalNameAndContact(targetEntity, tenantDTO);
+    applyErstantwort(targetEntity, tenantDTO);
     return targetEntity;
+  }
+
+  /**
+   * Absent keeps: a DTO without Erstantwort data (older client) must not wipe stored Bausteine.
+   * Clearing is explicit: a language whose value is blank is removed together with its {@code
+   * <lang>__meta} key (meta survives only for retained languages), so {"de":""} clears German and
+   * an all-blank map stores "{}". An empty or null map keeps. Deadline 0 clears the Antwortfrist;
+   * null keeps.
+   */
+  private void applyErstantwort(TenantEntity target, MultilingualTenantDTO tenantDTO) {
+    var content = tenantDTO.getContent();
+    if (content == null) {
+      return;
+    }
+    target.setContentErstantwortGreeting(
+        applyBaustein(target.getContentErstantwortGreeting(), content.getErstantwortGreeting()));
+    target.setContentErstantwortWhoReadsAlong(
+        applyBaustein(
+            target.getContentErstantwortWhoReadsAlong(), content.getErstantwortWhoReadsAlong()));
+    target.setContentErstantwortEmergencyAddition(
+        applyBaustein(
+            target.getContentErstantwortEmergencyAddition(),
+            content.getErstantwortEmergencyAddition()));
+    target.setContentErstantwortFreeNotice(
+        applyBaustein(
+            target.getContentErstantwortFreeNotice(), content.getErstantwortFreeNotice()));
+    target.setContentErstantwortClosing(
+        applyBaustein(target.getContentErstantwortClosing(), content.getErstantwortClosing()));
+    var deadline = content.getErstantwortResponseDeadlineDays();
+    if (deadline != null) {
+      target.setErstantwortResponseDeadlineDays(normalizeDeadline(deadline));
+    }
+  }
+
+  /** 0 (or below) is the clear signal and is stored as null; null stays null. */
+  private static Integer normalizeDeadline(Integer deadline) {
+    return deadline == null || deadline <= ERSTANTWORT_DEADLINE_CLEAR ? null : deadline;
+  }
+
+  private String applyBaustein(String stored, Map<String, String> incoming) {
+    if (incoming == null || incoming.isEmpty()) {
+      return stored;
+    }
+    var kept = new java.util.LinkedHashMap<String, String>();
+    incoming.forEach(
+        (key, value) -> {
+          if (key != null
+              && !TranslationMetaUtil.isMetaKey(key)
+              && value != null
+              && !value.isBlank()) {
+            kept.put(key, value);
+          }
+        });
+    // Meta is kept only for retained languages: an orphan meta of a cleared language is dropped.
+    incoming.forEach(
+        (key, value) -> {
+          if (key != null
+              && TranslationMetaUtil.isMetaKey(key)
+              && value != null
+              && !value.isBlank()
+              && kept.containsKey(TranslationMetaUtil.languageOf(key))) {
+            kept.put(key, value);
+          }
+        });
+    return convertToJson(kept);
+  }
+
+  private static boolean hasJson(String json) {
+    return json != null
+        && !json.isBlank()
+        && !"{}".equals(json.trim())
+        && !"null".equals(json.trim());
   }
 
   /**
@@ -314,7 +400,7 @@ public class TenantConverter {
               convertToJson(tenantDTO.getContent().getErstantwortFreeNotice()))
           .contentErstantwortClosing(convertToJson(tenantDTO.getContent().getErstantwortClosing()))
           .erstantwortResponseDeadlineDays(
-              tenantDTO.getContent().getErstantwortResponseDeadlineDays());
+              normalizeDeadline(tenantDTO.getContent().getErstantwortResponseDeadlineDays()));
     }
   }
 
@@ -431,6 +517,9 @@ public class TenantConverter {
             tenantSettings.getFeatureConsultantEmailInternalGroupEnabled())
         .featureConsultantBrowserInternalGroupEnabled(
             tenantSettings.getFeatureConsultantBrowserInternalGroupEnabled())
+        .featureDirectInviteChatEnabled(tenantSettings.getFeatureDirectInviteChatEnabled())
+        .featureDirectInviteAudioEnabled(tenantSettings.getFeatureDirectInviteAudioEnabled())
+        .featureDirectInviteVideoEnabled(tenantSettings.getFeatureDirectInviteVideoEnabled())
         .featureCallsEnabled(tenantSettings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(tenantSettings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
