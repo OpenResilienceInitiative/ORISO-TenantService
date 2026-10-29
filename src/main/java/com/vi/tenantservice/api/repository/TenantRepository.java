@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.repository;
 import com.vi.tenantservice.api.model.TenantDataView;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedDataView;
+import com.vi.tenantservice.api.service.search.TenantSearchText;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,7 +17,8 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
+public interface TenantRepository
+    extends JpaRepository<TenantEntity, Long>, TenantSearchRepository {
 
   @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query("UPDATE TenantEntity t SET t.active = :active, t.updateDate = :updatedAt WHERE t.id = :id")
@@ -127,53 +129,10 @@ public interface TenantRepository extends JpaRepository<TenantEntity, Long> {
               + "FROM TenantEntity t")
   List<TenantDataView> findAllTenantData();
 
-  @Query(
-      value =
-          "SELECT new com.vi.tenantservice.api.model.TenantDataView("
-              + "t.id, "
-              + "t.name, "
-              + "t.subdomain, "
-              + "t.address, "
-              + "t.description, "
-              + "t.legalName, "
-              + "t.contactEmail, "
-              + "t.contactPhone, "
-              + "t.licensingAllowedNumberOfUsers, "
-              + "t.themingLogo, "
-              + "t.themingAssociationLogo, "
-              + "t.themingFavicon, "
-              + "t.themingAssistantName, "
-              + "t.themingAssistantIcon, "
-              + "t.themingPrimaryColor, "
-              + "t.themingSecondaryColor, "
-              + "t.themingAccent, "
-              + "t.themingSignal, "
-              + "t.themingLoginEffect, "
-              + "t.contentImpressum, "
-              + "t.contentClaim, "
-              + "t.contentPrivacy, "
-              + "t.contentPrivacyActivationDate, "
-              + "t.contentTermsAndConditions, "
-              + "t.contentTermsAndConditionsActivationDate, "
-              + "t.contentErstantwortGreeting, "
-              + "t.contentErstantwortWhoReadsAlong, "
-              + "t.contentErstantwortEmergencyAddition, "
-              + "t.contentErstantwortFreeNotice, "
-              + "t.contentErstantwortClosing, "
-              + "t.erstantwortResponseDeadlineDays, "
-              + "t.settings, "
-              + "t.createDate, "
-              + "t.updateDate, "
-              + "t.dataProtectionOfficer, t.active) "
-              + "FROM TenantEntity t "
-              + "WHERE"
-              + "  t.id != 0L "
-              + "  AND ( :infix = '*' "
-              + "  OR cast(t.id as string) LIKE CONCAT('%', UPPER(:infix), '%') "
-              + "  OR UPPER(t.name) LIKE CONCAT('%', UPPER(:infix), '%')"
-              + "  )")
-  Page<TenantDataView> findAllTenantDataExceptTechnicalByInfix(
-      @Param("infix") String infix, Pageable pageable);
+  default Page<TenantDataView> findAllTenantDataExceptTechnicalByInfix(
+      String infix, Pageable pageable) {
+    return searchTenantData(TenantSearchText.tokens(infix), java.util.Map.of(), pageable);
+  }
 
   @Query(
       value =

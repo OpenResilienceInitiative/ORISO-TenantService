@@ -71,8 +71,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -779,7 +777,7 @@ public class TenantController implements TenantApi, TenantadminApi {
       @Min(1) @Valid Integer perPage,
       @Pattern(regexp = "^(NAME|ID|SUBDOMAIN|BERATERCOUNT)$") @Valid String field,
       @Pattern(regexp = "^(ASC|DESC)$") @Valid String order) {
-    var decodedInfix = URLDecoder.decode(query, StandardCharsets.UTF_8).trim();
+    var decodedInfix = query.trim();
     var isAscending = order.equalsIgnoreCase("asc");
     var mappedField = tenantDtoMapper.mappedFieldOf(field);
     var resultMap =

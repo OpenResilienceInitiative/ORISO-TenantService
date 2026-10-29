@@ -180,6 +180,124 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void searchMeasuresRealOwnerHttpCallsAndPreservesCallerScopeHeaders() {
+    var server =
+        new com.github.tomakehurst.wiremock.WireMockServer(
+            com.github.tomakehurst.wiremock.core.WireMockConfiguration.options().dynamicPort());
+    server.start();
+    try {
+      server.stubFor(
+          com.github.tomakehurst.wiremock.client.WireMock.get(
+                  com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo(
+                      "/useradmin/tenantadmins"))
+              .willReturn(
+                  com.github.tomakehurst.wiremock.client.WireMock.aResponse()
+                      .withHeader("Content-Type", "application/json")
+                      .withBody("[{\"_embedded\":{\"email\":\"owner@example.test\"}}]")
+                      .withFixedDelay(10)));
+      var factory =
+          new com.vi.tenantservice.api.config.apiclient.UserAdminServiceApiControllerFactory();
+      org.springframework.test.util.ReflectionTestUtils.setField(
+          factory, "userServiceApiUrl", server.baseUrl());
+      org.springframework.test.util.ReflectionTestUtils.setField(
+          factory, "restTemplate", new org.springframework.web.client.RestTemplate());
+      var headers = new org.springframework.http.HttpHeaders();
+      headers.set("Authorization", "Bearer synthetic-test");
+      headers.set("X-CSRF-TOKEN", "synthetic-csrf");
+      var supplier = mock(com.vi.tenantservice.api.service.httpheader.SecurityHeaderSupplier.class);
+      when(supplier.getKeycloakAndCsrfHttpHeaders())
+          .thenAnswer(ignored -> new org.springframework.http.HttpHeaders(headers));
+      when(tenantResolverService.tryResolve()).thenReturn(Optional.of(42L));
+      var owner = new UserAdminService(tenantResolverService, factory, supplier);
+      org.springframework.test.util.ReflectionTestUtils.setField(
+          tenantServiceFacade, "userAdminService", owner);
+      var ids = java.util.stream.LongStream.rangeClosed(1, 12).boxed().toList();
+      when(tenantService.searchableTenantIds()).thenReturn(ids);
+      var data = mock(com.vi.tenantservice.api.model.TenantData.class);
+      when(data.getId()).thenReturn(12L);
+      when(tenantService.searchTenantData(any(), any(), any()))
+          .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(data)));
+      long start = System.nanoTime();
+      var result = tenantServiceFacade.findTenantsExceptTechnicalByInfix("owner", 0, 1, "id", true);
+      long elapsed = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+      assertThat(result.get("totalElements")).isEqualTo(1);
+      server.verify(
+          12,
+          com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor(
+                  com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo(
+                      "/useradmin/tenantadmins"))
+              .withHeader(
+                  "Authorization",
+                  com.github.tomakehurst.wiremock.client.WireMock.equalTo("Bearer synthetic-test"))
+              .withHeader(
+                  "X-CSRF-TOKEN",
+                  com.github.tomakehurst.wiremock.client.WireMock.equalTo("synthetic-csrf"))
+              .withHeader(
+                  "tenantId", com.github.tomakehurst.wiremock.client.WireMock.equalTo("42")));
+      verify(tenantService)
+          .searchTenantData(
+              eq(List.of("owner")), eq(java.util.Map.of("owner", Set.copyOf(ids))), any());
+      System.out.println(
+          "TENANT_SEARCH_HTTP candidates="
+              + ids.size()
+              + " calls="
+              + server.getAllServeEvents().size()
+              + " elapsedMs="
+              + elapsed
+              + " artificialDelayMsPerCall=10");
+    } finally {
+      server.stop();
+    }
+  }
+
+  @Test
+  void searchResolvesAllCandidateEmailsBeforePagingAndReusesForEnrichment() {
+    when(tenantService.searchableTenantIds()).thenReturn(List.of(1L, 2L));
+    when(userAdminService.getTenantAdmins(1))
+        .thenReturn(
+            List.of(
+                new AdminResponseDTO().embedded(new AdminDTO().email("Müller@example.test")),
+                new AdminResponseDTO().embedded(new AdminDTO().email("second@example.test"))));
+    when(userAdminService.getTenantAdmins(2)).thenReturn(List.of());
+    var data = mock(com.vi.tenantservice.api.model.TenantData.class);
+    when(data.getId()).thenReturn(1L);
+    when(tenantService.searchTenantData(eq(List.of("muller", "second")), any(), any()))
+        .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(data)));
+    var result =
+        tenantServiceFacade.findTenantsExceptTechnicalByInfix(
+            "MULLER\u2003second", 0, 1, "id", true);
+    assertThat(result.get("totalElements")).isEqualTo(1);
+    verify(tenantService)
+        .searchTenantData(
+            eq(List.of("muller", "second")),
+            eq(java.util.Map.of("muller", Set.of(1L), "second", Set.of(1L))),
+            any());
+    verify(userAdminService, times(1)).getTenantAdmins(1);
+    verify(userAdminService, times(1)).getTenantAdmins(2);
+  }
+
+  @Test
+  void searchOwnerFailureIsExplicitAndDoesNotRunPagedQuery() {
+    when(tenantService.searchableTenantIds()).thenReturn(List.of(1L));
+    when(userAdminService.getTenantAdmins(1))
+        .thenThrow(new IllegalStateException("owner unavailable"));
+    assertThrows(
+        IllegalStateException.class,
+        () -> tenantServiceFacade.findTenantsExceptTechnicalByInfix("email", 0, 1, "id", true));
+    verify(tenantService, never()).searchTenantData(any(), any(), any());
+  }
+
+  @Test
+  void clearedAndSentinelSearchDoNotResolveCandidateOwners() {
+    when(tenantService.findAllTenantDataExceptTechnicalByInfix(any(), any()))
+        .thenReturn(org.springframework.data.domain.Page.empty());
+    tenantServiceFacade.findTenantsExceptTechnicalByInfix(" \u2003 ", 0, 1, "id", true);
+    tenantServiceFacade.findTenantsExceptTechnicalByInfix("*", 0, 1, "id", true);
+    verify(tenantService, never()).searchableTenantIds();
+    verifyNoInteractions(userAdminService);
+  }
+
+  @Test
   void getPlatformBrandingTenant_Should_notConsultTheMainTenant_When_singleDomainIsDisabled() {
     when(translationService.getCurrentLanguageContext()).thenReturn(DE);
     when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());

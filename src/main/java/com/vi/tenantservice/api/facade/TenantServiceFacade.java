@@ -59,6 +59,7 @@ import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
+import com.vi.tenantservice.api.service.search.TenantSearchText;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.api.validation.SubdomainValidator;
@@ -71,10 +72,12 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -1385,9 +1388,27 @@ public class TenantServiceFacade {
       String infix, int pageNumber, Integer pageSize, String fieldName, boolean isAscending) {
     var direction = isAscending ? Direction.ASC : Direction.DESC;
     var pageRequest = PageRequest.of(pageNumber, pageSize, direction, fieldName);
-    Page<TenantData> tenantPage =
-        tenantService.findAllTenantDataExceptTechnicalByInfix(infix, pageRequest);
-    return mapOf(tenantPage);
+    var tokens = TenantSearchText.tokens(infix);
+    if (tokens.isEmpty()) {
+      return mapOf(tenantService.findAllTenantDataExceptTechnicalByInfix(infix, pageRequest));
+    }
+    // Owner lookups are mandatory for matching. Do not hide an outage as an empty result.
+    var emailsByTenant = new HashMap<Long, List<String>>();
+    var emailMatches = new HashMap<String, Set<Long>>();
+    for (var id : tenantService.searchableTenantIds()) {
+      var emails = getAdminEmails(userAdminService.getTenantAdmins(Math.toIntExact(id)));
+      emailsByTenant.put(id, emails);
+      for (var token : tokens) {
+        if (emails.stream()
+            .filter(Objects::nonNull)
+            .map(TenantSearchText::fold)
+            .anyMatch(email -> email.contains(token))) {
+          emailMatches.computeIfAbsent(token, ignored -> new HashSet<>()).add(id);
+        }
+      }
+    }
+    var tenantPage = tenantService.searchTenantData(tokens, emailMatches, pageRequest);
+    return mapOf(tenantPage, emailsByTenant);
   }
 
   public List<AdminTenantDTO> getAllAdminTenantsExceptTechnical() {
@@ -1406,10 +1427,15 @@ public class TenantServiceFacade {
   }
 
   private Map<String, Object> mapOf(Page<TenantData> tenantPage) {
+    return mapOf(tenantPage, Map.of());
+  }
+
+  private Map<String, Object> mapOf(
+      Page<TenantData> tenantPage, Map<Long, List<String>> emailsByTenant) {
     var tenants = new ArrayList<Map<String, Object>>();
     tenantPage.forEach(
         tenantData -> {
-          var tenantMap = mapOf(tenantData);
+          var tenantMap = mapOf(tenantData, emailsByTenant);
           tenants.add(tenantMap);
         });
 
@@ -1424,7 +1450,7 @@ public class TenantServiceFacade {
         tenants);
   }
 
-  private Map<String, Object> mapOf(TenantData tenantData) {
+  private Map<String, Object> mapOf(TenantData tenantData, Map<Long, List<String>> emailsByTenant) {
     Map<String, Object> map = new HashMap<>();
     map.put("id", tenantData.getId());
     map.put("name", tenantData.getName());
@@ -1433,14 +1459,18 @@ public class TenantServiceFacade {
     map.put("beraterCount", tenantData.getLicensingAllowedNumberOfUsers());
     List<AdminResponseDTO> tenantAdmins = new ArrayList<>();
     try {
-      tenantAdmins = userAdminService.getTenantAdmins(tenantData.getId().intValue());
+      if (!emailsByTenant.containsKey(tenantData.getId())) {
+        tenantAdmins = userAdminService.getTenantAdmins(tenantData.getId().intValue());
+      }
     } catch (Exception ex) {
       log.warn(
           "Could not resolve tenant-admin emails for tenant {}. Returning tenant without adminEmails.",
           tenantData.getId(),
           ex);
     }
-    map.put("adminEmails", getAdminEmails(tenantAdmins));
+    map.put(
+        "adminEmails",
+        emailsByTenant.getOrDefault(tenantData.getId(), getAdminEmails(tenantAdmins)));
     map.put(
         "createDate",
         nonNull(tenantData.getCreateDate()) ? tenantData.getCreateDate().toString() : null);
