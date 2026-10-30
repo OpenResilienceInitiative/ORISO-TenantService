@@ -262,4 +262,45 @@ class TaskServiceIdentityTest {
         .claim("realm_access", Map.of("roles", roles))
         .build();
   }
+
+  /**
+   * The RUNTIME union gained deletion-audit-read for the AgencyService deletion-log outbox (OBP 2.1
+   * #130). Every receiver checks the exact union, so it has to accept the new set and refuse the
+   * old one; otherwise RUNTIME_POLICY breaks as soon as Keycloak issues the new role.
+   */
+  @Test
+  void runtimeActorCarriesTheDeletionAuditReadRoleInItsExactUnion() {
+    var identity =
+        new TaskServiceIdentity(
+            new MockEnvironment()
+                .withProperty("TASK_IDENTITY_MODEL", "FIVE_ACTORS")
+                .withProperty("TASK_IDENTITY_REQUIRED_TASKS", "RUNTIME_POLICY")
+                .withProperty("TASK_IDENTITY_AUDIENCE", "receiver")
+                .withProperty("IDENTITY_RUNTIME_CLIENT_ID", "backend-runtime")
+                .withProperty("IDENTITY_RUNTIME_SERVICE_SUBJECT", "runtime-subject"));
+    var current =
+        List.of(
+            "runtime-policy",
+            "matrix-agency",
+            "matrix-agency-provision",
+            "appointment-sync",
+            "appointment-participant-cleanup",
+            "deletion-audit-read");
+
+    assertThat(identity.allows(runtimeToken(current), "RUNTIME_POLICY")).isTrue();
+    assertThat(identity.allows(runtimeToken(current.subList(0, 5)), "RUNTIME_POLICY")).isFalse();
+  }
+
+  private static JwtAuthenticationToken runtimeToken(List<String> roles) {
+    return new JwtAuthenticationToken(
+        Jwt.withTokenValue("fixture")
+            .header("alg", "none")
+            .subject("runtime-subject")
+            .claim("azp", "backend-runtime")
+            .audience(List.of("receiver"))
+            .expiresAt(Instant.now().plusSeconds(60))
+            .claim("realm_access", Map.of("roles", roles))
+            .build(),
+        List.of());
+  }
 }
