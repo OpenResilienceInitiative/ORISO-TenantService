@@ -11,6 +11,11 @@ inputs:
     required: true
     type: string
 
+outputs:
+  digest:
+    description: Immutable image digest of the built image
+    value: ${{ steps.build.outputs.digest }}
+
 runs:
   using: 'composite'
   steps:
