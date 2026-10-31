@@ -53,12 +53,15 @@ class DeletionAuditReporterTest {
     var headers = new HttpHeaders();
     headers.setBearerAuth("admin-token");
     headers.add("X-CSRF-TOKEN", "csrf");
+    // UserService's CSRF filter compares the header with this cookie; both must arrive.
+    headers.add("Cookie", "CSRF-TOKEN=csrf");
     when(securityHeaderSupplier.getKeycloakAndCsrfHttpHeaders()).thenReturn(headers);
 
     reporter.reportTenantExecuted(9L);
 
     verify(apiClient).addDefaultHeader("Authorization", "Bearer admin-token");
     verify(apiClient).addDefaultHeader("X-CSRF-TOKEN", "csrf");
+    verify(apiClient).addDefaultHeader("Cookie", "CSRF-TOKEN=csrf");
   }
 
   @Test
