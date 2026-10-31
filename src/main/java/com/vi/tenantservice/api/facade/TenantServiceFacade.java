@@ -43,6 +43,7 @@ import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.AssistantIdentityValidator;
+import com.vi.tenantservice.api.service.DeletionAuditReporter;
 import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
@@ -161,6 +162,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantLegalVersionService tenantLegalVersionService;
 
   private final @NonNull TenantLegalProposalService tenantLegalProposalService;
+
+  private final @NonNull DeletionAuditReporter deletionAuditReporter;
 
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
@@ -500,6 +503,8 @@ public class TenantServiceFacade {
     // DPA signature rows (incl. any outstanding sign links) go with the tenant.
     tenantDpaService.deleteSignaturesForTenant(id);
     tenantService.delete(tenant);
+    // Reported after the commit and best effort: the log can never undo or fail the deletion.
+    deletionAuditReporter.reportTenantExecuted(id);
   }
 
   private boolean isAttemptToCreateFirstNonTechnicalTenant(Long tenantId) {
