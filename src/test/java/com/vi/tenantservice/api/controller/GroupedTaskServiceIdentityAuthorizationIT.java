@@ -63,7 +63,8 @@ class GroupedTaskServiceIdentityAuthorizationIT {
           "matrix-agency",
           "matrix-agency-provision",
           "appointment-sync",
-          "appointment-participant-cleanup");
+          "appointment-participant-cleanup",
+          "deletion-audit-read");
 
   @Autowired private WebApplicationContext context;
   @Autowired private JwtAuthConverter converter;
