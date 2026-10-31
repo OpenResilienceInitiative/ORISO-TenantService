@@ -30,6 +30,9 @@ public class ConsultingTypeService {
   private final @NonNull TenantResolverService tenantResolverService;
   private final @NonNull ConfigurationFileLoader configurationFileLoader;
 
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.vi.tenantservice.config.security.TenantCreationContext creationContext;
+
   @Value("${default.consulting.types.json.path}")
   private String defaultConsultingTypesFilePath;
 
@@ -65,22 +68,141 @@ public class ConsultingTypeService {
     }
   }
 
+  public BootstrapSuccess createDefaultConsultingTypes(
+      com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant) {
+    long tenantId = grant.tenantId();
+    try {
+      byte[] frozen = grant.frozenBootstrapCommand();
+      ConsultingTypeDTO dto =
+          new ObjectMapper()
+              .readValue(
+                  frozen == null ? freezeBootstrapCommand(tenantId) : frozen,
+                  ConsultingTypeDTO.class);
+      if (!Long.valueOf(tenantId).equals(dto.getTenantId().longValue()))
+        throw new IllegalStateException("Owned bootstrap target differs");
+      String proof = creationContext.issue(grant, dto);
+      FullConsultingTypeResponseDTO response = createConsultingType(dto, proof, grant);
+      if (response == null
+          || response.getId() == null
+          || response.getId() < 0
+          || !dto.getTenantId().equals(response.getTenantId()))
+        throw new IllegalStateException("Owned bootstrap readback is not verified");
+      return new BootstrapSuccess(this, grant, new ObjectMapper().writeValueAsBytes(dto));
+    } catch (IOException failure) {
+      throw new IllegalStateException("Owned bootstrap configuration cannot be materialized");
+    }
+  }
+
+  /** Data only; issuing authority still belongs to the private actual-INSERT grant. */
+  public byte[] freezeBootstrapCommand(long tenantId) {
+    if (tenantId < 1
+        || tenantId > Integer.MAX_VALUE
+        || StringUtils.isBlank(defaultConsultingTypesFilePath)) {
+      throw new IllegalStateException("Owned bootstrap configuration is unavailable");
+    }
+    File file = configurationFileLoader.loadFrom(defaultConsultingTypesFilePath);
+    if (!file.isFile())
+      throw new IllegalStateException("Owned bootstrap configuration is unavailable");
+    try {
+      ConsultingTypeDTO dto = new ObjectMapper().readValue(file, ConsultingTypeDTO.class);
+      dto.setTenantId(Math.toIntExact(tenantId));
+      if (dto.getSlug() == null
+          || dto.getRoles() == null
+          || dto.getRoles().getConsultant() == null
+          || dto.getUrls() == null
+          || dto.getRegistration() == null
+          || dto.getRegistration().getNotes() == null
+          || dto.getRegistration().getMandatoryFields() == null
+          || dto.getRegistration().getMandatoryFields().getAge() == null
+          || dto.getRegistration().getMandatoryFields().getState() == null) {
+        throw new IllegalStateException("Owned bootstrap configuration lacks required settings");
+      }
+      return new ObjectMapper().writeValueAsBytes(dto);
+    } catch (IOException failure) {
+      throw new IllegalStateException("Owned bootstrap configuration cannot be materialized");
+    }
+  }
+
   private void createConsultingType(ConsultingTypeDTO consultingTypeDTO, String creationContext)
+      throws RestClientException {
+    createConsultingType(consultingTypeDTO, creationContext, null);
+  }
+
+  private FullConsultingTypeResponseDTO createConsultingType(
+      ConsultingTypeDTO consultingTypeDTO,
+      String creationContext,
+      com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant)
       throws RestClientException {
     var consultingTypeControllerApi =
         consultingTypeServiceApiControllerFactory.createControllerApi();
     addDefaultHeaders(consultingTypeControllerApi.getApiClient());
     if (creationContext != null) {
+      // Internal routing only; the receiver still verifies the bearer, proof and target separately.
+      consultingTypeControllerApi.getApiClient().addDefaultHeader("tenantId", "0");
       consultingTypeControllerApi
           .getApiClient()
           .addDefaultHeader(
               com.vi.tenantservice.config.security.TenantCreationContext.HEADER, creationContext);
     }
+    if (grant != null) grant.beginSend();
     try {
-      consultingTypeControllerApi.createConsultingType(consultingTypeDTO);
+      return consultingTypeControllerApi.createConsultingType(consultingTypeDTO);
     } catch (RestClientException e) {
       log.error("Error while creating consulting type {}", consultingTypeDTO, e);
       throw e;
+    }
+  }
+
+  /** Only an actual successful owned HTTP call can construct this synchronous handle. */
+  public static final class BootstrapSuccess {
+    private final ConsultingTypeService owner;
+    private final com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant;
+    private final byte[] command;
+
+    private BootstrapSuccess(
+        ConsultingTypeService owner,
+        com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant,
+        byte[] command) {
+      this.owner = owner;
+      this.grant = grant;
+      this.command = command.clone();
+    }
+
+    public void compensate() {
+      for (int attempt = 0; attempt < 2; attempt++) {
+        try {
+          compensateOnce();
+          return;
+        } catch (org.springframework.web.client.ResourceAccessException unknown) {
+          if (attempt == 1) throw unknown;
+          // Only this exact terminal operation is retryable, while the same private grant is live.
+          grant.claims();
+        }
+      }
+    }
+
+    private void compensateOnce() {
+      try {
+        ConsultingTypeDTO dto = new ObjectMapper().readValue(command, ConsultingTypeDTO.class);
+        String proof = owner.creationContext.issueCompensation(grant, dto);
+        var api = owner.consultingTypeServiceApiControllerFactory.createControllerApi();
+        owner.addDefaultHeaders(api.getApiClient());
+        api.getApiClient().addDefaultHeader("tenantId", "0");
+        api.getApiClient()
+            .addDefaultHeader(
+                com.vi.tenantservice.config.security.TenantCreationContext.HEADER, proof);
+        var response = api.compensateTenantBootstrapWithHttpInfo(dto);
+        if (response.getStatusCode().value() != 204)
+          throw new IllegalStateException(
+              "Owned bootstrap terminal acknowledgement is unavailable");
+      } catch (IOException malformed) {
+        throw new IllegalStateException("Owned bootstrap command cannot be read");
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "<owned bootstrap HTTP success>";
     }
   }
 

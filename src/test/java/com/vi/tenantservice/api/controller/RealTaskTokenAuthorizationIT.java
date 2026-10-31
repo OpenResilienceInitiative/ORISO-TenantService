@@ -44,8 +44,7 @@ import org.springframework.test.context.jdbc.Sql;
       "csrf.header.property=csrfHeader",
       "csrf.cookie.property=csrfCookie",
       "TASK_IDENTITY_AUDIENCE=tenantservice",
-      "ORISO_WIZARD_POLICY_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-      "ORISO_TENANT_CREATION_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      "ORISO_TASK_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     })
 @Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class RealTaskTokenAuthorizationIT {
@@ -103,8 +102,8 @@ class RealTaskTokenAuthorizationIT {
       return purpose;
     }
     return switch (purpose) {
-      case "CONFIG_WIZARD", "INVITE_RESERVATIONS" -> "SETUP";
-      case "NOTIFICATION_DISPATCH", "SYSTEM_EMAIL_DELIVERY", "SMTP_SYNC" -> "MAIL";
+      case "CONFIG_WIZARD", "INVITE_RESERVATIONS", "SMTP_SYNC" -> "SETUP";
+      case "NOTIFICATION_DISPATCH", "SYSTEM_EMAIL_DELIVERY" -> "MAIL";
       case "RUNTIME_POLICY", "MATRIX_AGENCY" -> "RUNTIME";
       default -> throw new IllegalArgumentException("Unsupported receiver purpose fixture");
     };

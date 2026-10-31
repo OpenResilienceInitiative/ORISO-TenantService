@@ -1,0 +1,27 @@
+openapi: 3.0.1
+info:
+  title: Checked platform account creation defaults
+  version: 1.0.0
+paths:
+  /internal/platform/account-inactivity-policy:
+    get:
+      operationId: getCheckedPlatformInactivityPolicy
+      description: Current canonical RUNTIME_POLICY actor and fresh exact platform account-inactivity context are required. This returns only existing authoritative platform OTHER defaults, without administrative controls.
+      parameters:
+        - in: header
+          name: X-ORISO-Platform-Inactivity-Context
+          required: true
+          schema: {type: string, maxLength: 8192}
+      responses:
+        '200':
+          description: Exact current authoritative values; no-store.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [otherMonths, revision]
+                properties:
+                  otherMonths: {type: integer, minimum: 1, maximum: 2147483647}
+                  revision: {type: integer, format: int64, minimum: 0}
+        '403': {description: Invalid actor, purpose, target, shape, freshness or proof}

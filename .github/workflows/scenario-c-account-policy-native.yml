@@ -1,0 +1,110 @@
+name: Scenario C native checked account policy
+
+on:
+  pull_request:
+    branches: [dev]
+  push:
+    branches: [codex/367-c-policy-tenant-20261021, codex/367-c-c16-roundtrip-20261022, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scenario-c-native-policy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  actual-checked-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: caller
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      GIT_CONFIG_NOSYSTEM: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          path: caller
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check out the fixed real User policy caller
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: OpenResilienceInitiative/ORISO-UserService
+          ref: faeb614c32961bb9101910e337c4912487ce4ced
+          path: user
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check out the fixed canonical native account fixture
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          repository: OpenResilienceInitiative/ORISO-Helm
+          ref: db4ecd994857a81dffa830c299daeebafc465cc2
+          path: helm
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21.0.12+8.0.LTS'
+          cache: maven
+          cache-dependency-path: |
+            caller/pom.xml
+            user/pom.xml
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: 3.12.13
+      - name: Install and verify the selected native fixture's declared dependency
+        run: |
+          python - <<'PY'
+          import importlib.util, json, os
+          from pathlib import Path
+          available = importlib.util.find_spec("yaml") is not None
+          Path(os.environ["RUNNER_TEMP"], "policy-python-dependencies.json").write_text(
+              json.dumps({"preexistingPyYAML": available, "required": "PyYAML==6.0.3"}) + "\n")
+          PY
+          python -m pip install --disable-pip-version-check -r ../helm/requirements-ci.txt
+          python - <<'PY'
+          import sys, yaml
+          from pathlib import Path
+          assert yaml.__version__ == "6.0.3"
+          sys.path.insert(0, str(Path("../helm/tests").resolve()))
+          import _keycloak_container, scenario_c_receiver_fixture
+          print("Both selected native helper imports passed; no native resource was started")
+          PY
+      - name: Verify the resource and failure classifiers without native resources
+        run: |
+          python -m unittest discover -s scripts/tests -p test_native_context_resources.py -q > "$RUNNER_TEMP/policy-resource-controls.txt" 2>&1
+          python -m unittest discover -s scripts/tests -p test_account_policy_driver.py -q >> "$RUNNER_TEMP/policy-resource-controls.txt" 2>&1
+          python -m unittest discover -s ../user/scripts/tests -p test_account_policy_runner.py -q >> "$RUNNER_TEMP/policy-resource-controls.txt" 2>&1
+      - name: Compile ordinary sources before disposable actual HTTP execution
+        run: |
+          python scripts/ci/scenario-c-account-policy-native.py \
+            --user ../user --user-ref faeb614c32961bb9101910e337c4912487ce4ced \
+            --helm ../helm --helm-ref db4ecd994857a81dffa830c299daeebafc465cc2 \
+            --evidence "$RUNNER_TEMP/scenario-c-account-policy-native"
+      - name: Produce a mechanical proposal only after a pre-container formatter failure
+        if: failure()
+        run: |
+          python scripts/ci/scenario-c-policy-format-proposal.py \
+            --source-evidence "$RUNNER_TEMP/scenario-c-account-policy-native" \
+            --user ../user --helm ../helm --evidence "$RUNNER_TEMP/policy-format-proposal"
+      - name: Retain only source hashes, sanitized measurements and original safe XML
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: scenario-c-native-checked-account-policy
+          path: |
+            ${{ runner.temp }}/policy-format-proposal/*.patch
+            ${{ runner.temp }}/policy-format-proposal/*.json
+            ${{ runner.temp }}/policy-format-proposal/*.jsonl
+            ${{ runner.temp }}/policy-resource-controls.txt
+            ${{ runner.temp }}/policy-python-dependencies.json
+            ${{ runner.temp }}/scenario-c-account-policy-native/source-receipt.json
+            ${{ runner.temp }}/scenario-c-account-policy-native/native/*.json
+            ${{ runner.temp }}/scenario-c-account-policy-native/native/*.jsonl
+            ${{ runner.temp }}/scenario-c-account-policy-native/native/*.xml
+          if-no-files-found: error
+          retention-days: 14

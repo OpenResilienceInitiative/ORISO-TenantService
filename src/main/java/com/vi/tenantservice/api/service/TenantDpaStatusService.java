@@ -255,6 +255,15 @@ public class TenantDpaStatusService {
     return getStatus(tenantId);
   }
 
+  /** Read-only publication check for a reserved tenant, using the existing governing owner. */
+  public boolean isOnboardingVersionPublishedForUnregisteredTenant(LocalDateTime shownVersion) {
+    var governing = governingDpaResolver.resolveForUnregisteredTenant();
+    return governing != null
+        && (shownVersion == null
+            || shownVersion.equals(governing.version())
+            || governingDpaResolver.isPublishedVersion(governing.documentTenantId(), shownVersion));
+  }
+
   /**
    * Records the DPA acceptance a tenant admin gave while onboarding through a public invite link
    * (#569). Same audit contract as {@link #sign}, with two deliberate differences:

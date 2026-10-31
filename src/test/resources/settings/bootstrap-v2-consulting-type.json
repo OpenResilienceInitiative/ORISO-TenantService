@@ -1,0 +1,17 @@
+{
+  "slug": "native-bootstrap-v2",
+  "description": "Materialized native bootstrap ☃",
+  "groups": [
+    "native-fixture"
+  ],
+  "languageFormal": true,
+  "showAskerProfile": false,
+  "isVideoCallAllowed": false,
+  "roles": {
+    "consultant": {
+      "default": [
+        "consultant"
+      ]
+    }
+  }
+}

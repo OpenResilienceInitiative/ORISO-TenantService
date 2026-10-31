@@ -106,6 +106,9 @@ public class TenantServiceFacade {
   @org.springframework.beans.factory.annotation.Autowired
   private com.vi.tenantservice.config.security.TenantCreationContext creationContext;
 
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.vi.tenantservice.api.service.TenantBootstrapCreation bootstrapCreation;
+
   private static final int TECHNICAL_TENANT_ID = 0;
 
   /** AUTO create retries share the allocation service's retry budget (TEN-INV hardening). */
@@ -182,6 +185,37 @@ public class TenantServiceFacade {
       new java.util.concurrent.atomic.AtomicReference<>();
 
   public MultilingualTenantDTO createTenant(MultilingualTenantDTO tenantDTO) {
+    return createTenant(tenantDTO, null);
+  }
+
+  public MultilingualTenantDTO createHeldTenant(
+      MultilingualTenantDTO tenantDTO,
+      com.vi.tenantservice.api.service.TenantHeldBootstrapJournal.Operation operation) {
+    bootstrapCreation.requireHeldInput(operation, tenantDTO);
+    return createTenant(tenantDTO, operation);
+  }
+
+  public MultilingualTenantDTO resumeHeldTenant(
+      MultilingualTenantDTO tenantDTO,
+      com.vi.tenantservice.api.service.TenantHeldBootstrapJournal.Operation operation) {
+    bootstrapCreation.requireHeldInput(operation, tenantDTO);
+    return bootstrapCreation.resumeHeld(
+        operation, (created, grant) -> finishOwnedTenant(tenantDTO, created, grant));
+  }
+
+  public MultilingualTenantDTO readHeldTenant(
+      com.vi.tenantservice.api.service.TenantHeldBootstrapJournal.Operation operation) {
+    return bootstrapCreation.readHeld(
+        operation,
+        created -> {
+          var result = tenantConverter.toMultilingualDTO(created);
+          return result;
+        });
+  }
+
+  private MultilingualTenantDTO createTenant(
+      MultilingualTenantDTO tenantDTO,
+      com.vi.tenantservice.api.service.TenantHeldBootstrapJournal.Operation operation) {
     log.info("Creating new tenant");
     assertCallerMayCreateThisTenant(tenantDTO);
     if (Boolean.FALSE.equals(tenantDTO.getActive())) {
@@ -203,9 +237,24 @@ public class TenantServiceFacade {
       creationContext.validateConfiguration();
     }
     String reservationToken = tenantDTO.getTenantIdReservationToken();
+    if (bootstrapCreation != null && bootstrapCreation.current()) {
+      if (operation != null)
+        return bootstrapCreation.createHeld(
+            entity,
+            reservationToken,
+            operation,
+            (created, grant) -> finishOwnedTenant(tenantDTO, created, grant));
+      return bootstrapCreation.create(
+          entity,
+          reservationToken,
+          (created, grant) -> finishOwnedTenant(tenantDTO, created, grant));
+    }
     TenantEntity createdTenant = createWithIdAllocationRetry(entity, reservationToken);
     try {
       createDefaultConsultingTypeSettings(createdTenant);
+    } catch (ResponseStatusException ex) {
+      performRollback(createdTenant, reservationToken);
+      throw ex;
     } catch (com.vi.tenantservice.config.security.TenantCreationContext.IssuanceException ex) {
       performRollback(createdTenant, reservationToken);
       throw ex;
@@ -222,6 +271,26 @@ public class TenantServiceFacade {
     var createdTenantDto = tenantConverter.toMultilingualDTO(createdTenant);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(createdTenantDto);
     return createdTenantDto;
+  }
+
+  private MultilingualTenantDTO finishOwnedTenant(
+      MultilingualTenantDTO original,
+      TenantEntity created,
+      com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant) {
+    try {
+      createDefaultConsultingTypeSettings(created, grant);
+    } catch (ConsultingTypeCreationException failure) {
+      throw new TenantBadRequestException("Owned consulting-type bootstrap could not complete");
+    }
+    recordOnboardingDpaAcceptance(
+        created,
+        original.getOnboardingDpaAcceptance(),
+        original.getTenantIdReservationToken(),
+        false);
+    recordInitialLegalState(created);
+    var result = tenantConverter.toMultilingualDTO(created);
+    tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(result);
+    return result;
   }
 
   /**
@@ -276,40 +345,72 @@ public class TenantServiceFacade {
    */
   private void recordOnboardingDpaAcceptance(
       TenantEntity createdTenant, OnboardingDpaAcceptanceDTO acceptance, String reservationToken) {
+    recordOnboardingDpaAcceptance(createdTenant, acceptance, reservationToken, true);
+  }
+
+  private void recordOnboardingDpaAcceptance(
+      TenantEntity createdTenant,
+      OnboardingDpaAcceptanceDTO acceptance,
+      String reservationToken,
+      boolean rollbackOnFailure) {
     if (acceptance == null) {
       return;
     }
     try {
-      if (!Boolean.TRUE.equals(acceptance.getAccepted())
-          || isBlank(acceptance.getSignerUserId())
-          || isBlank(acceptance.getSignerName())) {
-        throw new TenantBadRequestException(
-            "onboardingDpaAcceptance requires accepted=true, signerUserId and signerName");
-      }
+      LocalDateTime version = validateOnboardingDpaAcceptance(acceptance);
       tenantDpaStatusService.signOnboarding(
           createdTenant.getId(),
-          bounded(acceptance.getSignerUserId(), MAX_SIGNER_FIELD_LENGTH, "signerUserId"),
-          bounded(acceptance.getSignerUsername(), MAX_SIGNER_FIELD_LENGTH, "signerUsername"),
-          parseDpaVersion(acceptance.getDpaVersion()),
+          acceptance.getSignerUserId(),
+          acceptance.getSignerUsername(),
+          version,
           new AdminSignatureForm(
-              bounded(acceptance.getSignerName(), MAX_SIGNER_FIELD_LENGTH, "signerName"),
-              bounded(acceptance.getSignerPosition(), MAX_SIGNER_FIELD_LENGTH, "signerPosition"),
-              bounded(acceptance.getSignerEmail(), MAX_SIGNER_FIELD_LENGTH, "signerEmail"),
-              bounded(
-                  acceptance.getSignerOrganisation(),
-                  MAX_SIGNER_FIELD_LENGTH,
-                  "signerOrganisation"),
-              bounded(acceptance.getLanguage(), MAX_LANGUAGE_LENGTH, "language"),
+              acceptance.getSignerName(),
+              acceptance.getSignerPosition(),
+              acceptance.getSignerEmail(),
+              acceptance.getSignerOrganisation(),
+              acceptance.getLanguage(),
               buildOnboardingFormDataJson(acceptance)));
     } catch (RuntimeException ex) {
-      performRollback(createdTenant, reservationToken);
+      if (rollbackOnFailure) performRollback(createdTenant, reservationToken);
       log.error(
-          "Onboarding DPA acceptance could not be recorded for tenant {} — the tenant creation was"
-              + " rolled back so the acceptance is never silently lost",
+          "Onboarding DPA acceptance failed for tenant {}; local rollback requested: {}",
           createdTenant.getId(),
+          rollbackOnFailure,
           ex);
       throw ex;
     }
+  }
+
+  /** Refuse unpublished onboarding agreements before consuming a held reservation. */
+  public void validateHeldOnboardingDpaAcceptance(OnboardingDpaAcceptanceDTO acceptance) {
+    LocalDateTime version = validateOnboardingDpaAcceptance(acceptance);
+    if (acceptance != null
+        && !tenantDpaStatusService.isOnboardingVersionPublishedForUnregisteredTenant(version)) {
+      throw new TenantBadRequestException(
+          "onboardingDpaAcceptance requires a published governing DPA version");
+    }
+  }
+
+  /** Deterministic acceptance checks shared by held preflight and the actual signature write. */
+  public LocalDateTime validateOnboardingDpaAcceptance(OnboardingDpaAcceptanceDTO acceptance) {
+    if (acceptance == null) {
+      return null;
+    }
+    if (!Boolean.TRUE.equals(acceptance.getAccepted())
+        || isBlank(acceptance.getSignerUserId())
+        || isBlank(acceptance.getSignerName())) {
+      throw new TenantBadRequestException(
+          "onboardingDpaAcceptance requires accepted=true, signerUserId and signerName");
+    }
+    bounded(acceptance.getSignerUserId(), MAX_SIGNER_FIELD_LENGTH, "signerUserId");
+    bounded(acceptance.getSignerUsername(), MAX_SIGNER_FIELD_LENGTH, "signerUsername");
+    LocalDateTime version = parseDpaVersion(acceptance.getDpaVersion());
+    bounded(acceptance.getSignerName(), MAX_SIGNER_FIELD_LENGTH, "signerName");
+    bounded(acceptance.getSignerPosition(), MAX_SIGNER_FIELD_LENGTH, "signerPosition");
+    bounded(acceptance.getSignerEmail(), MAX_SIGNER_FIELD_LENGTH, "signerEmail");
+    bounded(acceptance.getSignerOrganisation(), MAX_SIGNER_FIELD_LENGTH, "signerOrganisation");
+    bounded(acceptance.getLanguage(), MAX_LANGUAGE_LENGTH, "language");
+    return version;
   }
 
   /** Verbatim JSON snapshot of the submitted onboarding acceptance (audit evidence). */
@@ -433,8 +534,17 @@ public class TenantServiceFacade {
 
   private void createDefaultConsultingTypeSettings(TenantEntity createdTenant)
       throws ConsultingTypeCreationException {
+    createDefaultConsultingTypeSettings(createdTenant, null);
+  }
+
+  private void createDefaultConsultingTypeSettings(
+      TenantEntity createdTenant,
+      com.vi.tenantservice.api.service.TenantBootstrapCreation.Grant grant)
+      throws ConsultingTypeCreationException {
     try {
-      if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
+      if (grant != null) {
+        grant.createDefaultConsultingTypes();
+      } else if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
         consultingTypeService.createDefaultConsultingTypes(
             createdTenant.getId(), creationContext.issue(createdTenant.getId()));
       } else {
@@ -859,7 +969,11 @@ public class TenantServiceFacade {
 
   public Optional<com.vi.tenantservice.api.model.AccountProvisioningPolicy>
       findAccountProvisioningPolicy(Long id) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id, "CONFIG_WIZARD");
+    if (taskIdentity == null
+        || !(taskIdentity.current("INVITE_RESERVATIONS")
+            || taskIdentity.current("CONSULTANT_IMPORT"))) {
+      tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id, "CONFIG_WIZARD");
+    }
     return tenantService
         .findTenantDataById(id)
         .map(
