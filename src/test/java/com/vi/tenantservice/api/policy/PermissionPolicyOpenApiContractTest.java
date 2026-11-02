@@ -136,4 +136,26 @@ class PermissionPolicyOpenApiContractTest {
     }
     return property;
   }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void openApiExposesSeparateOptionalCollectionKeysWithCompatibleDefaults() throws IOException {
+    Map<String, Object> spec = new Yaml().load(Files.readString(Path.of("api/tenantservice.yaml")));
+    var schemas =
+        (Map<String, Object>) ((Map<String, Object>) spec.get("components")).get("schemas");
+    var properties =
+        (Map<String, Object>) ((Map<String, Object>) schemas.get("Settings")).get("properties");
+    var keys =
+        (List<String>) ((Map<String, Object>) schemas.get("PermissionFeatureKey")).get("enum");
+    for (String key :
+        List.of(
+            "featureAskerEmailCollectionAgencyCounsellingEnabled",
+            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureAskerEmailCollectionSelfHelpEnabled")) {
+      assertThat(keys).contains(key);
+      assertThat(properties).containsKey(key);
+      var field = (Map<String, Object>) properties.get(key);
+      assertThat(field).containsEntry("type", "boolean").containsEntry("default", true);
+    }
+  }
 }

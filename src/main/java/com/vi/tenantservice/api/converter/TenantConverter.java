@@ -111,6 +111,12 @@ public class TenantConverter {
         .featureAnonymousChatEnabled(settings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(settings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(settings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailCollectionAgencyCounsellingEnabled(
+            settings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled())
+        .featureAskerEmailCollectionLiveChatEnabled(
+            settings.getFeatureAskerEmailCollectionLiveChatEnabled())
+        .featureAskerEmailCollectionSelfHelpEnabled(
+            settings.getFeatureAskerEmailCollectionSelfHelpEnabled())
         .featureAskerEmailAgencyCounsellingEnabled(
             settings.getFeatureAskerEmailAgencyCounsellingEnabled())
         .featureAskerEmailLiveChatEnabled(settings.getFeatureAskerEmailLiveChatEnabled())
@@ -502,6 +508,12 @@ public class TenantConverter {
         .featureAnonymousChatEnabled(tenantSettings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(tenantSettings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(tenantSettings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailCollectionAgencyCounsellingEnabled(
+            tenantSettings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled())
+        .featureAskerEmailCollectionLiveChatEnabled(
+            tenantSettings.getFeatureAskerEmailCollectionLiveChatEnabled())
+        .featureAskerEmailCollectionSelfHelpEnabled(
+            tenantSettings.getFeatureAskerEmailCollectionSelfHelpEnabled())
         .featureAskerEmailAgencyCounsellingEnabled(
             tenantSettings.getFeatureAskerEmailAgencyCounsellingEnabled())
         .featureAskerEmailLiveChatEnabled(tenantSettings.getFeatureAskerEmailLiveChatEnabled())

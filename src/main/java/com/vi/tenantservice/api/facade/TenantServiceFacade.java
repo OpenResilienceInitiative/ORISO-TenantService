@@ -1056,8 +1056,33 @@ public class TenantServiceFacade {
         dto,
         tenantAdminControlsService.getControls(),
         getPlatformTheming(lang),
-        tenantPermissionPolicyService.getResolvedPolicies(dto.getId()),
+        publicPoliciesForResolvedTenant(dto, resolvedTenantId),
         tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantId));
+  }
+
+  /**
+   * Keeps selected-Träger account privacy authoritative when shared-domain branding masks its id.
+   */
+  private Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>>
+      publicPoliciesForResolvedTenant(RestrictedTenantDTO dto, Long resolvedTenantId) {
+    var policies = tenantPermissionPolicyService.getResolvedPolicies(dto.getId());
+    if (java.util.Objects.equals(dto.getId(), resolvedTenantId)) return policies;
+    var selected = tenantPermissionPolicyService.getResolvedPolicies(resolvedTenantId);
+    var combined = new java.util.LinkedHashMap<>(policies);
+    for (var feature :
+        java.util.List.of(
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME,
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL,
+            com.vi.tenantservice.api.policy.PermissionFeature
+                .ASKER_EMAIL_COLLECTION_AGENCY_COUNSELLING,
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL_COLLECTION_LIVE_CHAT,
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL_COLLECTION_SELF_HELP)) {
+      // Missing selected authority must never fall back to a permissive main-tenant value.
+      var selectedPolicy = selected.get(feature.apiKey());
+      if (selectedPolicy == null) combined.remove(feature.apiKey());
+      else combined.put(feature.apiKey(), selectedPolicy);
+    }
+    return combined;
   }
 
   /**

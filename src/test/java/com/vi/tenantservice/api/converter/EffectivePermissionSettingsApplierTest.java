@@ -183,4 +183,55 @@ class EffectivePermissionSettingsApplierTest {
     assertThat(settings.getFeatureAskerBrowserAgencyCounsellingEnabled()).isTrue();
     assertThat(settings.getFeatureAskerEmailLiveChatEnabled()).isTrue();
   }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "featureAskerEmailCollectionAgencyCounsellingEnabled",
+        "featureAskerEmailCollectionLiveChatEnabled",
+        "featureAskerEmailCollectionSelfHelpEnabled"
+      })
+  void projectsAnInheritedCollectionRequirementWithoutChangingDelivery(String key) {
+    var settings =
+        new Settings().featureAskerEmailEnabled(true).featureAskerEmailLiveChatEnabled(false);
+    applier.applyPolicies(
+        settings,
+        Map.of(
+            key,
+            new BooleanPermissionPolicy(false, PermissionPolicyMode.ENFORCED).inherited(true)));
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(settings);
+    assertThat(json.has(key)).isTrue();
+    assertThat(json.path(key).asBoolean()).isFalse();
+    assertThat(settings.getFeatureAskerEmailEnabled()).isTrue();
+    assertThat(settings.getFeatureAskerEmailLiveChatEnabled()).isFalse();
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.CsvSource({
+    "featureAskerEmailCollectionAgencyCounsellingEnabled,true",
+    "featureAskerEmailCollectionAgencyCounsellingEnabled,false",
+    "featureAskerEmailCollectionLiveChatEnabled,true",
+    "featureAskerEmailCollectionLiveChatEnabled,false",
+    "featureAskerEmailCollectionSelfHelpEnabled,true",
+    "featureAskerEmailCollectionSelfHelpEnabled,false"
+  })
+  void newCollectionDefaultsFollowTheInheritedSuggestionWithoutMakingEmailRequired(
+      String key, boolean allowed) {
+    var settings =
+        new Settings()
+            .featureAskerEmailEnabled(true)
+            .featureAskerEmailLiveChatEnabled(false)
+            .emailVisible(true)
+            .emailRequired(false);
+    var inheritedSuggestion =
+        new BooleanPermissionPolicy(allowed, PermissionPolicyMode.SUGGESTED).inherited(true);
+    applier.applyPolicies(settings, Map.of(key, inheritedSuggestion));
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(settings);
+    assertThat(json.path(key).asBoolean()).as(key).isEqualTo(allowed);
+    assertThat(inheritedSuggestion.getMode()).isEqualTo(PermissionPolicyMode.SUGGESTED);
+    assertThat(inheritedSuggestion.getInherited()).isTrue();
+    assertThat(settings.getEmailRequired()).isFalse();
+    assertThat(settings.getEmailVisible()).isTrue();
+    assertThat(settings.getFeatureAskerEmailLiveChatEnabled()).isFalse();
+  }
 }

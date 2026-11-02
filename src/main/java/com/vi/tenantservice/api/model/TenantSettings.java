@@ -63,6 +63,10 @@ public class TenantSettings {
    */
   Boolean featureAskerEmailEnabled;
 
+  Boolean featureAskerEmailCollectionAgencyCounsellingEnabled;
+  Boolean featureAskerEmailCollectionLiveChatEnabled;
+  Boolean featureAskerEmailCollectionSelfHelpEnabled;
+
   Boolean featureAskerEmailAgencyCounsellingEnabled;
   Boolean featureAskerEmailLiveChatEnabled;
   Boolean featureAskerEmailSelfHelpEnabled;
@@ -162,6 +166,9 @@ public class TenantSettings {
               // ORISO-Admin#602: opt-out, so every existing tenant keeps today's behaviour.
               Map.entry("featureDisplayNameEditable", true),
               Map.entry("featureAskerEmailEnabled", true),
+              Map.entry("featureAskerEmailCollectionAgencyCounsellingEnabled", true),
+              Map.entry("featureAskerEmailCollectionLiveChatEnabled", true),
+              Map.entry("featureAskerEmailCollectionSelfHelpEnabled", true),
               Map.entry("featureAskerEmailAgencyCounsellingEnabled", true),
               Map.entry("featureAskerEmailLiveChatEnabled", false),
               Map.entry("featureAskerEmailSelfHelpEnabled", true),
@@ -359,6 +366,18 @@ public class TenantSettings {
     }
     if (featureAskerEmailEnabled == null) {
       featureAskerEmailEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailEnabled");
+    }
+    if (featureAskerEmailCollectionAgencyCounsellingEnabled == null) {
+      featureAskerEmailCollectionAgencyCounsellingEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailCollectionAgencyCounsellingEnabled");
+    }
+    if (featureAskerEmailCollectionLiveChatEnabled == null) {
+      featureAskerEmailCollectionLiveChatEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailCollectionLiveChatEnabled");
+    }
+    if (featureAskerEmailCollectionSelfHelpEnabled == null) {
+      featureAskerEmailCollectionSelfHelpEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailCollectionSelfHelpEnabled");
     }
     if (featureAskerEmailAgencyCounsellingEnabled == null) {
       featureAskerEmailAgencyCounsellingEnabled =

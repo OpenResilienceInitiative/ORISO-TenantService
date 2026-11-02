@@ -50,6 +50,17 @@ public class SingleDomainTenantOverrideService {
       RestrictedTenantDTO overridingRestrictedTenantDTO) {
     var mainSettings = mainTenantRestrictedDTO.getSettings();
     var actualSettings = overridingRestrictedTenantDTO.getSettings();
+    // The shared domain keeps main branding, not another Träger's account privacy choices.
+    mainSettings.setFeatureDisplayNameEditable(actualSettings.getFeatureDisplayNameEditable());
+    mainSettings.setFeatureAskerEmailEnabled(actualSettings.getFeatureAskerEmailEnabled());
+    mainSettings.setFeatureAskerEmailCollectionAgencyCounsellingEnabled(
+        actualSettings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled());
+    mainSettings.setFeatureAskerEmailCollectionLiveChatEnabled(
+        actualSettings.getFeatureAskerEmailCollectionLiveChatEnabled());
+    mainSettings.setFeatureAskerEmailCollectionSelfHelpEnabled(
+        actualSettings.getFeatureAskerEmailCollectionSelfHelpEnabled());
+    mainSettings.setEmailVisible(actualSettings.getEmailVisible());
+    mainSettings.setEmailRequired(actualSettings.getEmailRequired());
     mainSettings.setFeatureMediaUploadEnabled(actualSettings.getFeatureMediaUploadEnabled());
     mainSettings.setFeatureMediaUploadAnonymousChatsEnabled(
         actualSettings.getFeatureMediaUploadAnonymousChatsEnabled());

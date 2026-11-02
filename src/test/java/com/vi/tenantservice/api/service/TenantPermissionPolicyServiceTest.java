@@ -395,4 +395,88 @@ class TenantPermissionPolicyServiceTest {
 
     verify(repository, never()).saveAndFlush(any());
   }
+
+  static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments>
+      collectionPolicyStates() {
+    return java.util.stream.Stream.of(
+            "featureAskerEmailCollectionAgencyCounsellingEnabled",
+            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureAskerEmailCollectionSelfHelpEnabled")
+        .flatMap(
+            key ->
+                java.util.stream.Stream.of(true, false)
+                    .flatMap(
+                        value ->
+                            java.util.stream.Stream.of(
+                                    PermissionPolicyMode.ENFORCED, PermissionPolicyMode.SUGGESTED)
+                                .map(
+                                    mode ->
+                                        org.junit.jupiter.params.provider.Arguments.of(
+                                            key, value, mode))));
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.MethodSource("collectionPolicyStates")
+  void collectionPoliciesHonorAllFourStatesAndKeepTenantOverridesIsolated(
+      String key, boolean parentValue, PermissionPolicyMode parentMode) throws Exception {
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        "featureAskerEmailEnabled",
+                        new BooleanPermissionPolicy(false, PermissionPolicyMode.ENFORCED),
+                        key,
+                        new BooleanPermissionPolicy(parentValue, parentMode))));
+    when(repository.findByTenantId(42L))
+        .thenReturn(
+            Optional.of(
+                TenantPermissionPolicyEntity.builder()
+                    .tenantId(42L)
+                    .policies(
+                        new ObjectMapper()
+                            .writeValueAsString(
+                                Map.of(key, new PolicyValue<>(!parentValue, SUGGESTED))))
+                    .build()));
+    when(repository.findByTenantId(84L)).thenReturn(Optional.empty());
+    var locked = parentMode == PermissionPolicyMode.ENFORCED;
+    var resolved = service.getResolvedPolicies(42L);
+    assertThat(resolved.get(key))
+        .isEqualTo(
+            new ResolvedPolicyValue<>(
+                locked ? parentValue : !parentValue, locked ? ENFORCED : SUGGESTED, locked));
+    assertThat(resolved.get("featureAskerEmailEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(false, ENFORCED, true));
+    assertThat(service.getResolvedPolicies(84L).get(key))
+        .isEqualTo(new ResolvedPolicyValue<>(parentValue, locked ? ENFORCED : SUGGESTED, true));
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "featureAskerEmailCollectionAgencyCounsellingEnabled",
+        "featureAskerEmailCollectionLiveChatEnabled",
+        "featureAskerEmailCollectionSelfHelpEnabled"
+      })
+  void collectionPreferencesRemainPersistableWhileTheGlobalMasterIsOff(String key)
+      throws Exception {
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        "featureAskerEmailEnabled",
+                        new BooleanPermissionPolicy(false, PermissionPolicyMode.ENFORCED),
+                        key,
+                        new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED))));
+    when(repository.findByTenantId(42L)).thenReturn(Optional.empty());
+    service.saveOverrides(42L, Map.of(key, new PolicyValue<>(false, SUGGESTED)));
+    var saved = org.mockito.ArgumentCaptor.forClass(TenantPermissionPolicyEntity.class);
+    verify(repository).saveAndFlush(saved.capture());
+    var json = new ObjectMapper().readTree(saved.getValue().getPolicies());
+    assertThat(saved.getValue().getTenantId()).isEqualTo(42L);
+    assertThat(json.path(key).path("value").asBoolean(true)).isFalse();
+    assertThat(json.path(key).path("mode").asText()).isEqualTo("SUGGESTED");
+    assertThat(json.has("featureAskerEmailEnabled")).isFalse();
+  }
 }

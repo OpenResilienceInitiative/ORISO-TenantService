@@ -21,6 +21,14 @@ import org.springframework.stereotype.Component;
 @Component
 public class EffectivePermissionSettingsApplier {
 
+  // These new choices have no legacy raw-toggle override. The canonical policy also supplies
+  // their effective inherited default; legacy feature hints below retain their old behavior.
+  private static final java.util.Set<String> CANONICAL_COLLECTION_DEFAULTS =
+      java.util.Set.of(
+          "featureAskerEmailCollectionAgencyCounsellingEnabled",
+          "featureAskerEmailCollectionLiveChatEnabled",
+          "featureAskerEmailCollectionSelfHelpEnabled");
+
   private static final Map<String, BiConsumer<Settings, Boolean>> POLICY_SETTERS =
       Map.ofEntries(
           Map.entry("featureAnonymousChatEnabled", Settings::setFeatureAnonymousChatEnabled),
@@ -127,6 +135,15 @@ public class EffectivePermissionSettingsApplier {
               Settings::setFeatureMediaAiScanSupervisionChatsEnabled),
           Map.entry("featureDisplayNameEditable", Settings::setFeatureDisplayNameEditable),
           Map.entry("featureAskerEmailEnabled", Settings::setFeatureAskerEmailEnabled),
+          Map.entry(
+              "featureAskerEmailCollectionAgencyCounsellingEnabled",
+              Settings::setFeatureAskerEmailCollectionAgencyCounsellingEnabled),
+          Map.entry(
+              "featureAskerEmailCollectionLiveChatEnabled",
+              Settings::setFeatureAskerEmailCollectionLiveChatEnabled),
+          Map.entry(
+              "featureAskerEmailCollectionSelfHelpEnabled",
+              Settings::setFeatureAskerEmailCollectionSelfHelpEnabled),
           Map.entry(
               "featureAskerEmailAgencyCounsellingEnabled",
               Settings::setFeatureAskerEmailAgencyCounsellingEnabled),
@@ -270,7 +287,8 @@ public class EffectivePermissionSettingsApplier {
           if (setter != null
               && policy != null
               && (policy.getMode() == PermissionPolicyMode.ENFORCED
-                  || Boolean.FALSE.equals(policy.getInherited()))) {
+                  || Boolean.FALSE.equals(policy.getInherited())
+                  || CANONICAL_COLLECTION_DEFAULTS.contains(feature))) {
             setter.accept(settings, policy.getValue());
           }
         });

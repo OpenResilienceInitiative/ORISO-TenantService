@@ -126,4 +126,28 @@ class TenantSettingsTest {
 
     assertThat(JsonConverter.convertToJson(settings).length()).isLessThan(32000);
   }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "featureAskerEmailCollectionAgencyCounsellingEnabled",
+        "featureAskerEmailCollectionLiveChatEnabled",
+        "featureAskerEmailCollectionSelfHelpEnabled"
+      })
+  void collectionDefaultsPreserveLegacyAndStoredFalseIndependentlyOfTheMaster(String key)
+      throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var defaults =
+        mapper.readTree(JsonConverter.convertToJson(new TenantSettings().applyDefaults()));
+    assertThat(defaults.has(key)).isTrue();
+    assertThat(defaults.path(key).asBoolean()).isTrue();
+    var stored =
+        JsonConverter.convertFromJson("{\"featureAskerEmailEnabled\":false,\"" + key + "\":false}")
+            .applyDefaults();
+    var json = mapper.readTree(JsonConverter.convertToJson(stored));
+    assertThat(json.has(key)).isTrue();
+    assertThat(json.path(key).asBoolean()).isFalse();
+    assertThat(json.path("featureAskerEmailEnabled").asBoolean()).isFalse();
+    assertThat(json.path("featureAskerEmailLiveChatEnabled").asBoolean()).isFalse();
+  }
 }
