@@ -1817,7 +1817,8 @@ components:
       type: object
       description: 'Typed machine-translation error. errorCode is one of
         TRANSLATION_NOT_CONFIGURED, TRANSLATION_KEY_INVALID, TRANSLATION_NO_CREDIT,
-        TRANSLATION_RATE_LIMITED, TRANSLATION_PROVIDER_UNAVAILABLE.'
+        TRANSLATION_RATE_LIMITED, TRANSLATION_PROVIDER_UNAVAILABLE,
+        TRANSLATION_ENCRYPTION_NOT_CONFIGURED (the key was not saved: no encryption secret on the server).'
       properties:
         errorCode:
           type: string

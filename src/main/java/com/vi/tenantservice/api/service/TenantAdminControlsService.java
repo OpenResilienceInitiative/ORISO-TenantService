@@ -22,6 +22,8 @@ import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
 import com.vi.tenantservice.api.service.translation.TranslationApiKeyEncryptionService;
+import com.vi.tenantservice.api.service.translation.TranslationErrorCode;
+import com.vi.tenantservice.api.service.translation.TranslationException;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HashMap;
@@ -255,6 +257,14 @@ public class TenantAdminControlsService {
    */
   @Transactional
   public void setTranslationApiKey(String provider, String apiKey) {
+    // Without a secret the cipher is a pass-through and the key would land in the database as plain
+    // text. Refuse before reading or writing anything (#346).
+    if (!translationApiKeyEncryptionService.isEnabled()) {
+      throw new TranslationException(
+          TranslationErrorCode.TRANSLATION_ENCRYPTION_NOT_CONFIGURED,
+          provider,
+          "Translation API keys cannot be saved: no encryption secret is configured on the server");
+    }
     Optional<TenantAdminControlsEntity> existingEntity = findExistingControls();
     TenantAdminControlsSettings controlsSettings =
         existingEntity

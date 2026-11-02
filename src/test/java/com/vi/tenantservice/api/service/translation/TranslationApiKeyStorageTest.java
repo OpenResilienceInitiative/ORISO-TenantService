@@ -2,8 +2,10 @@ package com.vi.tenantservice.api.service.translation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -24,6 +26,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 /**
  * The platform-global translation provider API keys must not sit in the admin-controls JSON in
@@ -290,5 +293,84 @@ class TranslationApiKeyStorageTest {
 
     verify(tenantAdminControlsRepository, org.mockito.Mockito.never())
         .save(org.mockito.ArgumentMatchers.any());
+  }
+
+  /**
+   * #346: without a secret the cipher is a pass-through, so saving a key used to put it into the
+   * database as plain text without telling anyone. It must be refused, and nothing may be written.
+   */
+  @Test
+  void setTranslationApiKey_Should_refuseAndWriteNothing_When_noSecretIsConfigured() {
+    var withoutSecret =
+        new TranslationApiKeyEncryptionService(new SmtpPasswordEncryptionService(""));
+    var service =
+        new TenantAdminControlsService(
+            tenantAdminControlsRepository, tenantConverter, withoutSecret);
+
+    assertThatThrownBy(() -> service.setTranslationApiKey("mistral", RAW_KEY))
+        .isInstanceOfSatisfying(
+            TranslationException.class,
+            e -> {
+              assertThat(e.getErrorCode())
+                  .isEqualTo(TranslationErrorCode.TRANSLATION_ENCRYPTION_NOT_CONFIGURED);
+              assertThat(e.getMessage()).doesNotContain(RAW_KEY);
+            });
+
+    verify(tenantAdminControlsRepository, never()).saveAndFlush(any());
+    verify(tenantAdminControlsRepository, never()).save(any());
+  }
+
+  /**
+   * Several replicas start at once and each runs the migration. The row is versioned, so the loser
+   * gets an optimistic-lock failure; that must neither crash the replica's startup nor be dropped:
+   * it re-reads and finds the work done (or does it itself).
+   */
+  @Test
+  void migration_Should_retryWithAFreshReadWhenAnotherReplicaWroteFirst() {
+    var stale = plaintextEntity(RAW_KEY);
+    var winnerWrote =
+        TenantAdminControlsEntity.builder()
+            .id(1L)
+            .controls(
+                "{\"translationApiKeys\":{\"mistral\":\""
+                    + encryptionService.encryptNewApiKey(RAW_KEY)
+                    + "\"}}")
+            .build();
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc())
+        .thenReturn(Optional.of(stale), Optional.of(winnerWrote));
+    when(tenantAdminControlsRepository.save(stale))
+        .thenThrow(new OptimisticLockingFailureException("another replica wrote first"));
+
+    assertThatCode(
+            () ->
+                new TranslationApiKeyEncryptionMigration(
+                        tenantAdminControlsRepository, encryptionService)
+                    .migrate())
+        .doesNotThrowAnyException();
+
+    // one failed write; the second read shows ciphertext, so there is nothing left to write
+    verify(tenantAdminControlsRepository, times(1)).save(any());
+  }
+
+  @Test
+  void migration_Should_giveUpQuietlyWhenTheRowKeepsChanging() {
+    when(tenantAdminControlsRepository.findTopByOrderByIdAsc())
+        .thenAnswer(i -> Optional.of(plaintextEntity(RAW_KEY)));
+    when(tenantAdminControlsRepository.save(any()))
+        .thenThrow(new OptimisticLockingFailureException("busy"));
+
+    assertThatCode(
+            () ->
+                new TranslationApiKeyEncryptionMigration(
+                        tenantAdminControlsRepository, encryptionService)
+                    .migrate())
+        .doesNotThrowAnyException();
+  }
+
+  private static TenantAdminControlsEntity plaintextEntity(String key) {
+    return TenantAdminControlsEntity.builder()
+        .id(1L)
+        .controls("{\"translationApiKeys\":{\"mistral\":\"" + key + "\"}}")
+        .build();
   }
 }

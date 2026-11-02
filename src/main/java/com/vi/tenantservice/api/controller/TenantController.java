@@ -460,6 +460,7 @@ public class TenantController implements TenantApi, TenantadminApi {
     log.warn("Machine translation failed: {} ({})", e.getErrorCode(), e.getMessage());
     var status =
         e.getErrorCode() == TranslationErrorCode.TRANSLATION_NOT_CONFIGURED
+                || e.getErrorCode() == TranslationErrorCode.TRANSLATION_ENCRYPTION_NOT_CONFIGURED
             ? HttpStatus.CONFLICT
             : HttpStatus.BAD_GATEWAY;
     var body =
