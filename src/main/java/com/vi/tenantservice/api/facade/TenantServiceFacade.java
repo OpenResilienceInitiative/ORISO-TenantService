@@ -43,6 +43,7 @@ import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.AssistantIdentityValidator;
+import com.vi.tenantservice.api.service.DeletionAuditReporter;
 import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
@@ -161,6 +162,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantLegalVersionService tenantLegalVersionService;
 
   private final @NonNull TenantLegalProposalService tenantLegalProposalService;
+
+  private final @NonNull DeletionAuditReporter deletionAuditReporter;
 
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
@@ -500,6 +503,8 @@ public class TenantServiceFacade {
     // DPA signature rows (incl. any outstanding sign links) go with the tenant.
     tenantDpaService.deleteSignaturesForTenant(id);
     tenantService.delete(tenant);
+    // Reported after the commit and best effort: the log can never undo or fail the deletion.
+    deletionAuditReporter.reportTenantExecuted(id);
   }
 
   private boolean isAttemptToCreateFirstNonTechnicalTenant(Long tenantId) {
@@ -649,6 +654,7 @@ public class TenantServiceFacade {
     preserveStoredSmtpMode(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     validateSelectedOwnSmtp(updatedEntity, existingSettingsJson, sanitizedTenantDTO);
     preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
+    preserveStoredDirectInviteFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     var entityToSave = updatedEntity;
     updatedEntity =
@@ -784,6 +790,41 @@ public class TenantServiceFacade {
     if (selfHelpOmitted) {
       updatedSettings.setFeatureSelfHelpGroupsEnabled(
           existingSettings.getFeatureSelfHelpGroupsEnabled());
+    }
+    updatedEntity.setSettings(convertToJson(updatedSettings));
+  }
+
+  /**
+   * TS#331: the "Direkteinladung erlauben" flags are stored opt-outs. A request that omits them
+   * (any client that predates the fields) must not blank a stored {@code false}, which {@link
+   * TenantSettings#applyDefaults()} would then read back as {@code true}. A non-null request value
+   * still overrides the stored one.
+   */
+  private void preserveStoredDirectInviteFlags(
+      String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
+    if (existingSettingsJson == null || updatedEntity.getSettings() == null) {
+      return;
+    }
+    Settings request = tenantDTO.getSettings();
+    boolean chatOmitted = request == null || request.getFeatureDirectInviteChatEnabled() == null;
+    boolean audioOmitted = request == null || request.getFeatureDirectInviteAudioEnabled() == null;
+    boolean videoOmitted = request == null || request.getFeatureDirectInviteVideoEnabled() == null;
+    if (!chatOmitted && !audioOmitted && !videoOmitted) {
+      return;
+    }
+    TenantSettings existingSettings = convertFromJson(existingSettingsJson);
+    TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
+    if (chatOmitted) {
+      updatedSettings.setFeatureDirectInviteChatEnabled(
+          existingSettings.getFeatureDirectInviteChatEnabled());
+    }
+    if (audioOmitted) {
+      updatedSettings.setFeatureDirectInviteAudioEnabled(
+          existingSettings.getFeatureDirectInviteAudioEnabled());
+    }
+    if (videoOmitted) {
+      updatedSettings.setFeatureDirectInviteVideoEnabled(
+          existingSettings.getFeatureDirectInviteVideoEnabled());
     }
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }

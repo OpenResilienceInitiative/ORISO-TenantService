@@ -167,6 +167,8 @@ class TenantServiceFacadeTest {
   @Mock private TenantLegalVersionService tenantLegalVersionService;
   @Mock private TenantLegalProposalService tenantLegalProposalService;
 
+  @Mock private com.vi.tenantservice.api.service.DeletionAuditReporter deletionAuditReporter;
+
   @InjectMocks private TenantServiceFacade tenantServiceFacade;
 
   @BeforeEach
@@ -177,6 +179,37 @@ class TenantServiceFacadeTest {
     lenient()
         .when(tenantLegalVersionService.saveRecordingPublications(any(), any()))
         .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
+  }
+
+  @Test
+  void deleteTenant_Should_ReportTheDeletionToTheDeletionLog_AfterTheTenantWasDeleted() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+
+    tenantServiceFacade.deleteTenant(ID);
+
+    var order = org.mockito.Mockito.inOrder(tenantService, deletionAuditReporter);
+    order.verify(tenantService).delete(tenantEntity);
+    order.verify(deletionAuditReporter).reportTenantExecuted(ID);
+  }
+
+  @Test
+  void deleteTenant_Should_NotReport_WhenTheTenantIsNotFound() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.empty());
+
+    org.junit.jupiter.api.Assertions.assertThrows(
+        com.vi.tenantservice.api.exception.TenantNotFoundException.class,
+        () -> tenantServiceFacade.deleteTenant(ID));
+
+    org.mockito.Mockito.verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
+  void deleteTenant_Should_NotReport_WhenTheTechnicalTenantIsRefused() {
+    org.junit.jupiter.api.Assertions.assertThrows(
+        com.vi.tenantservice.api.exception.TenantBadRequestException.class,
+        () -> tenantServiceFacade.deleteTenant(0L));
+
+    org.mockito.Mockito.verifyNoInteractions(deletionAuditReporter);
   }
 
   @Test
