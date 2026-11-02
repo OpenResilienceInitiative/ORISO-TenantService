@@ -40,7 +40,69 @@ class TenantPermissionPolicyServiceTest {
 
   @Mock private TenantPermissionPolicyRepository repository;
   @Mock private TenantAdminControlsService platformControls;
+  @Mock private com.vi.tenantservice.api.repository.TenantRepository tenants;
   @InjectMocks private TenantPermissionPolicyService service;
+
+  @Test
+  void collectionOptOutUsesOneCanonicalMapWithoutOverridingExplicitPoliciesOrRequirements() {
+    var keys =
+        java.util.List.of(
+            "featureAskerEmailCollectionAgencyCounsellingEnabled",
+            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureAskerEmailCollectionSelfHelpEnabled");
+    var raw = new java.util.LinkedHashMap<String, Boolean>();
+    keys.forEach(key -> raw.put(key, false));
+    String json;
+    try {
+      json = new ObjectMapper().writeValueAsString(raw);
+    } catch (Exception ex) {
+      throw new AssertionError(ex);
+    }
+    when(tenants.findAllById(Set.of(42L)))
+        .thenReturn(
+            java.util.List.of(
+                com.vi.tenantservice.api.model.TenantEntity.builder()
+                    .id(42L)
+                    .settings(json)
+                    .build()));
+    when(platformControls.getControls()).thenReturn(new TenantAdminControls());
+    var inherited = service.getResolvedPolicies(Set.of(42L)).get(42L);
+    keys.forEach(
+        key ->
+            assertThat(inherited.get(key))
+                .as("stored opt-out: %s", key)
+                .isEqualTo(new ResolvedPolicyValue<>(false, SUGGESTED, false)));
+
+    var explicit = new java.util.LinkedHashMap<String, PolicyValue<Boolean>>();
+    keys.forEach(key -> explicit.put(key, new PolicyValue<>(true, SUGGESTED)));
+    try {
+      when(repository.findByTenantIdIn(Set.of(42L)))
+          .thenReturn(
+              java.util.List.of(
+                  TenantPermissionPolicyEntity.builder()
+                      .tenantId(42L)
+                      .policies(new ObjectMapper().writeValueAsString(explicit))
+                      .build()));
+    } catch (Exception ex) {
+      throw new AssertionError(ex);
+    }
+    var chosen = service.getResolvedPolicies(Set.of(42L)).get(42L);
+    keys.forEach(
+        key ->
+            assertThat(chosen.get(key))
+                .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, false)));
+
+    var enforced = new java.util.LinkedHashMap<String, BooleanPermissionPolicy>();
+    keys.forEach(
+        key -> enforced.put(key, new BooleanPermissionPolicy(true, PermissionPolicyMode.ENFORCED)));
+    when(platformControls.getControls())
+        .thenReturn(new TenantAdminControls().permissionPolicies(enforced));
+    var required = service.getResolvedPolicies(Set.of(42L)).get(42L);
+    keys.forEach(
+        key ->
+            assertThat(required.get(key))
+                .isEqualTo(new ResolvedPolicyValue<>(true, ENFORCED, true)));
+  }
 
   @Test
   void resolve_shouldKeepPlatformEnforcementAndApplyTenantSuggestionOverride() {
@@ -419,6 +481,13 @@ class TenantPermissionPolicyServiceTest {
   @org.junit.jupiter.params.provider.MethodSource("collectionPolicyStates")
   void collectionPoliciesHonorAllFourStatesAndKeepTenantOverridesIsolated(
       String key, boolean parentValue, PermissionPolicyMode parentMode) throws Exception {
+    when(tenants.findAllById(Set.of(42L)))
+        .thenReturn(
+            java.util.List.of(
+                com.vi.tenantservice.api.model.TenantEntity.builder()
+                    .id(42L)
+                    .settings("{\"" + key + "\":false}")
+                    .build()));
     when(platformControls.getControls())
         .thenReturn(
             new TenantAdminControls()
@@ -478,5 +547,117 @@ class TenantPermissionPolicyServiceTest {
     assertThat(json.path(key).path("value").asBoolean(true)).isFalse();
     assertThat(json.path(key).path("mode").asText()).isEqualTo("SUGGESTED");
     assertThat(json.has("featureAskerEmailEnabled")).isFalse();
+  }
+
+  static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments>
+      rawCollectionInputs() {
+    return java.util.stream.Stream.of(
+            "featureAskerEmailCollectionAgencyCounsellingEnabled",
+            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureAskerEmailCollectionSelfHelpEnabled")
+        .flatMap(
+            key ->
+                java.util.stream.Stream.of("absent", "null", "false", "true")
+                    .flatMap(
+                        raw ->
+                            java.util.stream.Stream.of(true, false)
+                                .map(
+                                    parent ->
+                                        org.junit.jupiter.params.provider.Arguments.of(
+                                            key, raw, parent))));
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.MethodSource("rawCollectionInputs")
+  void rawFalseIsRestrictiveButNullAbsentAndTrueCannotGrantOverTheParentSuggestion(
+      String key, String raw, boolean parent) {
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        key, new BooleanPermissionPolicy(parent, PermissionPolicyMode.SUGGESTED))));
+    String json = "absent".equals(raw) ? "{}" : "{\"" + key + "\":" + raw + "}";
+    when(tenants.findAllById(Set.of(42L)))
+        .thenReturn(
+            java.util.List.of(
+                com.vi.tenantservice.api.model.TenantEntity.builder()
+                    .id(42L)
+                    .settings(json)
+                    .build()));
+    boolean optOut = "false".equals(raw);
+    assertThat(service.getResolvedPolicies(42L).get(key))
+        .isEqualTo(new ResolvedPolicyValue<>(optOut ? false : parent, SUGGESTED, !optOut));
+    verify(tenants).findAllById(Set.of(42L));
+  }
+
+  @Test
+  void batchedRawPreferencesStayIsolatedAndUseOneSettingsQueryForTheWholePage() {
+    String key = "featureAskerEmailCollectionLiveChatEnabled";
+    when(platformControls.getControls()).thenReturn(new TenantAdminControls());
+    Set<Long> ids = Set.of(42L, 84L);
+    when(tenants.findAllById(ids))
+        .thenReturn(
+            java.util.List.of(
+                com.vi.tenantservice.api.model.TenantEntity.builder()
+                    .id(42L)
+                    .settings("{\"" + key + "\":false}")
+                    .build(),
+                com.vi.tenantservice.api.model.TenantEntity.builder()
+                    .id(84L)
+                    .settings("{}")
+                    .build(),
+                com.vi.tenantservice.api.model.TenantEntity.builder()
+                    .id(999L)
+                    .settings("{\"" + key + "\":false}")
+                    .build()));
+    var result = service.getResolvedPolicies(ids);
+    assertThat(result).containsOnlyKeys(42L, 84L);
+    assertThat(result.get(42L).get(key))
+        .isEqualTo(new ResolvedPolicyValue<>(false, SUGGESTED, false));
+    assertThat(result.get(84L).get(key))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
+    verify(tenants).findAllById(ids);
+    verify(repository).findByTenantIdIn(ids);
+    org.mockito.Mockito.verifyNoMoreInteractions(tenants, repository);
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "{\"smtpPassword\":\"must-never-leak\",",
+        "[]",
+        "null",
+        "{\"featureAskerEmailCollectionLiveChatEnabled\":\"false\"}"
+      })
+  void malformedPrivateCollectionSettingsRefuseWithoutParserCauseOrRawData(String json) {
+    when(platformControls.getControls()).thenReturn(new TenantAdminControls());
+    when(tenants.findAllById(Set.of(42L)))
+        .thenReturn(
+            java.util.List.of(
+                com.vi.tenantservice.api.model.TenantEntity.builder()
+                    .id(42L)
+                    .settings(json)
+                    .build()));
+    assertThatThrownBy(() -> service.getResolvedPolicies(42L))
+        .isInstanceOf(IllegalStateException.class)
+        .hasNoCause()
+        .hasMessage("Current tenant collection preferences are unavailable");
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.NullAndEmptySource
+  @org.junit.jupiter.params.provider.ValueSource(strings = {" "})
+  void absentStoredSettingsRetainTheInheritedDefault(String json) {
+    when(platformControls.getControls()).thenReturn(new TenantAdminControls());
+    when(tenants.findAllById(Set.of(42L)))
+        .thenReturn(
+            java.util.List.of(
+                com.vi.tenantservice.api.model.TenantEntity.builder()
+                    .id(42L)
+                    .settings(json)
+                    .build()));
+    assertThat(service.getResolvedPolicies(42L).get("featureAskerEmailCollectionLiveChatEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
   }
 }

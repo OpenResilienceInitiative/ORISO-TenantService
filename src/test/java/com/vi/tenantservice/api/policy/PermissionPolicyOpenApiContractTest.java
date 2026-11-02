@@ -155,7 +155,46 @@ class PermissionPolicyOpenApiContractTest {
       assertThat(keys).contains(key);
       assertThat(properties).containsKey(key);
       var field = (Map<String, Object>) properties.get(key);
-      assertThat(field).containsEntry("type", "boolean").containsEntry("default", true);
+      assertThat(field).containsEntry("type", "boolean");
+      assertThat(
+              (List<String>)
+                  ((Map<String, Object>) schemas.get("Settings"))
+                      .getOrDefault("required", List.of()))
+          .doesNotContain(key);
+      assertThat(field).doesNotContainKey("default");
+    }
+  }
+
+  @Test
+  void collectionInputDistinguishesOmissionNullFalseAndTrueWhileDomainDefaultsRemainTrue()
+      throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    for (String key :
+        List.of(
+            "featureAskerEmailCollectionAgencyCounsellingEnabled",
+            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureAskerEmailCollectionSelfHelpEnabled")) {
+      String getter = "get" + Character.toUpperCase(key.charAt(0)) + key.substring(1);
+      assertThat(
+              com.vi.tenantservice.api.model.Settings.class
+                  .getMethod(getter)
+                  .invoke(mapper.readValue("{}", com.vi.tenantservice.api.model.Settings.class)))
+          .isNull();
+      for (String value : List.of("null", "false", "true")) {
+        var input =
+            mapper.readValue(
+                "{\"" + key + "\":" + value + "}", com.vi.tenantservice.api.model.Settings.class);
+        assertThat(com.vi.tenantservice.api.model.Settings.class.getMethod(getter).invoke(input))
+            .isEqualTo("null".equals(value) ? null : Boolean.valueOf(value));
+      }
+      var domain =
+          mapper.valueToTree(new com.vi.tenantservice.api.model.TenantSettings().applyDefaults());
+      assertThat(domain.path(key).asBoolean()).isTrue();
+      assertThat(
+              com.vi.tenantservice.api.policy.PermissionFeature.byApiKey(key)
+                  .orElseThrow()
+                  .defaultValue())
+          .isTrue();
     }
   }
 }

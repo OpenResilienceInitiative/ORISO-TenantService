@@ -28,6 +28,7 @@ import com.vi.tenantservice.api.policy.PermissionPolicyResolver;
 import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.policy.ResolvedPolicyValue;
 import com.vi.tenantservice.api.repository.TenantPermissionPolicyRepository;
+import com.vi.tenantservice.api.repository.TenantRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
@@ -47,13 +48,22 @@ public class TenantPermissionPolicyService {
 
   private final @NonNull TenantPermissionPolicyRepository repository;
   private final @NonNull TenantAdminControlsService platformControls;
+  private final @NonNull TenantRepository tenants;
+  private static final Set<String> COLLECTION_FIELDS =
+      Set.of(
+          "featureAskerEmailCollectionAgencyCounsellingEnabled",
+          "featureAskerEmailCollectionLiveChatEnabled",
+          "featureAskerEmailCollectionSelfHelpEnabled");
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   public Map<String, ResolvedPolicyValue<Boolean>> getResolvedPolicies(Long tenantId) {
     Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platformControls.getControls());
     Map<String, PolicyValue<Boolean>> overrides =
         repository.findByTenantId(tenantId).map(this::deserialize).orElse(Map.of());
-    return resolvePolicies(inherited, overrides);
+    return resolvePolicies(
+        inherited,
+        withCollectionOptOuts(
+            overrides, collectionOptOuts(Set.of(tenantId)).getOrDefault(tenantId, Map.of())));
   }
 
   public Map<Long, Map<String, ResolvedPolicyValue<Boolean>>> getResolvedPolicies(
@@ -66,13 +76,60 @@ public class TenantPermissionPolicyService {
     repository
         .findByTenantIdIn(tenantIds)
         .forEach(entity -> overridesByTenant.put(entity.getTenantId(), deserialize(entity)));
+    var optOutsByTenant = collectionOptOuts(tenantIds);
     Map<Long, Map<String, ResolvedPolicyValue<Boolean>>> resolvedByTenant = new LinkedHashMap<>();
     tenantIds.forEach(
         tenantId ->
             resolvedByTenant.put(
                 tenantId,
-                resolvePolicies(inherited, overridesByTenant.getOrDefault(tenantId, Map.of()))));
+                resolvePolicies(
+                    inherited,
+                    withCollectionOptOuts(
+                        overridesByTenant.getOrDefault(tenantId, Map.of()),
+                        optOutsByTenant.getOrDefault(tenantId, Map.of())))));
     return Map.copyOf(resolvedByTenant);
+  }
+
+  /** Raw FALSE remains a restrictive preference until an explicit typed choice supersedes it. */
+  private Map<String, PolicyValue<Boolean>> withCollectionOptOuts(
+      Map<String, PolicyValue<Boolean>> overrides, Map<String, PolicyValue<Boolean>> optOuts) {
+    var combined = new LinkedHashMap<>(optOuts);
+    combined.putAll(overrides);
+    return combined;
+  }
+
+  /** One repository read for the whole page, never one settings lookup per tenant. */
+  private Map<Long, Map<String, PolicyValue<Boolean>>> collectionOptOuts(Set<Long> tenantIds) {
+    Map<Long, Map<String, PolicyValue<Boolean>>> result = new LinkedHashMap<>();
+    for (var tenant : tenants.findAllById(tenantIds)) {
+      if (!tenantIds.contains(tenant.getId())) continue;
+      String json = tenant.getSettings();
+      if (json == null || json.isBlank()) continue;
+      try {
+        var settings = objectMapper.readTree(json);
+        if (settings == null || !settings.isObject()) throw collectionSettingsUnavailable();
+        Map<String, PolicyValue<Boolean>> optOuts = new LinkedHashMap<>();
+        for (String field : COLLECTION_FIELDS) {
+          var value = settings.get(field);
+          if (value == null || value.isNull()) continue;
+          if (!value.isBoolean()) throw collectionSettingsUnavailable();
+          if (!value.booleanValue())
+            optOuts.put(
+                field,
+                new PolicyValue<>(
+                    false, com.vi.tenantservice.api.policy.PermissionPolicyMode.SUGGESTED));
+        }
+        result.put(tenant.getId(), optOuts);
+      } catch (JsonProcessingException invalid) {
+        throw collectionSettingsUnavailable();
+      }
+    }
+    return result;
+  }
+
+  private IllegalStateException collectionSettingsUnavailable() {
+    // Tenant settings can contain credentials. Never attach the parser cause or raw JSON.
+    return new IllegalStateException("Current tenant collection preferences are unavailable");
   }
 
   /**

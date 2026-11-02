@@ -2587,16 +2587,13 @@ components:
           description: "ORISO-Admin#602 switch 2. Whether an advice seeker may leave an e-mail address at all. When false it must silence both the in-chat Erstantwort Baustein and the profile e-mail field. Opt-out: defaults to true."
         featureAskerEmailCollectionAgencyCounsellingEnabled:
           type: boolean
-          default: true
-          description: Allows optional advice-seeker email collection in agency counselling; featureAskerEmailEnabled remains the account-wide outer limit. This is separate from email delivery and does not make an address required.
+          description: Allows optional advice-seeker email collection in agency counselling; featureAskerEmailEnabled remains the account-wide outer limit. This is separate from email delivery and does not make an address required. Omitted input preserves the stored preference; absent stored policy defaults to true. A raw false is a restrictive fallback only when no typed tenant choice exists; explicit typed policies and platform requirements remain authoritative.
         featureAskerEmailCollectionLiveChatEnabled:
           type: boolean
-          default: true
-          description: Allows optional advice-seeker email collection in live chat; featureAskerEmailEnabled remains the account-wide outer limit. This is separate from email delivery and does not make an address required.
+          description: Allows optional advice-seeker email collection in live chat; featureAskerEmailEnabled remains the account-wide outer limit. This is separate from email delivery and does not make an address required. Omitted input preserves the stored preference; absent stored policy defaults to true. A raw false is a restrictive fallback only when no typed tenant choice exists; explicit typed policies and platform requirements remain authoritative.
         featureAskerEmailCollectionSelfHelpEnabled:
           type: boolean
-          default: true
-          description: Allows optional advice-seeker email collection in self-help groups; featureAskerEmailEnabled remains the account-wide outer limit. This is separate from email delivery and does not make an address required.
+          description: Allows optional advice-seeker email collection in self-help groups; featureAskerEmailEnabled remains the account-wide outer limit. This is separate from email delivery and does not make an address required. Omitted input preserves the stored preference; absent stored policy defaults to true. A raw false is a restrictive fallback only when no typed tenant choice exists; explicit typed policies and platform requirements remain authoritative.
         featureAskerEmailAgencyCounsellingEnabled:
           type: boolean
           default: true

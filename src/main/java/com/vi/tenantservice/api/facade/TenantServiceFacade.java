@@ -655,6 +655,7 @@ public class TenantServiceFacade {
     validateSelectedOwnSmtp(updatedEntity, existingSettingsJson, sanitizedTenantDTO);
     preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     preserveStoredDirectInviteFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
+    preserveStoredCollectionFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     var entityToSave = updatedEntity;
     updatedEntity =
@@ -826,6 +827,31 @@ public class TenantServiceFacade {
       updatedSettings.setFeatureDirectInviteVideoEnabled(
           existingSettings.getFeatureDirectInviteVideoEnabled());
     }
+    updatedEntity.setSettings(convertToJson(updatedSettings));
+  }
+
+  private void preserveStoredCollectionFlags(
+      String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
+    if (existingSettingsJson == null || updatedEntity.getSettings() == null) return;
+    Settings request = tenantDTO.getSettings();
+    boolean agencyOmitted =
+        request == null || request.getFeatureAskerEmailCollectionAgencyCounsellingEnabled() == null;
+    boolean liveOmitted =
+        request == null || request.getFeatureAskerEmailCollectionLiveChatEnabled() == null;
+    boolean selfHelpOmitted =
+        request == null || request.getFeatureAskerEmailCollectionSelfHelpEnabled() == null;
+    if (!agencyOmitted && !liveOmitted && !selfHelpOmitted) return;
+    TenantSettings existingSettings = convertFromJson(existingSettingsJson);
+    TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
+    if (agencyOmitted)
+      updatedSettings.setFeatureAskerEmailCollectionAgencyCounsellingEnabled(
+          existingSettings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled());
+    if (liveOmitted)
+      updatedSettings.setFeatureAskerEmailCollectionLiveChatEnabled(
+          existingSettings.getFeatureAskerEmailCollectionLiveChatEnabled());
+    if (selfHelpOmitted)
+      updatedSettings.setFeatureAskerEmailCollectionSelfHelpEnabled(
+          existingSettings.getFeatureAskerEmailCollectionSelfHelpEnabled());
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }
 

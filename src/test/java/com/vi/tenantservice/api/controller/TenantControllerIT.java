@@ -752,6 +752,82 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.settings.featureDirectInviteVideoEnabled", is(false)));
   }
 
+  @Test
+  void collectionOptOutSurvivesAnOlderClientUpdateAndAgreesWithPublicPolicies() throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var keys =
+        java.util.List.of(
+            "featureAskerEmailCollectionAgencyCounsellingEnabled",
+            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureAskerEmailCollectionSelfHelpEnabled");
+    var first =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(multilingualTenantTestDataBuilder.tenantDTO().withSettings().jsonify());
+    var firstSettings = (com.fasterxml.jackson.databind.node.ObjectNode) first.get("settings");
+    keys.forEach(key -> firstSettings.put(key, false));
+    putTenant1AsTenantAdmin(first.toString()).andExpect(status().isOk());
+
+    // A writable raw opt-out must agree with the canonical map before any later update.
+    var before =
+        mockMvc
+            .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andReturn();
+    var publicBefore = mapper.readTree(before.getResponse().getContentAsString());
+    for (String key : keys) {
+      org.assertj.core.api.Assertions.assertThat(publicBefore.path("permissionPolicies").has(key))
+          .isTrue();
+      org.assertj.core.api.Assertions.assertThat(
+              publicBefore.path("settings").path(key).asBoolean())
+          .isFalse();
+      org.assertj.core.api.Assertions.assertThat(
+              publicBefore.path("permissionPolicies").path(key).path("value").asBoolean())
+          .isFalse();
+    }
+
+    var older =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(multilingualTenantTestDataBuilder.tenantDTO().withSettings().jsonify());
+    var olderSettings = (com.fasterxml.jackson.databind.node.ObjectNode) older.get("settings");
+    olderSettings.remove(keys);
+    olderSettings.put("featureAskerEmailEnabled", false);
+    putTenant1AsTenantAdmin(older.toString()).andExpect(status().isOk());
+    var stored = mapper.readTree(tenantRepository.findById(1L).orElseThrow().getSettings());
+    for (String key : keys)
+      org.assertj.core.api.Assertions.assertThat(stored.path(key).asBoolean()).isFalse();
+  }
+
+  @Test
+  void olderClientDoesNotReplaceStoredCollectionOptOutsWithDefaults() throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var keys =
+        java.util.List.of(
+            "featureAskerEmailCollectionAgencyCounsellingEnabled",
+            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureAskerEmailCollectionSelfHelpEnabled");
+    var first =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(multilingualTenantTestDataBuilder.tenantDTO().withSettings().jsonify());
+    var settings = (com.fasterxml.jackson.databind.node.ObjectNode) first.get("settings");
+    keys.forEach(key -> settings.put(key, false));
+    putTenant1AsTenantAdmin(first.toString()).andExpect(status().isOk());
+    settings.remove(keys);
+    settings.put("featureAskerEmailEnabled", false);
+    putTenant1AsTenantAdmin(first.toString()).andExpect(status().isOk());
+    var stored = mapper.readTree(tenantRepository.findById(1L).orElseThrow().getSettings());
+    for (String key : keys) {
+      org.assertj.core.api.Assertions.assertThat(stored.path(key).isBoolean()).isTrue();
+      org.assertj.core.api.Assertions.assertThat(stored.path(key).asBoolean()).isFalse();
+    }
+    // An explicit ON is still writable; the omitted other choices keep their stored OFF.
+    settings.put(keys.get(0), true);
+    putTenant1AsTenantAdmin(first.toString()).andExpect(status().isOk());
+    var after = mapper.readTree(tenantRepository.findById(1L).orElseThrow().getSettings());
+    org.assertj.core.api.Assertions.assertThat(after.path(keys.get(0)).asBoolean()).isTrue();
+    org.assertj.core.api.Assertions.assertThat(after.path(keys.get(1)).asBoolean()).isFalse();
+    org.assertj.core.api.Assertions.assertThat(after.path(keys.get(2)).asBoolean()).isFalse();
+  }
+
   private org.springframework.test.web.servlet.ResultActions putTenant1AsTenantAdmin(
       String jsonRequest) throws Exception {
     when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
