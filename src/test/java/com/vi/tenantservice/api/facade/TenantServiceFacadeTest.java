@@ -1035,6 +1035,9 @@ class TenantServiceFacadeTest {
 
     when(tenantPermissionPolicyService.getResolvedPolicies(Set.of(1L, 2L)))
         .thenReturn(Map.of(1L, Map.of(), 2L, Map.of()));
+    when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(Set.of(1L, 2L)))
+        .thenReturn(
+            Map.of(1L, new InternalGroupChatPolicies(), 2L, new InternalGroupChatPolicies()));
 
     var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
 

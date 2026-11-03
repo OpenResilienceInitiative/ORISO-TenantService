@@ -37,6 +37,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -79,11 +80,8 @@ public class TenantPermissionPolicyService {
       return Map.of();
     }
     Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platformControls.getControls());
-    Map<Long, Map<String, PolicyValue<Boolean>>> overridesByTenant = new LinkedHashMap<>();
-    repository
-        .findByTenantIdIn(tenantIds)
-        .forEach(entity -> overridesByTenant.put(entity.getTenantId(), deserialize(entity)));
     var unreadable = new LinkedHashSet<Long>();
+    var overridesByTenant = deserializeBatch(tenantIds, unreadable, this::deserialize);
     var optOutsByTenant = accountOptOuts(tenantIds, unreadable);
     Map<Long, Map<String, ResolvedPolicyValue<Boolean>>> resolvedByTenant = new LinkedHashMap<>();
     tenantIds.stream()
@@ -267,18 +265,30 @@ public class TenantPermissionPolicyService {
       return Map.of();
     }
     InternalGroupChatPolicies parent = platformInternalGroupChat(platformControls.getControls());
-    Map<Long, InternalGroupChatPolicies> localByTenant = new LinkedHashMap<>();
-    repository
-        .findByTenantIdIn(tenantIds)
-        .forEach(
-            entity ->
-                localByTenant.put(entity.getTenantId(), deserializeInternalGroupChat(entity)));
+    var unreadable = new LinkedHashSet<Long>();
+    var localByTenant = deserializeBatch(tenantIds, unreadable, this::deserializeInternalGroupChat);
     Map<Long, InternalGroupChatPolicies> resolvedByTenant = new LinkedHashMap<>();
-    tenantIds.forEach(
-        tenantId ->
-            resolvedByTenant.put(
-                tenantId, resolveInternalGroupChat(parent, localByTenant.get(tenantId))));
+    tenantIds.stream()
+        .filter(id -> !unreadable.contains(id))
+        .forEach(
+            tenantId ->
+                resolvedByTenant.put(
+                    tenantId, resolveInternalGroupChat(parent, localByTenant.get(tenantId))));
     return Map.copyOf(resolvedByTenant);
+  }
+
+  /** Batch reads keep healthy tenants without serving default permissions for corrupt rows. */
+  private <T> Map<Long, T> deserializeBatch(
+      Set<Long> tenantIds, Set<Long> unreadable, Function<TenantPermissionPolicyEntity, T> reader) {
+    Map<Long, T> results = new LinkedHashMap<>();
+    for (var entity : repository.findByTenantIdIn(tenantIds)) {
+      try {
+        results.put(entity.getTenantId(), reader.apply(entity));
+      } catch (TenantSettingsUnavailableException invalid) {
+        unreadable.add(entity.getTenantId());
+      }
+    }
+    return results;
   }
 
   private InternalGroupChatPolicies platformInternalGroupChat(TenantAdminControls platform) {
@@ -328,9 +338,14 @@ public class TenantPermissionPolicyService {
       return null;
     }
     try {
-      return objectMapper.readValue(json, InternalGroupChatPolicies.class);
+      var stored = objectMapper.readValue(json, InternalGroupChatPolicies.class);
+      if (stored == null
+          || (stored.getRecipientScope() != null && toDomain(stored.getRecipientScope()) == null)) {
+        throw new TenantSettingsUnavailableException();
+      }
+      return stored;
     } catch (JsonProcessingException exception) {
-      throw mappingFailure("deserialize internal group chat policies", exception);
+      throw new TenantSettingsUnavailableException();
     }
   }
 
@@ -369,11 +384,15 @@ public class TenantPermissionPolicyService {
 
   private Map<String, PolicyValue<Boolean>> deserialize(TenantPermissionPolicyEntity entity) {
     try {
-      return withoutRetiredPolicy(
+      var stored =
           objectMapper.readValue(
-              entity.getPolicies(), new TypeReference<Map<String, PolicyValue<Boolean>>>() {}));
-    } catch (JsonProcessingException exception) {
-      throw mappingFailure("deserialize permission policies", exception);
+              entity.getPolicies(), new TypeReference<Map<String, PolicyValue<Boolean>>>() {});
+      if (stored == null) throw new TenantSettingsUnavailableException();
+      var policies = withoutRetiredPolicy(stored);
+      if (policies.containsValue(null)) throw new TenantSettingsUnavailableException();
+      return policies;
+    } catch (JsonProcessingException | IllegalArgumentException exception) {
+      throw new TenantSettingsUnavailableException();
     }
   }
 

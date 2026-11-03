@@ -1101,16 +1101,17 @@ public class TenantServiceFacade {
     Map<Long, Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>>>
         policiesByTenant = tenantPermissionPolicyService.getResolvedPolicies(resolvedTenantIds);
     Map<Long, com.vi.tenantservice.api.model.InternalGroupChatPolicies> internalGroupChatByTenant =
-        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantIds);
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(
+            policiesByTenant.keySet());
     return tenants.stream()
-        .filter(dto -> policiesByTenant.containsKey(dto.getId()))
+        .filter(dto -> internalGroupChatByTenant.containsKey(dto.getId()))
         .map(
             dto ->
                 withEffectiveSettings(
                     dto,
                     controls,
                     platformTheming,
-                    policiesByTenant.getOrDefault(dto.getId(), Map.of()),
+                    policiesByTenant.get(dto.getId()),
                     internalGroupChatByTenant.get(dto.getId())))
         .toList();
   }

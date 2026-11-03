@@ -96,6 +96,10 @@ class TenantControllerIT {
 
   @Autowired private com.vi.tenantservice.api.repository.TenantRepository tenantRepository;
 
+  @Autowired
+  private com.vi.tenantservice.api.repository.TenantPermissionPolicyRepository
+      permissionPolicyRepository;
+
   @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
   @Autowired
@@ -1242,6 +1246,33 @@ class TenantControllerIT {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$", hasSize(1)))
         .andExpect(jsonPath("$[0].id").value(2));
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+  void malformedPersistedTypedPolicyFailsClosedWithoutHidingOtherTenants(boolean internal)
+      throws Exception {
+    var policy =
+        permissionPolicyRepository.saveAndFlush(
+            com.vi.tenantservice.api.model.TenantPermissionPolicyEntity.builder()
+                .tenantId(1L)
+                .policies(internal ? "{}" : "{")
+                .internalGroupChatPolicies(internal ? "{" : null)
+                .updateDate(java.time.LocalDateTime.now())
+                .build());
+    try {
+      mockMvc
+          .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+          .andExpect(status().isInternalServerError());
+      mockMvc
+          .perform(
+              post(PUBLIC_TENANT_RESOURCE_BY_IDS).contentType(APPLICATION_JSON).content("[1, 2]"))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$", hasSize(1)))
+          .andExpect(jsonPath("$[0].id").value(2));
+    } finally {
+      permissionPolicyRepository.delete(policy);
+    }
   }
 
   @Test
