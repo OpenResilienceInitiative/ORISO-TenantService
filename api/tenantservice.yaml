@@ -1437,7 +1437,7 @@ paths:
     put:
       tags:
         - tenant-controller
-      summary: 'Publishes the tenant DPA text and stamps a new version [Authorization: Authority.UPDATE_TENANT]'
+      summary: 'Publishes the tenant DPA text and stamps a new version [Authorization: Authority.UPDATE_TENANT and the platform administrator (tenant 0, not the technical identity)]'
       operationId: publishDataProcessingAgreement
       parameters:
         - name: id
@@ -1472,7 +1472,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DpaGateStatusDTO'
         403:
-          description: FORBIDDEN - not authorized to access this tenant
+          description: FORBIDDEN - the caller is not a platform administrator (a Traeger admin or the technical identity may not publish, not even for their own tenant)
         404:
           description: NOT FOUND - tenant does not exist
         409:
@@ -1484,7 +1484,7 @@ paths:
     put:
       tags:
         - tenant-controller
-      summary: 'Publishes the tenant DPA text and stamps a new version [Authorization: Authority.UPDATE_TENANT]'
+      summary: 'Publishes the tenant DPA text and stamps a new version [Authorization: Authority.UPDATE_TENANT and the platform administrator (tenant 0, not the technical identity)]'
       operationId: publishDataProcessingAgreementV2
       parameters:
         - name: id
@@ -1528,7 +1528,7 @@ paths:
         400:
           description: BAD REQUEST - missing, invalid or nonfuture signing deadline
         403:
-          description: FORBIDDEN - not authorized to access this tenant
+          description: FORBIDDEN - the caller is not a platform administrator (a Traeger admin or the technical identity may not publish, not even for their own tenant)
         404:
           description: NOT FOUND - tenant does not exist
         500:
