@@ -322,7 +322,8 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   @PreAuthorize(
-      "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')")
+      "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
   public ResponseEntity<TenantDTO> getTenantById(@NotNull Long id) {
 
     var tenantById = tenantServiceFacade.findTenantById(id);

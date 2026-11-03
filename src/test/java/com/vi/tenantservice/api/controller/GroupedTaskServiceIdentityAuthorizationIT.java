@@ -166,6 +166,16 @@ class GroupedTaskServiceIdentityAuthorizationIT {
   }
 
   @Test
+  void setupActorReadsTheTenantForTheInviteLicenceCheck() throws Exception {
+    var setup = actor("setup-subject", "backend-setup", SETUP_ROLES, "tenantservice");
+    var runtime = actor("runtime-subject", "backend-runtime", RUNTIME_ROLES, "tenantservice");
+    mvc.perform(get("/tenant/2").with(setup))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(2));
+    mvc.perform(get("/tenant/2").with(runtime)).andExpect(status().isForbidden());
+  }
+
+  @Test
   void wrongActorAudienceAndInheritedHumanGrantsCannotUseTaskOrHumanRoutes() throws Exception {
     for (var caller :
         List.of(
@@ -189,6 +199,7 @@ class GroupedTaskServiceIdentityAuthorizationIT {
       mvc.perform(get("/tenantadmin/1/dpa/versions").with(caller))
           .andExpect(status().isForbidden());
       mvc.perform(get("/tenant").with(caller)).andExpect(status().isForbidden());
+      mvc.perform(get("/tenant/2").with(caller)).andExpect(status().isForbidden());
     }
   }
 
