@@ -64,7 +64,9 @@ public class TenantSettings {
   Boolean featureAskerEmailEnabled;
 
   Boolean featureAskerEmailCollectionAgencyCounsellingEnabled;
-  Boolean featureAskerEmailCollectionLiveChatEnabled;
+  Boolean featureDisplayNameEditableAgencyCounsellingEnabled;
+  Boolean featureDisplayNameEditableLiveChatEnabled;
+  Boolean featureDisplayNameEditableSelfHelpEnabled;
   Boolean featureAskerEmailCollectionSelfHelpEnabled;
 
   Boolean featureAskerEmailAgencyCounsellingEnabled;
@@ -171,7 +173,9 @@ public class TenantSettings {
               Map.entry("featureDisplayNameEditable", true),
               Map.entry("featureAskerEmailEnabled", true),
               Map.entry("featureAskerEmailCollectionAgencyCounsellingEnabled", true),
-              Map.entry("featureAskerEmailCollectionLiveChatEnabled", true),
+              Map.entry("featureDisplayNameEditableAgencyCounsellingEnabled", true),
+              Map.entry("featureDisplayNameEditableLiveChatEnabled", true),
+              Map.entry("featureDisplayNameEditableSelfHelpEnabled", true),
               Map.entry("featureAskerEmailCollectionSelfHelpEnabled", true),
               Map.entry("featureAskerEmailAgencyCounsellingEnabled", true),
               Map.entry("featureAskerEmailLiveChatEnabled", false),
@@ -378,9 +382,17 @@ public class TenantSettings {
       featureAskerEmailCollectionAgencyCounsellingEnabled =
           BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailCollectionAgencyCounsellingEnabled");
     }
-    if (featureAskerEmailCollectionLiveChatEnabled == null) {
-      featureAskerEmailCollectionLiveChatEnabled =
-          BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailCollectionLiveChatEnabled");
+    if (featureDisplayNameEditableAgencyCounsellingEnabled == null) {
+      featureDisplayNameEditableAgencyCounsellingEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDisplayNameEditableAgencyCounsellingEnabled");
+    }
+    if (featureDisplayNameEditableLiveChatEnabled == null) {
+      featureDisplayNameEditableLiveChatEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDisplayNameEditableLiveChatEnabled");
+    }
+    if (featureDisplayNameEditableSelfHelpEnabled == null) {
+      featureDisplayNameEditableSelfHelpEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDisplayNameEditableSelfHelpEnabled");
     }
     if (featureAskerEmailCollectionSelfHelpEnabled == null) {
       featureAskerEmailCollectionSelfHelpEnabled =

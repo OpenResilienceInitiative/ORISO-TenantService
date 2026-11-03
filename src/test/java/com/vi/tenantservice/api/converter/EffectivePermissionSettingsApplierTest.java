@@ -188,7 +188,7 @@ class EffectivePermissionSettingsApplierTest {
   @org.junit.jupiter.params.provider.ValueSource(
       strings = {
         "featureAskerEmailCollectionAgencyCounsellingEnabled",
-        "featureAskerEmailCollectionLiveChatEnabled",
+        "featureDisplayNameEditableLiveChatEnabled",
         "featureAskerEmailCollectionSelfHelpEnabled"
       })
   void projectsAnInheritedCollectionRequirementWithoutChangingDelivery(String key) {
@@ -210,8 +210,8 @@ class EffectivePermissionSettingsApplierTest {
   @org.junit.jupiter.params.provider.CsvSource({
     "featureAskerEmailCollectionAgencyCounsellingEnabled,true",
     "featureAskerEmailCollectionAgencyCounsellingEnabled,false",
-    "featureAskerEmailCollectionLiveChatEnabled,true",
-    "featureAskerEmailCollectionLiveChatEnabled,false",
+    "featureDisplayNameEditableLiveChatEnabled,true",
+    "featureDisplayNameEditableLiveChatEnabled,false",
     "featureAskerEmailCollectionSelfHelpEnabled,true",
     "featureAskerEmailCollectionSelfHelpEnabled,false"
   })

@@ -139,7 +139,7 @@ class PermissionPolicyOpenApiContractTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void openApiExposesSeparateOptionalCollectionKeysWithCompatibleDefaults() throws IOException {
+  void openApiExposesSeparateOptionalAccountPolicyKeysWithCompatibleDefaults() throws IOException {
     Map<String, Object> spec = new Yaml().load(Files.readString(Path.of("api/tenantservice.yaml")));
     var schemas =
         (Map<String, Object>) ((Map<String, Object>) spec.get("components")).get("schemas");
@@ -147,10 +147,14 @@ class PermissionPolicyOpenApiContractTest {
         (Map<String, Object>) ((Map<String, Object>) schemas.get("Settings")).get("properties");
     var keys =
         (List<String>) ((Map<String, Object>) schemas.get("PermissionFeatureKey")).get("enum");
+    assertThat(keys).doesNotContain("featureAskerEmailCollectionLiveChatEnabled");
+    assertThat(properties).doesNotContainKey("featureAskerEmailCollectionLiveChatEnabled");
     for (String key :
         List.of(
             "featureAskerEmailCollectionAgencyCounsellingEnabled",
-            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureDisplayNameEditableAgencyCounsellingEnabled",
+            "featureDisplayNameEditableLiveChatEnabled",
+            "featureDisplayNameEditableSelfHelpEnabled",
             "featureAskerEmailCollectionSelfHelpEnabled")) {
       assertThat(keys).contains(key);
       assertThat(properties).containsKey(key);
@@ -166,13 +170,15 @@ class PermissionPolicyOpenApiContractTest {
   }
 
   @Test
-  void collectionInputDistinguishesOmissionNullFalseAndTrueWhileDomainDefaultsRemainTrue()
+  void accountPolicyInputDistinguishesOmissionNullFalseAndTrueWhileDomainDefaultsRemainTrue()
       throws Exception {
     var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
     for (String key :
         List.of(
             "featureAskerEmailCollectionAgencyCounsellingEnabled",
-            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureDisplayNameEditableAgencyCounsellingEnabled",
+            "featureDisplayNameEditableLiveChatEnabled",
+            "featureDisplayNameEditableSelfHelpEnabled",
             "featureAskerEmailCollectionSelfHelpEnabled")) {
       String getter = "get" + Character.toUpperCase(key.charAt(0)) + key.substring(1);
       assertThat(

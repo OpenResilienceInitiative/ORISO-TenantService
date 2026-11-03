@@ -758,7 +758,9 @@ class TenantControllerIT {
     var keys =
         java.util.List.of(
             "featureAskerEmailCollectionAgencyCounsellingEnabled",
-            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureDisplayNameEditableAgencyCounsellingEnabled",
+            "featureDisplayNameEditableLiveChatEnabled",
+            "featureDisplayNameEditableSelfHelpEnabled",
             "featureAskerEmailCollectionSelfHelpEnabled");
     var first =
         (com.fasterxml.jackson.databind.node.ObjectNode)
@@ -803,7 +805,9 @@ class TenantControllerIT {
     var keys =
         java.util.List.of(
             "featureAskerEmailCollectionAgencyCounsellingEnabled",
-            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureDisplayNameEditableAgencyCounsellingEnabled",
+            "featureDisplayNameEditableLiveChatEnabled",
+            "featureDisplayNameEditableSelfHelpEnabled",
             "featureAskerEmailCollectionSelfHelpEnabled");
     var first =
         (com.fasterxml.jackson.databind.node.ObjectNode)
@@ -1221,6 +1225,23 @@ class TenantControllerIT {
         .andExpect(jsonPath("$[0].id").value(1))
         .andExpect(jsonPath("$[0].name").exists())
         .andExpect(jsonPath("$[0].licensing").doesNotExist());
+  }
+
+  @Test
+  void unreadableTenantSettingsAreServerErrorForDirectReadsAndOmittedFromBatch() throws Exception {
+    var tenant = tenantRepository.findById(1L).orElseThrow();
+    tenant.setSettings("{\"featureDisplayNameEditableLiveChatEnabled\":\"false\"}");
+    tenantRepository.saveAndFlush(tenant);
+
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isInternalServerError());
+    mockMvc
+        .perform(
+            post(PUBLIC_TENANT_RESOURCE_BY_IDS).contentType(APPLICATION_JSON).content("[1, 2]"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$", hasSize(1)))
+        .andExpect(jsonPath("$[0].id").value(2));
   }
 
   @Test

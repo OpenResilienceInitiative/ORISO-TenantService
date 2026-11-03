@@ -1046,7 +1046,7 @@ class TenantConverterTest {
             Map.of(
                 "featureAskerEmailEnabled", false,
                 "featureAskerEmailCollectionAgencyCounsellingEnabled", false,
-                "featureAskerEmailCollectionLiveChatEnabled", true,
+                "featureDisplayNameEditableLiveChatEnabled", true,
                 "featureAskerEmailCollectionSelfHelpEnabled", false),
             Settings.class);
     var input = new MultilingualTenantTestDataBuilder().tenantDTO().withTheming().build();
@@ -1058,7 +1058,7 @@ class TenantConverterTest {
     assertThat(json.has("featureAskerEmailCollectionAgencyCounsellingEnabled")).isTrue();
     assertThat(json.path("featureAskerEmailCollectionAgencyCounsellingEnabled").asBoolean())
         .isFalse();
-    assertThat(json.path("featureAskerEmailCollectionLiveChatEnabled").asBoolean()).isTrue();
+    assertThat(json.path("featureDisplayNameEditableLiveChatEnabled").asBoolean()).isTrue();
     assertThat(json.has("featureAskerEmailCollectionSelfHelpEnabled")).isTrue();
     assertThat(json.path("featureAskerEmailCollectionSelfHelpEnabled").asBoolean()).isFalse();
   }

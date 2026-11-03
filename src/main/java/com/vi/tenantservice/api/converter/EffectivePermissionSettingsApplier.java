@@ -23,10 +23,12 @@ public class EffectivePermissionSettingsApplier {
 
   // These new choices have no legacy raw-toggle override. The canonical policy also supplies
   // their effective inherited default; legacy feature hints below retain their old behavior.
-  private static final java.util.Set<String> CANONICAL_COLLECTION_DEFAULTS =
+  private static final java.util.Set<String> CANONICAL_ACCOUNT_POLICY_DEFAULTS =
       java.util.Set.of(
           "featureAskerEmailCollectionAgencyCounsellingEnabled",
-          "featureAskerEmailCollectionLiveChatEnabled",
+          "featureDisplayNameEditableAgencyCounsellingEnabled",
+          "featureDisplayNameEditableLiveChatEnabled",
+          "featureDisplayNameEditableSelfHelpEnabled",
           "featureAskerEmailCollectionSelfHelpEnabled");
 
   private static final Map<String, BiConsumer<Settings, Boolean>> POLICY_SETTERS =
@@ -139,8 +141,14 @@ public class EffectivePermissionSettingsApplier {
               "featureAskerEmailCollectionAgencyCounsellingEnabled",
               Settings::setFeatureAskerEmailCollectionAgencyCounsellingEnabled),
           Map.entry(
-              "featureAskerEmailCollectionLiveChatEnabled",
-              Settings::setFeatureAskerEmailCollectionLiveChatEnabled),
+              "featureDisplayNameEditableAgencyCounsellingEnabled",
+              Settings::setFeatureDisplayNameEditableAgencyCounsellingEnabled),
+          Map.entry(
+              "featureDisplayNameEditableLiveChatEnabled",
+              Settings::setFeatureDisplayNameEditableLiveChatEnabled),
+          Map.entry(
+              "featureDisplayNameEditableSelfHelpEnabled",
+              Settings::setFeatureDisplayNameEditableSelfHelpEnabled),
           Map.entry(
               "featureAskerEmailCollectionSelfHelpEnabled",
               Settings::setFeatureAskerEmailCollectionSelfHelpEnabled),
@@ -293,7 +301,7 @@ public class EffectivePermissionSettingsApplier {
               && policy != null
               && (policy.getMode() == PermissionPolicyMode.ENFORCED
                   || Boolean.FALSE.equals(policy.getInherited())
-                  || CANONICAL_COLLECTION_DEFAULTS.contains(feature))) {
+                  || CANONICAL_ACCOUNT_POLICY_DEFAULTS.contains(feature))) {
             setter.accept(settings, policy.getValue());
           }
         });

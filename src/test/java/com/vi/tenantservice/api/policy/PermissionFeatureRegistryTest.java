@@ -45,10 +45,12 @@ class PermissionFeatureRegistryTest {
   @org.junit.jupiter.params.provider.ValueSource(
       strings = {
         "featureAskerEmailCollectionAgencyCounsellingEnabled",
-        "featureAskerEmailCollectionLiveChatEnabled",
+        "featureDisplayNameEditableAgencyCounsellingEnabled",
+        "featureDisplayNameEditableLiveChatEnabled",
+        "featureDisplayNameEditableSelfHelpEnabled",
         "featureAskerEmailCollectionSelfHelpEnabled"
       })
-  void registrySeparatesOptionalEmailCollectionFromDelivery(String key) {
+  void registryProvidesIndependentAccountPreferences(String key) {
     var collection = PermissionFeature.byApiKey(key);
     assertThat(collection).isPresent();
     assertThat(collection.orElseThrow().defaultValue()).isTrue();

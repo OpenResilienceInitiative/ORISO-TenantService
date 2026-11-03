@@ -18,6 +18,7 @@ import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
+import com.vi.tenantservice.api.exception.TenantSettingsUnavailableException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import com.vi.tenantservice.api.model.AccountInactivitySettings;
@@ -655,7 +656,7 @@ public class TenantServiceFacade {
     validateSelectedOwnSmtp(updatedEntity, existingSettingsJson, sanitizedTenantDTO);
     preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     preserveStoredDirectInviteFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
-    preserveStoredCollectionFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
+    preserveStoredAccountFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     var entityToSave = updatedEntity;
     updatedEntity =
@@ -830,28 +831,34 @@ public class TenantServiceFacade {
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }
 
-  private void preserveStoredCollectionFlags(
+  private void preserveStoredAccountFlags(
       String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
     if (existingSettingsJson == null || updatedEntity.getSettings() == null) return;
     Settings request = tenantDTO.getSettings();
-    boolean agencyOmitted =
-        request == null || request.getFeatureAskerEmailCollectionAgencyCounsellingEnabled() == null;
-    boolean liveOmitted =
-        request == null || request.getFeatureAskerEmailCollectionLiveChatEnabled() == null;
-    boolean selfHelpOmitted =
-        request == null || request.getFeatureAskerEmailCollectionSelfHelpEnabled() == null;
-    if (!agencyOmitted && !liveOmitted && !selfHelpOmitted) return;
     TenantSettings existingSettings = convertFromJson(existingSettingsJson);
     TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
-    if (agencyOmitted)
+    if (request == null
+        || request.getFeatureAskerEmailCollectionAgencyCounsellingEnabled() == null) {
       updatedSettings.setFeatureAskerEmailCollectionAgencyCounsellingEnabled(
           existingSettings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled());
-    if (liveOmitted)
-      updatedSettings.setFeatureAskerEmailCollectionLiveChatEnabled(
-          existingSettings.getFeatureAskerEmailCollectionLiveChatEnabled());
-    if (selfHelpOmitted)
+    }
+    if (request == null || request.getFeatureAskerEmailCollectionSelfHelpEnabled() == null) {
       updatedSettings.setFeatureAskerEmailCollectionSelfHelpEnabled(
           existingSettings.getFeatureAskerEmailCollectionSelfHelpEnabled());
+    }
+    if (request == null
+        || request.getFeatureDisplayNameEditableAgencyCounsellingEnabled() == null) {
+      updatedSettings.setFeatureDisplayNameEditableAgencyCounsellingEnabled(
+          existingSettings.getFeatureDisplayNameEditableAgencyCounsellingEnabled());
+    }
+    if (request == null || request.getFeatureDisplayNameEditableLiveChatEnabled() == null) {
+      updatedSettings.setFeatureDisplayNameEditableLiveChatEnabled(
+          existingSettings.getFeatureDisplayNameEditableLiveChatEnabled());
+    }
+    if (request == null || request.getFeatureDisplayNameEditableSelfHelpEnabled() == null) {
+      updatedSettings.setFeatureDisplayNameEditableSelfHelpEnabled(
+          existingSettings.getFeatureDisplayNameEditableSelfHelpEnabled());
+    }
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }
 
@@ -1076,7 +1083,16 @@ public class TenantServiceFacade {
     Theming platformTheming = getPlatformTheming(lang);
     List<RestrictedTenantDTO> tenants =
         tenantService.findRestrictedTenantDataByIds(ids).stream()
-            .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
+            .flatMap(
+                tenant -> {
+                  try {
+                    return java.util.stream.Stream.of(
+                        tenantConverter.toRestrictedTenantDTO(tenant, lang));
+                  } catch (TenantSettingsUnavailableException unreadable) {
+                    log.warn("Omitting tenant {} with unreadable settings", tenant.getId());
+                    return java.util.stream.Stream.empty();
+                  }
+                })
             .toList();
     Set<Long> resolvedTenantIds =
         tenants.stream()
@@ -1087,6 +1103,7 @@ public class TenantServiceFacade {
     Map<Long, com.vi.tenantservice.api.model.InternalGroupChatPolicies> internalGroupChatByTenant =
         tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantIds);
     return tenants.stream()
+        .filter(dto -> policiesByTenant.containsKey(dto.getId()))
         .map(
             dto ->
                 withEffectiveSettings(
@@ -1142,7 +1159,9 @@ public class TenantServiceFacade {
             com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL,
             com.vi.tenantservice.api.policy.PermissionFeature
                 .ASKER_EMAIL_COLLECTION_AGENCY_COUNSELLING,
-            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL_COLLECTION_LIVE_CHAT,
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_AGENCY_COUNSELLING,
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_LIVE_CHAT,
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_SELF_HELP,
             com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL_COLLECTION_SELF_HELP)) {
       // Missing selected authority must never fall back to a permissive main-tenant value.
       var selectedPolicy = selected.get(feature.apiKey());

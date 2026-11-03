@@ -134,7 +134,7 @@ class SingleDomainTenantOverrideServiceTest {
             "featureDisplayNameEditable",
             "featureAskerEmailEnabled",
             "featureAskerEmailCollectionAgencyCounsellingEnabled",
-            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureDisplayNameEditableLiveChatEnabled",
             "featureAskerEmailCollectionSelfHelpEnabled",
             "emailVisible",
             "emailRequired")) {
@@ -149,7 +149,7 @@ class SingleDomainTenantOverrideServiceTest {
         .featureDisplayNameEditable(allowed)
         .featureAskerEmailEnabled(allowed)
         .featureAskerEmailCollectionAgencyCounsellingEnabled(allowed)
-        .featureAskerEmailCollectionLiveChatEnabled(allowed)
+        .featureDisplayNameEditableLiveChatEnabled(allowed)
         .featureAskerEmailCollectionSelfHelpEnabled(allowed)
         .emailVisible(allowed)
         .emailRequired(allowed);

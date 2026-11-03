@@ -131,7 +131,9 @@ class TenantSettingsTest {
   @org.junit.jupiter.params.provider.ValueSource(
       strings = {
         "featureAskerEmailCollectionAgencyCounsellingEnabled",
-        "featureAskerEmailCollectionLiveChatEnabled",
+        "featureDisplayNameEditableAgencyCounsellingEnabled",
+        "featureDisplayNameEditableLiveChatEnabled",
+        "featureDisplayNameEditableSelfHelpEnabled",
         "featureAskerEmailCollectionSelfHelpEnabled"
       })
   void collectionDefaultsPreserveLegacyAndStoredFalseIndependentlyOfTheMaster(String key)

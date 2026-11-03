@@ -55,8 +55,12 @@ public class SingleDomainTenantOverrideService {
     mainSettings.setFeatureAskerEmailEnabled(actualSettings.getFeatureAskerEmailEnabled());
     mainSettings.setFeatureAskerEmailCollectionAgencyCounsellingEnabled(
         actualSettings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled());
-    mainSettings.setFeatureAskerEmailCollectionLiveChatEnabled(
-        actualSettings.getFeatureAskerEmailCollectionLiveChatEnabled());
+    mainSettings.setFeatureDisplayNameEditableAgencyCounsellingEnabled(
+        actualSettings.getFeatureDisplayNameEditableAgencyCounsellingEnabled());
+    mainSettings.setFeatureDisplayNameEditableLiveChatEnabled(
+        actualSettings.getFeatureDisplayNameEditableLiveChatEnabled());
+    mainSettings.setFeatureDisplayNameEditableSelfHelpEnabled(
+        actualSettings.getFeatureDisplayNameEditableSelfHelpEnabled());
     mainSettings.setFeatureAskerEmailCollectionSelfHelpEnabled(
         actualSettings.getFeatureAskerEmailCollectionSelfHelpEnabled());
     mainSettings.setEmailVisible(actualSettings.getEmailVisible());

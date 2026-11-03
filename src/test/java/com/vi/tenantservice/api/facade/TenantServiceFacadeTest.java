@@ -71,6 +71,7 @@ import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDT
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -1032,6 +1033,9 @@ class TenantServiceFacadeTest {
     when(converter.toRestrictedTenantDTO(secondTenant, DE)).thenReturn(secondDto);
     when(tenantAdminControlsService.getControls()).thenReturn(new TenantAdminControls());
 
+    when(tenantPermissionPolicyService.getResolvedPolicies(Set.of(1L, 2L)))
+        .thenReturn(Map.of(1L, Map.of(), 2L, Map.of()));
+
     var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
 
     assertThat(result).containsExactly(firstDto, secondDto);
@@ -1430,7 +1434,7 @@ class TenantServiceFacadeTest {
   @org.junit.jupiter.params.provider.ValueSource(
       strings = {
         "featureAskerEmailCollectionAgencyCounsellingEnabled",
-        "featureAskerEmailCollectionLiveChatEnabled",
+        "featureDisplayNameEditableLiveChatEnabled",
         "featureAskerEmailCollectionSelfHelpEnabled"
       })
   void singlePublicTenantProjectsEachCollectionRequirementWithMatchingMetadata(String key) {
@@ -1468,7 +1472,7 @@ class TenantServiceFacadeTest {
             "featureDisplayNameEditable",
             "featureAskerEmailEnabled",
             "featureAskerEmailCollectionAgencyCounsellingEnabled",
-            "featureAskerEmailCollectionLiveChatEnabled",
+            "featureDisplayNameEditableLiveChatEnabled",
             "featureAskerEmailCollectionSelfHelpEnabled")
         .flatMap(
             key ->
