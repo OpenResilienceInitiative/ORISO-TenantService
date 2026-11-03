@@ -11,12 +11,12 @@ import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.TenantContent;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantSetting;
-import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.ResolvedPolicyValue;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
+import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.FeatureToggleDTO;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.config.security.TaskServiceIdentity;
@@ -42,6 +42,8 @@ public class TenantFacadeAuthorisationService {
   private final @NonNull TenantFacadeChangeDetectionService tenantFacadeChangeDetectionService;
 
   private final @NonNull ApplicationSettingsService applicationSettingsService;
+
+  private final @NonNull ConsultingTypeService consultingTypeService;
 
   private final @NonNull TenantAdminControlsService tenantAdminControlsService;
 
@@ -228,26 +230,38 @@ public class TenantFacadeAuthorisationService {
   }
 
   /**
-   * The platform admin can take branding away from Träger admins via {@code
-   * allowedPermissionToggles.appearance}. Until now that switch only greyed out the admin panel's
-   * "Individuelle Bilder" card, so the same change still went through over the API. See
-   * TenantService#174.
+   * The platform admin can take editing rights away from Träger admins via {@code
+   * allowedPermissionToggles.appearance} (TenantService#174, #345). Until now that switch only
+   * greyed out the cards in the admin panel, so the same change still went through over the API.
+   * {@link AppearanceLockedFields} is the list of what it locks.
    *
    * <p>Only an explicit {@code false} restricts anything: legacy rows carry no controls at all, and
    * an absent toggle must keep meaning "allowed" rather than silently locking every existing Träger
-   * out of its own branding.
+   * out of its own settings.
    */
   private void assertSingleTenantAdminMayChangeAppearance(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenant) {
-    if (appearanceChangesAllowedForTenantAdmins(existingTenant.getId())
-        || !themingChanged(sanitizedTenantDTO, existingTenant)) {
+    if (appearanceChangesAllowedForTenantAdmins(existingTenant.getId())) {
+      return;
+    }
+    List<String> lockedFields =
+        AppearanceLockedFields.changed(
+            sanitizedTenantDTO, existingTenant, () -> storedFormOfAddress(existingTenant.getId()));
+    if (lockedFields.isEmpty()) {
       return;
     }
 
     logAndThrowTenantAuthorisationException(
-        "Single tenant admin cannot change appearance for tenant with id: "
+        "Single tenant admin cannot change "
+            + lockedFields
+            + " for tenant with id: "
             + existingTenant.getId(),
         HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE);
+  }
+
+  private Boolean storedFormOfAddress(Long tenantId) {
+    var consultingType = consultingTypeService.getConsultingTypesByTenantId(tenantId.intValue());
+    return consultingType == null ? null : consultingType.getLanguageFormal();
   }
 
   /**
@@ -281,43 +295,6 @@ public class TenantFacadeAuthorisationService {
     }
 
     return !Boolean.FALSE.equals(controls.getAllowedPermissionToggles().getAppearance());
-  }
-
-  /**
-   * Compares the submitted branding against what is stored. The admin panel sends whole tenant
-   * payloads, so every other card's save carries the theming block too - rejecting on its mere
-   * presence would lock a restricted Träger admin out of settings that have nothing to do with
-   * branding. Only a real difference counts.
-   */
-  private boolean themingChanged(MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existing) {
-    var theming = sanitizedTenantDTO.getTheming();
-    if (theming == null) {
-      return false;
-    }
-
-    return !Objects.equals(
-            blankToNull(theming.getAssistantName()),
-            blankToNull(existing.getThemingAssistantName()))
-        || !Objects.equals(
-            blankToNull(theming.getAssistantIcon()),
-            blankToNull(existing.getThemingAssistantIcon()))
-        || !Objects.equals(theming.getLogo(), existing.getThemingLogo())
-        || !Objects.equals(theming.getFavicon(), existing.getThemingFavicon())
-        || !Objects.equals(theming.getAssociationLogo(), existing.getThemingAssociationLogo())
-        || !Objects.equals(theming.getPrimaryColor(), existing.getThemingPrimaryColor())
-        || !Objects.equals(theming.getSecondaryColor(), existing.getThemingSecondaryColor())
-        || !Objects.equals(theming.getAccent(), existing.getThemingAccent())
-        || !Objects.equals(theming.getSignal(), existing.getThemingSignal())
-        || !Objects.equals(loginEffectValue(theming), existing.getThemingLoginEffect());
-  }
-
-  private static String blankToNull(String value) {
-    return value == null || value.isBlank() ? null : value;
-  }
-
-  /** Mirrors TenantConverter: the effect is stored as the enum name, null stays null. */
-  private String loginEffectValue(Theming theming) {
-    return theming.getLoginEffect() == null ? null : theming.getLoginEffect().getValue();
   }
 
   private void assertSingleTenantAdminDoesNotTryToChangeLicensingInformation(

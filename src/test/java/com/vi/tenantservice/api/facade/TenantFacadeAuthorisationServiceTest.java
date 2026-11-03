@@ -13,8 +13,11 @@ import com.google.common.collect.Lists;
 import com.vi.tenantservice.api.authorisation.Authority;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
+import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.Licensing;
+import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
+import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantEntity;
@@ -27,8 +30,12 @@ import com.vi.tenantservice.api.policy.ResolvedPolicyValue;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
+import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.config.security.AuthorisationService;
+import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,6 +58,8 @@ class TenantFacadeAuthorisationServiceTest {
   @Mock TenantFacadeChangeDetectionService tenantFacadeChangeDetectionService;
 
   @Mock ApplicationSettingsService applicationSettingsService;
+
+  @Mock ConsultingTypeService consultingTypeService;
 
   @Mock TenantAdminControlsService tenantAdminControlsService;
 
@@ -832,5 +841,138 @@ class TenantFacadeAuthorisationServiceTest {
                                     .assistantIcon("robot-7341990")),
                         tenantWithLogo(null)))
         .doesNotThrowAnyException();
+  }
+
+  // --- Everything the switch locks, not only branding (TenantService#345) ---------------------
+
+  private void assertRefusedAsAppearance(MultilingualTenantDTO changed, TenantEntity existing) {
+    var denied =
+        assertThrows(
+            TenantAuthorisationException.class,
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(changed, existing));
+    assertThat(denied.getCustomHttpHeaders().getFirst("X-Reason"))
+        .isEqualTo(HttpStatusExceptionReason.NOT_ALLOWED_TO_CHANGE_APPEARANCE.name());
+  }
+
+  private void assertAccepted(MultilingualTenantDTO submitted, TenantEntity existing) {
+    assertThatCode(
+            () ->
+                tenantFacadeAuthorisationService
+                    .assertUserHasSufficientPermissionsToChangeAttributes(submitted, existing))
+        .doesNotThrowAnyException();
+  }
+
+  private TenantEntity storedTenant() {
+    var tenant = tenantWithLogo(null);
+    tenant.setName("Happylife");
+    tenant.setContentClaim("{\"de\":\"Old slogan\"}");
+    return tenant;
+  }
+
+  private MultilingualTenantDTO wholeObject() {
+    return new MultilingualTenantDTO("Happylife")
+        .content(new MultilingualContent().claim(Map.of("de", "Old slogan")))
+        .theming(new Theming())
+        .settings(new Settings());
+  }
+
+  @Test
+  void restrictedAdministratorCannotChangeNameSloganOrLanguages() {
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(false);
+
+    assertRefusedAsAppearance(wholeObject().name("Renamed"), storedTenant());
+    assertRefusedAsAppearance(
+        wholeObject().content(new MultilingualContent().claim(Map.of("de", "New slogan"))),
+        storedTenant());
+    assertRefusedAsAppearance(
+        wholeObject().settings(new Settings().activeLanguages(List.of("de", "en"))),
+        storedTenant());
+  }
+
+  @Test
+  void restrictedAdministratorCannotChangeFormOfAddress() {
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(false);
+    when(consultingTypeService.getConsultingTypesByTenantId((int) ID))
+        .thenReturn(new FullConsultingTypeResponseDTO().languageFormal(false));
+
+    assertRefusedAsAppearance(
+        wholeObject()
+            .settings(
+                new Settings().extendedSettings(new ConsultingTypePatchDTO().languageFormal(true))),
+        storedTenant());
+  }
+
+  @Test
+  void restrictedAdministratorCanSendTheWholeObjectUnchanged() {
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(false);
+    when(consultingTypeService.getConsultingTypesByTenantId((int) ID))
+        .thenReturn(new FullConsultingTypeResponseDTO().languageFormal(false));
+    var echoed =
+        wholeObject()
+            .theming(new Theming().loginEffect(Theming.LoginEffectEnum.NONE))
+            .settings(
+                new Settings()
+                    // a tenant that never stored languages reads as German only
+                    .activeLanguages(List.of("de"))
+                    .extendedSettings(new ConsultingTypePatchDTO().languageFormal(false)));
+
+    assertAccepted(echoed, storedTenant());
+  }
+
+  @Test
+  void restrictedAdministratorCanReorderTheSameLanguages() {
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(false);
+    var stored = storedTenant();
+    stored.setSettings(
+        JsonConverter.convertToJson(
+            TenantSettings.builder().activeLanguages(List.of("de", "en")).build()));
+
+    assertAccepted(
+        wholeObject().settings(new Settings().activeLanguages(List.of("en", "de"))), stored);
+  }
+
+  @Test
+  void restrictedAdministratorCannotClearTheSloganByLeavingItOut() {
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(false);
+
+    assertRefusedAsAppearance(wholeObject().content(new MultilingualContent()), storedTenant());
+  }
+
+  @Test
+  void platformAdministratorChangesEverythingWithoutAnyLookup() {
+    givenPlatformAdmin();
+
+    assertAccepted(
+        wholeObject()
+            .name("Renamed")
+            .settings(
+                new Settings()
+                    .activeLanguages(List.of("de", "en"))
+                    .extendedSettings(new ConsultingTypePatchDTO().languageFormal(true))),
+        storedTenant());
+    org.mockito.Mockito.verifyNoInteractions(consultingTypeService, tenantPermissionPolicyService);
+  }
+
+  @Test
+  void administratorChangesEverythingWhileEditingIsAllowed() {
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(true);
+
+    assertAccepted(
+        wholeObject()
+            .name("Renamed")
+            .settings(
+                new Settings()
+                    .activeLanguages(List.of("de", "en"))
+                    .extendedSettings(new ConsultingTypePatchDTO().languageFormal(true))),
+        storedTenant());
+    org.mockito.Mockito.verifyNoInteractions(consultingTypeService);
   }
 }
