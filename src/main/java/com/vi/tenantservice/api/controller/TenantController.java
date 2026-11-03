@@ -471,7 +471,8 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
+  @PreAuthorize(
+      "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')")
   public ResponseEntity<MultilingualTenantDTO> getMultilingualTenantById(@NotNull Long id) {
     var tenantById = tenantServiceFacade.findMultilingualTenantById(id);
     return tenantById.isEmpty()

@@ -80,6 +80,10 @@ public enum PermissionFeature {
   ASKER_BROWSER_SELF_HELP("featureAskerBrowserSelfHelpEnabled", null),
   CONSULTANT_EMAIL_INTERNAL_GROUP("featureConsultantEmailInternalGroupEnabled", null),
   CONSULTANT_BROWSER_INTERNAL_GROUP("featureConsultantBrowserInternalGroupEnabled", null),
+  // TS#331 / ADR-029 §6: "Direkteinladung erlauben" per conversation type.
+  DIRECT_INVITE_CHAT("featureDirectInviteChatEnabled", null),
+  DIRECT_INVITE_AUDIO("featureDirectInviteAudioEnabled", null),
+  DIRECT_INVITE_VIDEO("featureDirectInviteVideoEnabled", null),
 
   CASE_HANDOVER("caseHandoverEnabled", null);
 

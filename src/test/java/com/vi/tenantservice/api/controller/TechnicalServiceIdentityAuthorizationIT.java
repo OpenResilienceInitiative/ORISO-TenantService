@@ -80,6 +80,7 @@ class TechnicalServiceIdentityAuthorizationIT {
   @Autowired private TenantIdAllocationService tenantIdAllocationService;
   @Autowired private TenantIdReservationRepository reservationRepository;
   @Autowired private JwtAuthConverter jwtAuthConverter;
+  @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
   @MockitoBean private ApplicationSettingsService applicationSettingsService;
 
@@ -141,6 +142,67 @@ class TechnicalServiceIdentityAuthorizationIT {
       mvc.perform(get("/tenantadmin/" + tenantId + "/permission-policies").with(caller))
           .andExpect(status().isOk());
     }
+  }
+
+  // ---- (a2) ORISO-TenantService#310: Erstantwort texts read at send time ----
+
+  @Test
+  void technicalOnly_Should_readTheErstantwortTextsOfAnyTenant() throws Exception {
+    seedErstantwort(1L);
+
+    mvc.perform(get("/tenantadmin/1").with(technicalOnly()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(1))
+        .andExpect(jsonPath("$.content.erstantwortGreeting.de").value("Hallo"))
+        .andExpect(jsonPath("$.content.erstantwortWhoReadsAlong.de").value("Team"))
+        .andExpect(jsonPath("$.content.erstantwortEmergencyAddition.de").value("Notfall"))
+        .andExpect(jsonPath("$.content.erstantwortFreeNotice.de").value("Kostenlos"))
+        .andExpect(jsonPath("$.content.erstantwortClosing.de").value("Gruss"))
+        .andExpect(jsonPath("$.content.erstantwortResponseDeadlineDays").value(3))
+        // read-only: the SMTP password never leaves the service, and no admin data is added
+        .andExpect(jsonPath("$.adminEmails").isEmpty());
+  }
+
+  @Test
+  void technicalOnly_Should_stillNotModifyATenantViaTenantadmin() throws Exception {
+    mvc.perform(
+            put("/tenantadmin/1")
+                .with(technicalOnly())
+                .contentType(APPLICATION_JSON)
+                .content(
+                    new MultilingualTenantTestDataBuilder()
+                        .withName("changed")
+                        .withSubdomain("changed")
+                        .withLicensing()
+                        .jsonify()))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void foreignSubjectWithTechnicalRole_Should_beForbiddenToReadTenantadminById() throws Exception {
+    mvc.perform(get("/tenantadmin/1").with(foreignSubjectWithTechnicalRole()))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void callerWithoutAnyTenantAuthority_Should_beForbiddenToReadTenantadminById() throws Exception {
+    mvc.perform(
+            get("/tenantadmin/1")
+                .with(caller(SERVICE_SUBJECT, Set.of("default-roles-online-beratung"))))
+        .andExpect(status().isForbidden());
+  }
+
+  private void seedErstantwort(long tenantId) {
+    jdbcTemplate.update(
+        "UPDATE TENANT SET content_erstantwort_greeting = ?, content_erstantwort_who_reads_along = ?,"
+            + " content_erstantwort_emergency_addition = ?, content_erstantwort_free_notice = ?,"
+            + " content_erstantwort_closing = ?, erstantwort_response_deadline_days = 3 WHERE id = ?",
+        "{\"de\":\"Hallo\"}",
+        "{\"de\":\"Team\"}",
+        "{\"de\":\"Notfall\"}",
+        "{\"de\":\"Kostenlos\"}",
+        "{\"de\":\"Gruss\"}",
+        tenantId);
   }
 
   // ---- (b) createTenant during public onboarding ----
@@ -265,7 +327,6 @@ class TechnicalServiceIdentityAuthorizationIT {
     mvc.perform(get("/tenantadmin").with(caller)).andExpect(status().isForbidden());
     mvc.perform(get("/tenantadmin/search").param("query", "*").with(caller))
         .andExpect(status().isForbidden());
-    mvc.perform(get("/tenantadmin/1").with(caller)).andExpect(status().isForbidden());
     mvc.perform(
             put("/tenantadmin/1")
                 .with(caller)

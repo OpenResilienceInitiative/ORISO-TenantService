@@ -72,6 +72,10 @@ public class TenantSettings {
   // FE#1725 story 40: counsellor channels for internal group chats, opt-out.
   Boolean featureConsultantEmailInternalGroupEnabled;
   Boolean featureConsultantBrowserInternalGroupEnabled;
+  // TS#331 / ADR-029 §6: counsellors may create direct links per conversation type, opt-out.
+  Boolean featureDirectInviteChatEnabled;
+  Boolean featureDirectInviteAudioEnabled;
+  Boolean featureDirectInviteVideoEnabled;
 
   Boolean featureCallsEnabled;
   Boolean featureSupervisionEnabled;
@@ -170,6 +174,9 @@ public class TenantSettings {
               Map.entry("featureAskerBrowserSelfHelpEnabled", true),
               Map.entry("featureConsultantEmailInternalGroupEnabled", true),
               Map.entry("featureConsultantBrowserInternalGroupEnabled", true),
+              Map.entry("featureDirectInviteChatEnabled", true),
+              Map.entry("featureDirectInviteAudioEnabled", true),
+              Map.entry("featureDirectInviteVideoEnabled", true),
               Map.entry("featureCallsEnabled", true),
               Map.entry("featureSupervisionEnabled", true),
               Map.entry("featureSupervisionAnonymousChatsEnabled", true),
@@ -391,6 +398,17 @@ public class TenantSettings {
     if (featureConsultantBrowserInternalGroupEnabled == null) {
       featureConsultantBrowserInternalGroupEnabled =
           BOOLEAN_FIELD_DEFAULTS.get("featureConsultantBrowserInternalGroupEnabled");
+    }
+    if (featureDirectInviteChatEnabled == null) {
+      featureDirectInviteChatEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureDirectInviteChatEnabled");
+    }
+    if (featureDirectInviteAudioEnabled == null) {
+      featureDirectInviteAudioEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDirectInviteAudioEnabled");
+    }
+    if (featureDirectInviteVideoEnabled == null) {
+      featureDirectInviteVideoEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDirectInviteVideoEnabled");
     }
     applyMediaDefaults();
     if (isVideoCallAllowed == null) {
