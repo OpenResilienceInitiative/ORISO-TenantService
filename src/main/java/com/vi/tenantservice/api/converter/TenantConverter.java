@@ -8,7 +8,11 @@ import static com.vi.tenantservice.api.model.DataProtectionPlaceHolderType.DATA_
 import static com.vi.tenantservice.api.util.JsonConverter.convertMapFromJson;
 import static com.vi.tenantservice.api.util.JsonConverter.convertToJson;
 
+import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
 import com.google.common.collect.Maps;
+import com.vi.tenantservice.api.exception.TenantSettingsUnavailableException;
+import com.vi.tenantservice.api.exception.TenantValidationException;
+import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
@@ -111,6 +115,16 @@ public class TenantConverter {
         .featureAnonymousChatEnabled(settings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(settings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(settings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailCollectionAgencyCounsellingEnabled(
+            settings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled())
+        .featureDisplayNameEditableAgencyCounsellingEnabled(
+            settings.getFeatureDisplayNameEditableAgencyCounsellingEnabled())
+        .featureDisplayNameEditableLiveChatEnabled(
+            settings.getFeatureDisplayNameEditableLiveChatEnabled())
+        .featureDisplayNameEditableSelfHelpEnabled(
+            settings.getFeatureDisplayNameEditableSelfHelpEnabled())
+        .featureAskerEmailCollectionSelfHelpEnabled(
+            settings.getFeatureAskerEmailCollectionSelfHelpEnabled())
         .featureAskerEmailAgencyCounsellingEnabled(
             settings.getFeatureAskerEmailAgencyCounsellingEnabled())
         .featureAskerEmailLiveChatEnabled(settings.getFeatureAskerEmailLiveChatEnabled())
@@ -123,6 +137,9 @@ public class TenantConverter {
             settings.getFeatureConsultantEmailInternalGroupEnabled())
         .featureConsultantBrowserInternalGroupEnabled(
             settings.getFeatureConsultantBrowserInternalGroupEnabled())
+        .featureDirectInviteChatEnabled(settings.getFeatureDirectInviteChatEnabled())
+        .featureDirectInviteAudioEnabled(settings.getFeatureDirectInviteAudioEnabled())
+        .featureDirectInviteVideoEnabled(settings.getFeatureDirectInviteVideoEnabled())
         .featureCallsEnabled(settings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(settings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -486,7 +503,14 @@ public class TenantConverter {
   }
 
   private Settings getSettingsIfNotNull(String settingsJson) {
-    TenantSettings tenantSettings = JsonConverter.convertFromJson(settingsJson).applyDefaults();
+    TenantSettings tenantSettings;
+    try {
+      tenantSettings = JsonConverter.convertFromJson(settingsJson);
+      if (tenantSettings == null) throw new TenantSettingsUnavailableException();
+      tenantSettings.applyDefaults();
+    } catch (RuntimeJsonMappingException unreadable) {
+      throw new TenantSettingsUnavailableException();
+    }
     return new Settings()
         .topicsInRegistrationEnabled(tenantSettings.getTopicsInRegistrationEnabled())
         .featureDemographicsEnabled(tenantSettings.getFeatureDemographicsEnabled())
@@ -502,6 +526,16 @@ public class TenantConverter {
         .featureAnonymousChatEnabled(tenantSettings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(tenantSettings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(tenantSettings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailCollectionAgencyCounsellingEnabled(
+            tenantSettings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled())
+        .featureDisplayNameEditableAgencyCounsellingEnabled(
+            tenantSettings.getFeatureDisplayNameEditableAgencyCounsellingEnabled())
+        .featureDisplayNameEditableLiveChatEnabled(
+            tenantSettings.getFeatureDisplayNameEditableLiveChatEnabled())
+        .featureDisplayNameEditableSelfHelpEnabled(
+            tenantSettings.getFeatureDisplayNameEditableSelfHelpEnabled())
+        .featureAskerEmailCollectionSelfHelpEnabled(
+            tenantSettings.getFeatureAskerEmailCollectionSelfHelpEnabled())
         .featureAskerEmailAgencyCounsellingEnabled(
             tenantSettings.getFeatureAskerEmailAgencyCounsellingEnabled())
         .featureAskerEmailLiveChatEnabled(tenantSettings.getFeatureAskerEmailLiveChatEnabled())
@@ -514,6 +548,9 @@ public class TenantConverter {
             tenantSettings.getFeatureConsultantEmailInternalGroupEnabled())
         .featureConsultantBrowserInternalGroupEnabled(
             tenantSettings.getFeatureConsultantBrowserInternalGroupEnabled())
+        .featureDirectInviteChatEnabled(tenantSettings.getFeatureDirectInviteChatEnabled())
+        .featureDirectInviteAudioEnabled(tenantSettings.getFeatureDirectInviteAudioEnabled())
+        .featureDirectInviteVideoEnabled(tenantSettings.getFeatureDirectInviteVideoEnabled())
         .featureCallsEnabled(tenantSettings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(tenantSettings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -1005,6 +1042,13 @@ public class TenantConverter {
   private TenantSmtpSettings toTenantSmtpSettings(SmtpConfig smtpConfig) {
     if (smtpConfig == null) {
       return null;
+    }
+    // A new password without a secret would be stored in plain text (#346). "Unchanged" (blank or
+    // masked) needs no encryption and stays allowed.
+    if (normalizeIncomingSmtpPassword(smtpConfig.getPassword()) != null
+        && !smtpPasswordEncryptionService.isEnabled()) {
+      throw new TenantValidationException(
+          HttpStatusExceptionReason.SMTP_PASSWORD_ENCRYPTION_NOT_CONFIGURED);
     }
     return TenantSmtpSettings.builder()
         .enabled(nullAsFalse(smtpConfig.getEnabled()))

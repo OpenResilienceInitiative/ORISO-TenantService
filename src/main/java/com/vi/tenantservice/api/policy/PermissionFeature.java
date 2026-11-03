@@ -72,6 +72,12 @@ public enum PermissionFeature {
       "featureMediaAiScanSupervisionChatsEnabled", "mediaAiScanSupervisionChats"),
   ASKER_DISPLAY_NAME("featureDisplayNameEditable", null),
   ASKER_EMAIL("featureAskerEmailEnabled", null),
+  ASKER_EMAIL_COLLECTION_AGENCY_COUNSELLING(
+      "featureAskerEmailCollectionAgencyCounsellingEnabled", null),
+  ASKER_DISPLAY_NAME_AGENCY_COUNSELLING("featureDisplayNameEditableAgencyCounsellingEnabled", null),
+  ASKER_DISPLAY_NAME_LIVE_CHAT("featureDisplayNameEditableLiveChatEnabled", null),
+  ASKER_DISPLAY_NAME_SELF_HELP("featureDisplayNameEditableSelfHelpEnabled", null),
+  ASKER_EMAIL_COLLECTION_SELF_HELP("featureAskerEmailCollectionSelfHelpEnabled", null),
   ASKER_EMAIL_AGENCY_COUNSELLING("featureAskerEmailAgencyCounsellingEnabled", null),
   ASKER_EMAIL_LIVE_CHAT("featureAskerEmailLiveChatEnabled", null),
   ASKER_EMAIL_SELF_HELP("featureAskerEmailSelfHelpEnabled", null),
@@ -80,6 +86,10 @@ public enum PermissionFeature {
   ASKER_BROWSER_SELF_HELP("featureAskerBrowserSelfHelpEnabled", null),
   CONSULTANT_EMAIL_INTERNAL_GROUP("featureConsultantEmailInternalGroupEnabled", null),
   CONSULTANT_BROWSER_INTERNAL_GROUP("featureConsultantBrowserInternalGroupEnabled", null),
+  // TS#331 / ADR-029 §6: "Direkteinladung erlauben" per conversation type.
+  DIRECT_INVITE_CHAT("featureDirectInviteChatEnabled", null),
+  DIRECT_INVITE_AUDIO("featureDirectInviteAudioEnabled", null),
+  DIRECT_INVITE_VIDEO("featureDirectInviteVideoEnabled", null),
 
   CASE_HANDOVER("caseHandoverEnabled", null);
 

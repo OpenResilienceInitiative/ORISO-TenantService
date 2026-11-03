@@ -107,4 +107,51 @@ class SingleDomainTenantOverrideServiceTest {
                 .dataPrivacyConfirmation(privacyChangedDate))
         .settings(new Settings().featureMediaUploadEnabled(mediaUploadEnabled));
   }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+  void selectedTenantOwnsAccountPrivacyAndEmailPresentationWhileBrandingKeepsMainId(
+      boolean allowed) {
+    var main = new TenantEntity();
+    main.setId(1L);
+    var actual = new TenantEntity();
+    actual.setId(2L);
+    var mainSettings = accountPrivacySettings(!allowed).featureVideoCallsEnabled(true);
+    var selectedSettings = accountPrivacySettings(allowed).featureVideoCallsEnabled(false);
+    when(translationService.getCurrentLanguageContext()).thenReturn("de");
+    when(applicationSettingsService.getApplicationSettings())
+        .thenReturn(
+            new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+                .ApplicationSettingsDTO());
+    when(tenantConverter.toRestrictedTenantDTO(main, "de"))
+        .thenReturn(new RestrictedTenantDTO().id(1L).settings(mainSettings));
+    when(tenantConverter.toRestrictedTenantDTO(actual, "de"))
+        .thenReturn(new RestrictedTenantDTO().id(2L).settings(selectedSettings));
+    var result = singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(main, actual);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(result.getSettings());
+    for (String key :
+        java.util.List.of(
+            "featureDisplayNameEditable",
+            "featureAskerEmailEnabled",
+            "featureAskerEmailCollectionAgencyCounsellingEnabled",
+            "featureDisplayNameEditableLiveChatEnabled",
+            "featureAskerEmailCollectionSelfHelpEnabled",
+            "emailVisible",
+            "emailRequired")) {
+      assertThat(json.path(key).asBoolean()).as(key).isEqualTo(allowed);
+    }
+    assertThat(result.getId()).isEqualTo(1L);
+    assertThat(result.getSettings().getFeatureVideoCallsEnabled()).isTrue();
+  }
+
+  private static Settings accountPrivacySettings(boolean allowed) {
+    return new Settings()
+        .featureDisplayNameEditable(allowed)
+        .featureAskerEmailEnabled(allowed)
+        .featureAskerEmailCollectionAgencyCounsellingEnabled(allowed)
+        .featureDisplayNameEditableLiveChatEnabled(allowed)
+        .featureAskerEmailCollectionSelfHelpEnabled(allowed)
+        .emailVisible(allowed)
+        .emailRequired(allowed);
+  }
 }

@@ -63,6 +63,12 @@ public class TenantSettings {
    */
   Boolean featureAskerEmailEnabled;
 
+  Boolean featureAskerEmailCollectionAgencyCounsellingEnabled;
+  Boolean featureDisplayNameEditableAgencyCounsellingEnabled;
+  Boolean featureDisplayNameEditableLiveChatEnabled;
+  Boolean featureDisplayNameEditableSelfHelpEnabled;
+  Boolean featureAskerEmailCollectionSelfHelpEnabled;
+
   Boolean featureAskerEmailAgencyCounsellingEnabled;
   Boolean featureAskerEmailLiveChatEnabled;
   Boolean featureAskerEmailSelfHelpEnabled;
@@ -72,6 +78,10 @@ public class TenantSettings {
   // FE#1725 story 40: counsellor channels for internal group chats, opt-out.
   Boolean featureConsultantEmailInternalGroupEnabled;
   Boolean featureConsultantBrowserInternalGroupEnabled;
+  // TS#331 / ADR-029 §6: counsellors may create direct links per conversation type, opt-out.
+  Boolean featureDirectInviteChatEnabled;
+  Boolean featureDirectInviteAudioEnabled;
+  Boolean featureDirectInviteVideoEnabled;
 
   Boolean featureCallsEnabled;
   Boolean featureSupervisionEnabled;
@@ -162,6 +172,11 @@ public class TenantSettings {
               // ORISO-Admin#602: opt-out, so every existing tenant keeps today's behaviour.
               Map.entry("featureDisplayNameEditable", true),
               Map.entry("featureAskerEmailEnabled", true),
+              Map.entry("featureAskerEmailCollectionAgencyCounsellingEnabled", true),
+              Map.entry("featureDisplayNameEditableAgencyCounsellingEnabled", true),
+              Map.entry("featureDisplayNameEditableLiveChatEnabled", true),
+              Map.entry("featureDisplayNameEditableSelfHelpEnabled", true),
+              Map.entry("featureAskerEmailCollectionSelfHelpEnabled", true),
               Map.entry("featureAskerEmailAgencyCounsellingEnabled", true),
               Map.entry("featureAskerEmailLiveChatEnabled", false),
               Map.entry("featureAskerEmailSelfHelpEnabled", true),
@@ -170,6 +185,9 @@ public class TenantSettings {
               Map.entry("featureAskerBrowserSelfHelpEnabled", true),
               Map.entry("featureConsultantEmailInternalGroupEnabled", true),
               Map.entry("featureConsultantBrowserInternalGroupEnabled", true),
+              Map.entry("featureDirectInviteChatEnabled", true),
+              Map.entry("featureDirectInviteAudioEnabled", true),
+              Map.entry("featureDirectInviteVideoEnabled", true),
               Map.entry("featureCallsEnabled", true),
               Map.entry("featureSupervisionEnabled", true),
               Map.entry("featureSupervisionAnonymousChatsEnabled", true),
@@ -360,6 +378,26 @@ public class TenantSettings {
     if (featureAskerEmailEnabled == null) {
       featureAskerEmailEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailEnabled");
     }
+    if (featureAskerEmailCollectionAgencyCounsellingEnabled == null) {
+      featureAskerEmailCollectionAgencyCounsellingEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailCollectionAgencyCounsellingEnabled");
+    }
+    if (featureDisplayNameEditableAgencyCounsellingEnabled == null) {
+      featureDisplayNameEditableAgencyCounsellingEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDisplayNameEditableAgencyCounsellingEnabled");
+    }
+    if (featureDisplayNameEditableLiveChatEnabled == null) {
+      featureDisplayNameEditableLiveChatEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDisplayNameEditableLiveChatEnabled");
+    }
+    if (featureDisplayNameEditableSelfHelpEnabled == null) {
+      featureDisplayNameEditableSelfHelpEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDisplayNameEditableSelfHelpEnabled");
+    }
+    if (featureAskerEmailCollectionSelfHelpEnabled == null) {
+      featureAskerEmailCollectionSelfHelpEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailCollectionSelfHelpEnabled");
+    }
     if (featureAskerEmailAgencyCounsellingEnabled == null) {
       featureAskerEmailAgencyCounsellingEnabled =
           BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailAgencyCounsellingEnabled");
@@ -391,6 +429,17 @@ public class TenantSettings {
     if (featureConsultantBrowserInternalGroupEnabled == null) {
       featureConsultantBrowserInternalGroupEnabled =
           BOOLEAN_FIELD_DEFAULTS.get("featureConsultantBrowserInternalGroupEnabled");
+    }
+    if (featureDirectInviteChatEnabled == null) {
+      featureDirectInviteChatEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureDirectInviteChatEnabled");
+    }
+    if (featureDirectInviteAudioEnabled == null) {
+      featureDirectInviteAudioEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDirectInviteAudioEnabled");
+    }
+    if (featureDirectInviteVideoEnabled == null) {
+      featureDirectInviteVideoEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDirectInviteVideoEnabled");
     }
     applyMediaDefaults();
     if (isVideoCallAllowed == null) {
