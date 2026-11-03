@@ -52,7 +52,7 @@ public class TranslationApiKeyEncryptionMigration {
   @EventListener(ApplicationReadyEvent.class)
   public void migrate() {
     if (!translationApiKeyEncryptionService.isEnabled()) {
-      log.info("Skipping translation API key encryption migration: encryption is not configured");
+      warnAboutPlaintextKeys();
       return;
     }
     // Deliberately not @Transactional: every attempt is its own read and its own write, so a lost
@@ -82,6 +82,41 @@ public class TranslationApiKeyEncryptionMigration {
         "Translation API key migration gave up after {} concurrent writes; it runs again at the"
             + " next start",
         MAX_ATTEMPTS);
+  }
+
+  /** Nothing can be encrypted without a secret; make sure the operator knows what is exposed. */
+  private void warnAboutPlaintextKeys() {
+    int plaintext =
+        tenantAdminControlsRepository
+            .findTopByOrderByIdAsc()
+            .map(entity -> countStoredPlaintextKeys(entity.getControls()))
+            .orElse(0);
+    if (plaintext > 0) {
+      // Count only - never the key, never its length or prefix.
+      log.warn(
+          "{} translation API key(s) are stored in plain text and cannot be encrypted: no"
+              + " encryption secret is configured (SETTINGS_SMTP_PASSWORD_ENCRYPTION_SECRET)",
+          plaintext);
+    } else {
+      log.info("Skipping translation API key encryption migration: encryption is not configured");
+    }
+  }
+
+  private int countStoredPlaintextKeys(String controlsJson) {
+    ObjectNode controls = readControls(controlsJson);
+    JsonNode apiKeys = controls == null ? null : controls.get(TRANSLATION_API_KEYS);
+    if (apiKeys == null || !apiKeys.isObject()) {
+      return 0;
+    }
+    int count = 0;
+    for (JsonNode value : apiKeys) {
+      if (value.isTextual()
+          && StringUtils.isNotBlank(value.asText())
+          && !value.asText().startsWith("ENC:")) {
+        count++;
+      }
+    }
+    return count;
   }
 
   private int encryptPlaintextKeys(TenantAdminControlsEntity entity) {

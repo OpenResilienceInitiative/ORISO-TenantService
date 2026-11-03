@@ -43,6 +43,7 @@ class TranslationApiKeyWithoutSecretIT extends TranslationApiKeyITSupport {
 
     assertThat(body).doesNotContain(RAW_KEY);
     assertThat(output.getAll()).doesNotContain(RAW_KEY);
-    assertThat(repository.findAll()).noneMatch(row -> row.getControls().contains(RAW_KEY));
+    // no row at all, not merely a row without the key
+    assertThat(repository.findAll()).isEmpty();
   }
 }

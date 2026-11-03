@@ -1,9 +1,11 @@
 package com.vi.tenantservice.api.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.is;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.vi.tenantservice.TenantServiceApplication;
@@ -41,6 +43,8 @@ class TranslationApiKeyAtRestIT extends TranslationApiKeyITSupport {
     var getBody =
         mvc.perform(get("/tenantadmin/translation/keys").with(superAdmin()))
             .andExpect(status().isOk())
+            // the read path must show the saved provider, masked: an empty {} would not do
+            .andExpect(jsonPath("openrouter", is("sk-\u2026cdef")))
             .andReturn()
             .getResponse()
             .getContentAsString();

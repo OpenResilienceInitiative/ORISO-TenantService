@@ -29,6 +29,8 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -606,6 +608,21 @@ class TenantConverterTest {
 
     assertThat(converterWithoutSecret().toEntity(tenantDTO).getSettings())
         .contains("smtp.example.org");
+  }
+
+  /** "Unchanged" passwords need no encryption, so they must not be refused without a secret. */
+  @ParameterizedTest
+  @ValueSource(strings = {"", "   ", "********"})
+  void toEntity_should_acceptBlankOrMaskedSmtpPassword_When_noSecretIsConfigured(String password) {
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .smtp(new SmtpConfig().enabled(true).host("smtp.example.org").password(password));
+
+    var settings = converterWithoutSecret().toEntity(tenantDTO).getSettings();
+
+    assertThat(settings).contains("smtp.example.org").doesNotContain("********");
   }
 
   private TenantConverter converterWithoutSecret() {
