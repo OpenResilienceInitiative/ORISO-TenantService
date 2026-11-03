@@ -8,7 +8,9 @@ import static com.vi.tenantservice.api.model.DataProtectionPlaceHolderType.DATA_
 import static com.vi.tenantservice.api.util.JsonConverter.convertMapFromJson;
 import static com.vi.tenantservice.api.util.JsonConverter.convertToJson;
 
+import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
 import com.google.common.collect.Maps;
+import com.vi.tenantservice.api.exception.TenantSettingsUnavailableException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
@@ -113,6 +115,16 @@ public class TenantConverter {
         .featureAnonymousChatEnabled(settings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(settings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(settings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailCollectionAgencyCounsellingEnabled(
+            settings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled())
+        .featureDisplayNameEditableAgencyCounsellingEnabled(
+            settings.getFeatureDisplayNameEditableAgencyCounsellingEnabled())
+        .featureDisplayNameEditableLiveChatEnabled(
+            settings.getFeatureDisplayNameEditableLiveChatEnabled())
+        .featureDisplayNameEditableSelfHelpEnabled(
+            settings.getFeatureDisplayNameEditableSelfHelpEnabled())
+        .featureAskerEmailCollectionSelfHelpEnabled(
+            settings.getFeatureAskerEmailCollectionSelfHelpEnabled())
         .featureAskerEmailAgencyCounsellingEnabled(
             settings.getFeatureAskerEmailAgencyCounsellingEnabled())
         .featureAskerEmailLiveChatEnabled(settings.getFeatureAskerEmailLiveChatEnabled())
@@ -491,7 +503,14 @@ public class TenantConverter {
   }
 
   private Settings getSettingsIfNotNull(String settingsJson) {
-    TenantSettings tenantSettings = JsonConverter.convertFromJson(settingsJson).applyDefaults();
+    TenantSettings tenantSettings;
+    try {
+      tenantSettings = JsonConverter.convertFromJson(settingsJson);
+      if (tenantSettings == null) throw new TenantSettingsUnavailableException();
+      tenantSettings.applyDefaults();
+    } catch (RuntimeJsonMappingException unreadable) {
+      throw new TenantSettingsUnavailableException();
+    }
     return new Settings()
         .topicsInRegistrationEnabled(tenantSettings.getTopicsInRegistrationEnabled())
         .featureDemographicsEnabled(tenantSettings.getFeatureDemographicsEnabled())
@@ -507,6 +526,16 @@ public class TenantConverter {
         .featureAnonymousChatEnabled(tenantSettings.getFeatureAnonymousChatEnabled())
         .featureDisplayNameEditable(tenantSettings.getFeatureDisplayNameEditable())
         .featureAskerEmailEnabled(tenantSettings.getFeatureAskerEmailEnabled())
+        .featureAskerEmailCollectionAgencyCounsellingEnabled(
+            tenantSettings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled())
+        .featureDisplayNameEditableAgencyCounsellingEnabled(
+            tenantSettings.getFeatureDisplayNameEditableAgencyCounsellingEnabled())
+        .featureDisplayNameEditableLiveChatEnabled(
+            tenantSettings.getFeatureDisplayNameEditableLiveChatEnabled())
+        .featureDisplayNameEditableSelfHelpEnabled(
+            tenantSettings.getFeatureDisplayNameEditableSelfHelpEnabled())
+        .featureAskerEmailCollectionSelfHelpEnabled(
+            tenantSettings.getFeatureAskerEmailCollectionSelfHelpEnabled())
         .featureAskerEmailAgencyCounsellingEnabled(
             tenantSettings.getFeatureAskerEmailAgencyCounsellingEnabled())
         .featureAskerEmailLiveChatEnabled(tenantSettings.getFeatureAskerEmailLiveChatEnabled())

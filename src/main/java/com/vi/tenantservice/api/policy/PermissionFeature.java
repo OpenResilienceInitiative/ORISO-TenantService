@@ -72,6 +72,12 @@ public enum PermissionFeature {
       "featureMediaAiScanSupervisionChatsEnabled", "mediaAiScanSupervisionChats"),
   ASKER_DISPLAY_NAME("featureDisplayNameEditable", null),
   ASKER_EMAIL("featureAskerEmailEnabled", null),
+  ASKER_EMAIL_COLLECTION_AGENCY_COUNSELLING(
+      "featureAskerEmailCollectionAgencyCounsellingEnabled", null),
+  ASKER_DISPLAY_NAME_AGENCY_COUNSELLING("featureDisplayNameEditableAgencyCounsellingEnabled", null),
+  ASKER_DISPLAY_NAME_LIVE_CHAT("featureDisplayNameEditableLiveChatEnabled", null),
+  ASKER_DISPLAY_NAME_SELF_HELP("featureDisplayNameEditableSelfHelpEnabled", null),
+  ASKER_EMAIL_COLLECTION_SELF_HELP("featureAskerEmailCollectionSelfHelpEnabled", null),
   ASKER_EMAIL_AGENCY_COUNSELLING("featureAskerEmailAgencyCounsellingEnabled", null),
   ASKER_EMAIL_LIVE_CHAT("featureAskerEmailLiveChatEnabled", null),
   ASKER_EMAIL_SELF_HELP("featureAskerEmailSelfHelpEnabled", null),

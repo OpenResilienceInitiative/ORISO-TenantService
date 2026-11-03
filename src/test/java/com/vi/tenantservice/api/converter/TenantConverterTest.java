@@ -1097,4 +1097,29 @@ class TenantConverterTest {
     // then
     assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(4);
   }
+
+  @Test
+  void roundTripsMixedCollectionPreferencesWhenTheAccountMasterIsOff() {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var settings =
+        mapper.convertValue(
+            Map.of(
+                "featureAskerEmailEnabled", false,
+                "featureAskerEmailCollectionAgencyCounsellingEnabled", false,
+                "featureDisplayNameEditableLiveChatEnabled", true,
+                "featureAskerEmailCollectionSelfHelpEnabled", false),
+            Settings.class);
+    var input = new MultilingualTenantTestDataBuilder().tenantDTO().withTheming().build();
+    input.setSettings(settings);
+    var entity = tenantConverter.toEntity(input);
+    var converted = tenantConverter.toDTO(entity, "de");
+    var json = mapper.valueToTree(converted.getSettings());
+    assertThat(json.path("featureAskerEmailEnabled").asBoolean()).isFalse();
+    assertThat(json.has("featureAskerEmailCollectionAgencyCounsellingEnabled")).isTrue();
+    assertThat(json.path("featureAskerEmailCollectionAgencyCounsellingEnabled").asBoolean())
+        .isFalse();
+    assertThat(json.path("featureDisplayNameEditableLiveChatEnabled").asBoolean()).isTrue();
+    assertThat(json.has("featureAskerEmailCollectionSelfHelpEnabled")).isTrue();
+    assertThat(json.path("featureAskerEmailCollectionSelfHelpEnabled").asBoolean()).isFalse();
+  }
 }

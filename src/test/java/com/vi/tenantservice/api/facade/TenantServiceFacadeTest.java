@@ -71,6 +71,7 @@ import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDT
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -1032,6 +1033,12 @@ class TenantServiceFacadeTest {
     when(converter.toRestrictedTenantDTO(secondTenant, DE)).thenReturn(secondDto);
     when(tenantAdminControlsService.getControls()).thenReturn(new TenantAdminControls());
 
+    when(tenantPermissionPolicyService.getResolvedPolicies(Set.of(1L, 2L)))
+        .thenReturn(Map.of(1L, Map.of(), 2L, Map.of()));
+    when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(Set.of(1L, 2L)))
+        .thenReturn(
+            Map.of(1L, new InternalGroupChatPolicies(), 2L, new InternalGroupChatPolicies()));
+
     var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
 
     assertThat(result).containsExactly(firstDto, secondDto);
@@ -1424,5 +1431,124 @@ class TenantServiceFacadeTest {
         TenantBadRequestException.class,
         () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
     verify(tenantService, never()).update(any());
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "featureAskerEmailCollectionAgencyCounsellingEnabled",
+        "featureDisplayNameEditableLiveChatEnabled",
+        "featureAskerEmailCollectionSelfHelpEnabled"
+      })
+  void singlePublicTenantProjectsEachCollectionRequirementWithMatchingMetadata(String key) {
+    var publicDto =
+        new RestrictedTenantDTO()
+            .id(tenantEntity.getId())
+            .settings(
+                new Settings()
+                    .featureAskerEmailEnabled(true)
+                    .featureAskerEmailLiveChatEnabled(false));
+    when(tenantService.getAllTenantData()).thenReturn(List.of(tenantEntity));
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(converter.toRestrictedTenantDTO(tenantEntity, DE)).thenReturn(publicDto);
+    when(tenantPermissionPolicyService.getResolvedPolicies(tenantEntity.getId()))
+        .thenReturn(
+            java.util.Map.of(
+                key,
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    false, com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED, true)));
+    var result = tenantServiceFacade.getSingleTenant().orElseThrow();
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(result.getSettings());
+    assertThat(json.has(key)).isTrue();
+    assertThat(json.path(key).asBoolean()).isFalse();
+    assertThat(result.getPermissionPolicies().get(key).getValue()).isFalse();
+    assertThat(result.getPermissionPolicies().get(key).getMode())
+        .isEqualTo(PermissionPolicyMode.ENFORCED);
+    assertThat(result.getPermissionPolicies().get(key).getInherited()).isTrue();
+    assertThat(result.getSettings().getFeatureAskerEmailEnabled()).isTrue();
+    assertThat(result.getSettings().getFeatureAskerEmailLiveChatEnabled()).isFalse();
+  }
+
+  static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments>
+      selectedAccountPrivacyCases() {
+    return java.util.stream.Stream.of(
+            "featureDisplayNameEditable",
+            "featureAskerEmailEnabled",
+            "featureAskerEmailCollectionAgencyCounsellingEnabled",
+            "featureDisplayNameEditableLiveChatEnabled",
+            "featureAskerEmailCollectionSelfHelpEnabled")
+        .flatMap(
+            key ->
+                java.util.stream.Stream.of(true, false)
+                    .flatMap(
+                        allowed ->
+                            java.util.stream.Stream.of(true, false)
+                                .map(
+                                    authenticated ->
+                                        org.junit.jupiter.params.provider.Arguments.of(
+                                            key, allowed, authenticated))));
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.MethodSource("selectedAccountPrivacyCases")
+  void singleDomainAccountPolicyUsesSelectedTenantAndKeepsMainBrandingAndLegacyPolicy(
+      String key, boolean selectedAllowed, boolean authenticated) {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    if (authenticated) {
+      givenSingleDomainWithMainTenant(SINGLE_DOMAIN_SUBDOMAIN_NAME);
+      when(converter.toRestrictedTenantDTO(any(TenantRestrictedData.class), any()))
+          .thenReturn(new RestrictedTenantDTO().id(1L).theming(new Theming()));
+      when(tenantResolverService.tryResolve()).thenReturn(Optional.of(2L));
+    } else {
+      when(tenantResolverService.tryResolveForNonAuthUsers()).thenReturn(Optional.of(2L));
+    }
+    var main = getTenantWithPrivacy("{\"de\":\"main\"}");
+    var actual = getTenantWithPrivacy("{\"de\":\"selected\"}");
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(main);
+    when(tenantService.findRestrictedTenantDataById(2L)).thenReturn(actual);
+    var settings =
+        new com.fasterxml.jackson.databind.ObjectMapper()
+            .convertValue(
+                java.util.Map.of(key, selectedAllowed, "featureVideoCallsEnabled", true),
+                Settings.class);
+    when(singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
+            main.get(), actual.get()))
+        .thenReturn(new RestrictedTenantDTO().id(1L).settings(settings));
+    when(tenantPermissionPolicyService.getResolvedPolicies(1L))
+        .thenReturn(
+            java.util.Map.of(
+                key,
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    !selectedAllowed,
+                    com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED,
+                    true),
+                "featureVideoCallsEnabled",
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    true, com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED, true)));
+    when(tenantPermissionPolicyService.getResolvedPolicies(2L))
+        .thenReturn(
+            java.util.Map.of(
+                key,
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    selectedAllowed,
+                    com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED,
+                    true),
+                "featureVideoCallsEnabled",
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    false, com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED, true)));
+    var result =
+        authenticated
+            ? tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext()
+            : tenantServiceFacade
+                .findTenantBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME, null)
+                .orElseThrow();
+    assertThat(result.getId()).isEqualTo(1L);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(result.getSettings());
+    assertThat(json.path(key).asBoolean()).as(key).isEqualTo(selectedAllowed);
+    assertThat(result.getPermissionPolicies().get(key).getValue()).isEqualTo(selectedAllowed);
+    assertThat(result.getPermissionPolicies().get("featureVideoCallsEnabled").getValue()).isTrue();
+    assertThat(result.getSettings().getFeatureVideoCallsEnabled()).isTrue();
   }
 }

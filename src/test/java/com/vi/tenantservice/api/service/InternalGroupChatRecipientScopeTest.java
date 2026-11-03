@@ -36,6 +36,7 @@ class InternalGroupChatRecipientScopeTest {
 
   @Mock private TenantPermissionPolicyRepository repository;
   @Mock private TenantAdminControlsService platformControls;
+  @Mock private com.vi.tenantservice.api.repository.TenantRepository tenants;
   @InjectMocks private TenantPermissionPolicyService service;
 
   @Test
