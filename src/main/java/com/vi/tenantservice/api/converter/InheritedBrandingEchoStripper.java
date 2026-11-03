@@ -44,6 +44,30 @@ public class InheritedBrandingEchoStripper {
         platform.getThemingAssociationLogo(),
         Theming::getAssociationLogo,
         Theming::setAssociationLogo);
+    stripEcho(
+        submitted,
+        existing.getThemingPrimaryColor(),
+        platform.getThemingPrimaryColor(),
+        Theming::getPrimaryColor,
+        Theming::setPrimaryColor);
+    stripEcho(
+        submitted,
+        existing.getThemingSecondaryColor(),
+        platform.getThemingSecondaryColor(),
+        Theming::getSecondaryColor,
+        Theming::setSecondaryColor);
+    stripEcho(
+        submitted,
+        existing.getThemingAccent(),
+        platform.getThemingAccent(),
+        Theming::getAccent,
+        Theming::setAccent);
+    stripEcho(
+        submitted,
+        existing.getThemingSignal(),
+        platform.getThemingSignal(),
+        Theming::getSignal,
+        Theming::setSignal);
   }
 
   private static void stripEcho(
