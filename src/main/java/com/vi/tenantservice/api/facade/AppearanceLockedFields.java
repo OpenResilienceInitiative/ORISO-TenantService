@@ -56,6 +56,9 @@ final class AppearanceLockedFields {
     if (formOfAddressChanged(submitted, storedFormOfAddress)) {
       changed.add("languageFormal");
     }
+    if (submitted.getTheming() == null) {
+      submitted.setTheming(new Theming());
+    }
     changed.addAll(brandingChanged(submitted.getTheming(), existing));
     return changed;
   }
@@ -102,13 +105,12 @@ final class AppearanceLockedFields {
 
   /**
    * Assistant identity (name, icon), images, colours and login effect. A missing block clears the
-   * images and colours, so it counts as a change. The signed-in Admin never sends the assistant
-   * identity or the login effect at all, though; leaving those out would clear a stored value, so
-   * the stored value is kept for the save instead of refusing every save of that Träger. Blank is
-   * different from missing: it is an explicit clear and counts as a change.
+   * images and colours, so it counts as a change. The signed-in Admin never sends the login effect
+   * and can leave out the assistant identity, though; leaving those out would clear a stored value,
+   * so the stored value is kept for the save instead of refusing every save of that Träger. Blank
+   * is different from missing: it is an explicit clear and counts as a change.
    */
-  private static List<String> brandingChanged(Theming submitted, TenantEntity existing) {
-    Theming theming = submitted == null ? new Theming() : submitted;
+  private static List<String> brandingChanged(Theming theming, TenantEntity existing) {
     keepUnsent(theming, existing);
     List<String> changed = new ArrayList<>();
     differs(

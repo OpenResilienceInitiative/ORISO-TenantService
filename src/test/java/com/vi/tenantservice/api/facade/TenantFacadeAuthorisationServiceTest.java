@@ -1046,6 +1046,32 @@ class TenantFacadeAuthorisationServiceTest {
   }
 
   @Test
+  void restrictedAdministratorKeepsAssistantIdentityAndLoginEffectWhenThemingIsLeftOut() {
+    givenRestrictedAdministrator();
+    var stored = storedTenant();
+    stored.setThemingAssistantName("Helper");
+    stored.setThemingAssistantIcon("robot-7341990");
+    stored.setThemingLoginEffect("CRACKS");
+    var withoutTheming = wholeObject().theming(null);
+
+    assertAccepted(withoutTheming, stored);
+
+    assertThat(withoutTheming.getTheming().getAssistantName()).isEqualTo("Helper");
+    assertThat(withoutTheming.getTheming().getAssistantIcon()).isEqualTo("robot-7341990");
+    assertThat(withoutTheming.getTheming().getLoginEffect())
+        .isEqualTo(Theming.LoginEffectEnum.CRACKS);
+  }
+
+  @Test
+  void restrictedAdministratorCannotClearAStoredLogoByLeavingThemingOut() {
+    givenRestrictedAdministrator();
+    var stored = storedTenant();
+    stored.setThemingLogo("logo-7341990.png");
+
+    assertRefusedAsAppearance(wholeObject().theming(null), stored);
+  }
+
+  @Test
   void restrictedAdministratorCannotChangeTheLoginEffect() {
     givenRestrictedAdministrator();
     var stored = storedTenant();
