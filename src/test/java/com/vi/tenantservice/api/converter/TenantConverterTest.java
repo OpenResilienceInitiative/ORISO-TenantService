@@ -29,6 +29,8 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -46,10 +48,11 @@ class TenantConverterTest {
 
   @Mock com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens platformLegalTextTokens;
 
-  // disabled (no secret): converter unit tests run on plaintext passthrough
+  // A secret is configured: saving an SMTP password without one is refused (#346), so tests that
+  // only need a password to exist run with encryption on.
   @Spy
   SmtpPasswordEncryptionService smtpPasswordEncryptionService =
-      new SmtpPasswordEncryptionService("");
+      new SmtpPasswordEncryptionService("unit-test-secret");
 
   @Test
   void toEntity_should_convertToEntityAndBackToDTO() {
@@ -571,6 +574,63 @@ class TenantConverterTest {
 
     // then
     assertThat(entity.getSettings()).doesNotContain("plain-secret").contains("ENC:");
+  }
+
+  /** #346: without a secret the password used to be stored in plain text, silently. */
+  @Test
+  void toEntity_should_refuseSmtpPassword_When_encryptionIsNotConfigured() {
+    // given
+    var converterWithoutSecret = converterWithoutSecret();
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).password("plain-secret"));
+
+    // when / then
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> converterWithoutSecret.toEntity(tenantDTO))
+        .isInstanceOfSatisfying(
+            com.vi.tenantservice.api.exception.TenantValidationException.class,
+            e ->
+                assertThat(e.getStatusExceptionReason())
+                    .isEqualTo(
+                        com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason
+                            .SMTP_PASSWORD_ENCRYPTION_NOT_CONFIGURED));
+  }
+
+  /**
+   * Saving other SMTP settings without touching the password must keep working without a secret.
+   */
+  @Test
+  void toEntity_should_acceptSmtpSettings_When_noPasswordIsSupplied_andNoSecretIsConfigured() {
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).host("smtp.example.org"));
+
+    assertThat(converterWithoutSecret().toEntity(tenantDTO).getSettings())
+        .contains("smtp.example.org");
+  }
+
+  /** "Unchanged" passwords need no encryption, so they must not be refused without a secret. */
+  @ParameterizedTest
+  @ValueSource(strings = {"", "   ", "********"})
+  void toEntity_should_acceptBlankOrMaskedSmtpPassword_When_noSecretIsConfigured(String password) {
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .smtp(new SmtpConfig().enabled(true).host("smtp.example.org").password(password));
+
+    var settings = converterWithoutSecret().toEntity(tenantDTO).getSettings();
+
+    assertThat(settings).contains("smtp.example.org").doesNotContain("********");
+  }
+
+  private TenantConverter converterWithoutSecret() {
+    return new TenantConverter(
+        templateService,
+        templateRenderer,
+        new SmtpPasswordEncryptionService(""),
+        platformLegalTextTokens);
   }
 
   @Test

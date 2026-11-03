@@ -195,6 +195,7 @@ class TenantAdminControlsServiceTest {
   }
 
   private void givenEncryptingCipher() {
+    when(translationApiKeyEncryptionService.isEnabled()).thenReturn(true);
     when(translationApiKeyEncryptionService.encryptNewApiKey(anyString()))
         .thenAnswer(call -> "ENC(" + call.getArgument(0) + ")");
   }

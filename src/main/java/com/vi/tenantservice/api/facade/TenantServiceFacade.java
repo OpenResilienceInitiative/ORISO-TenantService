@@ -631,11 +631,7 @@ public class TenantServiceFacade {
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenantEntity) {
     subdomainValidator.validateOnUpdate(
         sanitizedTenantDTO.getSubdomain(), existingTenantEntity.getSubdomain());
-    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
-        sanitizedTenantDTO, existingTenantEntity);
-    tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
-        sanitizedTenantDTO, existingTenantEntity);
-    tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
+    // Before the permission check: branding the form merely echoed from the platform is no change.
     if (existingTenantEntity.getId() != TECHNICAL_TENANT_ID) {
       tenantService
           .findTenantById((long) TECHNICAL_TENANT_ID)
@@ -644,6 +640,11 @@ public class TenantServiceFacade {
                   inheritedBrandingEchoStripper.strip(
                       sanitizedTenantDTO.getTheming(), existingTenantEntity, platform));
     }
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        sanitizedTenantDTO, existingTenantEntity);
+    tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
+        sanitizedTenantDTO, existingTenantEntity);
+    tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     // toEntity mutates existingTenantEntity, so capture the stored settings first
     var existingSettingsJson = existingTenantEntity.getSettings();
     var publishedBefore = PublishedLegalTexts.of(existingTenantEntity);
