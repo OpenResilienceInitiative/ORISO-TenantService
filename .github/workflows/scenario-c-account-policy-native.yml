@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: OpenResilienceInitiative/ORISO-Helm
-          ref: db4ecd994857a81dffa830c299daeebafc465cc2
+          ref: 3780107cf5c67ab8f2054571672207241e84ed60
           path: helm
           persist-credentials: false
           fetch-depth: 0
@@ -83,7 +83,7 @@ jobs:
         run: |
           python scripts/ci/scenario-c-account-policy-native.py \
             --user ../user --user-ref faeb614c32961bb9101910e337c4912487ce4ced \
-            --helm ../helm --helm-ref db4ecd994857a81dffa830c299daeebafc465cc2 \
+            --helm ../helm --helm-ref 3780107cf5c67ab8f2054571672207241e84ed60 \
             --evidence "$RUNNER_TEMP/scenario-c-account-policy-native"
       - name: Produce a mechanical proposal only after a pre-container formatter failure
         if: failure()
