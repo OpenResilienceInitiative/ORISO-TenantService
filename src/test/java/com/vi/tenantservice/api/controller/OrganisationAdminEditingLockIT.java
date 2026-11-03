@@ -11,6 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.vi.tenantservice.TenantServiceApplication;
@@ -155,7 +156,6 @@ class OrganisationAdminEditingLockIT {
     setEditingAllowedForOrganisationAdmins(false);
     ObjectNode whole = read();
     // the Admin form echoes name, slogan, languages and form of address as it read them
-    whole.withObject("/content/claim");
     languages(whole, "de");
     whole.withObject("/settings/extendedSettings").put("languageFormal", false);
 
@@ -195,12 +195,79 @@ class OrganisationAdminEditingLockIT {
     String platformLogo = "data:image/png;base64,iVBORw0KGgo=";
     ObjectNode platform = read(0);
     platform.withObject("/theming").put("logo", platformLogo);
+    platform.withObject("/theming").put("primaryColor", "#112233");
     save(0, platformAdmin(), platform).andExpect(status().isOk());
     setEditingAllowedForOrganisationAdmins(false);
     ObjectNode echo = read(2);
     echo.withObject("/theming").put("logo", platformLogo);
+    echo.withObject("/theming").put("primaryColor", "#112233");
 
     save(2, adminToken("traeger-admin-2", "2"), echo).andExpect(status().isOk());
+  }
+
+  @Test
+  void switchOff_Should_acceptWhatTheSignedInAdminActuallySends() throws Exception {
+    // mapTenantDataToTenantAdminData (ORISO-Admin): seeded from GET /tenant, so the slogan is one
+    // string sent as {de: x}, theming is only logo, favicon, colours and association logo, and
+    // there is no assistant identity, no login effect and no extendedSettings.
+    setEditingAllowedForOrganisationAdmins(false);
+    JsonNode tenant =
+        MAPPER.readTree(
+            mvc.perform(get("/tenant/" + TENANT).with(traeger()))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString());
+    ObjectNode body = read();
+    body.withObject("/settings").remove("extendedSettings");
+    ObjectNode theming = MAPPER.createObjectNode();
+    for (String field :
+        List.of(
+            "associationLogo",
+            "logo",
+            "favicon",
+            "primaryColor",
+            "secondaryColor",
+            "accent",
+            "signal")) {
+      theming.set(
+          field,
+          tenant.path("theming").path(field).isMissingNode()
+              ? null
+              : tenant.path("theming").get(field));
+    }
+    body.set("theming", theming);
+    body.withObject("/content")
+        .putObject("claim")
+        .put("de", tenant.path("content").path("claim").asText());
+
+    save(traeger(), body).andExpect(status().isOk());
+
+    ObjectNode stored = read();
+    org.assertj.core.api.Assertions.assertThat(
+            stored.path("theming").path("assistantName").asText())
+        .isEqualTo("Helper");
+    org.assertj.core.api.Assertions.assertThat(stored.path("theming").path("loginEffect").asText())
+        .isEqualTo("CRACKS");
+  }
+
+  @Test
+  void switchOff_Should_neverLetAFormOfAddressChangeThroughWhenItCannotBeRead() throws Exception {
+    setEditingAllowedForOrganisationAdmins(false);
+    ObjectNode body = read();
+    String nameBefore = body.path("name").asText();
+    body.withObject("/settings/extendedSettings").put("languageFormal", true);
+    body.put("name", "Renamed while the check was blind");
+    when(consultingTypeService.getConsultingTypesByTenantId((int) TENANT))
+        .thenThrow(new org.springframework.web.client.RestClientException("consulting type down"));
+
+    save(traeger(), body).andExpect(status().is5xxServerError());
+
+    org.mockito.Mockito.doReturn(new FullConsultingTypeResponseDTO().id(7).languageFormal(false))
+        .when(consultingTypeService)
+        .getConsultingTypesByTenantId((int) TENANT);
+
+    org.assertj.core.api.Assertions.assertThat(read().path("name").asText()).isEqualTo(nameBefore);
   }
 
   // --- helpers ----------------------------------------------------------------------------
@@ -224,6 +291,12 @@ class OrganisationAdminEditingLockIT {
     ObjectNode body = read();
     body.withObject("/theming").put("logo", "data:image/png;base64,iVBORw0KGgo=");
     body.withObject("/theming").put("associationLogo", "data:image/png;base64,iVBORw0KGgo=");
+    // what a real Träger has stored: assistant identity, login effect, a slogan, awkward characters
+    body.withObject("/theming").put("assistantName", "Helper");
+    body.withObject("/theming").put("assistantIcon", "robot-7341990");
+    body.withObject("/theming").put("loginEffect", "CRACKS");
+    body.put("name", "Müller & Söhne <Beratung>");
+    body.withObject("/content/claim").put("de", "Ärzte & Söhne für Ü <b>fett</b> 5 < 6");
     save(platformAdmin(), body).andExpect(status().isOk());
   }
 

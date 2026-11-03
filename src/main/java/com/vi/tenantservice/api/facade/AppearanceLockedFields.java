@@ -9,7 +9,6 @@ import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.Theming;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -30,14 +29,15 @@ import java.util.function.Supplier;
 final class AppearanceLockedFields {
 
   private static final String GERMAN = "de";
-  private static final String NO_LOGIN_EFFECT = "NONE";
 
   private AppearanceLockedFields() {}
 
   /**
    * @param storedFormOfAddress the form of address lives in the consulting type service, so it is
    *     only fetched when the request names one
-   * @return the locked fields whose submitted value differs from what is stored
+   * @return the locked fields whose submitted value differs from what is stored. Side effect: an
+   *     assistant identity or login effect the request leaves out is filled in from the stored
+   *     value, so a save that passes this check does not clear them.
    */
   static List<String> changed(
       MultilingualTenantDTO submitted,
@@ -60,26 +60,18 @@ final class AppearanceLockedFields {
     return changed;
   }
 
-  /** Content is always present after sanitising; an omitted slogan would clear the stored one. */
+  /**
+   * The claim is stored as sent, blank entries included, and a language with a blank entry shows
+   * blank instead of falling back to German. So the maps are compared as they are, not trimmed of
+   * blanks. A claim with fewer languages than stored (the Admin sends only {@code de}) or none at
+   * all would drop the others silently, so it counts as a change too.
+   */
   private static boolean sloganChanged(MultilingualTenantDTO submitted, TenantEntity existing) {
     if (submitted.getContent() == null) {
       return false;
     }
-    return !withoutBlanks(submitted.getContent().getClaim())
-        .equals(withoutBlanks(convertMapFromJson(existing.getContentClaim())));
-  }
-
-  private static Map<String, String> withoutBlanks(Map<String, String> translations) {
-    Map<String, String> kept = new LinkedHashMap<>();
-    if (translations != null) {
-      translations.forEach(
-          (language, text) -> {
-            if (text != null && !text.isBlank()) {
-              kept.put(language, text);
-            }
-          });
-    }
-    return kept;
+    Map<String, String> sent = submitted.getContent().getClaim();
+    return !(sent == null ? Map.of() : sent).equals(convertMapFromJson(existing.getContentClaim()));
   }
 
   /** Absent settings keep what is stored; German is always active, so none reads as {@code de}. */
@@ -108,9 +100,16 @@ final class AppearanceLockedFields {
     return requested != null && !requested.equals(storedFormOfAddress.get());
   }
 
-  /** Assistant identity (name, icon), images and colours; a missing block clears them all. */
+  /**
+   * Assistant identity (name, icon), images, colours and login effect. A missing block clears the
+   * images and colours, so it counts as a change. The signed-in Admin never sends the assistant
+   * identity or the login effect at all, though; leaving those out would clear a stored value, so
+   * the stored value is kept for the save instead of refusing every save of that Träger. Blank is
+   * different from missing: it is an explicit clear and counts as a change.
+   */
   private static List<String> brandingChanged(Theming submitted, TenantEntity existing) {
     Theming theming = submitted == null ? new Theming() : submitted;
+    keepUnsent(theming, existing);
     List<String> changed = new ArrayList<>();
     differs(
         changed,
@@ -144,14 +143,33 @@ final class AppearanceLockedFields {
     differs(
         changed,
         "theming.loginEffect",
-        loginEffect(theming.getLoginEffect() == null ? null : theming.getLoginEffect().getValue()),
-        loginEffect(existing.getThemingLoginEffect()));
+        theming.getLoginEffect().getValue(),
+        effectiveLoginEffect(existing.getThemingLoginEffect()).getValue());
     return changed;
   }
 
-  /** Stored as the enum name; never configured reads back as NONE, so both are the plain stage. */
-  private static String loginEffect(String value) {
-    return value == null ? NO_LOGIN_EFFECT : value;
+  private static void keepUnsent(Theming theming, TenantEntity existing) {
+    if (theming.getAssistantName() == null) {
+      theming.setAssistantName(existing.getThemingAssistantName());
+    }
+    if (theming.getAssistantIcon() == null) {
+      theming.setAssistantIcon(existing.getThemingAssistantIcon());
+    }
+    if (theming.getLoginEffect() == null) {
+      theming.setLoginEffect(effectiveLoginEffect(existing.getThemingLoginEffect()));
+    }
+  }
+
+  /** As {@code TenantConverter#toLoginEffect} reads it: never configured or unknown is NONE. */
+  private static Theming.LoginEffectEnum effectiveLoginEffect(String stored) {
+    if (stored == null) {
+      return Theming.LoginEffectEnum.NONE;
+    }
+    try {
+      return Theming.LoginEffectEnum.fromValue(stored);
+    } catch (IllegalArgumentException e) {
+      return Theming.LoginEffectEnum.NONE;
+    }
   }
 
   private static void differs(List<String> changed, String field, String submitted, String stored) {

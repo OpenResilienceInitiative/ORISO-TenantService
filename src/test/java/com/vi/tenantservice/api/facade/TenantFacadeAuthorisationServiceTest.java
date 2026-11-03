@@ -975,4 +975,141 @@ class TenantFacadeAuthorisationServiceTest {
         storedTenant());
     org.mockito.Mockito.verifyNoInteractions(consultingTypeService);
   }
+
+  // --- Review round: what the lock compares must be what gets stored ---------------------------
+
+  private void givenRestrictedAdministrator() {
+    givenSingleTenantAdmin();
+    givenResolvedAppearancePolicy(false);
+  }
+
+  private MultilingualTenantDTO withClaim(Map<String, String> claim) {
+    return wholeObject().content(new MultilingualContent().claim(claim));
+  }
+
+  @Test
+  void restrictedAdministratorCannotAddABlankLanguageToTheSlogan() {
+    // a blank entry is stored and shows blank instead of the German fallback
+    givenRestrictedAdministrator();
+
+    assertRefusedAsAppearance(withClaim(Map.of("de", "Old slogan", "en", "")), storedTenant());
+  }
+
+  @Test
+  void restrictedAdministratorCannotDropAStoredLanguageOfTheSlogan() {
+    // the Admin sends {de: x} only; saving that would silently lose the other languages
+    givenRestrictedAdministrator();
+    var stored = storedTenant();
+    stored.setContentClaim("{\"de\":\"Old slogan\",\"en\":\"Old English slogan\"}");
+
+    assertRefusedAsAppearance(withClaim(Map.of("de", "Old slogan")), stored);
+  }
+
+  @Test
+  void restrictedAdministratorCanSendAMultiLanguageSloganUnchanged() {
+    givenRestrictedAdministrator();
+    var stored = storedTenant();
+    stored.setContentClaim("{\"de\":\"Old slogan\",\"en\":\"Old English slogan\"}");
+
+    assertAccepted(withClaim(Map.of("de", "Old slogan", "en", "Old English slogan")), stored);
+  }
+
+  @Test
+  void restrictedAdministratorCannotClearAssistantIdentityWithBlanks() {
+    givenRestrictedAdministrator();
+    var stored = storedTenant();
+    stored.setThemingAssistantName("Helper");
+    stored.setThemingAssistantIcon("robot-7341990");
+
+    assertRefusedAsAppearance(
+        wholeObject().theming(new Theming().assistantName("").assistantIcon("robot-7341990")),
+        stored);
+    assertRefusedAsAppearance(
+        wholeObject().theming(new Theming().assistantName("Helper").assistantIcon(" ")), stored);
+  }
+
+  @Test
+  void restrictedAdministratorKeepsAssistantIdentityAndLoginEffectTheRequestLeavesOut() {
+    // the signed-in Admin never sends them; the save must neither fail nor clear them
+    givenRestrictedAdministrator();
+    var stored = storedTenant();
+    stored.setThemingAssistantName("Helper");
+    stored.setThemingAssistantIcon("robot-7341990");
+    stored.setThemingLoginEffect("CRACKS");
+    var theming = new Theming();
+
+    assertAccepted(wholeObject().theming(theming), stored);
+
+    assertThat(theming.getAssistantName()).isEqualTo("Helper");
+    assertThat(theming.getAssistantIcon()).isEqualTo("robot-7341990");
+    assertThat(theming.getLoginEffect()).isEqualTo(Theming.LoginEffectEnum.CRACKS);
+  }
+
+  @Test
+  void restrictedAdministratorCannotChangeTheLoginEffect() {
+    givenRestrictedAdministrator();
+    var stored = storedTenant();
+    stored.setThemingLoginEffect("CRACKS");
+
+    assertRefusedAsAppearance(
+        wholeObject().theming(new Theming().loginEffect(Theming.LoginEffectEnum.NONE)), stored);
+    assertRefusedAsAppearance(
+        wholeObject().theming(new Theming().loginEffect(Theming.LoginEffectEnum.LINES)), stored);
+  }
+
+  @Test
+  void restrictedAdministratorCanSendTheLoginEffectAsStored() {
+    givenRestrictedAdministrator();
+    var stored = storedTenant();
+    stored.setThemingLoginEffect("CRACKS");
+
+    assertAccepted(
+        wholeObject().theming(new Theming().loginEffect(Theming.LoginEffectEnum.CRACKS)), stored);
+  }
+
+  @Test
+  void restrictedAdministratorSeesAnUnknownStoredLoginEffectAsNone() {
+    // TenantConverter#toLoginEffect serves an unknown stored value as NONE, so NONE is an echo
+    givenRestrictedAdministrator();
+    var stored = storedTenant();
+    stored.setThemingLoginEffect("SPARKLES");
+
+    assertAccepted(
+        wholeObject().theming(new Theming().loginEffect(Theming.LoginEffectEnum.NONE)), stored);
+    assertAccepted(wholeObject().theming(new Theming()), stored);
+    assertRefusedAsAppearance(
+        wholeObject().theming(new Theming().loginEffect(Theming.LoginEffectEnum.LINES)), stored);
+  }
+
+  @Test
+  void anUnreadableFormOfAddressNeverLetsAChangeThrough() {
+    givenRestrictedAdministrator();
+    when(consultingTypeService.getConsultingTypesByTenantId((int) ID))
+        .thenThrow(new org.springframework.web.client.RestClientException("consulting type down"));
+
+    assertThrows(
+        org.springframework.web.client.RestClientException.class,
+        () ->
+            tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+                wholeObject()
+                    .settings(
+                        new Settings()
+                            .extendedSettings(new ConsultingTypePatchDTO().languageFormal(true))),
+                storedTenant()));
+  }
+
+  @Test
+  void restrictedAdministratorCanSaveWhatTheSignedInAdminSends() {
+    // mapTenantDataToTenantAdminData: claim {de: x}, no extendedSettings, no login effect, no
+    // assistant identity, empty logos instead of missing ones, null colours
+    givenRestrictedAdministrator();
+    var stored = storedTenant();
+    var adminShape =
+        new MultilingualTenantDTO("Happylife")
+            .content(new MultilingualContent().claim(Map.of("de", "Old slogan")))
+            .theming(new Theming().logo("").favicon("").primaryColor(null))
+            .settings(new Settings().activeLanguages(List.of("de")));
+
+    assertAccepted(adminShape, stored);
+  }
 }
