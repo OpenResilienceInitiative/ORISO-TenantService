@@ -9,6 +9,8 @@ import static com.vi.tenantservice.api.util.JsonConverter.convertMapFromJson;
 import static com.vi.tenantservice.api.util.JsonConverter.convertToJson;
 
 import com.google.common.collect.Maps;
+import com.vi.tenantservice.api.exception.TenantValidationException;
+import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import com.vi.tenantservice.api.model.AdminTenantDTO;
 import com.vi.tenantservice.api.model.BasicTenantLicensingDTO;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
@@ -1011,6 +1013,13 @@ public class TenantConverter {
   private TenantSmtpSettings toTenantSmtpSettings(SmtpConfig smtpConfig) {
     if (smtpConfig == null) {
       return null;
+    }
+    // A new password without a secret would be stored in plain text (#346). "Unchanged" (blank or
+    // masked) needs no encryption and stays allowed.
+    if (normalizeIncomingSmtpPassword(smtpConfig.getPassword()) != null
+        && !smtpPasswordEncryptionService.isEnabled()) {
+      throw new TenantValidationException(
+          HttpStatusExceptionReason.SMTP_PASSWORD_ENCRYPTION_NOT_CONFIGURED);
     }
     return TenantSmtpSettings.builder()
         .enabled(nullAsFalse(smtpConfig.getEnabled()))
