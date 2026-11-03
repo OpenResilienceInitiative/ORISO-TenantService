@@ -705,6 +705,35 @@ class TenantFacadeAuthorisationServiceTest {
   }
 
   @Test
+  void assertCanPublishDpa_Should_allowThePlatformAdministrator() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+
+    tenantFacadeAuthorisationService.assertCanPublishDpa();
+  }
+
+  @Test
+  void assertCanPublishDpa_Should_refuseATraegerAdminOfAnyTenant() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(2L));
+    org.mockito.Mockito.lenient()
+        .when(authorisationService.hasRole("tenant-admin"))
+        .thenReturn(true);
+
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanPublishDpa())
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void assertCanPublishDpa_Should_refuseTheTechnicalIdentityWithAPlatformShapedToken() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
+    when(technicalServiceIdentity.isCurrentCaller()).thenReturn(true);
+
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertCanPublishDpa())
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
   void canAccessTenantById_Should_notGrantTheTechnicalIdentityForeignTenants() {
     org.mockito.Mockito.lenient().when(authorisationService.getUsername()).thenReturn("technical");
     org.mockito.Mockito.lenient().when(technicalServiceIdentity.isCurrentCaller()).thenReturn(true);

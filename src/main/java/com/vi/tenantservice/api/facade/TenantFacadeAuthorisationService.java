@@ -399,6 +399,18 @@ public class TenantFacadeAuthorisationService {
     return isSuperAdmin() && !isTechnicalUser();
   }
 
+  /**
+   * Publishing a data processing agreement stamps a version every tenant must sign and sets the
+   * deadline after which new counselling stops, so it is the platform administrator's act alone. A
+   * Träger admin (tenant-admin or single-tenant-admin with a tenant above 0) and the technical
+   * identity are refused, even for their own tenant. Reading and signing stay with tenant access.
+   */
+  public void assertCanPublishDpa() {
+    if (!isPlatformAdministrator()) {
+      throw new AccessDeniedException("Only the platform administrator may publish the DPA");
+    }
+  }
+
   public boolean isSuperAdmin() {
     try {
       Optional<Long> tenantId = authorisationService.findTenantIdInAccessToken();
