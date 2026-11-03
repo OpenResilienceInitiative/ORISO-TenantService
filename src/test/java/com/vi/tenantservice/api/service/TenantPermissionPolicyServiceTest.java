@@ -60,13 +60,9 @@ class TenantPermissionPolicyServiceTest {
     } catch (Exception ex) {
       throw new AssertionError(ex);
     }
-    when(tenants.findAllById(Set.of(42L)))
+    when(tenants.findSettingsByIdIn(Set.of(42L)))
         .thenReturn(
-            java.util.List.of(
-                com.vi.tenantservice.api.model.TenantEntity.builder()
-                    .id(42L)
-                    .settings(json)
-                    .build()));
+            java.util.List.of(new com.vi.tenantservice.api.model.TenantSettingsView(42L, json)));
     when(platformControls.getControls()).thenReturn(new TenantAdminControls());
     var inherited = service.getResolvedPolicies(Set.of(42L)).get(42L);
     keys.forEach(
@@ -485,13 +481,11 @@ class TenantPermissionPolicyServiceTest {
   @org.junit.jupiter.params.provider.MethodSource("collectionPolicyStates")
   void collectionPoliciesHonorAllFourStatesAndKeepTenantOverridesIsolated(
       String key, boolean parentValue, PermissionPolicyMode parentMode) throws Exception {
-    when(tenants.findAllById(Set.of(42L)))
+    when(tenants.findSettingsByIdIn(Set.of(42L)))
         .thenReturn(
             java.util.List.of(
-                com.vi.tenantservice.api.model.TenantEntity.builder()
-                    .id(42L)
-                    .settings("{\"" + key + "\":false}")
-                    .build()));
+                new com.vi.tenantservice.api.model.TenantSettingsView(
+                    42L, "{\"" + key + "\":false}")));
     when(platformControls.getControls())
         .thenReturn(
             new TenantAdminControls()
@@ -586,17 +580,13 @@ class TenantPermissionPolicyServiceTest {
                     Map.of(
                         key, new BooleanPermissionPolicy(parent, PermissionPolicyMode.SUGGESTED))));
     String json = "absent".equals(raw) ? "{}" : "{\"" + key + "\":" + raw + "}";
-    when(tenants.findAllById(Set.of(42L)))
+    when(tenants.findSettingsByIdIn(Set.of(42L)))
         .thenReturn(
-            java.util.List.of(
-                com.vi.tenantservice.api.model.TenantEntity.builder()
-                    .id(42L)
-                    .settings(json)
-                    .build()));
+            java.util.List.of(new com.vi.tenantservice.api.model.TenantSettingsView(42L, json)));
     boolean optOut = "false".equals(raw);
     assertThat(service.getResolvedPolicies(42L).get(key))
         .isEqualTo(new ResolvedPolicyValue<>(optOut ? false : parent, SUGGESTED, !optOut));
-    verify(tenants).findAllById(Set.of(42L));
+    verify(tenants).findSettingsByIdIn(Set.of(42L));
   }
 
   @Test
@@ -604,28 +594,21 @@ class TenantPermissionPolicyServiceTest {
     String key = "featureDisplayNameEditableLiveChatEnabled";
     when(platformControls.getControls()).thenReturn(new TenantAdminControls());
     Set<Long> ids = Set.of(42L, 84L);
-    when(tenants.findAllById(ids))
+    when(tenants.findSettingsByIdIn(ids))
         .thenReturn(
             java.util.List.of(
-                com.vi.tenantservice.api.model.TenantEntity.builder()
-                    .id(42L)
-                    .settings("{\"" + key + "\":false}")
-                    .build(),
-                com.vi.tenantservice.api.model.TenantEntity.builder()
-                    .id(84L)
-                    .settings("{}")
-                    .build(),
-                com.vi.tenantservice.api.model.TenantEntity.builder()
-                    .id(999L)
-                    .settings("{\"" + key + "\":false}")
-                    .build()));
+                new com.vi.tenantservice.api.model.TenantSettingsView(
+                    42L, "{\"" + key + "\":false}"),
+                new com.vi.tenantservice.api.model.TenantSettingsView(84L, "{}"),
+                new com.vi.tenantservice.api.model.TenantSettingsView(
+                    999L, "{\"" + key + "\":false}")));
     var result = service.getResolvedPolicies(ids);
     assertThat(result).containsOnlyKeys(42L, 84L);
     assertThat(result.get(42L).get(key))
         .isEqualTo(new ResolvedPolicyValue<>(false, SUGGESTED, false));
     assertThat(result.get(84L).get(key))
         .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
-    verify(tenants).findAllById(ids);
+    verify(tenants).findSettingsByIdIn(ids);
     verify(repository).findByTenantIdIn(ids);
     org.mockito.Mockito.verifyNoMoreInteractions(tenants, repository);
   }
@@ -640,13 +623,9 @@ class TenantPermissionPolicyServiceTest {
       })
   void malformedPrivateCollectionSettingsRefuseWithoutParserCauseOrRawData(String json) {
     when(platformControls.getControls()).thenReturn(new TenantAdminControls());
-    when(tenants.findAllById(Set.of(42L)))
+    when(tenants.findSettingsByIdIn(Set.of(42L)))
         .thenReturn(
-            java.util.List.of(
-                com.vi.tenantservice.api.model.TenantEntity.builder()
-                    .id(42L)
-                    .settings(json)
-                    .build()));
+            java.util.List.of(new com.vi.tenantservice.api.model.TenantSettingsView(42L, json)));
     assertThatThrownBy(() -> service.getResolvedPolicies(42L))
         .isInstanceOf(com.vi.tenantservice.api.exception.TenantSettingsUnavailableException.class)
         .hasNoCause()
@@ -658,13 +637,9 @@ class TenantPermissionPolicyServiceTest {
   @org.junit.jupiter.params.provider.ValueSource(strings = {" "})
   void absentStoredSettingsRetainTheInheritedDefault(String json) {
     when(platformControls.getControls()).thenReturn(new TenantAdminControls());
-    when(tenants.findAllById(Set.of(42L)))
+    when(tenants.findSettingsByIdIn(Set.of(42L)))
         .thenReturn(
-            java.util.List.of(
-                com.vi.tenantservice.api.model.TenantEntity.builder()
-                    .id(42L)
-                    .settings(json)
-                    .build()));
+            java.util.List.of(new com.vi.tenantservice.api.model.TenantSettingsView(42L, json)));
     assertThat(service.getResolvedPolicies(42L).get("featureDisplayNameEditableLiveChatEnabled"))
         .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
   }
@@ -707,14 +682,11 @@ class TenantPermissionPolicyServiceTest {
   @Test
   void invalidPrivateSettingsOmitOnlyTheirTenantInBatchReads() {
     var bad =
-        com.vi.tenantservice.api.model.TenantEntity.builder()
-            .id(42L)
-            .settings("{\"featureDisplayNameEditableLiveChatEnabled\":\"false\"}")
-            .build();
-    var valid =
-        com.vi.tenantservice.api.model.TenantEntity.builder().id(84L).settings("{}").build();
+        new com.vi.tenantservice.api.model.TenantSettingsView(
+            42L, "{\"featureDisplayNameEditableLiveChatEnabled\":\"false\"}");
+    var valid = new com.vi.tenantservice.api.model.TenantSettingsView(84L, "{}");
     when(platformControls.getControls()).thenReturn(new TenantAdminControls());
-    when(tenants.findAllById(Set.of(42L, 84L))).thenReturn(java.util.List.of(bad, valid));
+    when(tenants.findSettingsByIdIn(Set.of(42L, 84L))).thenReturn(java.util.List.of(bad, valid));
 
     assertThat(service.getResolvedPolicies(Set.of(42L, 84L))).containsOnlyKeys(84L);
   }

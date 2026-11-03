@@ -110,7 +110,7 @@ public class TenantPermissionPolicyService {
   private Map<Long, Map<String, PolicyValue<Boolean>>> accountOptOuts(
       Set<Long> tenantIds, Set<Long> unreadable) {
     Map<Long, Map<String, PolicyValue<Boolean>>> result = new LinkedHashMap<>();
-    for (var tenant : tenants.findAllById(tenantIds)) {
+    for (var tenant : tenants.findSettingsByIdIn(tenantIds)) {
       if (!tenantIds.contains(tenant.getId())) continue;
       String json = tenant.getSettings();
       if (json == null || json.isBlank()) continue;
