@@ -281,6 +281,8 @@ public class TenantServiceFacade {
     try {
       createDefaultConsultingTypeSettings(created, grant);
     } catch (ConsultingTypeCreationException failure) {
+      log.error(
+          "Owned consulting-type bootstrap failed for tenant with id {}", created.getId(), failure);
       throw new TenantBadRequestException("Owned consulting-type bootstrap could not complete");
     }
     recordOnboardingDpaAcceptance(

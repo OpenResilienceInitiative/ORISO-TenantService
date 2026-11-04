@@ -76,11 +76,19 @@ jobs:
           PY
       - name: Verify the resource and failure classifiers without native resources
         run: |
-          python -m unittest discover -s scripts/tests -p test_native_context_resources.py -q > "$RUNNER_TEMP/ctx-resource-controls.txt" 2>&1
-          python -m unittest discover -s scripts/tests -p test_bootstrap_baseline.py -q >> "$RUNNER_TEMP/ctx-resource-controls.txt" 2>&1
-          python -m unittest discover -s scripts/tests -p test_native_memory_attribution.py -q >> "$RUNNER_TEMP/ctx-resource-controls.txt" 2>&1
-          python -m unittest discover -s scripts/tests -p test_native_diagnostic_frames.py -q >> "$RUNNER_TEMP/ctx-resource-controls.txt" 2>&1
-          python -m unittest discover -s scripts/tests -p test_paired_bootstrap_native.py -q >> "$RUNNER_TEMP/ctx-resource-controls.txt" 2>&1
+          if {
+            python -m unittest discover -s scripts/tests -p test_native_context_resources.py -q &&
+            python -m unittest discover -s scripts/tests -p test_bootstrap_baseline.py -q &&
+            python -m unittest discover -s scripts/tests -p test_native_memory_attribution.py -q &&
+            python -m unittest discover -s scripts/tests -p test_native_diagnostic_frames.py -q &&
+            python -m unittest discover -s scripts/tests -p test_paired_bootstrap_native.py -q
+          } > "$RUNNER_TEMP/ctx-resource-controls.txt" 2>&1; then
+            :
+          else
+            status=$?
+            cat "$RUNNER_TEMP/ctx-resource-controls.txt"
+            exit "$status"
+          fi
       - name: Compile ordinary sources before disposable actual HTTP execution
         run: |
           python scripts/ci/scenario-c-context-native.py \

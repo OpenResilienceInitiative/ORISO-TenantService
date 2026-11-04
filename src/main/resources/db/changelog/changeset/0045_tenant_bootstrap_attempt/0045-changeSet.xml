@@ -1,8 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
   <changeSet id="tenant-owned-bootstrap-attempt" author="oriso">
+    <preConditions onFail="MARK_RAN">
+      <not><columnExists tableName="tenant" columnName="bootstrap_attempt_id"/></not>
+    </preConditions>
     <addColumn tableName="tenant"><column name="bootstrap_attempt_id" type="VARCHAR(36)"/></addColumn>
     <addUniqueConstraint tableName="tenant" columnNames="bootstrap_attempt_id" constraintName="uq_tenant_bootstrap_attempt"/>
     <rollback><dropUniqueConstraint tableName="tenant" constraintName="uq_tenant_bootstrap_attempt"/><dropColumn tableName="tenant" columnName="bootstrap_attempt_id"/></rollback>
+  </changeSet>
+  <!-- MariaDB DDL is not transactional: a partial apply skips the set above, so the constraint is ensured apart. -->
+  <changeSet id="tenant-owned-bootstrap-attempt-unique" author="oriso">
+    <preConditions onFail="MARK_RAN">
+      <not><uniqueConstraintExists tableName="tenant" constraintName="uq_tenant_bootstrap_attempt"/></not>
+    </preConditions>
+    <addUniqueConstraint tableName="tenant" columnNames="bootstrap_attempt_id" constraintName="uq_tenant_bootstrap_attempt"/>
+    <rollback/>
   </changeSet>
 </databaseChangeLog>

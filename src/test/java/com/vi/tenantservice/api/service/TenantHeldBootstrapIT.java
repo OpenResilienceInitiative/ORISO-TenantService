@@ -54,7 +54,7 @@ import org.springframework.web.server.ResponseStatusException;
     })
 @ActiveProfiles("testing")
 @Sql(
-    scripts = "/held-bootstrap-operation.sql",
+    scripts = "/db/changelog/changeset/0046_tenant_held_bootstrap/createTenantHeldBootstrap.sql",
     statements = {
       "ALTER TABLE tenant ADD COLUMN IF NOT EXISTS bootstrap_attempt_id VARCHAR(36)",
       "ALTER TABLE tenant ADD CONSTRAINT IF NOT EXISTS uq_tenant_bootstrap_attempt UNIQUE (bootstrap_attempt_id)",

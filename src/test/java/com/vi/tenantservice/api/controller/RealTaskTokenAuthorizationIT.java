@@ -44,7 +44,8 @@ import org.springframework.test.context.jdbc.Sql;
       "csrf.header.property=csrfHeader",
       "csrf.cookie.property=csrfCookie",
       "TASK_IDENTITY_AUDIENCE=tenantservice",
-      "ORISO_TASK_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+      "ORISO_TASK_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+      "ORISO_TENANT_CREATION_CONTEXT_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     })
 @Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class RealTaskTokenAuthorizationIT {

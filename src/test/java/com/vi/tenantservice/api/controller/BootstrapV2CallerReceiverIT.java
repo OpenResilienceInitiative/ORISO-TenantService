@@ -69,7 +69,7 @@ import org.springframework.test.context.jdbc.Sql;
     scripts = {
       "/database/TenantServiceDatabase.sql",
       "/database/MultiTenantData.sql",
-      "/held-bootstrap-operation.sql"
+      "/db/changelog/changeset/0046_tenant_held_bootstrap/createTenantHeldBootstrap.sql"
     },
     statements = "ALTER TABLE tenant DROP CONSTRAINT IF EXISTS unique_subdomain")
 class BootstrapV2CallerReceiverIT {

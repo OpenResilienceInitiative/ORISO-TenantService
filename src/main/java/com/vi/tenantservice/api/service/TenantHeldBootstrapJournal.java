@@ -104,11 +104,15 @@ public final class TenantHeldBootstrapJournal {
   }
 
   void require(Operation operation) {
+    requireBound(operation);
+    if (System.nanoTime() - operation.started >= 60_000_000_000L) throw denied();
+  }
+
+  private void requireBound(Operation operation) {
     if (operation == null
         || operation.owner != this
         || !operation.open
         || operation.thread != Thread.currentThread()
-        || System.nanoTime() - operation.started >= 60_000_000_000L
         || !operation.binding.equals(caller())) throw denied();
     if (!equal(
         operation.inputDigest,
@@ -118,6 +122,19 @@ public final class TenantHeldBootstrapJournal {
 
   Row read(Operation operation, boolean lock) {
     require(operation);
+    return validatedRow(operation, lock);
+  }
+
+  /**
+   * Classifies a failed request only. A committed row outlives the 60-second write window, so this
+   * skips that one check; every binding and digest is still enforced.
+   */
+  Row readForRecovery(Operation operation) {
+    requireBound(operation);
+    return validatedRow(operation, false);
+  }
+
+  private Row validatedRow(Operation operation, boolean lock) {
     var rows =
         sql.query(
             "SELECT * FROM tenant_bootstrap_operation WHERE claim_id=?"

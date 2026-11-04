@@ -69,12 +69,10 @@ public class TenantHeldBootstrap {
       if (row == null) throw TenantHeldBootstrapJournal.denied();
       if (!"COMPLETE".equals(row.state())) creation.completeHeld(operation, resultDigest);
       return new Result(result, journal.receipt(operation, resultDigest));
-    } catch (org.springframework.security.access.AccessDeniedException denied) {
-      throw denied;
     } catch (RuntimeException failure) {
       TenantHeldBootstrapJournal.Row pending;
       try {
-        pending = journal.read(operation, false);
+        pending = journal.readForRecovery(operation);
       } catch (org.springframework.security.access.AccessDeniedException denied) {
         throw denied;
       } catch (RuntimeException unknown) {
