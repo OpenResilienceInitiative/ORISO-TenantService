@@ -880,7 +880,8 @@ public class TenantServiceFacade {
   }
 
   public Optional<TenantDTO> findTenantById(Long id) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id);
+    // The invite flow checks the tenant's licence limit with the setup actor's token.
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id, "INVITE_RESERVATIONS");
     var tenantById = tenantService.findTenantDataById(id);
     if (tenantById.isEmpty()) {
       return Optional.empty();
