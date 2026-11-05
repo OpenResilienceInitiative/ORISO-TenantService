@@ -63,6 +63,12 @@ public class TenantSettings {
    */
   Boolean featureAskerEmailEnabled;
 
+  Boolean featureAskerEmailCollectionAgencyCounsellingEnabled;
+  Boolean featureDisplayNameEditableAgencyCounsellingEnabled;
+  Boolean featureDisplayNameEditableLiveChatEnabled;
+  Boolean featureDisplayNameEditableSelfHelpEnabled;
+  Boolean featureAskerEmailCollectionSelfHelpEnabled;
+
   Boolean featureAskerEmailAgencyCounsellingEnabled;
   Boolean featureAskerEmailLiveChatEnabled;
   Boolean featureAskerEmailSelfHelpEnabled;
@@ -166,6 +172,11 @@ public class TenantSettings {
               // ORISO-Admin#602: opt-out, so every existing tenant keeps today's behaviour.
               Map.entry("featureDisplayNameEditable", true),
               Map.entry("featureAskerEmailEnabled", true),
+              Map.entry("featureAskerEmailCollectionAgencyCounsellingEnabled", true),
+              Map.entry("featureDisplayNameEditableAgencyCounsellingEnabled", true),
+              Map.entry("featureDisplayNameEditableLiveChatEnabled", true),
+              Map.entry("featureDisplayNameEditableSelfHelpEnabled", true),
+              Map.entry("featureAskerEmailCollectionSelfHelpEnabled", true),
               Map.entry("featureAskerEmailAgencyCounsellingEnabled", true),
               Map.entry("featureAskerEmailLiveChatEnabled", false),
               Map.entry("featureAskerEmailSelfHelpEnabled", true),
@@ -366,6 +377,26 @@ public class TenantSettings {
     }
     if (featureAskerEmailEnabled == null) {
       featureAskerEmailEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailEnabled");
+    }
+    if (featureAskerEmailCollectionAgencyCounsellingEnabled == null) {
+      featureAskerEmailCollectionAgencyCounsellingEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailCollectionAgencyCounsellingEnabled");
+    }
+    if (featureDisplayNameEditableAgencyCounsellingEnabled == null) {
+      featureDisplayNameEditableAgencyCounsellingEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDisplayNameEditableAgencyCounsellingEnabled");
+    }
+    if (featureDisplayNameEditableLiveChatEnabled == null) {
+      featureDisplayNameEditableLiveChatEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDisplayNameEditableLiveChatEnabled");
+    }
+    if (featureDisplayNameEditableSelfHelpEnabled == null) {
+      featureDisplayNameEditableSelfHelpEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureDisplayNameEditableSelfHelpEnabled");
+    }
+    if (featureAskerEmailCollectionSelfHelpEnabled == null) {
+      featureAskerEmailCollectionSelfHelpEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAskerEmailCollectionSelfHelpEnabled");
     }
     if (featureAskerEmailAgencyCounsellingEnabled == null) {
       featureAskerEmailAgencyCounsellingEnabled =

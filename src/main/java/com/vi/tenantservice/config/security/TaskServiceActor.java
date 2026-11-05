@@ -25,7 +25,9 @@ enum TaskServiceActor {
           "matrix-agency",
           "matrix-agency-provision",
           "appointment-sync",
-          "appointment-participant-cleanup"));
+          "appointment-participant-cleanup",
+          // AgencyService deletion-log outbox (OBP 2.1 #130); exact-union check only here.
+          "deletion-audit-read"));
 
   private final Set<String> purposes;
   private final Set<String> roles;

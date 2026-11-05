@@ -18,6 +18,7 @@ import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
+import com.vi.tenantservice.api.exception.TenantSettingsUnavailableException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import com.vi.tenantservice.api.model.AccountInactivitySettings;
@@ -43,6 +44,7 @@ import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpMode;
 import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.AssistantIdentityValidator;
+import com.vi.tenantservice.api.service.DeletionAuditReporter;
 import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
@@ -161,6 +163,8 @@ public class TenantServiceFacade {
   private final @NonNull TenantLegalVersionService tenantLegalVersionService;
 
   private final @NonNull TenantLegalProposalService tenantLegalProposalService;
+
+  private final @NonNull DeletionAuditReporter deletionAuditReporter;
 
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
@@ -500,6 +504,8 @@ public class TenantServiceFacade {
     // DPA signature rows (incl. any outstanding sign links) go with the tenant.
     tenantDpaService.deleteSignaturesForTenant(id);
     tenantService.delete(tenant);
+    // Reported after the commit and best effort: the log can never undo or fail the deletion.
+    deletionAuditReporter.reportTenantExecuted(id);
   }
 
   private boolean isAttemptToCreateFirstNonTechnicalTenant(Long tenantId) {
@@ -625,11 +631,7 @@ public class TenantServiceFacade {
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenantEntity) {
     subdomainValidator.validateOnUpdate(
         sanitizedTenantDTO.getSubdomain(), existingTenantEntity.getSubdomain());
-    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
-        sanitizedTenantDTO, existingTenantEntity);
-    tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
-        sanitizedTenantDTO, existingTenantEntity);
-    tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
+    // Before the permission check: branding the form merely echoed from the platform is no change.
     if (existingTenantEntity.getId() != TECHNICAL_TENANT_ID) {
       tenantService
           .findTenantById((long) TECHNICAL_TENANT_ID)
@@ -638,6 +640,11 @@ public class TenantServiceFacade {
                   inheritedBrandingEchoStripper.strip(
                       sanitizedTenantDTO.getTheming(), existingTenantEntity, platform));
     }
+    tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
+        sanitizedTenantDTO, existingTenantEntity);
+    tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
+        sanitizedTenantDTO, existingTenantEntity);
+    tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     // toEntity mutates existingTenantEntity, so capture the stored settings first
     var existingSettingsJson = existingTenantEntity.getSettings();
     var publishedBefore = PublishedLegalTexts.of(existingTenantEntity);
@@ -650,6 +657,7 @@ public class TenantServiceFacade {
     validateSelectedOwnSmtp(updatedEntity, existingSettingsJson, sanitizedTenantDTO);
     preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     preserveStoredDirectInviteFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
+    preserveStoredAccountFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     var entityToSave = updatedEntity;
     updatedEntity =
@@ -824,6 +832,37 @@ public class TenantServiceFacade {
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }
 
+  private void preserveStoredAccountFlags(
+      String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
+    if (existingSettingsJson == null || updatedEntity.getSettings() == null) return;
+    Settings request = tenantDTO.getSettings();
+    TenantSettings existingSettings = convertFromJson(existingSettingsJson);
+    TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
+    if (request == null
+        || request.getFeatureAskerEmailCollectionAgencyCounsellingEnabled() == null) {
+      updatedSettings.setFeatureAskerEmailCollectionAgencyCounsellingEnabled(
+          existingSettings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled());
+    }
+    if (request == null || request.getFeatureAskerEmailCollectionSelfHelpEnabled() == null) {
+      updatedSettings.setFeatureAskerEmailCollectionSelfHelpEnabled(
+          existingSettings.getFeatureAskerEmailCollectionSelfHelpEnabled());
+    }
+    if (request == null
+        || request.getFeatureDisplayNameEditableAgencyCounsellingEnabled() == null) {
+      updatedSettings.setFeatureDisplayNameEditableAgencyCounsellingEnabled(
+          existingSettings.getFeatureDisplayNameEditableAgencyCounsellingEnabled());
+    }
+    if (request == null || request.getFeatureDisplayNameEditableLiveChatEnabled() == null) {
+      updatedSettings.setFeatureDisplayNameEditableLiveChatEnabled(
+          existingSettings.getFeatureDisplayNameEditableLiveChatEnabled());
+    }
+    if (request == null || request.getFeatureDisplayNameEditableSelfHelpEnabled() == null) {
+      updatedSettings.setFeatureDisplayNameEditableSelfHelpEnabled(
+          existingSettings.getFeatureDisplayNameEditableSelfHelpEnabled());
+    }
+    updatedEntity.setSettings(convertToJson(updatedSettings));
+  }
+
   private void setContentActivationDates(TenantEntity entity, MultilingualTenantDTO tenantDTO) {
     MultilingualContent content = tenantDTO.getContent();
 
@@ -841,7 +880,8 @@ public class TenantServiceFacade {
   }
 
   public Optional<TenantDTO> findTenantById(Long id) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id);
+    // The invite flow checks the tenant's licence limit with the setup actor's token.
+    tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(id, "INVITE_RESERVATIONS");
     var tenantById = tenantService.findTenantDataById(id);
     if (tenantById.isEmpty()) {
       return Optional.empty();
@@ -1045,7 +1085,16 @@ public class TenantServiceFacade {
     Theming platformTheming = getPlatformTheming(lang);
     List<RestrictedTenantDTO> tenants =
         tenantService.findRestrictedTenantDataByIds(ids).stream()
-            .map(tenant -> tenantConverter.toRestrictedTenantDTO(tenant, lang))
+            .flatMap(
+                tenant -> {
+                  try {
+                    return java.util.stream.Stream.of(
+                        tenantConverter.toRestrictedTenantDTO(tenant, lang));
+                  } catch (TenantSettingsUnavailableException unreadable) {
+                    log.warn("Omitting tenant {} with unreadable settings", tenant.getId());
+                    return java.util.stream.Stream.empty();
+                  }
+                })
             .toList();
     Set<Long> resolvedTenantIds =
         tenants.stream()
@@ -1054,15 +1103,17 @@ public class TenantServiceFacade {
     Map<Long, Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>>>
         policiesByTenant = tenantPermissionPolicyService.getResolvedPolicies(resolvedTenantIds);
     Map<Long, com.vi.tenantservice.api.model.InternalGroupChatPolicies> internalGroupChatByTenant =
-        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantIds);
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(
+            policiesByTenant.keySet());
     return tenants.stream()
+        .filter(dto -> internalGroupChatByTenant.containsKey(dto.getId()))
         .map(
             dto ->
                 withEffectiveSettings(
                     dto,
                     controls,
                     platformTheming,
-                    policiesByTenant.getOrDefault(dto.getId(), Map.of()),
+                    policiesByTenant.get(dto.getId()),
                     internalGroupChatByTenant.get(dto.getId())))
         .toList();
   }
@@ -1092,8 +1143,35 @@ public class TenantServiceFacade {
         dto,
         tenantAdminControlsService.getControls(),
         getPlatformTheming(lang),
-        tenantPermissionPolicyService.getResolvedPolicies(dto.getId()),
+        publicPoliciesForResolvedTenant(dto, resolvedTenantId),
         tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantId));
+  }
+
+  /**
+   * Keeps selected-Träger account privacy authoritative when shared-domain branding masks its id.
+   */
+  private Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>>
+      publicPoliciesForResolvedTenant(RestrictedTenantDTO dto, Long resolvedTenantId) {
+    var policies = tenantPermissionPolicyService.getResolvedPolicies(dto.getId());
+    if (java.util.Objects.equals(dto.getId(), resolvedTenantId)) return policies;
+    var selected = tenantPermissionPolicyService.getResolvedPolicies(resolvedTenantId);
+    var combined = new java.util.LinkedHashMap<>(policies);
+    for (var feature :
+        java.util.List.of(
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME,
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL,
+            com.vi.tenantservice.api.policy.PermissionFeature
+                .ASKER_EMAIL_COLLECTION_AGENCY_COUNSELLING,
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_AGENCY_COUNSELLING,
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_LIVE_CHAT,
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_SELF_HELP,
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL_COLLECTION_SELF_HELP)) {
+      // Missing selected authority must never fall back to a permissive main-tenant value.
+      var selectedPolicy = selected.get(feature.apiKey());
+      if (selectedPolicy == null) combined.remove(feature.apiKey());
+      else combined.put(feature.apiKey(), selectedPolicy);
+    }
+    return combined;
   }
 
   /**
