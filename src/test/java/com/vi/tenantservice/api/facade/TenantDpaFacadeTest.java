@@ -131,19 +131,74 @@ class TenantDpaFacadeTest {
   }
 
   @Test
-  void getGateStatus_Should_reportPublishedAndSigned_When_theAuthoritativeStatusIsValid() {
-    // given
+  void getGateStatus_Should_includeCurrentSignatureTimeInUtc_When_theAuthoritativeStatusIsValid() {
     var version = LocalDateTime.of(2026, 7, 19, 20, 0);
-    givenStatus(5L, TenantDpaStatus.VALID, version);
+    var signedAt = version.plusDays(1).plusSeconds(18);
+    when(tenantDpaStatusService.getStatus(5L))
+        .thenReturn(
+            new TenantDpaStatusService.DpaStatusView(
+                5L, TenantDpaStatus.VALID, version, version, signedAt, "Signer name", false));
 
-    // when
     var status = tenantDpaFacade.getGateStatus(5L);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);
 
-    // then
     verify(tenantFacadeAuthorisationService)
         .assertUserIsAuthorizedToReadTenant(5L, "RUNTIME_POLICY");
     assertThat(status.getDpaPublished()).isTrue();
     assertThat(status.getDpaSigned()).isTrue();
+    assertThat(json.path("dpaSignedAt").asText()).isEqualTo("2026-07-20T20:00:18Z");
+    assertThat(json.has("signedBy")).isFalse();
+  }
+
+  @Test
+  void getGateStatus_Should_omitSignatureTime_When_renewalGraceAllowsCounselling() {
+    var oldVersion = LocalDateTime.of(2026, 7, 19, 20, 0);
+    var newVersion = oldVersion.plusDays(5);
+    when(tenantDpaStatusService.getStatus(5L))
+        .thenReturn(
+            new TenantDpaStatusService.DpaStatusView(
+                5L,
+                TenantDpaStatus.OUTDATED,
+                newVersion,
+                oldVersion,
+                oldVersion.plusDays(1),
+                "Signer name",
+                false,
+                newVersion.plusDays(14),
+                true));
+
+    var status = tenantDpaFacade.getGateStatus(5L);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);
+
+    assertThat(status.getDpaSigned()).isFalse();
+    assertThat(status.getNewCounsellingAllowed()).isTrue();
+    assertThat(json.has("dpaSignedAt")).isFalse();
+  }
+
+  @Test
+  void getGateStatus_Should_omitSignatureTime_When_validSignatureHasNoKnownTime() {
+    var version = LocalDateTime.of(2026, 7, 19, 20, 0);
+    when(tenantDpaStatusService.getStatus(5L))
+        .thenReturn(
+            new TenantDpaStatusService.DpaStatusView(
+                5L, TenantDpaStatus.VALID, version, version, null, null, false));
+
+    var status = tenantDpaFacade.getGateStatus(5L);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);
+
+    assertThat(status.getDpaSigned()).isTrue();
+    assertThat(json.has("dpaSignedAt")).isFalse();
+  }
+
+  @Test
+  void getGateStatus_Should_notReadSignature_When_notAuthorizedForTenant() {
+    doThrow(new AccessDeniedException("nope"))
+        .when(tenantFacadeAuthorisationService)
+        .assertUserIsAuthorizedToReadTenant(5L, "RUNTIME_POLICY");
+
+    assertThatThrownBy(() -> tenantDpaFacade.getGateStatus(5L))
+        .isInstanceOf(AccessDeniedException.class);
+    verifyNoInteractions(tenantDpaStatusService);
   }
 
   @Test

@@ -1375,7 +1375,8 @@ paths:
     description: 'Boolean projection of the authoritative DPA status (/dpa/status): dpaPublished
       means a DPA is in force for the tenant (its own or the governing operator DPA), dpaSigned
       means that exact version is signed - by an authenticated tenant admin in-app or by the
-      authorised signer through a forwarded invite.'
+      authorised signer through a forwarded invite. dpaSignedAt is that signature time in UTC
+      when known.'
     get:
       tags:
         - tenant-controller
@@ -1908,6 +1909,11 @@ components:
           type: boolean
         dpaSigned:
           type: boolean
+        dpaSignedAt:
+          type: string
+          description: 'UTC ISO-8601 signing time for the governing version. Present only when that version is validly signed and its signature time is known.'
+          example: '2026-07-20T20:00:18Z'
+          x-field-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
         dpaForwardPending:
           type: boolean
           description: 'True while the governing DPA version is not signed but at least one

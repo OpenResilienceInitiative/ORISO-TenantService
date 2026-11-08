@@ -217,9 +217,14 @@ public class TenantDpaFacade {
   public DpaGateStatusDTO getGateStatus(Long tenantId) {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId, "RUNTIME_POLICY");
     var status = tenantDpaStatusService.getStatus(tenantId);
+    boolean currentVersionSigned = status.status() == TenantDpaStatus.VALID;
     return new DpaGateStatusDTO()
         .dpaPublished(status.currentVersion() != null)
-        .dpaSigned(status.status() == TenantDpaStatus.VALID)
+        .dpaSigned(currentVersionSigned)
+        .dpaSignedAt(
+            currentVersionSigned && status.signedAt() != null
+                ? status.signedAt().toInstant(ZoneOffset.UTC).toString()
+                : null)
         .dpaForwardPending(status.forwardPending())
         .dpaStatus(status.status().name())
         .currentDpaVersion(
