@@ -221,10 +221,7 @@ public class TenantDpaFacade {
     return new DpaGateStatusDTO()
         .dpaPublished(status.currentVersion() != null)
         .dpaSigned(currentVersionSigned)
-        .dpaSignedAt(
-            currentVersionSigned && status.signedAt() != null
-                ? status.signedAt().toInstant(ZoneOffset.UTC).toString()
-                : null)
+        .dpaSignedAt(currentVersionSigned ? signatureTimeInUtc(status.signedAt()) : null)
         .dpaForwardPending(status.forwardPending())
         .dpaStatus(status.status().name())
         .currentDpaVersion(
@@ -235,6 +232,15 @@ public class TenantDpaFacade {
                 : status.signingDeadlineAt().toInstant(ZoneOffset.UTC).toString())
         .renewalGraceActive(status.renewalGraceActive())
         .newCounsellingAllowed(status.newCounsellingAllowed());
+  }
+
+  private String signatureTimeInUtc(LocalDateTime signedAt) {
+    if (signedAt == null) {
+      return null;
+    }
+    // Signature rows store wall time in the configured signing zone without an offset.
+    var offsets = dpaClock.getZone().getRules().getValidOffsets(signedAt);
+    return offsets.size() == 1 ? signedAt.toInstant(offsets.getFirst()).toString() : null;
   }
 
   /**

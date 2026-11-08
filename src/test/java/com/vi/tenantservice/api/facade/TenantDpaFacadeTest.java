@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -24,11 +25,14 @@ import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.api.validation.InputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -148,6 +152,29 @@ class TenantDpaFacadeTest {
     assertThat(status.getDpaSigned()).isTrue();
     assertThat(json.path("dpaSignedAt").asText()).isEqualTo("2026-07-20T20:00:18Z");
     assertThat(json.has("signedBy")).isFalse();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"2026-03-29T02:30", "2026-10-25T02:30"})
+  void getGateStatus_Should_omitSignatureTime_When_itsLocalTimeHasNoUniqueOffset(String localTime) {
+    var version = LocalDateTime.of(2026, 3, 1, 10, 0);
+    doReturn(ZoneId.of("Europe/Berlin")).when(dpaClock).getZone();
+    when(tenantDpaStatusService.getStatus(5L))
+        .thenReturn(
+            new TenantDpaStatusService.DpaStatusView(
+                5L,
+                TenantDpaStatus.VALID,
+                version,
+                version,
+                LocalDateTime.parse(localTime),
+                "Signer name",
+                false));
+
+    var status = tenantDpaFacade.getGateStatus(5L);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);
+
+    assertThat(status.getDpaSigned()).isTrue();
+    assertThat(json.has("dpaSignedAt")).isFalse();
   }
 
   @Test

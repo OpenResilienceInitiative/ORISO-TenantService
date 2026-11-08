@@ -39,7 +39,10 @@ import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import com.vi.tenantservice.config.security.AuthorisationService;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,6 +51,7 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -113,6 +117,13 @@ class TenantControllerDpaStatusIT {
         "accepted": true
       }
       """;
+
+  @TestBean(methodName = "fixedDpaClock", enforceOverride = true)
+  Clock dpaClock;
+
+  static Clock fixedDpaClock() {
+    return Clock.fixed(Instant.parse("2026-07-20T18:00:18Z"), ZoneId.of("Europe/Berlin"));
+  }
 
   @Autowired private WebApplicationContext context;
   @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
@@ -332,7 +343,7 @@ class TenantControllerDpaStatusIT {
     assertThat(row.getFormData())
         .contains("\"signerName\":\"Toni Tenantadmin\"")
         .contains("\"accepted\":true");
-    assertThat(row.getSignedAt()).isNotNull();
+    assertThat(row.getSignedAt()).isEqualTo(LocalDateTime.of(2026, 7, 20, 20, 0, 18));
     assertThat(row.getCreateDate()).isNotNull();
 
     // the status endpoint reflects the signature as the authoritative state
@@ -340,6 +351,12 @@ class TenantControllerDpaStatusIT {
         .perform(get(DPA_STATUS.formatted(OWN_TENANT)).with(tenantAdminOf(OWN_TENANT)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("status", is("VALID")));
+
+    mockMvc
+        .perform(get(DPA_GATE.formatted(OWN_TENANT)).with(tenantAdminOf(OWN_TENANT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("dpaSigned", is(true)))
+        .andExpect(jsonPath("dpaSignedAt", is("2026-07-20T18:00:18Z")));
   }
 
   @Test
