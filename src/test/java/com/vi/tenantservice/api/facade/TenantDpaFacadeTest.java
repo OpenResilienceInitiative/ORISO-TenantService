@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -18,6 +17,7 @@ import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.GoverningDpaResolver;
+import com.vi.tenantservice.api.service.LegacyDpaSigningTime;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantService;
@@ -25,7 +25,6 @@ import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.api.validation.InputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -57,6 +56,10 @@ class TenantDpaFacadeTest {
   @Mock private AuthorisationService authorisationService;
   @Mock private DpaSignLinkOrigin dpaSignLinkOrigin;
   @org.mockito.Spy private java.time.Clock dpaClock = java.time.Clock.systemUTC();
+
+  @org.mockito.Spy
+  private LegacyDpaSigningTime legacyDpaSigningTime = new LegacyDpaSigningTime("", "");
+
   @InjectMocks private TenantDpaFacade tenantDpaFacade;
 
   @Test
@@ -103,7 +106,8 @@ class TenantDpaFacadeTest {
             null,
             null,
             new com.vi.tenantservice.api.service.DpaSignatureOwnership(null),
-            null);
+            null,
+            java.time.Clock.systemDefaultZone());
     org.springframework.test.util.ReflectionTestUtils.setField(
         tenantDpaFacade, "tenantDpaService", service);
     when(repository.findByTenantId(5L))
@@ -141,7 +145,16 @@ class TenantDpaFacadeTest {
     when(tenantDpaStatusService.getStatus(5L))
         .thenReturn(
             new TenantDpaStatusService.DpaStatusView(
-                5L, TenantDpaStatus.VALID, version, version, signedAt, "Signer name", false));
+                5L,
+                TenantDpaStatus.VALID,
+                version,
+                version,
+                signedAt,
+                "Signer name",
+                false,
+                null,
+                false,
+                java.time.Instant.parse("2026-07-20T20:00:18Z").toEpochMilli()));
 
     var status = tenantDpaFacade.getGateStatus(5L);
     var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);
@@ -158,7 +171,10 @@ class TenantDpaFacadeTest {
   @ValueSource(strings = {"2026-03-29T02:30", "2026-10-25T02:30"})
   void getGateStatus_Should_omitSignatureTime_When_itsLocalTimeHasNoUniqueOffset(String localTime) {
     var version = LocalDateTime.of(2026, 3, 1, 10, 0);
-    doReturn(ZoneId.of("Europe/Berlin")).when(dpaClock).getZone();
+    org.springframework.test.util.ReflectionTestUtils.setField(
+        tenantDpaFacade,
+        "legacyDpaSigningTime",
+        new LegacyDpaSigningTime("Europe/Berlin", "2026-03-01T00:00:00"));
     when(tenantDpaStatusService.getStatus(5L))
         .thenReturn(
             new TenantDpaStatusService.DpaStatusView(
@@ -192,7 +208,8 @@ class TenantDpaFacadeTest {
                 "Signer name",
                 false,
                 newVersion.plusDays(14),
-                true));
+                true,
+                null));
 
     var status = tenantDpaFacade.getGateStatus(5L);
     var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);

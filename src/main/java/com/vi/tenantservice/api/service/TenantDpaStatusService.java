@@ -61,7 +61,8 @@ public class TenantDpaStatusService {
       String signedBy,
       boolean forwardPending,
       LocalDateTime signingDeadlineAt,
-      boolean renewalGraceActive) {
+      boolean renewalGraceActive,
+      Long signedAtEpochMillis) {
     public boolean newCounsellingAllowed() {
       return status == TenantDpaStatus.VALID || renewalGraceActive;
     }
@@ -83,7 +84,8 @@ public class TenantDpaStatusService {
           signedBy,
           forwardPending,
           null,
-          false);
+          false,
+          null);
     }
   }
 
@@ -97,7 +99,11 @@ public class TenantDpaStatusService {
       String formDataJson) {}
 
   private record SignedEntry(
-      LocalDateTime version, LocalDateTime signedAt, String signedBy, boolean graceEligible) {}
+      LocalDateTime version,
+      LocalDateTime signedAt,
+      String signedBy,
+      boolean graceEligible,
+      Long signedAtEpochMillis) {}
 
   private final TenantDpaAdminSignatureRepository adminSignatureRepository;
   private final TenantDpaSignatureRepository signatureRepository;
@@ -131,7 +137,8 @@ public class TenantDpaStatusService {
         status == TenantDpaStatus.OUTDATED
             && deadline != null
             && signedEntries.stream().anyMatch(SignedEntry::graceEligible)
-            && dpaClock.instant().isBefore(deadline.toInstant(ZoneOffset.UTC)));
+            && dpaClock.instant().isBefore(deadline.toInstant(ZoneOffset.UTC)),
+        latestSigned == null ? null : latestSigned.signedAtEpochMillis());
   }
 
   /**
@@ -351,7 +358,8 @@ public class TenantDpaStatusService {
       String signerUsername,
       AdminSignatureForm form,
       boolean currentVersionWhenSigned) {
-    var now = LocalDateTime.now(dpaClock);
+    var instant = dpaClock.instant();
+    var now = LocalDateTime.ofInstant(instant, dpaClock.getZone());
     return TenantDpaAdminSignatureEntity.builder()
         .tenantId(tenantId)
         .dpaVersion(version)
@@ -364,6 +372,7 @@ public class TenantDpaStatusService {
         .language(form.language())
         .formData(form.formDataJson())
         .signedAt(now)
+        .signedAtEpochMillis(instant.toEpochMilli())
         .currentVersionWhenSigned(currentVersionWhenSigned)
         .createDate(now)
         .build();
@@ -384,7 +393,8 @@ public class TenantDpaStatusService {
                         row.getDpaVersion(),
                         row.getSignedAt(),
                         row.getSignerName() != null ? row.getSignerName() : row.getSignerUsername(),
-                        !Boolean.FALSE.equals(row.getCurrentVersionWhenSigned()))));
+                        !Boolean.FALSE.equals(row.getCurrentVersionWhenSigned()),
+                        row.getSignedAtEpochMillis())));
     // Only the current occupant's signatures count: a tenant ID is a reusable slot, and an
     // orphan left behind by a released reservation must never make the next organisation on that
     // ID look signed (#179).
@@ -399,7 +409,8 @@ public class TenantDpaStatusService {
                         row.getDpaVersion(),
                         row.getSignedAt(),
                         row.getSignerName(),
-                        !Boolean.FALSE.equals(row.getCurrentVersionWhenSigned()))));
+                        !Boolean.FALSE.equals(row.getCurrentVersionWhenSigned()),
+                        row.getSignedAtEpochMillis())));
     return entries;
   }
 
@@ -421,12 +432,15 @@ public class TenantDpaStatusService {
     return signed.isEmpty() ? TenantDpaStatus.UNSIGNED : TenantDpaStatus.OUTDATED;
   }
 
-  /** The signature covering the newest version (signing time breaks ties). */
+  /** Compare recorded instants across zones, then use wall time for unresolved legacy ties. */
   private SignedEntry latestSignedEntry(List<SignedEntry> signed) {
     return signed.stream()
         .max(
             Comparator.comparing(
                     SignedEntry::version, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(
+                    SignedEntry::signedAtEpochMillis,
+                    Comparator.nullsFirst(Comparator.naturalOrder()))
                 .thenComparing(
                     SignedEntry::signedAt, Comparator.nullsFirst(Comparator.naturalOrder())))
         .orElse(null);

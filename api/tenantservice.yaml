@@ -1912,8 +1912,8 @@ components:
         dpaSignedAt:
           type: string
           description: 'UTC ISO-8601 signing time for the governing version. Present only when that
-            version is validly signed and its stored signing time resolves uniquely in the
-            configured signing zone.'
+            version is validly signed and the signing instant is recorded or can be resolved
+            uniquely within a verified legacy signing interval.'
           example: '2026-07-20T20:00:18Z'
           x-field-extra-annotation: '@com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)'
         dpaForwardPending:

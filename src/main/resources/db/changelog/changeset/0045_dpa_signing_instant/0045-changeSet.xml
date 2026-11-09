@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.2.xsd">
+  <!-- Old wall times do not identify an instant. Leave their new columns null. -->
+  <changeSet author="oriso" id="addDpaAdminSigningInstant">
+    <addColumn tableName="tenant_dpa_admin_signature">
+      <column name="signed_at_epoch_millis" type="bigint"/>
+    </addColumn>
+    <rollback><dropColumn tableName="tenant_dpa_admin_signature" columnName="signed_at_epoch_millis"/></rollback>
+  </changeSet>
+  <changeSet author="oriso" id="addDpaForwardedSigningInstant">
+    <addColumn tableName="tenant_dpa_signature">
+      <column name="signed_at_epoch_millis" type="bigint"/>
+    </addColumn>
+    <rollback><dropColumn tableName="tenant_dpa_signature" columnName="signed_at_epoch_millis"/></rollback>
+  </changeSet>
+</databaseChangeLog>

@@ -73,6 +73,7 @@ class TenantDpaDeadlineIT {
     tenants.deleteAll();
     reservations.deleteAll();
     clock.set("2026-10-01T10:00:00Z");
+    clock.setZone(ZoneOffset.UTC);
     seedTenant(1L);
     seedTenant(2L);
   }
@@ -195,6 +196,7 @@ class TenantDpaDeadlineIT {
     mvc.perform(get("/tenantadmin/2/dpa/gate").with(caller(2L, "single-tenant-admin")))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.dpaStatus").value("OUTDATED"))
+        .andExpect(jsonPath("$.dpaSignedAt").doesNotHaveJsonPath())
         .andExpect(jsonPath("$.signingDeadlineAt").value("2026-10-03T10:00:00Z"))
         .andExpect(jsonPath("$.renewalGraceActive").value(true))
         .andExpect(jsonPath("$.newCounsellingAllowed").value(true));
@@ -211,6 +213,40 @@ class TenantDpaDeadlineIT {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.dpaStatus").value("VALID"))
         .andExpect(jsonPath("$.newCounsellingAllowed").value(true));
+  }
+
+  @Test
+  void signedGateUsesThePersistedInstantAfterTheServiceZoneChanges() throws Exception {
+    publish("2026-10-15T15:00:00Z");
+    clock.set("2026-10-02T12:00:00Z");
+    clock.setZone(ZoneId.of("Europe/Berlin"));
+    signCurrent();
+
+    clock.setZone(ZoneId.of("America/New_York"));
+    mvc.perform(get("/tenantadmin/2/dpa/gate").with(caller(2L, "single-tenant-admin")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dpaStatus").value("VALID"))
+        .andExpect(jsonPath("$.dpaSignedAt").value("2026-10-02T12:00:00Z"));
+  }
+
+  @Test
+  void latestSignatureForTheSameVersionIsSelectedByInstantAcrossWriterZones() throws Exception {
+    publish("2026-10-15T15:00:00Z");
+    clock.set("2026-10-02T12:00:00Z");
+    clock.setZone(ZoneId.of("Europe/Berlin"));
+    signCurrent();
+
+    clock.set("2026-10-02T13:00:00Z");
+    clock.setZone(ZoneId.of("America/New_York"));
+    confirmForwardedSignature();
+
+    mvc.perform(get("/tenantadmin/2/dpa/gate").with(caller(2L, "single-tenant-admin")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.dpaStatus").value("VALID"))
+        .andExpect(jsonPath("$.dpaSignedAt").value("2026-10-02T13:00:00Z"));
+    mvc.perform(get("/tenantadmin/2/dpa/status").with(caller(2L, "single-tenant-admin")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.signedBy").value("External Signer"));
   }
 
   @Test
@@ -311,19 +347,7 @@ class TenantDpaDeadlineIT {
   @Test
   void aCurrentForwardedSignatureSupportsTheNextRenewalGrace() throws Exception {
     publish("2026-10-15T15:00:00Z");
-    var invite =
-        mvc.perform(post("/tenantadmin/2/dpa/invite").with(caller(2L, "single-tenant-admin")))
-            .andExpect(status().isOk())
-            .andReturn()
-            .getResponse()
-            .getContentAsString();
-    String token = com.jayway.jsonpath.JsonPath.read(invite, "$.token");
-    mvc.perform(
-            post("/tenant/public/dpa/confirm/{token}", token)
-                .contentType(APPLICATION_JSON)
-                .content(
-                    "{\"signerName\":\"External Signer\",\"signerPosition\":\"CEO\",\"signerEmail\":\"signer@example.org\",\"signerOrganisation\":\"Tenant Two\",\"accepted\":true,\"language\":\"de\"}"))
-        .andExpect(status().isOk());
+    confirmForwardedSignature();
     mvc.perform(get("/tenantadmin/2/dpa/gate").with(caller(2L, "single-tenant-admin")))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.dpaStatus").value("VALID"));
@@ -538,6 +562,22 @@ class TenantDpaDeadlineIT {
         .andExpect(jsonPath("$.status").value("VALID"));
   }
 
+  private void confirmForwardedSignature() throws Exception {
+    var invite =
+        mvc.perform(post("/tenantadmin/2/dpa/invite").with(caller(2L, "single-tenant-admin")))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String token = com.jayway.jsonpath.JsonPath.read(invite, "$.token");
+    mvc.perform(
+            post("/tenant/public/dpa/confirm/{token}", token)
+                .contentType(APPLICATION_JSON)
+                .content(
+                    "{\"signerName\":\"External Signer\",\"signerPosition\":\"CEO\",\"signerEmail\":\"signer@example.org\",\"signerOrganisation\":\"Tenant Two\",\"accepted\":true,\"language\":\"de\"}"))
+        .andExpect(status().isOk());
+  }
+
   private void seedTenant(long id) {
     var now = LocalDateTime.of(2026, 9, 1, 0, 0);
     tenants.save(
@@ -579,14 +619,19 @@ class TenantDpaDeadlineIT {
   static class ControlledClock extends Clock {
     private final AtomicReference<Instant> now =
         new AtomicReference<>(Instant.parse("2026-10-01T10:00:00Z"));
+    private ZoneId zone = ZoneOffset.UTC;
 
     void set(String instant) {
       now.set(Instant.parse(instant));
     }
 
+    void setZone(ZoneId zone) {
+      this.zone = zone;
+    }
+
     @Override
     public ZoneId getZone() {
-      return ZoneOffset.UTC;
+      return zone;
     }
 
     @Override

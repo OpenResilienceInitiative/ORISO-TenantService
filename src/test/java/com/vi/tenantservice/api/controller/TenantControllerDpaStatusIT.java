@@ -285,6 +285,12 @@ class TenantControllerDpaStatusIT {
         .andExpect(status().isOk())
         .andExpect(jsonPath("status", is("VALID")))
         .andExpect(jsonPath("signedDpaVersion", is(VERSION_2.toString())));
+
+    mockMvc
+        .perform(get(DPA_GATE.formatted(OWN_TENANT)).with(tenantAdminOf(OWN_TENANT)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("dpaSigned", is(true)))
+        .andExpect(jsonPath("dpaSignedAt").doesNotHaveJsonPath());
   }
 
   @Test
@@ -514,6 +520,12 @@ class TenantControllerDpaStatusIT {
     assertThat(signature.getSignerUserId()).isEqualTo("kc-onboarded-admin");
     assertThat(signature.getDpaVersion()).isEqualTo(VERSION_2);
     assertThat(signature.getFormData()).contains("PUBLIC_TENANT_ADMIN_ONBOARDING");
+
+    mockMvc
+        .perform(get(DPA_GATE.formatted(ONBOARDED_TENANT)).with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("dpaStatus", is("VALID")))
+        .andExpect(jsonPath("dpaSignedAt", is("2026-07-20T18:00:18Z")));
   }
 
   @Test
@@ -677,7 +689,8 @@ class TenantControllerDpaStatusIT {
     mockMvc
         .perform(
             post(DPA_PUBLIC.formatted(token)).contentType(APPLICATION_JSON).content(CONFIRM_BODY))
-        .andExpect(status().isOk());
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("signedAt", is("2026-07-20T20:00:18")));
 
     // the forwarded signature counts for the gate exactly like an admin signature
     mockMvc
@@ -685,6 +698,11 @@ class TenantControllerDpaStatusIT {
         .andExpect(status().isOk())
         .andExpect(jsonPath("status", is("VALID")))
         .andExpect(jsonPath("signedBy", is("Erika Extern")));
+    mockMvc
+        .perform(get(DPA_GATE.formatted(GOVERNED_TENANT)).with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("dpaStatus", is("VALID")))
+        .andExpect(jsonPath("dpaSignedAt", is("2026-07-20T18:00:18Z")));
   }
 
   @Test
