@@ -58,7 +58,7 @@ class TenantDpaFacadeTest {
   @org.mockito.Spy private java.time.Clock dpaClock = java.time.Clock.systemUTC();
 
   @org.mockito.Spy
-  private LegacyDpaSigningTime legacyDpaSigningTime = new LegacyDpaSigningTime("", "");
+  private LegacyDpaSigningTime legacyDpaSigningTime = new LegacyDpaSigningTime("", "", "");
 
   @InjectMocks private TenantDpaFacade tenantDpaFacade;
 
@@ -174,7 +174,7 @@ class TenantDpaFacadeTest {
     org.springframework.test.util.ReflectionTestUtils.setField(
         tenantDpaFacade,
         "legacyDpaSigningTime",
-        new LegacyDpaSigningTime("Europe/Berlin", "2026-03-01T00:00:00"));
+        new LegacyDpaSigningTime("Europe/Berlin", "2026-03-01T00:00:00", "2026-10-31T23:59:59"));
     when(tenantDpaStatusService.getStatus(5L))
         .thenReturn(
             new TenantDpaStatusService.DpaStatusView(
