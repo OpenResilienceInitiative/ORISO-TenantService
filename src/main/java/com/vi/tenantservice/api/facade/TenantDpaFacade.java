@@ -17,7 +17,6 @@ import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.GoverningDpaResolver;
 import com.vi.tenantservice.api.service.InvalidDpaSignTokenException;
-import com.vi.tenantservice.api.service.LegacyDpaSigningTime;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantService;
@@ -30,7 +29,6 @@ import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.DateTimeException;
 import java.time.Duration;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -77,7 +75,6 @@ public class TenantDpaFacade {
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull DpaSignLinkOrigin dpaSignLinkOrigin;
   private final @NonNull Clock dpaClock;
-  private final @NonNull LegacyDpaSigningTime legacyDpaSigningTime;
 
   /**
    * Creates a single-use sign invite for the DPA version currently in force for the tenant and
@@ -221,10 +218,11 @@ public class TenantDpaFacade {
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToReadTenant(tenantId, "RUNTIME_POLICY");
     var status = tenantDpaStatusService.getStatus(tenantId);
     boolean currentVersionSigned = status.status() == TenantDpaStatus.VALID;
+    var signedAt = currentVersionSigned ? status.signedAtInstant() : null;
     return new DpaGateStatusDTO()
         .dpaPublished(status.currentVersion() != null)
         .dpaSigned(currentVersionSigned)
-        .dpaSignedAt(currentVersionSigned ? signatureTimeInUtc(status) : null)
+        .dpaSignedAt(signedAt == null ? null : signedAt.toString())
         .dpaForwardPending(status.forwardPending())
         .dpaStatus(status.status().name())
         .currentDpaVersion(
@@ -235,13 +233,6 @@ public class TenantDpaFacade {
                 : status.signingDeadlineAt().toInstant(ZoneOffset.UTC).toString())
         .renewalGraceActive(status.renewalGraceActive())
         .newCounsellingAllowed(status.newCounsellingAllowed());
-  }
-
-  private String signatureTimeInUtc(TenantDpaStatusService.DpaStatusView status) {
-    if (status.signedAtEpochMillis() != null) {
-      return Instant.ofEpochMilli(status.signedAtEpochMillis()).toString();
-    }
-    return legacyDpaSigningTime.resolve(status.signedAt()).map(Instant::toString).orElse(null);
   }
 
   /**

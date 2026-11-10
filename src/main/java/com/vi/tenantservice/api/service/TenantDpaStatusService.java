@@ -6,6 +6,7 @@ import com.vi.tenantservice.api.model.TenantDpaStatus;
 import com.vi.tenantservice.api.repository.TenantDpaAdminSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -62,7 +63,7 @@ public class TenantDpaStatusService {
       boolean forwardPending,
       LocalDateTime signingDeadlineAt,
       boolean renewalGraceActive,
-      Long signedAtEpochMillis) {
+      Instant signedAtInstant) {
     public boolean newCounsellingAllowed() {
       return status == TenantDpaStatus.VALID || renewalGraceActive;
     }
@@ -103,7 +104,8 @@ public class TenantDpaStatusService {
       LocalDateTime signedAt,
       String signedBy,
       boolean graceEligible,
-      Long signedAtEpochMillis) {}
+      Instant signedAtInstant,
+      boolean recordedInstant) {}
 
   private final TenantDpaAdminSignatureRepository adminSignatureRepository;
   private final TenantDpaSignatureRepository signatureRepository;
@@ -111,6 +113,7 @@ public class TenantDpaStatusService {
   private final GoverningDpaResolver governingDpaResolver;
   private final PlatformTransactionManager transactionManager;
   private final Clock dpaClock;
+  private final LegacyDpaSigningTime legacyDpaSigningTime;
 
   /** Computes the authoritative DPA state for the tenant. */
   @Transactional(readOnly = true)
@@ -138,7 +141,7 @@ public class TenantDpaStatusService {
             && deadline != null
             && signedEntries.stream().anyMatch(SignedEntry::graceEligible)
             && dpaClock.instant().isBefore(deadline.toInstant(ZoneOffset.UTC)),
-        latestSigned == null ? null : latestSigned.signedAtEpochMillis());
+        latestSigned == null ? null : latestSigned.signedAtInstant());
   }
 
   /**
@@ -389,7 +392,7 @@ public class TenantDpaStatusService {
         .forEach(
             row ->
                 entries.add(
-                    new SignedEntry(
+                    signedEntry(
                         row.getDpaVersion(),
                         row.getSignedAt(),
                         row.getSignerName() != null ? row.getSignerName() : row.getSignerUsername(),
@@ -405,13 +408,27 @@ public class TenantDpaStatusService {
         .forEach(
             row ->
                 entries.add(
-                    new SignedEntry(
+                    signedEntry(
                         row.getDpaVersion(),
                         row.getSignedAt(),
                         row.getSignerName(),
                         !Boolean.FALSE.equals(row.getCurrentVersionWhenSigned()),
                         row.getSignedAtEpochMillis())));
     return entries;
+  }
+
+  private SignedEntry signedEntry(
+      LocalDateTime version,
+      LocalDateTime signedAt,
+      String signedBy,
+      boolean graceEligible,
+      Long signedAtEpochMillis) {
+    var instant =
+        signedAtEpochMillis == null
+            ? legacyDpaSigningTime.resolve(signedAt).orElse(null)
+            : Instant.ofEpochMilli(signedAtEpochMillis);
+    return new SignedEntry(
+        version, signedAt, signedBy, graceEligible, instant, signedAtEpochMillis != null);
   }
 
   private TenantDpaStatus deriveStatus(LocalDateTime currentVersion, List<SignedEntry> signed) {
@@ -432,15 +449,15 @@ public class TenantDpaStatusService {
     return signed.isEmpty() ? TenantDpaStatus.UNSIGNED : TenantDpaStatus.OUTDATED;
   }
 
-  /** Compare recorded instants across zones, then use wall time for unresolved legacy ties. */
+  /** Within a version, prefer the latest known instant and a recorded instant on an exact tie. */
   private SignedEntry latestSignedEntry(List<SignedEntry> signed) {
     return signed.stream()
         .max(
             Comparator.comparing(
                     SignedEntry::version, Comparator.nullsFirst(Comparator.naturalOrder()))
                 .thenComparing(
-                    SignedEntry::signedAtEpochMillis,
-                    Comparator.nullsFirst(Comparator.naturalOrder()))
+                    SignedEntry::signedAtInstant, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(SignedEntry::recordedInstant)
                 .thenComparing(
                     SignedEntry::signedAt, Comparator.nullsFirst(Comparator.naturalOrder())))
         .orElse(null);

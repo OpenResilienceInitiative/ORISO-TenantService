@@ -17,7 +17,6 @@ import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.service.DpaNotPublishedException;
 import com.vi.tenantservice.api.service.GoverningDpaResolver;
-import com.vi.tenantservice.api.service.LegacyDpaSigningTime;
 import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantService;
@@ -31,6 +30,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -56,9 +56,6 @@ class TenantDpaFacadeTest {
   @Mock private AuthorisationService authorisationService;
   @Mock private DpaSignLinkOrigin dpaSignLinkOrigin;
   @org.mockito.Spy private java.time.Clock dpaClock = java.time.Clock.systemUTC();
-
-  @org.mockito.Spy
-  private LegacyDpaSigningTime legacyDpaSigningTime = new LegacyDpaSigningTime("", "", "");
 
   @InjectMocks private TenantDpaFacade tenantDpaFacade;
 
@@ -154,7 +151,7 @@ class TenantDpaFacadeTest {
                 false,
                 null,
                 false,
-                java.time.Instant.parse("2026-07-20T20:00:18Z").toEpochMilli()));
+                java.time.Instant.parse("2026-07-20T20:00:18Z")));
 
     var status = tenantDpaFacade.getGateStatus(5L);
     var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);
@@ -165,32 +162,6 @@ class TenantDpaFacadeTest {
     assertThat(status.getDpaSigned()).isTrue();
     assertThat(json.path("dpaSignedAt").asText()).isEqualTo("2026-07-20T20:00:18Z");
     assertThat(json.has("signedBy")).isFalse();
-  }
-
-  @ParameterizedTest
-  @ValueSource(strings = {"2026-03-29T02:30", "2026-10-25T02:30"})
-  void getGateStatus_Should_omitSignatureTime_When_itsLocalTimeHasNoUniqueOffset(String localTime) {
-    var version = LocalDateTime.of(2026, 3, 1, 10, 0);
-    org.springframework.test.util.ReflectionTestUtils.setField(
-        tenantDpaFacade,
-        "legacyDpaSigningTime",
-        new LegacyDpaSigningTime("Europe/Berlin", "2026-03-01T00:00:00", "2026-10-31T23:59:59"));
-    when(tenantDpaStatusService.getStatus(5L))
-        .thenReturn(
-            new TenantDpaStatusService.DpaStatusView(
-                5L,
-                TenantDpaStatus.VALID,
-                version,
-                version,
-                LocalDateTime.parse(localTime),
-                "Signer name",
-                false));
-
-    var status = tenantDpaFacade.getGateStatus(5L);
-    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);
-
-    assertThat(status.getDpaSigned()).isTrue();
-    assertThat(json.has("dpaSignedAt")).isFalse();
   }
 
   @Test
@@ -219,13 +190,16 @@ class TenantDpaFacadeTest {
     assertThat(json.has("dpaSignedAt")).isFalse();
   }
 
-  @Test
-  void getGateStatus_Should_omitSignatureTime_When_validSignatureHasNoKnownTime() {
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = "2026-10-25T02:30")
+  void getGateStatus_Should_omitSignatureTime_When_validSignatureHasNoKnownInstant(
+      LocalDateTime wallTime) {
     var version = LocalDateTime.of(2026, 7, 19, 20, 0);
     when(tenantDpaStatusService.getStatus(5L))
         .thenReturn(
             new TenantDpaStatusService.DpaStatusView(
-                5L, TenantDpaStatus.VALID, version, version, null, null, false));
+                5L, TenantDpaStatus.VALID, version, version, wallTime, null, false));
 
     var status = tenantDpaFacade.getGateStatus(5L);
     var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);
