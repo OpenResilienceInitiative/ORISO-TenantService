@@ -11,6 +11,7 @@ import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
+import com.vi.tenantservice.api.service.search.TenantSearchText;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -191,9 +192,16 @@ public class TenantService {
 
   public Page<TenantData> findAllTenantDataExceptTechnicalByInfix(
       String infix, PageRequest pageRequest) {
-    return tenantRepository
-        .findAllTenantDataExceptTechnicalByInfix(infix, pageRequest)
-        .map(tenantData -> tenantData);
+    return searchTenantData(TenantSearchText.tokens(infix), Map.of(), pageRequest);
+  }
+
+  public List<Long> searchableTenantIds() {
+    return tenantRepository.findAllIds().stream().filter(id -> id != 0L).toList();
+  }
+
+  public Page<TenantData> searchTenantData(
+      List<String> tokens, Map<String, Set<Long>> emailMatches, PageRequest pageRequest) {
+    return tenantRepository.searchTenantData(tokens, emailMatches, pageRequest).map(data -> data);
   }
 
   public List<TenantEntity> findAllByIds(List<Long> tenantIds) {
