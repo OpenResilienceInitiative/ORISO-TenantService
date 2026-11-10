@@ -26,7 +26,8 @@ class LegacyDpaSigningTimeTest {
         "ORISO_DPA_LEGACY_SIGNING_TO"
       })
   void aMissingSettingDoesNotEnableConversion(String missing) {
-    var settings = new HashMap<>(window(FIRST_VERIFIED_LOCAL_TIME, LAST_VERIFIED_LOCAL_TIME));
+    var settings =
+        new HashMap<>(window("UTC", FIRST_VERIFIED_LOCAL_TIME, LAST_VERIFIED_LOCAL_TIME));
     settings.remove(missing);
     runnerWithSettings(settings)
         .run(
@@ -37,7 +38,7 @@ class LegacyDpaSigningTimeTest {
   @Test
   void verifiedDeploymentEnvironmentResolvesOnlyRowsWithinBothInclusiveBounds() {
     var end = LocalDateTime.parse(LAST_VERIFIED_LOCAL_TIME);
-    runnerWithSettings(window(FIRST_VERIFIED_LOCAL_TIME, LAST_VERIFIED_LOCAL_TIME))
+    runnerWithSettings(window("UTC", FIRST_VERIFIED_LOCAL_TIME, LAST_VERIFIED_LOCAL_TIME))
         .run(
             context -> {
               var signerTime = context.getBean(LegacyDpaSigningTime.class);
@@ -53,7 +54,7 @@ class LegacyDpaSigningTimeTest {
 
   @Test
   void rejectsAnEndBeforeTheStart() {
-    runnerWithSettings(window(LAST_VERIFIED_LOCAL_TIME, FIRST_VERIFIED_LOCAL_TIME))
+    runnerWithSettings(window("UTC", LAST_VERIFIED_LOCAL_TIME, FIRST_VERIFIED_LOCAL_TIME))
         .run(
             context ->
                 assertThat(context.getStartupFailure())
@@ -62,7 +63,7 @@ class LegacyDpaSigningTimeTest {
 
   @Test
   void acceptsASingleVerifiedLocalTimestamp() {
-    runnerWithSettings(window(FIRST_VERIFIED_LOCAL_TIME, FIRST_VERIFIED_LOCAL_TIME))
+    runnerWithSettings(window("UTC", FIRST_VERIFIED_LOCAL_TIME, FIRST_VERIFIED_LOCAL_TIME))
         .run(
             context -> {
               var signerTime = context.getBean(LegacyDpaSigningTime.class);
@@ -72,9 +73,22 @@ class LegacyDpaSigningTimeTest {
             });
   }
 
-  private static Map<String, Object> window(String from, String to) {
+  @Test
+  void configuredBerlinZoneRejectsDstGapAndOverlapWithinTheVerifiedWindow() {
+    runnerWithSettings(window("Europe/Berlin", "2026-03-01T00:00", "2026-10-31T23:59"))
+        .run(
+            context -> {
+              var signerTime = context.getBean(LegacyDpaSigningTime.class);
+              assertThat(signerTime.resolve(LocalDateTime.parse("2026-07-02T15:00")))
+                  .contains(Instant.parse("2026-07-02T13:00:00Z"));
+              assertThat(signerTime.resolve(LocalDateTime.parse("2026-03-29T02:30"))).isEmpty();
+              assertThat(signerTime.resolve(LocalDateTime.parse("2026-10-25T02:30"))).isEmpty();
+            });
+  }
+
+  private static Map<String, Object> window(String zone, String from, String to) {
     return Map.of(
-        "ORISO_DPA_LEGACY_SIGNING_ZONE", "UTC",
+        "ORISO_DPA_LEGACY_SIGNING_ZONE", zone,
         "ORISO_DPA_LEGACY_SIGNING_FROM", from,
         "ORISO_DPA_LEGACY_SIGNING_TO", to);
   }
