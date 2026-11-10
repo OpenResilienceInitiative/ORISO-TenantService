@@ -341,6 +341,7 @@ public class TenantDpaFacade {
   @Transactional
   public DpaGateStatusDTO publishDpa(
       Long tenantId, Map<String, String> contentByLanguage, String signingDeadlineAt) {
+    tenantFacadeAuthorisationService.assertCanPublishDpa();
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
     var deadline = requireFutureSigningDeadline(signingDeadlineAt);
     return persistPublication(tenantId, contentByLanguage, deadline, false);
@@ -348,6 +349,7 @@ public class TenantDpaFacade {
 
   @Transactional
   public DpaGateStatusDTO publishLegacyDpa(Long tenantId, Map<String, String> contentByLanguage) {
+    tenantFacadeAuthorisationService.assertCanPublishDpa();
     tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(tenantId);
     return persistPublication(tenantId, contentByLanguage, null, true);
   }

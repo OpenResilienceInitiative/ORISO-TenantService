@@ -484,6 +484,7 @@ paths:
         - tenant-controller
       summary: Updates tenant-scoped permission policy overrides
       description: >-
+        Omitting a key in `policies` keeps the stored override for that feature.
         Omitting `internalGroupChat` keeps the stored override. A platform requirement (ENFORCED)
         of `internalGroupChat.recipientScope` cannot be changed: an unchanged echo of it is
         accepted and discarded, a changed value or mode is refused with 400 and nothing is stored.
@@ -1437,7 +1438,7 @@ paths:
     put:
       tags:
         - tenant-controller
-      summary: 'Publishes the tenant DPA text and stamps a new version [Authorization: Authority.UPDATE_TENANT]'
+      summary: 'Publishes the tenant DPA text and stamps a new version [Authorization: Authority.UPDATE_TENANT and the platform administrator (tenant 0, not the technical identity)]'
       operationId: publishDataProcessingAgreement
       parameters:
         - name: id
@@ -1472,7 +1473,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DpaGateStatusDTO'
         403:
-          description: FORBIDDEN - not authorized to access this tenant
+          description: FORBIDDEN - the caller is not a platform administrator (a Traeger admin or the technical identity may not publish, not even for their own tenant)
         404:
           description: NOT FOUND - tenant does not exist
         409:
@@ -1484,7 +1485,7 @@ paths:
     put:
       tags:
         - tenant-controller
-      summary: 'Publishes the tenant DPA text and stamps a new version [Authorization: Authority.UPDATE_TENANT]'
+      summary: 'Publishes the tenant DPA text and stamps a new version [Authorization: Authority.UPDATE_TENANT and the platform administrator (tenant 0, not the technical identity)]'
       operationId: publishDataProcessingAgreementV2
       parameters:
         - name: id
@@ -1528,7 +1529,7 @@ paths:
         400:
           description: BAD REQUEST - missing, invalid or nonfuture signing deadline
         403:
-          description: FORBIDDEN - not authorized to access this tenant
+          description: FORBIDDEN - the caller is not a platform administrator (a Traeger admin or the technical identity may not publish, not even for their own tenant)
         404:
           description: NOT FOUND - tenant does not exist
         500:
@@ -1817,7 +1818,8 @@ components:
       type: object
       description: 'Typed machine-translation error. errorCode is one of
         TRANSLATION_NOT_CONFIGURED, TRANSLATION_KEY_INVALID, TRANSLATION_NO_CREDIT,
-        TRANSLATION_RATE_LIMITED, TRANSLATION_PROVIDER_UNAVAILABLE.'
+        TRANSLATION_RATE_LIMITED, TRANSLATION_PROVIDER_UNAVAILABLE,
+        TRANSLATION_ENCRYPTION_NOT_CONFIGURED (the key was not saved: no encryption secret on the server).'
       properties:
         errorCode:
           type: string
@@ -2580,11 +2582,26 @@ components:
         featureDisplayNameEditable:
           type: boolean
           example: "true"
-          description: "ORISO-Admin#602 switch 1. Whether an advice seeker may type their own Anzeigename (displayName), or may only re-roll the generated one. Never governs the Anmeldename (userName), which is immutable at every layer. Opt-out: defaults to true."
+          description: "ORISO-Admin#602 switch 1. Outer limit on whether an advice seeker may type a login name at registration or a display name. A conversation-specific policy may restrict typing further. Existing login names are immutable. Opt-out: defaults to true."
         featureAskerEmailEnabled:
           type: boolean
           example: "true"
           description: "ORISO-Admin#602 switch 2. Whether an advice seeker may leave an e-mail address at all. When false it must silence both the in-chat Erstantwort Baustein and the profile e-mail field. Opt-out: defaults to true."
+        featureAskerEmailCollectionAgencyCounsellingEnabled:
+          type: boolean
+          description: Allows optional advice-seeker email collection in agency counselling; featureAskerEmailEnabled remains the account-wide outer limit. This is separate from email delivery and does not make an address required. Omitted input preserves the stored preference; absent stored policy defaults to true. A raw false is a restrictive fallback only when no typed tenant choice exists; explicit typed policies and platform requirements remain authoritative.
+        featureDisplayNameEditableAgencyCounsellingEnabled:
+          type: boolean
+          description: Whether the advice seeker may type a name in agency counselling. Requires featureDisplayNameEditable and defaults to true when no policy was set.
+        featureDisplayNameEditableLiveChatEnabled:
+          type: boolean
+          description: Whether the advice seeker may type a name in live chat. Requires featureDisplayNameEditable and defaults to true when no policy was set.
+        featureDisplayNameEditableSelfHelpEnabled:
+          type: boolean
+          description: Whether the advice seeker may type a name in self-help. Requires featureDisplayNameEditable and defaults to true when no policy was set.
+        featureAskerEmailCollectionSelfHelpEnabled:
+          type: boolean
+          description: Allows optional advice-seeker email collection in self-help groups; featureAskerEmailEnabled remains the account-wide outer limit. This is separate from email delivery and does not make an address required. Omitted input preserves the stored preference; absent stored policy defaults to true. A raw false is a restrictive fallback only when no typed tenant choice exists; explicit typed policies and platform requirements remain authoritative.
         featureAskerEmailAgencyCounsellingEnabled:
           type: boolean
           default: true
@@ -2592,7 +2609,7 @@ components:
         featureAskerEmailLiveChatEnabled:
           type: boolean
           default: false
-          description: "Effective advice-seeker notification channel permission for EmailLiveChat. Email additionally requires featureAskerEmailEnabled."
+          description: "Legacy setting retained for older clients. Live chat does not send advice-seeker email."
         featureAskerEmailSelfHelpEnabled:
           type: boolean
           default: true
@@ -3248,6 +3265,11 @@ components:
         - featureMediaAiScanSupervisionChatsEnabled
         - featureDisplayNameEditable
         - featureAskerEmailEnabled
+        - featureAskerEmailCollectionAgencyCounsellingEnabled
+        - featureDisplayNameEditableAgencyCounsellingEnabled
+        - featureDisplayNameEditableLiveChatEnabled
+        - featureDisplayNameEditableSelfHelpEnabled
+        - featureAskerEmailCollectionSelfHelpEnabled
         - featureAskerEmailAgencyCounsellingEnabled
         - featureAskerEmailLiveChatEnabled
         - featureAskerEmailSelfHelpEnabled

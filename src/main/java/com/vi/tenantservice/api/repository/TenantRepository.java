@@ -3,6 +3,7 @@ package com.vi.tenantservice.api.repository;
 import com.vi.tenantservice.api.model.TenantDataView;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedDataView;
+import com.vi.tenantservice.api.model.TenantSettingsView;
 import com.vi.tenantservice.api.service.search.TenantSearchText;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
@@ -216,4 +217,9 @@ public interface TenantRepository
   List<TenantRestrictedDataView> findRestrictedDataByIdIn(@Param("ids") Set<Long> ids);
 
   List<TenantEntity> findAllByIdIn(List<Long> tenantIds);
+
+  @Query(
+      "SELECT new com.vi.tenantservice.api.model.TenantSettingsView(t.id, t.settings) "
+          + "FROM TenantEntity t WHERE t.id IN :ids")
+  List<TenantSettingsView> findSettingsByIdIn(@Param("ids") Set<Long> ids);
 }
