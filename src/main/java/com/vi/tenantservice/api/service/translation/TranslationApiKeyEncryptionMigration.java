@@ -16,8 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * One-time (idempotent) startup migration: encrypts machine-translation provider API keys that are
@@ -34,13 +34,15 @@ import org.springframework.transaction.annotation.Transactional;
  * migration touches one key and leaves every other byte of the document alone.
  *
  * <p>Runs only when the encryption secret is configured. Values that already authenticate under the
- * key are left untouched, so re-running changes nothing.
+ * key are left untouched, so re-running changes nothing. Safe with several replicas: the row is
+ * versioned, a replica that loses the write race re-reads and finds the work done.
  */
 @Component
 @Slf4j
 @RequiredArgsConstructor
 public class TranslationApiKeyEncryptionMigration {
 
+  private static final int MAX_ATTEMPTS = 3;
   private static final String TRANSLATION_API_KEYS = "translationApiKeys";
   private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -48,21 +50,73 @@ public class TranslationApiKeyEncryptionMigration {
   private final @NonNull TranslationApiKeyEncryptionService translationApiKeyEncryptionService;
 
   @EventListener(ApplicationReadyEvent.class)
-  @Transactional
   public void migrate() {
     if (!translationApiKeyEncryptionService.isEnabled()) {
-      log.info("Skipping translation API key encryption migration: encryption is not configured");
+      warnAboutPlaintextKeys();
       return;
     }
-    tenantAdminControlsRepository
-        .findTopByOrderByIdAsc()
-        .ifPresent(
-            entity -> {
-              int migrated = encryptPlaintextKeys(entity);
-              if (migrated > 0) {
-                log.info("Encrypted {} stored translation provider API key(s)", migrated);
-              }
-            });
+    // Deliberately not @Transactional: every attempt is its own read and its own write, so a lost
+    // optimistic-lock race can be caught and retried here instead of poisoning one big transaction.
+    for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        tenantAdminControlsRepository
+            .findTopByOrderByIdAsc()
+            .ifPresent(
+                entity -> {
+                  int migrated = encryptPlaintextKeys(entity);
+                  if (migrated > 0) {
+                    log.info("Encrypted {} stored translation provider API key(s)", migrated);
+                  }
+                });
+        return;
+      } catch (OptimisticLockingFailureException anotherWriterWonTheRace) {
+        // Several replicas start together, or an admin saved meanwhile. The row is versioned, so
+        // nothing was lost; read it again - the other writer may already have done our work.
+        log.info(
+            "Translation API key migration met a concurrent write (attempt {} of {})",
+            attempt,
+            MAX_ATTEMPTS);
+      }
+    }
+    log.warn(
+        "Translation API key migration gave up after {} concurrent writes; it runs again at the"
+            + " next start",
+        MAX_ATTEMPTS);
+  }
+
+  /** Nothing can be encrypted without a secret; make sure the operator knows what is exposed. */
+  private void warnAboutPlaintextKeys() {
+    int plaintext =
+        tenantAdminControlsRepository
+            .findTopByOrderByIdAsc()
+            .map(entity -> countStoredPlaintextKeys(entity.getControls()))
+            .orElse(0);
+    if (plaintext > 0) {
+      // Count only - never the key, never its length or prefix.
+      log.warn(
+          "{} translation API key(s) are stored in plain text and cannot be encrypted: no"
+              + " encryption secret is configured (SETTINGS_SMTP_PASSWORD_ENCRYPTION_SECRET)",
+          plaintext);
+    } else {
+      log.info("Skipping translation API key encryption migration: encryption is not configured");
+    }
+  }
+
+  private int countStoredPlaintextKeys(String controlsJson) {
+    ObjectNode controls = readControls(controlsJson);
+    JsonNode apiKeys = controls == null ? null : controls.get(TRANSLATION_API_KEYS);
+    if (apiKeys == null || !apiKeys.isObject()) {
+      return 0;
+    }
+    int count = 0;
+    for (JsonNode value : apiKeys) {
+      if (value.isTextual()
+          && StringUtils.isNotBlank(value.asText())
+          && !value.asText().startsWith("ENC:")) {
+        count++;
+      }
+    }
+    return count;
   }
 
   private int encryptPlaintextKeys(TenantAdminControlsEntity entity) {

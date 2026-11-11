@@ -21,10 +21,23 @@ import org.springframework.stereotype.Component;
 @Component
 public class EffectivePermissionSettingsApplier {
 
+  // These new choices have no legacy raw-toggle override. The canonical policy also supplies
+  // their effective inherited default; legacy feature hints below retain their old behavior.
+  private static final java.util.Set<String> CANONICAL_ACCOUNT_POLICY_DEFAULTS =
+      java.util.Set.of(
+          "featureAskerEmailCollectionAgencyCounsellingEnabled",
+          "featureDisplayNameEditableAgencyCounsellingEnabled",
+          "featureDisplayNameEditableLiveChatEnabled",
+          "featureDisplayNameEditableSelfHelpEnabled",
+          "featureAskerEmailCollectionSelfHelpEnabled");
+
   private static final Map<String, BiConsumer<Settings, Boolean>> POLICY_SETTERS =
       Map.ofEntries(
           Map.entry("featureAnonymousChatEnabled", Settings::setFeatureAnonymousChatEnabled),
           Map.entry("featureGroupChatV2Enabled", Settings::setFeatureGroupChatV2Enabled),
+          Map.entry(
+              "featureInternalGroupChatEnabled", Settings::setFeatureInternalGroupChatEnabled),
+          Map.entry("featureSelfHelpGroupsEnabled", Settings::setFeatureSelfHelpGroupsEnabled),
           Map.entry("featureCallsEnabled", Settings::setFeatureCallsEnabled),
           Map.entry("featureSupervisionEnabled", Settings::setFeatureSupervisionEnabled),
           Map.entry(
@@ -123,7 +136,49 @@ public class EffectivePermissionSettingsApplier {
               "featureMediaAiScanSupervisionChatsEnabled",
               Settings::setFeatureMediaAiScanSupervisionChatsEnabled),
           Map.entry("featureDisplayNameEditable", Settings::setFeatureDisplayNameEditable),
-          Map.entry("featureAskerEmailEnabled", Settings::setFeatureAskerEmailEnabled));
+          Map.entry("featureAskerEmailEnabled", Settings::setFeatureAskerEmailEnabled),
+          Map.entry(
+              "featureAskerEmailCollectionAgencyCounsellingEnabled",
+              Settings::setFeatureAskerEmailCollectionAgencyCounsellingEnabled),
+          Map.entry(
+              "featureDisplayNameEditableAgencyCounsellingEnabled",
+              Settings::setFeatureDisplayNameEditableAgencyCounsellingEnabled),
+          Map.entry(
+              "featureDisplayNameEditableLiveChatEnabled",
+              Settings::setFeatureDisplayNameEditableLiveChatEnabled),
+          Map.entry(
+              "featureDisplayNameEditableSelfHelpEnabled",
+              Settings::setFeatureDisplayNameEditableSelfHelpEnabled),
+          Map.entry(
+              "featureAskerEmailCollectionSelfHelpEnabled",
+              Settings::setFeatureAskerEmailCollectionSelfHelpEnabled),
+          Map.entry(
+              "featureAskerEmailAgencyCounsellingEnabled",
+              Settings::setFeatureAskerEmailAgencyCounsellingEnabled),
+          Map.entry(
+              "featureAskerEmailLiveChatEnabled", Settings::setFeatureAskerEmailLiveChatEnabled),
+          Map.entry(
+              "featureAskerEmailSelfHelpEnabled", Settings::setFeatureAskerEmailSelfHelpEnabled),
+          Map.entry(
+              "featureAskerBrowserAgencyCounsellingEnabled",
+              Settings::setFeatureAskerBrowserAgencyCounsellingEnabled),
+          Map.entry(
+              "featureAskerBrowserLiveChatEnabled",
+              Settings::setFeatureAskerBrowserLiveChatEnabled),
+          Map.entry(
+              "featureAskerBrowserSelfHelpEnabled",
+              Settings::setFeatureAskerBrowserSelfHelpEnabled),
+          Map.entry(
+              "featureConsultantEmailInternalGroupEnabled",
+              Settings::setFeatureConsultantEmailInternalGroupEnabled),
+          Map.entry(
+              "featureConsultantBrowserInternalGroupEnabled",
+              Settings::setFeatureConsultantBrowserInternalGroupEnabled),
+          Map.entry("featureDirectInviteChatEnabled", Settings::setFeatureDirectInviteChatEnabled),
+          Map.entry(
+              "featureDirectInviteAudioEnabled", Settings::setFeatureDirectInviteAudioEnabled),
+          Map.entry(
+              "featureDirectInviteVideoEnabled", Settings::setFeatureDirectInviteVideoEnabled));
 
   private record ToggleBinding(
       Function<TenantAdminAllowedPermissionToggles, Boolean> getter,
@@ -140,6 +195,12 @@ public class EffectivePermissionSettingsApplier {
           new ToggleBinding(
               TenantAdminAllowedPermissionToggles::getGroupChat,
               Settings::setFeatureGroupChatV2Enabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getInternalGroupChat,
+              Settings::setFeatureInternalGroupChatEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getSelfHelpGroups,
+              Settings::setFeatureSelfHelpGroupsEnabled),
           new ToggleBinding(
               TenantAdminAllowedPermissionToggles::getCalls, Settings::setFeatureCallsEnabled),
           new ToggleBinding(
@@ -227,7 +288,7 @@ public class EffectivePermissionSettingsApplier {
     }
   }
 
-  /** Applies only locked policies. Suggestions remain editable tenant settings. */
+  /** Applies locked policies and resolved tenant-local values. Inherited suggestions are hints. */
   public void applyPolicies(
       Settings settings, Map<String, BooleanPermissionPolicy> permissionPolicies) {
     if (settings == null || permissionPolicies == null) {
@@ -238,7 +299,9 @@ public class EffectivePermissionSettingsApplier {
           BiConsumer<Settings, Boolean> setter = POLICY_SETTERS.get(feature);
           if (setter != null
               && policy != null
-              && policy.getMode() == PermissionPolicyMode.ENFORCED) {
+              && (policy.getMode() == PermissionPolicyMode.ENFORCED
+                  || Boolean.FALSE.equals(policy.getInherited())
+                  || CANONICAL_ACCOUNT_POLICY_DEFAULTS.contains(feature))) {
             setter.accept(settings, policy.getValue());
           }
         });

@@ -2,6 +2,14 @@ package com.vi.tenantservice.api.exception.httpresponse;
 
 public enum HttpStatusExceptionReason {
   SUBDOMAIN_NOT_UNIQUE,
+
+  /**
+   * The submitted subdomain is not a usable routing key. The format rule used to live only in the
+   * admin panel's tenant form, so every other writer stored the value unchecked
+   * (ORISO-Admin/src/utils/isValidSubdomain.ts).
+   */
+  SUBDOMAIN_INVALID,
+
   NOT_ALLOWED_TO_CHANGE_SUBDOMAIN,
   NOT_ALLOWED_TO_CHANGE_LICENSING,
   NOT_ALLOWED_TO_CHANGE_SETTING,
@@ -21,4 +29,10 @@ public enum HttpStatusExceptionReason {
   SUBDOMAIN_IN_REQUEST_BODY_NOT_EQUAL_TO_SUBDOMAIN_IN_URL,
 
   LANGUAGE_MUST_BE_NON_NULL_AND_PROPER_LENGTH,
+
+  /**
+   * An SMTP password was submitted but the server has no encryption secret, so it would have been
+   * stored in plain text. Refused instead (#346). Answers 409 with this reason in {@code X-Reason}.
+   */
+  SMTP_PASSWORD_ENCRYPTION_NOT_CONFIGURED,
 }

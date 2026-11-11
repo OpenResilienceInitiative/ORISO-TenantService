@@ -3,8 +3,10 @@ package com.vi.tenantservice.api.facade;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -20,15 +22,20 @@ import com.vi.tenantservice.api.converter.EffectivePermissionSettingsApplier;
 import com.vi.tenantservice.api.converter.EffectiveThemingApplier;
 import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.api.model.Content;
+import com.vi.tenantservice.api.model.InternalGroupChatPolicies;
+import com.vi.tenantservice.api.model.InternalGroupChatRecipientScope;
 import com.vi.tenantservice.api.model.MultilingualContent;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
 import com.vi.tenantservice.api.model.OnboardingDpaAcceptanceDTO;
+import com.vi.tenantservice.api.model.PermissionPolicyMode;
+import com.vi.tenantservice.api.model.RecipientScopePermissionPolicy;
 import com.vi.tenantservice.api.model.RestrictedTenantDTO;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
@@ -36,6 +43,8 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
+import com.vi.tenantservice.api.model.Theming;
+import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
@@ -43,6 +52,8 @@ import com.vi.tenantservice.api.service.TenantAdminControlsService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
+import com.vi.tenantservice.api.service.TenantLegalProposalService;
+import com.vi.tenantservice.api.service.TenantLegalVersionService;
 import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
@@ -51,6 +62,7 @@ import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
+import com.vi.tenantservice.api.validation.SubdomainValidator;
 import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
@@ -59,8 +71,10 @@ import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDT
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -103,8 +117,13 @@ class TenantServiceFacadeTest {
   @Mock private ConsultingTypePatchDTOConverter consultingTypePatchDTOConverter;
 
   @Mock private TenantService tenantService;
+  @Mock private jakarta.persistence.EntityManager entityManager;
 
   @Mock private TenantInputSanitizer tenantInputSanitizer;
+
+  // Real instance on purpose: the subdomain format rule is production behaviour of the facade, and
+  // a mocked validator would let a malformed subdomain through every test in this class.
+  @Spy private SubdomainValidator subdomainValidator = new SubdomainValidator();
 
   @Mock private TenantFacadeAuthorisationService tenantFacadeAuthorisationService;
 
@@ -131,6 +150,8 @@ class TenantServiceFacadeTest {
 
   @Mock private TenantAdminControlsService tenantAdminControlsService;
 
+  @Mock private NewTenantPresetService newTenantPresetService;
+
   @Spy
   private EffectivePermissionSettingsApplier effectivePermissionSettingsApplier =
       new EffectivePermissionSettingsApplier();
@@ -144,12 +165,333 @@ class TenantServiceFacadeTest {
   @Mock private SingleDomainTenantOverrideService singleDomainTenantOverrideService;
   @Mock private TenantIdAllocationService tenantIdAllocationService;
   @Mock private TenantPermissionPolicyService tenantPermissionPolicyService;
+  @Mock private TenantLegalVersionService tenantLegalVersionService;
+  @Mock private TenantLegalProposalService tenantLegalProposalService;
+
+  @Mock private com.vi.tenantservice.api.service.DeletionAuditReporter deletionAuditReporter;
 
   @InjectMocks private TenantServiceFacade tenantServiceFacade;
 
   @BeforeEach
   public void initialize() {
+    ReflectionTestUtils.setField(tenantServiceFacade, "entityManager", entityManager);
     tenantEntity.setId(ID);
+    // The history service wraps the real save; the mock has to run it like the real one does.
+    lenient()
+        .when(tenantLegalVersionService.saveRecordingPublications(any(), any()))
+        .thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
+  }
+
+  @Test
+  void searchMeasuresRealOwnerHttpCallsAndPreservesCallerScopeHeaders() {
+    var server =
+        new com.github.tomakehurst.wiremock.WireMockServer(
+            com.github.tomakehurst.wiremock.core.WireMockConfiguration.options().dynamicPort());
+    server.start();
+    try {
+      server.stubFor(
+          com.github.tomakehurst.wiremock.client.WireMock.get(
+                  com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo(
+                      "/useradmin/tenantadmins"))
+              .willReturn(
+                  com.github.tomakehurst.wiremock.client.WireMock.aResponse()
+                      .withHeader("Content-Type", "application/json")
+                      .withBody("[{\"_embedded\":{\"email\":\"owner@example.test\"}}]")
+                      .withFixedDelay(10)));
+      var factory =
+          new com.vi.tenantservice.api.config.apiclient.UserAdminServiceApiControllerFactory();
+      org.springframework.test.util.ReflectionTestUtils.setField(
+          factory, "userServiceApiUrl", server.baseUrl());
+      org.springframework.test.util.ReflectionTestUtils.setField(
+          factory, "restTemplate", new org.springframework.web.client.RestTemplate());
+      var headers = new org.springframework.http.HttpHeaders();
+      headers.set("Authorization", "Bearer synthetic-test");
+      headers.set("X-CSRF-TOKEN", "synthetic-csrf");
+      var supplier = mock(com.vi.tenantservice.api.service.httpheader.SecurityHeaderSupplier.class);
+      when(supplier.getKeycloakAndCsrfHttpHeaders())
+          .thenAnswer(ignored -> new org.springframework.http.HttpHeaders(headers));
+      when(tenantResolverService.tryResolve()).thenReturn(Optional.of(42L));
+      var owner = new UserAdminService(tenantResolverService, factory, supplier);
+      org.springframework.test.util.ReflectionTestUtils.setField(
+          tenantServiceFacade, "userAdminService", owner);
+      var ids = java.util.stream.LongStream.rangeClosed(1, 12).boxed().toList();
+      when(tenantService.searchableTenantIds()).thenReturn(ids);
+      var data = mock(com.vi.tenantservice.api.model.TenantData.class);
+      when(data.getId()).thenReturn(12L);
+      when(tenantService.searchTenantData(any(), any(), any()))
+          .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(data)));
+      long start = System.nanoTime();
+      var result = tenantServiceFacade.findTenantsExceptTechnicalByInfix("owner", 0, 1, "id", true);
+      long elapsed = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+      assertThat(result.get("totalElements")).isEqualTo(1);
+      server.verify(
+          12,
+          com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor(
+                  com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo(
+                      "/useradmin/tenantadmins"))
+              .withHeader(
+                  "Authorization",
+                  com.github.tomakehurst.wiremock.client.WireMock.equalTo("Bearer synthetic-test"))
+              .withHeader(
+                  "X-CSRF-TOKEN",
+                  com.github.tomakehurst.wiremock.client.WireMock.equalTo("synthetic-csrf"))
+              .withHeader(
+                  "tenantId", com.github.tomakehurst.wiremock.client.WireMock.equalTo("42")));
+      verify(tenantService)
+          .searchTenantData(
+              eq(List.of("owner")), eq(java.util.Map.of("owner", Set.copyOf(ids))), any());
+      System.out.println(
+          "TENANT_SEARCH_HTTP candidates="
+              + ids.size()
+              + " calls="
+              + server.getAllServeEvents().size()
+              + " elapsedMs="
+              + elapsed
+              + " artificialDelayMsPerCall=10");
+    } finally {
+      server.stop();
+    }
+  }
+
+  @Test
+  void searchResolvesAllCandidateEmailsBeforePagingAndReusesForEnrichment() {
+    when(tenantService.searchableTenantIds()).thenReturn(List.of(1L, 2L));
+    when(userAdminService.getTenantAdmins(1))
+        .thenReturn(
+            List.of(
+                new AdminResponseDTO().embedded(new AdminDTO().email("Müller@example.test")),
+                new AdminResponseDTO().embedded(new AdminDTO().email("second@example.test"))));
+    when(userAdminService.getTenantAdmins(2)).thenReturn(List.of());
+    var data = mock(com.vi.tenantservice.api.model.TenantData.class);
+    when(data.getId()).thenReturn(1L);
+    when(tenantService.searchTenantData(eq(List.of("muller", "second")), any(), any()))
+        .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(data)));
+    var result =
+        tenantServiceFacade.findTenantsExceptTechnicalByInfix(
+            "MULLER\u2003second", 0, 1, "id", true);
+    assertThat(result.get("totalElements")).isEqualTo(1);
+    verify(tenantService)
+        .searchTenantData(
+            eq(List.of("muller", "second")),
+            eq(java.util.Map.of("muller", Set.of(1L), "second", Set.of(1L))),
+            any());
+    verify(userAdminService, times(1)).getTenantAdmins(1);
+    verify(userAdminService, times(1)).getTenantAdmins(2);
+  }
+
+  @Test
+  void searchOwnerFailureIsExplicitAndDoesNotRunPagedQuery() {
+    when(tenantService.searchableTenantIds()).thenReturn(List.of(1L));
+    when(userAdminService.getTenantAdmins(1))
+        .thenThrow(new IllegalStateException("owner unavailable"));
+    assertThrows(
+        IllegalStateException.class,
+        () -> tenantServiceFacade.findTenantsExceptTechnicalByInfix("email", 0, 1, "id", true));
+    verify(tenantService, never()).searchTenantData(any(), any(), any());
+  }
+
+  @Test
+  void clearedAndSentinelSearchDoNotResolveCandidateOwners() {
+    when(tenantService.findAllTenantDataExceptTechnicalByInfix(any(), any()))
+        .thenReturn(org.springframework.data.domain.Page.empty());
+    tenantServiceFacade.findTenantsExceptTechnicalByInfix(" \u2003 ", 0, 1, "id", true);
+    tenantServiceFacade.findTenantsExceptTechnicalByInfix("*", 0, 1, "id", true);
+    verify(tenantService, never()).searchableTenantIds();
+    verifyNoInteractions(userAdminService);
+  }
+
+  @Test
+  void deleteTenant_Should_ReportTheDeletionToTheDeletionLog_AfterTheTenantWasDeleted() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+
+    tenantServiceFacade.deleteTenant(ID);
+
+    var order = org.mockito.Mockito.inOrder(tenantService, deletionAuditReporter);
+    order.verify(tenantService).delete(tenantEntity);
+    order.verify(deletionAuditReporter).reportTenantExecuted(ID);
+  }
+
+  @Test
+  void deleteTenant_Should_NotReport_WhenTheTenantIsNotFound() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.empty());
+
+    org.junit.jupiter.api.Assertions.assertThrows(
+        com.vi.tenantservice.api.exception.TenantNotFoundException.class,
+        () -> tenantServiceFacade.deleteTenant(ID));
+
+    org.mockito.Mockito.verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
+  void deleteTenant_Should_NotReport_WhenTheTechnicalTenantIsRefused() {
+    org.junit.jupiter.api.Assertions.assertThrows(
+        com.vi.tenantservice.api.exception.TenantBadRequestException.class,
+        () -> tenantServiceFacade.deleteTenant(0L));
+
+    org.mockito.Mockito.verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_notConsultTheMainTenant_When_singleDomainIsDisabled() {
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+
+    verifyNoInteractions(applicationSettingsService);
+  }
+
+  private void givenSingleDomainWithMainTenant(String subdomain) {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    var settings =
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+            .ApplicationSettingsDTO();
+    settings.setMainTenantSubdomainForSingleDomainMultitenancy(
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO()
+            .value(subdomain));
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(settings);
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+  }
+
+  private TenantRestrictedData tenantDataWithTheming(Theming theming) {
+    TenantRestrictedData data = mock(TenantRestrictedData.class);
+    when(converter.toRestrictedTenantDTO(data, DE))
+        .thenReturn(new RestrictedTenantDTO().theming(theming));
+    return data;
+  }
+
+  @Test
+  void
+      getPlatformBrandingTenant_Should_fillOnlyTheImageGapsOfTheTechnicalTenantFromTheMainTenant() {
+    givenSingleDomainWithMainTenant("app");
+    var technical = new Theming().logo("technical-logo");
+    var main =
+        new Theming()
+            .logo("main-logo")
+            .favicon("main-icon")
+            .associationLogo("main-association")
+            .primaryColor("#123456");
+    var technicalData = tenantDataWithTheming(technical);
+    var mainData = tenantDataWithTheming(main);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.of(technicalData));
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    Theming platform = tenantServiceFacade.getPlatformBrandingTenant().orElseThrow().getTheming();
+
+    assertThat(platform.getLogo()).isEqualTo("technical-logo");
+    assertThat(platform.getFavicon()).isEqualTo("main-icon");
+    assertThat(platform.getAssociationLogo()).isEqualTo("main-association");
+    assertThat(platform.getPrimaryColor()).isNull();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_useTheMainTenantImages_When_theTechnicalTenantHasNoRow() {
+    givenSingleDomainWithMainTenant("app");
+    var mainData = tenantDataWithTheming(new Theming().logo("main-logo"));
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant().orElseThrow().getTheming().getLogo())
+        .isEqualTo("main-logo");
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_inheritNothing_When_theMainSubdomainIsBlank() {
+    givenSingleDomainWithMainTenant(" ");
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+    verify(tenantService, never()).findRestrictedTenantDataBySubdomain(any());
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_inheritNothing_When_theMainTenantDoesNotExist() {
+    givenSingleDomainWithMainTenant("gone");
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("gone")).thenReturn(Optional.empty());
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_degrade_When_theSettingsServiceReturnsNothing() {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(null);
+
+    assertThat(tenantServiceFacade.getPlatformBrandingTenant()).isEmpty();
+  }
+
+  @Test
+  void getPlatformBrandingTenant_Should_askTheSettingsServiceOnlyOncePerCacheWindow() {
+    givenSingleDomainWithMainTenant("app");
+    ReflectionTestUtils.setField(tenantServiceFacade, "mainTenantImagesCacheSeconds", 10L);
+    var mainData = tenantDataWithTheming(new Theming().logo("main-logo"));
+    when(tenantService.findRestrictedTenantDataById(0L)).thenReturn(Optional.empty());
+    when(tenantService.findRestrictedTenantDataBySubdomain("app"))
+        .thenReturn(Optional.of(mainData));
+
+    tenantServiceFacade.getPlatformBrandingTenant();
+    tenantServiceFacade.getPlatformBrandingTenant();
+
+    verify(applicationSettingsService, times(1)).getApplicationSettings();
+  }
+
+  @Test
+  void createTenant_Should_offerTheLatestPlatformTemplatesAndRecordInitialLegalTexts() {
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    verify(tenantLegalVersionService)
+        .saveRecordingPublications(eq(TenantLegalVersionService.PublishedLegalTexts.NONE), any());
+    verify(tenantLegalProposalService).deliverLatestTemplatesTo(ID);
+  }
+
+  @Test
+  void createTenant_Should_stillSucceed_When_theTemplateOfferFails() {
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+    when(tenantLegalProposalService.deliverLatestTemplatesTo(ID))
+        .thenThrow(new IllegalStateException("database hiccup"));
+
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    verify(tenantService, never()).delete(any());
+  }
+
+  @Test
+  void updateTenant_Should_recordLegalHistoryAgainstTheTextsStoredBeforeTheUpdate() {
+    tenantEntity.setContentImpressum("{\"de\":\"old imprint\"}");
+    tenantEntity.setContentPrivacy("{\"de\":\"old privacy\"}");
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(converter.toEntity(tenantEntity, sanitizedTenantDTO))
+        .thenAnswer(
+            invocation -> {
+              // The real converter mutates the stored entity in place.
+              tenantEntity.setContentPrivacy("{\"de\":\"new privacy\"}");
+              return tenantEntity;
+            });
+    givenConsultingTypeReturnsConsultingTypeByTenantId();
+    when(tenantService.update(tenantEntity)).thenReturn(tenantEntity);
+    when(converter.toMultilingualDTO(tenantEntity)).thenReturn(sanitizedTenantDTO);
+
+    tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO);
+
+    verify(tenantLegalVersionService)
+        .saveRecordingPublications(
+            eq(
+                new TenantLegalVersionService.PublishedLegalTexts(
+                    "{\"de\":\"old imprint\"}", "{\"de\":\"old privacy\"}")),
+            any());
+    verify(tenantService).update(tenantEntity);
   }
 
   @Test
@@ -167,6 +509,21 @@ class TenantServiceFacadeTest {
     verify(tenantService).create(tenantEntity, null);
     verify(consultingTypeService).createDefaultConsultingTypes(tenantEntity.getId());
     verify(applicationSettingsService, never()).saveMainTenantSubDomain(any());
+  }
+
+  @Test
+  void createTenant_Should_applyPlatformPresetToEmptySettings_WhenDefaultFileIsNull() {
+    when(tenantInputSanitizer.sanitize(tenantMultilingualDTO)).thenReturn(sanitizedTenantDTO);
+    when(converter.toEntity(tenantMultilingualDTO)).thenReturn(tenantEntity);
+    when(tenantService.create(tenantEntity, null)).thenReturn(tenantEntity);
+    when(tenantService.getDefaultTenantSettings()).thenReturn(null);
+
+    tenantServiceFacade.createTenant(tenantMultilingualDTO);
+
+    ArgumentCaptor<com.vi.tenantservice.api.model.TenantSettings> settings =
+        ArgumentCaptor.forClass(com.vi.tenantservice.api.model.TenantSettings.class);
+    verify(newTenantPresetService).applyCurrentPlatformPreset(settings.capture());
+    assertThat(settings.getValue()).isNotNull();
   }
 
   @Test
@@ -794,6 +1151,12 @@ class TenantServiceFacadeTest {
     when(converter.toRestrictedTenantDTO(secondTenant, DE)).thenReturn(secondDto);
     when(tenantAdminControlsService.getControls()).thenReturn(new TenantAdminControls());
 
+    when(tenantPermissionPolicyService.getResolvedPolicies(Set.of(1L, 2L)))
+        .thenReturn(Map.of(1L, Map.of(), 2L, Map.of()));
+    when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(Set.of(1L, 2L)))
+        .thenReturn(
+            Map.of(1L, new InternalGroupChatPolicies(), 2L, new InternalGroupChatPolicies()));
+
     var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
 
     assertThat(result).containsExactly(firstDto, secondDto);
@@ -831,7 +1194,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     Optional<TenantRestrictedData> defaultTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
     Optional<TenantRestrictedData> accessTokenTenantData =
@@ -867,7 +1232,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     Optional<TenantRestrictedData> mainTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
     when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
@@ -905,7 +1272,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     var settings =
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
@@ -949,7 +1318,9 @@ class TenantServiceFacadeTest {
         new TenantConverter(
             new TemplateService(),
             templateRenderer,
-            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService("")));
+            new com.vi.tenantservice.api.service.SmtpPasswordEncryptionService(""),
+            org.mockito.Mockito.mock(
+                com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens.class)));
 
     var settings =
         new com.vi.tenantservice.applicationsettingsservice.generated.web.model
@@ -1007,10 +1378,295 @@ class TenantServiceFacadeTest {
     verify(tenantService, never()).findTenantBySubdomain("localhost");
   }
 
+  @Test
+  void
+      findTenantBySubdomain_Should_resolveRecipientScopeForTheResolvedTenant_When_OverrideApplies() {
+    // given: single-domain mode. The override service hands back the MAIN tenant's DTO (id 1)
+    // carrying the resolved tenant's (id 2) settings. The main tenant allows PLATFORM; the
+    // resolved tenant is held to AGENCY by an ENFORCED platform requirement. The public payload
+    // must carry the resolved tenant's scope, never the wider main-tenant one (#319).
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    Optional<TenantRestrictedData> mainTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
+    Optional<TenantRestrictedData> resolvedTenant = getTenantWithPrivacy("{\"de\":\"content2\"}");
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(mainTenant);
+    when(tenantResolverService.tryResolveForNonAuthUsers()).thenReturn(Optional.of(2L));
+    when(tenantService.findRestrictedTenantDataById(2L)).thenReturn(resolvedTenant);
+    when(singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
+            mainTenant.get(), resolvedTenant.get()))
+        .thenReturn(new RestrictedTenantDTO().id(1L));
+    lenient()
+        .when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(1L))
+        .thenReturn(
+            recipientScope(
+                InternalGroupChatRecipientScope.PLATFORM, PermissionPolicyMode.SUGGESTED));
+    lenient()
+        .when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(2L))
+        .thenReturn(
+            recipientScope(InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
+
+    // when
+    Optional<RestrictedTenantDTO> tenantDTO =
+        tenantServiceFacade.findTenantBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME, null);
+
+    // then
+    assertThat(tenantDTO).isPresent();
+    assertThat(tenantDTO.get().getInternalGroupChat().getRecipientScope())
+        .isEqualTo(
+            new RecipientScopePermissionPolicy(
+                InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
+    verify(tenantPermissionPolicyService, never()).getResolvedInternalGroupChatPolicies(1L);
+  }
+
+  @Test
+  void
+      getRestrictedTenantDataDeterminingTenantContext_Should_resolveRecipientScopeForTheResolvedTenant_When_SingleDomain() {
+    // given: same hazard on the authenticated path -- the override DTO keeps the main tenant's id.
+    givenSingleDomainWithMainTenant(SINGLE_DOMAIN_SUBDOMAIN_NAME);
+    Optional<TenantRestrictedData> mainTenant = getTenantWithPrivacy("{\"de\":\"content1\"}");
+    Optional<TenantRestrictedData> resolvedTenant = getTenantWithPrivacy("{\"de\":\"content2\"}");
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(mainTenant);
+    when(tenantResolverService.tryResolve()).thenReturn(Optional.of(2L));
+    when(tenantService.findRestrictedTenantDataById(2L)).thenReturn(resolvedTenant);
+    // the main tenant's branding images are read for platform theming inheritance
+    lenient()
+        .when(converter.toRestrictedTenantDTO(any(TenantRestrictedData.class), any()))
+        .thenReturn(new RestrictedTenantDTO());
+    when(singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
+            mainTenant.get(), resolvedTenant.get()))
+        .thenReturn(new RestrictedTenantDTO().id(1L));
+    lenient()
+        .when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(1L))
+        .thenReturn(
+            recipientScope(
+                InternalGroupChatRecipientScope.PLATFORM, PermissionPolicyMode.SUGGESTED));
+    lenient()
+        .when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(2L))
+        .thenReturn(
+            recipientScope(InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
+
+    // when
+    RestrictedTenantDTO tenantDTO =
+        tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext();
+
+    // then
+    assertThat(tenantDTO.getInternalGroupChat().getRecipientScope())
+        .isEqualTo(
+            new RecipientScopePermissionPolicy(
+                InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
+    verify(tenantPermissionPolicyService, never()).getResolvedInternalGroupChatPolicies(1L);
+  }
+
+  private static InternalGroupChatPolicies recipientScope(
+      InternalGroupChatRecipientScope value, PermissionPolicyMode mode) {
+    return new InternalGroupChatPolicies()
+        .recipientScope(new RecipientScopePermissionPolicy(value, mode));
+  }
+
   private static Optional<TenantRestrictedData> getTenantWithPrivacy(String contentPrivacy) {
     TenantEntity defaultTenantEntity = new TenantEntity();
     defaultTenantEntity.setContentPrivacy(contentPrivacy);
     Optional<TenantRestrictedData> defaultTenant = Optional.of(defaultTenantEntity);
     return defaultTenant;
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "<svg xmlns='urn:other'/>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><g xmlns='urn:other'/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><foreignObject/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><path onload='alert(1)'/></svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><path fill='url(https://example.org)'/></svg>",
+        "<!DOCTYPE svg [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><svg>&x;</svg>",
+        "<svg xmlns='http://www.w3.org/2000/svg'><use href='https://example.org'/></svg>"
+      })
+  void updateRejectsActiveAssistantArtworkWithoutSaving(String svg) {
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming()
+            .assistantIcon(
+                "data:image/svg+xml;base64,"
+                    + java.util.Base64.getEncoder()
+                        .encodeToString(svg.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {"data:image/jpeg;base64,", "data:image/png;base64,%%%"})
+  void invalidIconEncodingNeverSaves(String icon) {
+    if (icon.startsWith("data:image/jpeg")) {
+      // Valid passive artwork isolates the unsupported MIME prefix from content validation.
+      icon +=
+          java.util.Base64.getEncoder()
+              .encodeToString(
+                  "<svg xmlns='http://www.w3.org/2000/svg'><circle r='1'/></svg>"
+                      .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantIcon(icon));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"<Helper", "Helper>"})
+  void markupInAssistantNameNeverSaves(String name) {
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantName(name));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @Test
+  void oversizedAssistantNameNeverSaves() {
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantName("x".repeat(81)));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @Test
+  void decodedIconBeyondLimitNeverSaves() {
+    byte[] bytes = new byte[512 * 1024 + 1];
+    byte[] signature = {(byte) 137, 80, 78, 71, 13, 10, 26, 10};
+    System.arraycopy(signature, 0, bytes, 0, signature.length);
+    String icon = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(bytes);
+    tenantMultilingualDTO.setTheming(
+        new com.vi.tenantservice.api.model.Theming().assistantIcon(icon));
+    assertThrows(
+        TenantBadRequestException.class,
+        () -> tenantServiceFacade.updateTenant(ID, tenantMultilingualDTO));
+    verify(tenantService, never()).update(any());
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "featureAskerEmailCollectionAgencyCounsellingEnabled",
+        "featureDisplayNameEditableLiveChatEnabled",
+        "featureAskerEmailCollectionSelfHelpEnabled"
+      })
+  void singlePublicTenantProjectsEachCollectionRequirementWithMatchingMetadata(String key) {
+    var publicDto =
+        new RestrictedTenantDTO()
+            .id(tenantEntity.getId())
+            .settings(
+                new Settings()
+                    .featureAskerEmailEnabled(true)
+                    .featureAskerEmailLiveChatEnabled(false));
+    when(tenantService.getAllTenantData()).thenReturn(List.of(tenantEntity));
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(converter.toRestrictedTenantDTO(tenantEntity, DE)).thenReturn(publicDto);
+    when(tenantPermissionPolicyService.getResolvedPolicies(tenantEntity.getId()))
+        .thenReturn(
+            java.util.Map.of(
+                key,
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    false, com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED, true)));
+    var result = tenantServiceFacade.getSingleTenant().orElseThrow();
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(result.getSettings());
+    assertThat(json.has(key)).isTrue();
+    assertThat(json.path(key).asBoolean()).isFalse();
+    assertThat(result.getPermissionPolicies().get(key).getValue()).isFalse();
+    assertThat(result.getPermissionPolicies().get(key).getMode())
+        .isEqualTo(PermissionPolicyMode.ENFORCED);
+    assertThat(result.getPermissionPolicies().get(key).getInherited()).isTrue();
+    assertThat(result.getSettings().getFeatureAskerEmailEnabled()).isTrue();
+    assertThat(result.getSettings().getFeatureAskerEmailLiveChatEnabled()).isFalse();
+  }
+
+  static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments>
+      selectedAccountPrivacyCases() {
+    return java.util.stream.Stream.of(
+            "featureDisplayNameEditable",
+            "featureAskerEmailEnabled",
+            "featureAskerEmailCollectionAgencyCounsellingEnabled",
+            "featureDisplayNameEditableLiveChatEnabled",
+            "featureAskerEmailCollectionSelfHelpEnabled")
+        .flatMap(
+            key ->
+                java.util.stream.Stream.of(true, false)
+                    .flatMap(
+                        allowed ->
+                            java.util.stream.Stream.of(true, false)
+                                .map(
+                                    authenticated ->
+                                        org.junit.jupiter.params.provider.Arguments.of(
+                                            key, allowed, authenticated))));
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.MethodSource("selectedAccountPrivacyCases")
+  void singleDomainAccountPolicyUsesSelectedTenantAndKeepsMainBrandingAndLegacyPolicy(
+      String key, boolean selectedAllowed, boolean authenticated) {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    if (authenticated) {
+      givenSingleDomainWithMainTenant(SINGLE_DOMAIN_SUBDOMAIN_NAME);
+      when(converter.toRestrictedTenantDTO(any(TenantRestrictedData.class), any()))
+          .thenReturn(new RestrictedTenantDTO().id(1L).theming(new Theming()));
+      when(tenantResolverService.tryResolve()).thenReturn(Optional.of(2L));
+    } else {
+      when(tenantResolverService.tryResolveForNonAuthUsers()).thenReturn(Optional.of(2L));
+    }
+    var main = getTenantWithPrivacy("{\"de\":\"main\"}");
+    var actual = getTenantWithPrivacy("{\"de\":\"selected\"}");
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(main);
+    when(tenantService.findRestrictedTenantDataById(2L)).thenReturn(actual);
+    var settings =
+        new com.fasterxml.jackson.databind.ObjectMapper()
+            .convertValue(
+                java.util.Map.of(key, selectedAllowed, "featureVideoCallsEnabled", true),
+                Settings.class);
+    when(singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
+            main.get(), actual.get()))
+        .thenReturn(new RestrictedTenantDTO().id(1L).settings(settings));
+    when(tenantPermissionPolicyService.getResolvedPolicies(1L))
+        .thenReturn(
+            java.util.Map.of(
+                key,
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    !selectedAllowed,
+                    com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED,
+                    true),
+                "featureVideoCallsEnabled",
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    true, com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED, true)));
+    when(tenantPermissionPolicyService.getResolvedPolicies(2L))
+        .thenReturn(
+            java.util.Map.of(
+                key,
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    selectedAllowed,
+                    com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED,
+                    true),
+                "featureVideoCallsEnabled",
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    false, com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED, true)));
+    var result =
+        authenticated
+            ? tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext()
+            : tenantServiceFacade
+                .findTenantBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME, null)
+                .orElseThrow();
+    assertThat(result.getId()).isEqualTo(1L);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(result.getSettings());
+    assertThat(json.path(key).asBoolean()).as(key).isEqualTo(selectedAllowed);
+    assertThat(result.getPermissionPolicies().get(key).getValue()).isEqualTo(selectedAllowed);
+    assertThat(result.getPermissionPolicies().get("featureVideoCallsEnabled").getValue()).isTrue();
+    assertThat(result.getSettings().getFeatureVideoCallsEnabled()).isTrue();
   }
 }

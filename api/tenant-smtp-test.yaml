@@ -1,0 +1,53 @@
+openapi: 3.0.1
+info:
+  title: Tenant SMTP test mail
+  version: 1.0.0
+  description: >-
+    Manually implemented contract. Kept separate from TenantApi generation so the existing
+    TenantController does not inherit a second handler for this route.
+paths:
+  /tenant/{tenantId}/smtp-test-deliveries:
+    post:
+      tags:
+        - tenant-smtp-test-controller
+      operationId: sendTenantSmtpTestMail
+      summary: Send one test mail through the tenant's own SMTP server to the calling admin
+      description: >-
+        Requires a validated JWT with role single-tenant-admin (not technical), a tenantId claim
+        equal to the path, and email_verified=true. The recipient is always the caller's verified
+        email; the caller supplies no recipient, credentials or message, and a non-empty body is
+        rejected. Uses the stored OWN SMTP settings even when tenant system notification emails
+        are switched off. At most one attempt per tenant per minute. Responses carry
+        Cache-Control no-store and no body.
+      parameters:
+        - name: tenantId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '204':
+          description: SMTP transport completed; not a mailbox receipt guarantee
+        '400':
+          description: A request body was sent
+        '401':
+          description: Invalid or missing signed authentication
+        '403':
+          description: >-
+            Caller is not the single-tenant admin of this tenant, is technical, or has no
+            verified email
+        '404':
+          description: Tenant does not exist
+        '422':
+          description: Tenant is not in OWN SMTP mode, its SMTP is disabled, or its settings are invalid
+        '429':
+          description: A test for this tenant was requested within the last minute
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                example: 60
+        '502':
+          description: Delivery unconfirmed; do not automatically retry

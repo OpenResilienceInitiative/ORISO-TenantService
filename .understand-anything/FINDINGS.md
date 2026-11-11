@@ -1,5 +1,7 @@
 # Findings: ORISO-TenantService
 
+> **Historical snapshot (June 2026).** This document is a point-in-time audit and has not been re-run. File counts, versions and findings refer to the June 2026 state of the repository.
+
 ## Generation Summary
 
 - Generated from latest dev commit: `a777c69447609d16db33ae1a1b54fd4efe5366b6`

@@ -29,6 +29,8 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -44,10 +46,13 @@ class TenantConverterTest {
 
   @Mock TemplateRenderer templateRenderer;
 
-  // disabled (no secret): converter unit tests run on plaintext passthrough
+  @Mock com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens platformLegalTextTokens;
+
+  // A secret is configured: saving an SMTP password without one is refused (#346), so tests that
+  // only need a password to exist run with encryption on.
   @Spy
   SmtpPasswordEncryptionService smtpPasswordEncryptionService =
-      new SmtpPasswordEncryptionService("");
+      new SmtpPasswordEncryptionService("unit-test-secret");
 
   @Test
   void toEntity_should_convertToEntityAndBackToDTO() {
@@ -513,6 +518,32 @@ class TenantConverterTest {
   }
 
   @Test
+  void smtpModeRoundTripsAndIsAbsentFromPublicTenant() {
+    for (Settings.SmtpModeEnum mode : Settings.SmtpModeEnum.values()) {
+      MultilingualTenantDTO tenantDTO =
+          new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+      tenantDTO.getSettings().smtpMode(mode);
+
+      TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+      assertThat(tenantConverter.toDTO(entity, "de").getSettings().getSmtpMode()).isEqualTo(mode);
+      assertThat(tenantConverter.toRestrictedTenantDTO(entity, "de").getSettings().getSmtpMode())
+          .isNull();
+    }
+  }
+
+  @Test
+  void toDTO_should_returnNoSmtpMode_When_storedSettingsHaveNone() {
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtpMode(null);
+
+    TenantEntity entity = tenantConverter.toEntity(tenantDTO);
+
+    assertThat(tenantConverter.toDTO(entity, "de").getSettings().getSmtpMode()).isNull();
+  }
+
+  @Test
   void toDTO_should_reportPasswordSetFalse_When_noSmtpPasswordStored() {
     // given
     MultilingualTenantDTO tenantDTO =
@@ -532,7 +563,8 @@ class TenantConverterTest {
     // given
     var encryptionService = new SmtpPasswordEncryptionService("unit-test-secret");
     var encryptingConverter =
-        new TenantConverter(templateService, templateRenderer, encryptionService);
+        new TenantConverter(
+            templateService, templateRenderer, encryptionService, platformLegalTextTokens);
     MultilingualTenantDTO tenantDTO =
         new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
     tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).password("plain-secret"));
@@ -542,6 +574,63 @@ class TenantConverterTest {
 
     // then
     assertThat(entity.getSettings()).doesNotContain("plain-secret").contains("ENC:");
+  }
+
+  /** #346: without a secret the password used to be stored in plain text, silently. */
+  @Test
+  void toEntity_should_refuseSmtpPassword_When_encryptionIsNotConfigured() {
+    // given
+    var converterWithoutSecret = converterWithoutSecret();
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).password("plain-secret"));
+
+    // when / then
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> converterWithoutSecret.toEntity(tenantDTO))
+        .isInstanceOfSatisfying(
+            com.vi.tenantservice.api.exception.TenantValidationException.class,
+            e ->
+                assertThat(e.getStatusExceptionReason())
+                    .isEqualTo(
+                        com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason
+                            .SMTP_PASSWORD_ENCRYPTION_NOT_CONFIGURED));
+  }
+
+  /**
+   * Saving other SMTP settings without touching the password must keep working without a secret.
+   */
+  @Test
+  void toEntity_should_acceptSmtpSettings_When_noPasswordIsSupplied_andNoSecretIsConfigured() {
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO.getSettings().smtp(new SmtpConfig().enabled(true).host("smtp.example.org"));
+
+    assertThat(converterWithoutSecret().toEntity(tenantDTO).getSettings())
+        .contains("smtp.example.org");
+  }
+
+  /** "Unchanged" passwords need no encryption, so they must not be refused without a secret. */
+  @ParameterizedTest
+  @ValueSource(strings = {"", "   ", "********"})
+  void toEntity_should_acceptBlankOrMaskedSmtpPassword_When_noSecretIsConfigured(String password) {
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .smtp(new SmtpConfig().enabled(true).host("smtp.example.org").password(password));
+
+    var settings = converterWithoutSecret().toEntity(tenantDTO).getSettings();
+
+    assertThat(settings).contains("smtp.example.org").doesNotContain("********");
+  }
+
+  private TenantConverter converterWithoutSecret() {
+    return new TenantConverter(
+        templateService,
+        templateRenderer,
+        new SmtpPasswordEncryptionService(""),
+        platformLegalTextTokens);
   }
 
   @Test
@@ -695,6 +784,38 @@ class TenantConverterTest {
   }
 
   @Test
+  void toDTO_should_defaultInternalGroupChannelsToTrue_When_storedSettingsJsonIsEmpty() {
+    // given — FE#1725: legacy tenant without the counsellor channel keys
+    TenantEntity entity = TenantEntity.builder().settings("{}").build();
+
+    // when
+    Settings settings = tenantConverter.toDTO(entity, "de").getSettings();
+
+    // then
+    assertThat(settings.getFeatureConsultantEmailInternalGroupEnabled()).isTrue();
+    assertThat(settings.getFeatureConsultantBrowserInternalGroupEnabled()).isTrue();
+  }
+
+  @Test
+  void toEntity_should_roundTripExplicitFalseForInternalGroupChannels() {
+    // given
+    MultilingualTenantDTO tenantDTO =
+        new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    tenantDTO
+        .getSettings()
+        .featureConsultantEmailInternalGroupEnabled(false)
+        .featureConsultantBrowserInternalGroupEnabled(false);
+
+    // when
+    Settings settings =
+        tenantConverter.toDTO(tenantConverter.toEntity(tenantDTO), "de").getSettings();
+
+    // then
+    assertThat(settings.getFeatureConsultantEmailInternalGroupEnabled()).isFalse();
+    assertThat(settings.getFeatureConsultantBrowserInternalGroupEnabled()).isFalse();
+  }
+
+  @Test
   void toDTO_should_notCrossContaminate_When_jsonContainsMisspelledFieldName() {
     // given — typo must not satisfy .contains() for the correctly-spelled key
     TenantEntity entity =
@@ -745,5 +866,260 @@ class TenantConverterTest {
       return written;
     }
     return written.loginEffect(Theming.LoginEffectEnum.NONE);
+  }
+
+  // --- Träger DPO (ORISO-Admin#1067)
+
+  @Test
+  void dataProtectionOfficer_Should_roundTripThroughTheEntity_And_dropBlankFields() {
+    var dto = new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+    dto.setDataProtectionOfficer(
+        new com.vi.tenantservice.api.model.TenantDataProtectionOfficerDTO()
+            .nameAndLegalForm(" Dr. Maria Muster ")
+            .email("datenschutz@example.org")
+            .street(" "));
+
+    var entity = tenantConverter.toEntity(dto);
+    var back = tenantConverter.toMultilingualDTO(entity).getDataProtectionOfficer();
+
+    assertThat(back.getNameAndLegalForm()).isEqualTo("Dr. Maria Muster");
+    assertThat(back.getEmail()).isEqualTo("datenschutz@example.org");
+    assertThat(back.getStreet()).isNull();
+    assertThat(tenantConverter.toRestrictedTenantDTO(entity, "de").getDataProtectionOfficer())
+        .isEqualTo(back);
+  }
+
+  @Test
+  void dataProtectionOfficer_Should_keepStoredValue_When_absent_And_clear_When_allBlank() {
+    var stored =
+        TenantEntity.builder()
+            .dataProtectionOfficer("{\"nameAndLegalForm\":\"Dr. Maria Muster\"}")
+            .build();
+    var withoutDpo = new MultilingualTenantTestDataBuilder().tenantDTO().withSettings().build();
+
+    tenantConverter.toEntity(stored, withoutDpo);
+    assertThat(stored.getDataProtectionOfficer()).contains("Dr. Maria Muster");
+
+    withoutDpo.setDataProtectionOfficer(
+        new com.vi.tenantservice.api.model.TenantDataProtectionOfficerDTO().nameAndLegalForm(" "));
+    tenantConverter.toEntity(stored, withoutDpo);
+    assertThat(stored.getDataProtectionOfficer()).isNull();
+  }
+
+  @Test
+  void dataProtectionOfficer_Should_readAsNotEntered_When_storedJsonIsDamaged() {
+    var stored = TenantEntity.builder().dataProtectionOfficer("{not json").build();
+    assertThat(tenantConverter.toMultilingualDTO(stored).getDataProtectionOfficer()).isNull();
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_keepErstantwortWhenDtoHasNone() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"<p>x</p>\"}");
+    existing.setErstantwortResponseDeadlineDays(5);
+    MultilingualTenantDTO dto = new MultilingualTenantDTO();
+    dto.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{\"de\":\"<p>x</p>\"}");
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(5);
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_replaceErstantwortWhenDtoHasValues() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"old\"}");
+    existing.setErstantwortResponseDeadlineDays(5);
+    MultilingualTenantDTO dto = new MultilingualTenantDTO();
+    dto.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    dto.getContent().setErstantwortClosing(java.util.Map.of("de", "new"));
+    dto.getContent().setErstantwortResponseDeadlineDays(7);
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{\"de\":\"new\"}");
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(7);
+  }
+
+  private MultilingualTenantDTO dtoWithContent() {
+    MultilingualTenantDTO dto = new MultilingualTenantDTO();
+    dto.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    return dto;
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_removeOnlyTheLanguageWithBlankValue() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"a\",\"en\":\"b\"}");
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortClosing(Map.of("de", "", "en", "b"));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{\"en\":\"b\"}");
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_storeEmptyObjectWhenEveryLanguageIsBlank() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"a\",\"en\":\"b\"}");
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortClosing(Map.of("de", "", "en", "  "));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{}");
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_keepStoredTextWhenMapIsEmpty() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"a\"}");
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortClosing(Map.of());
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing()).isEqualTo("{\"de\":\"a\"}");
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_dropMetaOfClearedLanguageButKeepNewMeta() {
+    // given
+    String meta = "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-10-14T10:00:00Z\"}";
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"a\",\"en\":\"b\",\"en__meta\":\"old\"}");
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent()
+        .setErstantwortClosing(
+            Map.of("de", "a", "en", "", "en__meta", "", "fr", "c", "fr__meta", meta));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing())
+        .doesNotContain("en__meta")
+        .doesNotContain("\"en\"")
+        .contains("fr__meta");
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_clearDeadlineWhenZero() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setErstantwortResponseDeadlineDays(5);
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortResponseDeadlineDays(0);
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getErstantwortResponseDeadlineDays()).isNull();
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_keepStoredDeadlineWhenDtoDeadlineIsNull() {
+    // given
+    TenantEntity existing = new TenantEntity();
+    existing.setErstantwortResponseDeadlineDays(5);
+    MultilingualTenantDTO dto = new MultilingualTenantDTO();
+    dto.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    dto.getContent().setErstantwortGreeting(java.util.Map.of("de", "hi"));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(5);
+    assertThat(result.getContentErstantwortGreeting()).isEqualTo("{\"de\":\"hi\"}");
+  }
+
+  @Test
+  void toEntity_withExistingEntity_Should_dropNonBlankMetaOfClearedLanguage() {
+    // given
+    String meta = "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-10-14T10:00:00Z\"}";
+    TenantEntity existing = new TenantEntity();
+    existing.setContentErstantwortClosing("{\"de\":\"a\",\"en\":\"b\",\"en__meta\":\"old\"}");
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent()
+        .setErstantwortClosing(Map.of("de", "a", "en", "", "en__meta", meta, "de__meta", meta));
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(existing, dto);
+
+    // then
+    assertThat(result.getContentErstantwortClosing())
+        .doesNotContain("en__meta")
+        .doesNotContain("\"en\"")
+        .contains("de__meta");
+  }
+
+  @Test
+  void toEntity_forCreate_Should_storeNullDeadlineWhenZero() {
+    // given
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortResponseDeadlineDays(0);
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(dto);
+
+    // then
+    assertThat(result.getErstantwortResponseDeadlineDays()).isNull();
+  }
+
+  @Test
+  void toEntity_forCreate_Should_keepPositiveDeadline() {
+    // given
+    MultilingualTenantDTO dto = dtoWithContent();
+    dto.getContent().setErstantwortResponseDeadlineDays(4);
+
+    // when
+    TenantEntity result = tenantConverter.toEntity(dto);
+
+    // then
+    assertThat(result.getErstantwortResponseDeadlineDays()).isEqualTo(4);
+  }
+
+  @Test
+  void roundTripsMixedCollectionPreferencesWhenTheAccountMasterIsOff() {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var settings =
+        mapper.convertValue(
+            Map.of(
+                "featureAskerEmailEnabled", false,
+                "featureAskerEmailCollectionAgencyCounsellingEnabled", false,
+                "featureDisplayNameEditableLiveChatEnabled", true,
+                "featureAskerEmailCollectionSelfHelpEnabled", false),
+            Settings.class);
+    var input = new MultilingualTenantTestDataBuilder().tenantDTO().withTheming().build();
+    input.setSettings(settings);
+    var entity = tenantConverter.toEntity(input);
+    var converted = tenantConverter.toDTO(entity, "de");
+    var json = mapper.valueToTree(converted.getSettings());
+    assertThat(json.path("featureAskerEmailEnabled").asBoolean()).isFalse();
+    assertThat(json.has("featureAskerEmailCollectionAgencyCounsellingEnabled")).isTrue();
+    assertThat(json.path("featureAskerEmailCollectionAgencyCounsellingEnabled").asBoolean())
+        .isFalse();
+    assertThat(json.path("featureDisplayNameEditableLiveChatEnabled").asBoolean()).isTrue();
+    assertThat(json.has("featureAskerEmailCollectionSelfHelpEnabled")).isTrue();
+    assertThat(json.path("featureAskerEmailCollectionSelfHelpEnabled").asBoolean()).isFalse();
   }
 }

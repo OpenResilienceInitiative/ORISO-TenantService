@@ -1,12 +1,15 @@
 CREATE TABLE IF NOT EXISTS TENANT
 (
     ID bigint NOT NULL,
+    active boolean NOT NULL DEFAULT TRUE,
     name varchar(36) NOT NULL,
     subdomain varchar(255) NOT NULL,
     licensing_allowed_users int,
     theming_logo longtext,
     theming_association_logo longtext,
     theming_favicon longtext,
+    theming_assistant_name varchar(80),
+    theming_assistant_icon longtext,
     theming_primary_color varchar(15),
     theming_secondary_color varchar(15),
     theming_accent varchar(15),

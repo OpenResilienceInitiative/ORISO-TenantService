@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+ <!-- #319: Traeger override of the internal group chat policies (recipient scope). Null = no override, the platform preset applies. -->
+ <changeSet id="tenant-permission-policy-internal-group-chat" author="oriso">
+  <preConditions onFail="CONTINUE"><not><columnExists tableName="tenant_permission_policy" columnName="internal_group_chat_policies"/></not></preConditions>
+  <addColumn tableName="tenant_permission_policy"><column name="internal_group_chat_policies" type="LONGTEXT"/></addColumn>
+  <rollback><dropColumn tableName="tenant_permission_policy" columnName="internal_group_chat_policies"/></rollback>
+ </changeSet>
+</databaseChangeLog>

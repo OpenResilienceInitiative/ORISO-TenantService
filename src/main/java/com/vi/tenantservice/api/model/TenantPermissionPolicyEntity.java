@@ -43,6 +43,10 @@ public class TenantPermissionPolicyEntity {
   @Column(name = "case_handover_policies", columnDefinition = "TEXT")
   private String caseHandoverPolicies;
 
+  /** JSON of the Traeger's {@link InternalGroupChatPolicies} override (#319); null = none set. */
+  @Column(name = "internal_group_chat_policies", columnDefinition = "TEXT")
+  private String internalGroupChatPolicies;
+
   @Column(name = "update_date", nullable = false)
   private LocalDateTime updateDate;
 }

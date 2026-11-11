@@ -30,6 +30,8 @@ public class SingleDomainTenantOverrideService {
     if (isContentOverrideAllowed()) {
       overrideContent(mainTenantRestrictedDTO, overridingRestrictedTenantDTO);
     }
+    // Branding belongs to the main tenant; operational status belongs to the selected Träger.
+    mainTenantRestrictedDTO.setActive(overridingRestrictedTenantDTO.getActive());
     overrideSettings(mainTenantRestrictedDTO, overridingRestrictedTenantDTO);
     return mainTenantRestrictedDTO;
   }
@@ -48,6 +50,21 @@ public class SingleDomainTenantOverrideService {
       RestrictedTenantDTO overridingRestrictedTenantDTO) {
     var mainSettings = mainTenantRestrictedDTO.getSettings();
     var actualSettings = overridingRestrictedTenantDTO.getSettings();
+    // The shared domain keeps main branding, not another Träger's account privacy choices.
+    mainSettings.setFeatureDisplayNameEditable(actualSettings.getFeatureDisplayNameEditable());
+    mainSettings.setFeatureAskerEmailEnabled(actualSettings.getFeatureAskerEmailEnabled());
+    mainSettings.setFeatureAskerEmailCollectionAgencyCounsellingEnabled(
+        actualSettings.getFeatureAskerEmailCollectionAgencyCounsellingEnabled());
+    mainSettings.setFeatureDisplayNameEditableAgencyCounsellingEnabled(
+        actualSettings.getFeatureDisplayNameEditableAgencyCounsellingEnabled());
+    mainSettings.setFeatureDisplayNameEditableLiveChatEnabled(
+        actualSettings.getFeatureDisplayNameEditableLiveChatEnabled());
+    mainSettings.setFeatureDisplayNameEditableSelfHelpEnabled(
+        actualSettings.getFeatureDisplayNameEditableSelfHelpEnabled());
+    mainSettings.setFeatureAskerEmailCollectionSelfHelpEnabled(
+        actualSettings.getFeatureAskerEmailCollectionSelfHelpEnabled());
+    mainSettings.setEmailVisible(actualSettings.getEmailVisible());
+    mainSettings.setEmailRequired(actualSettings.getEmailRequired());
     mainSettings.setFeatureMediaUploadEnabled(actualSettings.getFeatureMediaUploadEnabled());
     mainSettings.setFeatureMediaUploadAnonymousChatsEnabled(
         actualSettings.getFeatureMediaUploadAnonymousChatsEnabled());

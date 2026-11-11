@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+  <!-- Never choose among conflicting legal master data. Check before changing any existing row. -->
+  <changeSet id="normalizePlatformDpiaSingletonId" author="oriso">
+    <preConditions onFail="HALT" onError="HALT"
+      onFailMessage="Cannot migrate: multiple platform DPIA master-data rows exist. Reconcile the rows explicitly before retrying; no row will be chosen or deleted.">
+      <sqlCheck expectedResult="1">
+        SELECT CASE WHEN COUNT(*) &lt;= 1 THEN 1 ELSE 0 END FROM platform_dpia_master_data
+      </sqlCheck>
+    </preConditions>
+    <sql>UPDATE platform_dpia_master_data SET id = 1 WHERE id != 1</sql>
+    <!-- The surrogate ID has no external references. Rollback preserves the normalized ID and
+         all payload/timestamp values; the former arbitrary ID is intentionally not reconstructed. -->
+    <rollback/>
+  </changeSet>
+
+  <changeSet id="constrainPlatformDpiaSingleton" author="oriso">
+    <!-- MariaDB DDL commits independently of the changelog entry. If DDL committed before a
+         process interruption, mark that installed constraint as applied on the next run. -->
+    <preConditions onFail="MARK_RAN" onError="HALT">
+      <sqlCheck expectedResult="0">
+        SELECT COUNT(*) FROM information_schema.table_constraints
+        WHERE constraint_schema = SCHEMA()
+          AND LOWER(table_name) = 'platform_dpia_master_data'
+          AND LOWER(constraint_name) = 'ck_platform_dpia_singleton'
+          AND constraint_type = 'CHECK'
+      </sqlCheck>
+    </preConditions>
+    <sql>ALTER TABLE platform_dpia_master_data ADD CONSTRAINT ck_platform_dpia_singleton CHECK (id = 1)</sql>
+    <rollback>
+      <sql>ALTER TABLE platform_dpia_master_data DROP CONSTRAINT ck_platform_dpia_singleton</sql>
+    </rollback>
+  </changeSet>
+</databaseChangeLog>

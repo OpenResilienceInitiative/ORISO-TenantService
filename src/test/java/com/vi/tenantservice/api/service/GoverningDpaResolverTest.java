@@ -37,7 +37,11 @@ class GoverningDpaResolverTest {
 
   @BeforeEach
   void setUp() {
-    resolver = new GoverningDpaResolver(tenantRepository, versionRepository);
+    resolver =
+        new GoverningDpaResolver(
+            tenantRepository,
+            versionRepository,
+            org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class));
     ReflectionTestUtils.setField(resolver, "operatorTenantId", OPERATOR_TENANT_ID.longValue());
   }
 

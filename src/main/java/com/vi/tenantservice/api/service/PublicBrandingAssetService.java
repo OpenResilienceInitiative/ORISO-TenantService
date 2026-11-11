@@ -25,6 +25,30 @@ public class PublicBrandingAssetService {
         .flatMap(brandingAssetDecoder::decode);
   }
 
+  /** A mail image URL must identify its tenant without a browser cookie or session. */
+  public Optional<DecodedAsset> find(Long tenantId, String asset) {
+    if (tenantId == null || tenantId < 0 || !("logo".equals(asset) || "favicon".equals(asset))) {
+      return Optional.empty();
+    }
+    Optional<RestrictedTenantDTO> tenant =
+        tenantServiceFacade.findOwnRestrictedTenantById(tenantId);
+    // The technical tenant may have no row (#300); its route then serves the platform branding.
+    if (tenant.isEmpty() && tenantId != 0L) {
+      return Optional.empty();
+    }
+    // The Träger's own images come first (logo, then association logo); only when it has none
+    // is the platform branding inherited, as Admin -> Appearance shows it.
+    String stored = tenant.map(found -> select(found.getTheming(), asset)).orElse(null);
+    if (stored == null || stored.isBlank()) {
+      stored =
+          tenantServiceFacade
+              .getPlatformBrandingTenant()
+              .map(platform -> select(platform.getTheming(), asset))
+              .orElse(null);
+    }
+    return brandingAssetDecoder.decode(stored);
+  }
+
   private Optional<RestrictedTenantDTO> resolveTenant() {
     try {
       return Optional.of(tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext());
@@ -41,8 +65,12 @@ public class PublicBrandingAssetService {
       return theming.getFavicon();
     }
     if ("logo".equals(asset)) {
-      return theming.getLogo() != null ? theming.getLogo() : theming.getAssociationLogo();
+      return isBlank(theming.getLogo()) ? theming.getAssociationLogo() : theming.getLogo();
     }
     return null;
+  }
+
+  private static boolean isBlank(String value) {
+    return value == null || value.isBlank();
   }
 }

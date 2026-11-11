@@ -22,6 +22,8 @@ public class EffectiveThemingApplier {
     inheritString(tenant, platform, Theming::getLogo, Theming::setLogo);
     inheritString(tenant, platform, Theming::getAssociationLogo, Theming::setAssociationLogo);
     inheritString(tenant, platform, Theming::getFavicon, Theming::setFavicon);
+    inheritString(tenant, platform, Theming::getAssistantName, Theming::setAssistantName);
+    inheritString(tenant, platform, Theming::getAssistantIcon, Theming::setAssistantIcon);
     inheritString(tenant, platform, Theming::getPrimaryColor, Theming::setPrimaryColor);
     inheritString(tenant, platform, Theming::getAccent, Theming::setAccent);
     inheritString(tenant, platform, Theming::getSecondaryColor, Theming::setSecondaryColor);

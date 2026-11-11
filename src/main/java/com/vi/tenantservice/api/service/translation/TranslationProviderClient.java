@@ -6,6 +6,11 @@ public interface TranslationProviderClient {
   /** Stable provider id used in the settings map and the API ("openrouter", "mistral"). */
   String getProviderId();
 
+  /** False when the provider's base URL is not configured; the provider is then unusable. */
+  default boolean isConfigured() {
+    return true;
+  }
+
   /** The model this client sends requests for (configurable via application properties). */
   String getModel();
 

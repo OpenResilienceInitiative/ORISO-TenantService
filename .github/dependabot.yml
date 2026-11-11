@@ -1,60 +1,100 @@
 # Dependabot configuration.
 #
-# NOTE ON BRANCHES: `target-branch` only applies to VERSION updates. Dependabot
-# SECURITY updates always open against the repository default branch (`main`)
-# and cannot be retargeted from here. Since day-to-day work happens on
-# `pre-dev`, security PRs against `main` fix nothing that is actually deployed.
-# The real fix is to make `pre-dev` the default branch; until then security
-# fixes have to be applied to `pre-dev` by hand.
+# Dependabot reads this file from the repository DEFAULT branch (`main`) only,
+# so it takes effect once it is released to `main`.
+#
+# `target-branch` applies to VERSION updates only. SECURITY updates always open
+# against `main`. Entries WITHOUT `target-branch` therefore carry the security
+# grouping (their version updates are switched off with limit 0); entries WITH
+# `target-branch: dev` carry the version updates. Apply security fixes that
+# matter onto `dev` by hand.
 version: 2
 updates:
-  - package-ecosystem: "maven"
-    directory: "/"
-    target-branch: "pre-dev"
-    schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 3
-    commit-message:
-      prefix: "chore(deps)"
-    groups:
-      maven-security:
-        applies-to: security-updates
-        patterns: ["*"]
-      maven-minor-and-patch:
-        applies-to: version-updates
-        patterns: ["*"]
-        update-types: ["minor", "patch"]
-    ignore:
-      # Majors are upgraded deliberately, never by bot.
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+    - package-ecosystem: 'maven'
+      directory: '/'
+      schedule:
+          interval: 'monthly'
+      open-pull-requests-limit: 0 # version updates live in the dev entry below
+      groups:
+          maven-security-production:
+              applies-to: security-updates
+              dependency-type: 'production'
+              patterns: ['*']
+          maven-security-development:
+              applies-to: security-updates
+              dependency-type: 'development'
+              patterns: ['*']
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    target-branch: "pre-dev"
-    schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 1
-    commit-message:
-      prefix: "chore(actions)"
-    groups:
-      github-actions:
-        patterns: ["*"]
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+    - package-ecosystem: 'maven'
+      directory: '/'
+      target-branch: 'dev'
+      schedule:
+          interval: 'monthly'
+      open-pull-requests-limit: 3
+      commit-message:
+          prefix: 'chore(deps)'
+      groups:
+          maven-minor-and-patch:
+              applies-to: version-updates
+              patterns: ['*']
+              update-types: ['minor', 'patch']
+      ignore:
+          # Majors are upgraded deliberately, never by bot.
+          - dependency-name: '*'
+            update-types: ['version-update:semver-major']
 
-  - package-ecosystem: "docker"
-    directory: "/"
-    target-branch: "pre-dev"
-    schedule:
-      interval: "monthly"
-    open-pull-requests-limit: 1
-    commit-message:
-      prefix: "chore(docker)"
-    groups:
-      docker-base-images:
-        patterns: ["*"]
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
+    - package-ecosystem: 'github-actions'
+      directories:
+          - '/'
+          - '/.github/actions/*'
+      schedule:
+          interval: 'monthly'
+      open-pull-requests-limit: 0 # version updates live in the dev entry below
+      groups:
+          github-actions-security:
+              applies-to: security-updates
+              patterns: ['*']
+
+    - package-ecosystem: 'github-actions'
+      directories:
+          - '/'
+          - '/.github/actions/*'
+      target-branch: 'dev'
+      schedule:
+          interval: 'monthly'
+      open-pull-requests-limit: 1
+      commit-message:
+          prefix: 'chore(actions)'
+      groups:
+          github-actions:
+              patterns: ['*']
+      ignore:
+          # Majors are upgraded deliberately, never by bot.
+          - dependency-name: '*'
+            update-types: ['version-update:semver-major']
+
+    - package-ecosystem: 'docker'
+      directory: '/'
+      schedule:
+          interval: 'monthly'
+      open-pull-requests-limit: 0 # version updates live in the dev entry below
+      groups:
+          docker-security:
+              applies-to: security-updates
+              patterns: ['*']
+
+    - package-ecosystem: 'docker'
+      directory: '/'
+      target-branch: 'dev'
+      schedule:
+          interval: 'monthly'
+      open-pull-requests-limit: 1
+      commit-message:
+          prefix: 'chore(docker)'
+      groups:
+          docker-base-images:
+              patterns: ['*']
+      ignore:
+          # Majors are upgraded deliberately, never by bot.
+          - dependency-name: '*'
+            update-types: ['version-update:semver-major']
