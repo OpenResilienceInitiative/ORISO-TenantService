@@ -69,7 +69,7 @@ public interface TenantDpaSignatureRepository
           + "s.signerEmail = :signerEmail, s.signerOrganisation = :signerOrganisation, "
           + "s.signerIsMember = :signerIsMember, s.language = :language, "
           + "s.source = coalesce(s.source, :defaultSource), "
-          + "s.signedAt = :now, s.tokenHash = null, "
+          + "s.signedAt = :now, s.signedAtEpochMillis = :signedAtEpochMillis, s.tokenHash = null, "
           + "s.currentVersionWhenSigned = :currentVersionWhenSigned "
           + "where s.tokenHash = :tokenHash "
           + "and s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.PENDING")
@@ -83,6 +83,7 @@ public interface TenantDpaSignatureRepository
       @Param("language") String language,
       @Param("defaultSource") String defaultSource,
       @Param("now") LocalDateTime now,
+      @Param("signedAtEpochMillis") long signedAtEpochMillis,
       @Param("currentVersionWhenSigned") Boolean currentVersionWhenSigned);
 
   /**

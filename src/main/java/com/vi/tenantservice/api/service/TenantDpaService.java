@@ -10,6 +10,7 @@ import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -55,6 +56,7 @@ public class TenantDpaService {
   private final TenantIdReservationRepository tenantIdReservationRepository;
   private final DpaSignatureOwnership dpaSignatureOwnership;
   private final GoverningDpaResolver governingDpaResolver;
+  private final Clock dpaClock;
 
   /** Persists a SIGNED confirmation of the given DPA version for a tenant. */
   public TenantDpaSignatureEntity recordSignature(
@@ -89,7 +91,8 @@ public class TenantDpaService {
       String source,
       boolean signerIsMember,
       String language) {
-    var now = LocalDateTime.now();
+    var instant = dpaClock.instant();
+    var now = LocalDateTime.ofInstant(instant, dpaClock.getZone());
     return signatureRepository.save(
         TenantDpaSignatureEntity.builder()
             .tenantId(tenantId)
@@ -104,6 +107,7 @@ public class TenantDpaService {
             .language(language)
             .status(DpaSignatureStatus.SIGNED)
             .signedAt(now)
+            .signedAtEpochMillis(instant.toEpochMilli())
             .createDate(now)
             .build());
   }
@@ -345,7 +349,8 @@ public class TenantDpaService {
     // longer PENDING and gets the defined "already used" answer (410).
     signatureRepository.lockOutstandingByTenantId(pending.getTenantId());
     var tokenHash = DpaSignToken.hash(rawToken);
-    var now = LocalDateTime.now();
+    var instant = dpaClock.instant();
+    var now = LocalDateTime.ofInstant(instant, dpaClock.getZone());
     // Atomic single-use: only the still-PENDING row is updated, so a concurrent double-submit
     // produces exactly one winner (1 row) and the rest see 0.
     int consumed =
@@ -359,6 +364,7 @@ public class TenantDpaService {
             language,
             SOURCE_FORWARDED_EXTERNAL,
             now,
+            instant.toEpochMilli(),
             currentVersionWhenSigned);
     if (consumed == 0) {
       throw new InvalidDpaSignTokenException("Sign token has already been used");
@@ -378,6 +384,7 @@ public class TenantDpaService {
     pending.setLanguage(language);
     pending.setStatus(DpaSignatureStatus.SIGNED);
     pending.setSignedAt(now);
+    pending.setSignedAtEpochMillis(instant.toEpochMilli());
     pending.setCurrentVersionWhenSigned(currentVersionWhenSigned);
     pending.setTokenHash(null);
     return pending;

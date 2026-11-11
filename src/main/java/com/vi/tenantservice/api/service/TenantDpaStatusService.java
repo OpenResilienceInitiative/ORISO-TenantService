@@ -6,6 +6,7 @@ import com.vi.tenantservice.api.model.TenantDpaStatus;
 import com.vi.tenantservice.api.repository.TenantDpaAdminSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -61,7 +62,8 @@ public class TenantDpaStatusService {
       String signedBy,
       boolean forwardPending,
       LocalDateTime signingDeadlineAt,
-      boolean renewalGraceActive) {
+      boolean renewalGraceActive,
+      Instant signedAtInstant) {
     public boolean newCounsellingAllowed() {
       return status == TenantDpaStatus.VALID || renewalGraceActive;
     }
@@ -83,7 +85,8 @@ public class TenantDpaStatusService {
           signedBy,
           forwardPending,
           null,
-          false);
+          false,
+          null);
     }
   }
 
@@ -97,7 +100,12 @@ public class TenantDpaStatusService {
       String formDataJson) {}
 
   private record SignedEntry(
-      LocalDateTime version, LocalDateTime signedAt, String signedBy, boolean graceEligible) {}
+      LocalDateTime version,
+      LocalDateTime signedAt,
+      String signedBy,
+      boolean graceEligible,
+      Instant signedAtInstant,
+      boolean recordedInstant) {}
 
   private final TenantDpaAdminSignatureRepository adminSignatureRepository;
   private final TenantDpaSignatureRepository signatureRepository;
@@ -105,6 +113,7 @@ public class TenantDpaStatusService {
   private final GoverningDpaResolver governingDpaResolver;
   private final PlatformTransactionManager transactionManager;
   private final Clock dpaClock;
+  private final LegacyDpaSigningTime legacyDpaSigningTime;
 
   /** Computes the authoritative DPA state for the tenant. */
   @Transactional(readOnly = true)
@@ -131,7 +140,8 @@ public class TenantDpaStatusService {
         status == TenantDpaStatus.OUTDATED
             && deadline != null
             && signedEntries.stream().anyMatch(SignedEntry::graceEligible)
-            && dpaClock.instant().isBefore(deadline.toInstant(ZoneOffset.UTC)));
+            && dpaClock.instant().isBefore(deadline.toInstant(ZoneOffset.UTC)),
+        latestSigned == null ? null : latestSigned.signedAtInstant());
   }
 
   /**
@@ -351,7 +361,8 @@ public class TenantDpaStatusService {
       String signerUsername,
       AdminSignatureForm form,
       boolean currentVersionWhenSigned) {
-    var now = LocalDateTime.now(dpaClock);
+    var instant = dpaClock.instant();
+    var now = LocalDateTime.ofInstant(instant, dpaClock.getZone());
     return TenantDpaAdminSignatureEntity.builder()
         .tenantId(tenantId)
         .dpaVersion(version)
@@ -364,6 +375,7 @@ public class TenantDpaStatusService {
         .language(form.language())
         .formData(form.formDataJson())
         .signedAt(now)
+        .signedAtEpochMillis(instant.toEpochMilli())
         .currentVersionWhenSigned(currentVersionWhenSigned)
         .createDate(now)
         .build();
@@ -380,11 +392,12 @@ public class TenantDpaStatusService {
         .forEach(
             row ->
                 entries.add(
-                    new SignedEntry(
+                    signedEntry(
                         row.getDpaVersion(),
                         row.getSignedAt(),
                         row.getSignerName() != null ? row.getSignerName() : row.getSignerUsername(),
-                        !Boolean.FALSE.equals(row.getCurrentVersionWhenSigned()))));
+                        !Boolean.FALSE.equals(row.getCurrentVersionWhenSigned()),
+                        row.getSignedAtEpochMillis())));
     // Only the current occupant's signatures count: a tenant ID is a reusable slot, and an
     // orphan left behind by a released reservation must never make the next organisation on that
     // ID look signed (#179).
@@ -395,12 +408,27 @@ public class TenantDpaStatusService {
         .forEach(
             row ->
                 entries.add(
-                    new SignedEntry(
+                    signedEntry(
                         row.getDpaVersion(),
                         row.getSignedAt(),
                         row.getSignerName(),
-                        !Boolean.FALSE.equals(row.getCurrentVersionWhenSigned()))));
+                        !Boolean.FALSE.equals(row.getCurrentVersionWhenSigned()),
+                        row.getSignedAtEpochMillis())));
     return entries;
+  }
+
+  private SignedEntry signedEntry(
+      LocalDateTime version,
+      LocalDateTime signedAt,
+      String signedBy,
+      boolean graceEligible,
+      Long signedAtEpochMillis) {
+    var instant =
+        signedAtEpochMillis == null
+            ? legacyDpaSigningTime.resolve(signedAt).orElse(null)
+            : Instant.ofEpochMilli(signedAtEpochMillis);
+    return new SignedEntry(
+        version, signedAt, signedBy, graceEligible, instant, signedAtEpochMillis != null);
   }
 
   private TenantDpaStatus deriveStatus(LocalDateTime currentVersion, List<SignedEntry> signed) {
@@ -421,12 +449,15 @@ public class TenantDpaStatusService {
     return signed.isEmpty() ? TenantDpaStatus.UNSIGNED : TenantDpaStatus.OUTDATED;
   }
 
-  /** The signature covering the newest version (signing time breaks ties). */
+  /** Within a version, prefer the latest known instant and a recorded instant on an exact tie. */
   private SignedEntry latestSignedEntry(List<SignedEntry> signed) {
     return signed.stream()
         .max(
             Comparator.comparing(
                     SignedEntry::version, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(
+                    SignedEntry::signedAtInstant, Comparator.nullsFirst(Comparator.naturalOrder()))
+                .thenComparing(SignedEntry::recordedInstant)
                 .thenComparing(
                     SignedEntry::signedAt, Comparator.nullsFirst(Comparator.naturalOrder())))
         .orElse(null);

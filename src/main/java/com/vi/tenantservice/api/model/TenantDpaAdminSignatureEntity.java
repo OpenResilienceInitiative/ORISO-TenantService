@@ -88,6 +88,9 @@ public class TenantDpaAdminSignatureEntity {
   @Column(name = "signed_at", nullable = false, updatable = false)
   private LocalDateTime signedAt;
 
+  @Column(name = "signed_at_epoch_millis", updatable = false)
+  private Long signedAtEpochMillis;
+
   /** Whether this contract was still governing when signed; null retains legacy audit semantics. */
   @Column(name = "current_version_when_signed", updatable = false)
   @Convert(converter = NumericBooleanConverter.class)
