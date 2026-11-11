@@ -1774,14 +1774,27 @@ class TenantControllerIT {
   private static final String LEGAL_NAME =
       "Caritasverband für die Erzdiözese Musterstadt e.V. – Fachbereich Online-Beratung";
 
-  private String tenant1RequestWith(String legalNameAndContactJson) {
+  private String tenant1RequestWith(String legalNameAndContactJson) throws Exception {
     String base =
         multilingualTenantTestDataBuilder
             .tenantDTO()
             .withSubdomain("happylife")
             .withLicensing(5)
             .jsonify();
-    return base.substring(0, base.lastIndexOf('}')) + "," + legalNameAndContactJson + "}";
+    return withFields(base, legalNameAndContactJson);
+  }
+
+  /**
+   * Merges extra JSON fields into a serialized request. The serialized DTO already carries these
+   * keys as null, so appending them as text sent duplicate keys, which Jackson 3.1 (Spring Boot
+   * 4.0.7) no longer resolves to the last value.
+   */
+  private static String withFields(String base, String fieldsJson) throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var merged = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(base);
+    merged.setAll(
+        (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree("{" + fieldsJson + "}"));
+    return mapper.writeValueAsString(merged);
   }
 
   private String tenant1RequestWithoutLegalNameAndContact() {
@@ -1964,11 +1977,12 @@ class TenantControllerIT {
                 .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build()))
                 .contentType(APPLICATION_JSON)
                 .content(
-                    base.substring(0, base.lastIndexOf('}'))
-                        + ",\"legalName\":\""
-                        + LEGAL_NAME
-                        + "\",\"contactEmail\":\"beratung@caritas-musterstadt.de\","
-                        + "\"contactPhone\":\"\"}"))
+                    withFields(
+                        base,
+                        "\"legalName\":\""
+                            + LEGAL_NAME
+                            + "\",\"contactEmail\":\"beratung@caritas-musterstadt.de\","
+                            + "\"contactPhone\":\"\"")))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.legalName", is(LEGAL_NAME)))
         .andExpect(jsonPath("$.contactEmail", is("beratung@caritas-musterstadt.de")))
