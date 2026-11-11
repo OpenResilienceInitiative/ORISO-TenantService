@@ -40,4 +40,21 @@ class PermissionFeatureRegistryTest {
     assertThat(PermissionFeature.byApiKey("caseHandoverEnabled")).isPresent();
     assertThat(PermissionFeature.byApiKey("caseHandoverTeamAccessOptOut")).isEmpty();
   }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "featureAskerEmailCollectionAgencyCounsellingEnabled",
+        "featureDisplayNameEditableAgencyCounsellingEnabled",
+        "featureDisplayNameEditableLiveChatEnabled",
+        "featureDisplayNameEditableSelfHelpEnabled",
+        "featureAskerEmailCollectionSelfHelpEnabled"
+      })
+  void registryProvidesIndependentAccountPreferences(String key) {
+    var collection = PermissionFeature.byApiKey(key);
+    assertThat(collection).isPresent();
+    assertThat(collection.orElseThrow().defaultValue()).isTrue();
+    assertThat(collection.orElseThrow().legacyToggleKey()).isNull();
+    assertThat(PermissionFeature.ASKER_EMAIL_LIVE_CHAT.defaultValue()).isFalse();
+  }
 }

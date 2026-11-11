@@ -430,6 +430,32 @@ class TenantDpaFacadeTest {
   }
 
   @Test
+  void publishDpa_Should_checkPlatformAdministratorFirst_andTouchNothingWhenRefused() {
+    doThrow(new AccessDeniedException("no"))
+        .when(tenantFacadeAuthorisationService)
+        .assertCanPublishDpa();
+
+    assertThatThrownBy(() -> publishWithDeadline(5L, Map.of("de", "<p>x</p>")))
+        .isInstanceOf(AccessDeniedException.class);
+
+    verify(tenantFacadeAuthorisationService).assertCanPublishDpa();
+    verifyNoInteractions(tenantService, tenantDpaService, governingDpaResolver, inputSanitizer);
+  }
+
+  @Test
+  void publishLegacyDpa_Should_checkPlatformAdministratorFirst_andTouchNothingWhenRefused() {
+    doThrow(new AccessDeniedException("no"))
+        .when(tenantFacadeAuthorisationService)
+        .assertCanPublishDpa();
+
+    assertThatThrownBy(() -> tenantDpaFacade.publishLegacyDpa(5L, Map.of("de", "<p>x</p>")))
+        .isInstanceOf(AccessDeniedException.class);
+
+    verify(tenantFacadeAuthorisationService).assertCanPublishDpa();
+    verifyNoInteractions(tenantService, tenantDpaService, governingDpaResolver, inputSanitizer);
+  }
+
+  @Test
   void publishDpa_Should_sanitize_storeAsJson_stampVersion_andReturnGate() {
     // given
     var tenant = new TenantEntity();

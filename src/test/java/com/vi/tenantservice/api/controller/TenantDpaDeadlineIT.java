@@ -77,6 +77,26 @@ class TenantDpaDeadlineIT {
     seedTenant(2L);
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"tenant-admin", "single-tenant-admin"})
+  void aTraegerAdminCannotPublishAnyDocumentNotEvenForTheirOwnTenant(String role) throws Exception {
+    for (String path : List.of("/tenantadmin/2/dpa", "/tenantadmin/2/dpa/v2")) {
+      mvc.perform(
+              put(path)
+                  .with(caller(2L, role))
+                  .queryParam("signingDeadlineAt", "2099-10-15T15:00:00Z")
+                  .contentType(APPLICATION_JSON)
+                  .content("{\"de\":\"<p>Own text decides who may start counselling</p>\"}"))
+          .andExpect(status().isForbidden());
+    }
+    mvc.perform(get("/tenantadmin/2/dpa/status").with(caller(2L, "single-tenant-admin")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("MISSING"));
+    // The platform administrator still publishes, and a Traeger admin still reads and signs it.
+    publish("2099-10-15T15:00:00Z");
+    signCurrent();
+  }
+
   @Test
   void legacyClientsCanPublishAndSignBeforeDeadlinePolicyRollout() throws Exception {
     mvc.perform(
@@ -125,14 +145,14 @@ class TenantDpaDeadlineIT {
   void aGoverningOwnLegacyDocumentKeepsItsExistingMutationContract() throws Exception {
     mvc.perform(
             put("/tenantadmin/2/dpa")
-                .with(caller(2L, "single-tenant-admin"))
+                .with(caller(0L, "tenant-admin"))
                 .contentType(APPLICATION_JSON)
                 .content("{\"de\":\"<p>Own legacy AVV</p>\"}"))
         .andExpect(status().isOk());
     publish("2026-10-15T15:00:00Z");
     mvc.perform(
             put("/tenantadmin/2/dpa")
-                .with(caller(2L, "single-tenant-admin"))
+                .with(caller(0L, "tenant-admin"))
                 .contentType(APPLICATION_JSON)
                 .content("{\"de\":\"<p>Own legacy update</p>\"}"))
         .andExpect(status().isOk());
@@ -201,7 +221,7 @@ class TenantDpaDeadlineIT {
     String operatorVersion = currentVersion();
     mvc.perform(
             put("/tenantadmin/2/dpa/v2")
-                .with(caller(2L, "single-tenant-admin"))
+                .with(caller(0L, "tenant-admin"))
                 .queryParam("signingDeadlineAt", "2026-10-20T15:00:00Z")
                 .contentType(APPLICATION_JSON)
                 .content("{\"de\":\"<p>Different own contract</p>\"}"))
@@ -396,7 +416,7 @@ class TenantDpaDeadlineIT {
             .build());
     mvc.perform(
             put("/tenantadmin/2/dpa/v2")
-                .with(caller(2L, "single-tenant-admin"))
+                .with(caller(0L, "tenant-admin"))
                 .queryParam("signingDeadlineAt", "2026-10-15T15:00:00Z")
                 .contentType(APPLICATION_JSON)
                 .content("{\"de\":\"<p>New own publication</p>\"}"))
