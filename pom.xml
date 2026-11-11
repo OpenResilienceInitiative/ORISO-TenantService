@@ -15,7 +15,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.0.7</version>
+        <version>4.0.8</version>
         <relativePath/>
     </parent>
 
@@ -23,11 +23,13 @@
         spring boot, basic code changes are already made and as new features arrive they will use
         the upper version -->
         <java.upper.version>21</java.upper.version>
-        <springboot.upper.version>4.0.7</springboot.upper.version>
+        <springboot.upper.version>4.0.8</springboot.upper.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <java.version>21</java.version>
-        <keycloak.version>17.0.0</keycloak.version>
+        <!-- Test-only: AuthenticationMockBuilder builds KeycloakPrincipal fixtures. The runtime
+             authenticates through Spring's OAuth2 resource server, so no Keycloak jar ships. -->
+        <keycloak.version>26.0.4</keycloak.version>
         <swagger.version>3.0.0</swagger.version>
         <!-- Kept below the Boot 4.0.7 baseline (2.4.240) on purpose: 2.4.x rejects a
              tenant_dpa_signature check constraint that 2.2.220 accepts. Raising it needs its
@@ -50,8 +52,52 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <mockito.version>5.20.0</mockito.version>
-
+        <!-- Image CVE gate (Trivy, fixable HIGH/CRITICAL). Same pins as ORISO-AgencyService;
+             drop each one once the Spring Boot parent manages the fixed version. -->
+        <!-- CVE-2026-55276 and related auth-bypass issues in Tomcat 11.0.22. -->
+        <tomcat.version>11.0.25</tomcat.version>
+        <!-- CVE-2026-84939: FreeMarker path traversal via malformed locale. -->
+        <freemarker.version>2.3.35</freemarker.version>
+        <!-- CVE-2026-68497 / CVE-2026-89407: Jackson 2.21.4 and 3.1.4. -->
+        <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
+        <jackson-bom.version>3.1.7</jackson-bom.version>
+        <!-- CVE-2026-54399 / CVE-2026-54428: httpcore5 5.3.6. -->
+        <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- owasp-java-html-sanitizer drags in guava 30.1-jre (CVE-2026-102554). -->
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>33.7.2-jre</version>
+            </dependency>
+            <!-- swagger-parser drags in commons-io 2.11.0 (CVE-2024-47554). -->
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>2.22.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>${httpcore5.version}</version>
+            </dependency>
+            <!-- The provided-scope openapi-generator brings handlebars 4.3.1 (CVE-2026-55760),
+                 and Spring Boot repackaging ships provided jars inside app.jar. -->
+            <dependency>
+                <groupId>com.github.jknack</groupId>
+                <artifactId>handlebars</artifactId>
+                <version>4.5.2</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
@@ -277,27 +323,20 @@
             <version>2.0</version>
         </dependency>
 
-        <!-- Keycloak dependencies -->
+        <!-- The generated OpenAPI clients annotate classes with @javax.annotation.Generated.
+             That API used to arrive transitively through keycloak-admin-client 17. -->
         <dependency>
-            <groupId>org.keycloak</groupId>
-            <artifactId>keycloak-spring-security-adapter</artifactId>
-            <version>${keycloak.version}</version>
+            <groupId>javax.annotation</groupId>
+            <artifactId>javax.annotation-api</artifactId>
+            <version>1.3.2</version>
         </dependency>
+        <!-- Keycloak: test fixtures only (see keycloak.version). The legacy 17.0.0 Spring adapters
+             were unused at runtime and shipped keycloak-core with CVE-2023-6841. -->
         <dependency>
             <groupId>org.keycloak</groupId>
-            <artifactId>keycloak-spring-boot-starter</artifactId>
+            <artifactId>keycloak-core</artifactId>
             <version>${keycloak.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>ch.qos.logback</groupId>
-                    <artifactId>logback-classic</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.keycloak</groupId>
-            <artifactId>keycloak-admin-client</artifactId>
-            <version>${keycloak.version}</version>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
