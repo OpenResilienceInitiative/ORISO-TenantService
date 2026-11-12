@@ -5,6 +5,7 @@ import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import com.vi.tenantservice.api.model.Settings;
 import com.vi.tenantservice.api.model.TenantAdminAllowedPermissionToggles;
 import com.vi.tenantservice.api.model.TenantAdminControls;
+import com.vi.tenantservice.api.policy.PermissionFeature;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
@@ -270,7 +271,52 @@ public class EffectivePermissionSettingsApplier {
               Settings::setFeatureVoiceMessagesGroupChatsEnabled),
           new ToggleBinding(
               TenantAdminAllowedPermissionToggles::getVoiceMessagesSupervisionChats,
-              Settings::setFeatureVoiceMessagesSupervisionChatsEnabled));
+              Settings::setFeatureVoiceMessagesSupervisionChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaUpload,
+              Settings::setFeatureMediaUploadEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaUploadAnonymousChats,
+              Settings::setFeatureMediaUploadAnonymousChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaUploadOneOnOneChats,
+              Settings::setFeatureMediaUploadOneOnOneChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaUploadGroupChats,
+              Settings::setFeatureMediaUploadGroupChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaUploadSupervisionChats,
+              Settings::setFeatureMediaUploadSupervisionChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaInlineDisplay,
+              Settings::setFeatureMediaInlineDisplayEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaInlineDisplayAnonymousChats,
+              Settings::setFeatureMediaInlineDisplayAnonymousChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaInlineDisplayOneOnOneChats,
+              Settings::setFeatureMediaInlineDisplayOneOnOneChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaInlineDisplayGroupChats,
+              Settings::setFeatureMediaInlineDisplayGroupChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaInlineDisplaySupervisionChats,
+              Settings::setFeatureMediaInlineDisplaySupervisionChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaAiScan,
+              Settings::setFeatureMediaAiScanEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaAiScanAnonymousChats,
+              Settings::setFeatureMediaAiScanAnonymousChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaAiScanOneOnOneChats,
+              Settings::setFeatureMediaAiScanOneOnOneChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaAiScanGroupChats,
+              Settings::setFeatureMediaAiScanGroupChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaAiScanSupervisionChats,
+              Settings::setFeatureMediaAiScanSupervisionChatsEnabled));
 
   public void applyTo(Settings settings, TenantAdminControls controls) {
     if (settings == null || controls == null) {
@@ -288,7 +334,18 @@ public class EffectivePermissionSettingsApplier {
     }
   }
 
-  /** Applies locked policies and resolved tenant-local values. Inherited suggestions are hints. */
+  /**
+   * Funktionszugriff features (those with an Admin toggle key): as long as the Träger never chose,
+   * the platform suggestion IS the effective value, so the served settings match what the Admin
+   * shows (#363). Other inherited suggestions (asker delivery channels) stay hints.
+   */
+  static boolean isFunctionAccessFeature(String feature) {
+    return PermissionFeature.byApiKey(feature)
+        .map(f -> f.legacyToggleKey() != null && f != PermissionFeature.APPEARANCE)
+        .orElse(false);
+  }
+
+  /** Applies locked policies, resolved tenant-local values and Funktionszugriff suggestions. */
   public void applyPolicies(
       Settings settings, Map<String, BooleanPermissionPolicy> permissionPolicies) {
     if (settings == null || permissionPolicies == null) {
@@ -301,7 +358,9 @@ public class EffectivePermissionSettingsApplier {
               && policy != null
               && (policy.getMode() == PermissionPolicyMode.ENFORCED
                   || Boolean.FALSE.equals(policy.getInherited())
-                  || CANONICAL_ACCOUNT_POLICY_DEFAULTS.contains(feature))) {
+                  || CANONICAL_ACCOUNT_POLICY_DEFAULTS.contains(feature)
+                  || (Boolean.TRUE.equals(policy.getInherited())
+                      && isFunctionAccessFeature(feature)))) {
             setter.accept(settings, policy.getValue());
           }
         });
