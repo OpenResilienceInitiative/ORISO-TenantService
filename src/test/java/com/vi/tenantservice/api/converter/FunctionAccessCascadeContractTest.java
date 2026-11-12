@@ -17,8 +17,9 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 /**
  * Contract (#363): a platform lock reaches every existing Träger at once; a suggestion does not
- * overwrite a Träger value. Every Funktionszugriff feature in the {@link PermissionFeature} registry must
- * cascade. A feature that is added to the registry but not wired into the applier fails here.
+ * overwrite a Träger value. Every Funktionszugriff feature in the {@link PermissionFeature}
+ * registry must cascade. A feature that is added to the registry but not wired into the applier
+ * fails here.
  */
 class FunctionAccessCascadeContractTest {
 
