@@ -151,21 +151,16 @@ class EffectivePermissionSettingsApplierTest {
   }
 
   @Test
-  void applyPolicies_servesAnInheritedFunctionAccessSuggestionAsTheEffectiveValue() {
-    // #363: the Träger never chose, so the platform suggestion is the effective value; the app
-    // must see exactly what the Admin shows.
-    var settings = new Settings().featureGroupChatV2Enabled(false).featureSupervisionEnabled(false);
+  void applyPolicies_shouldLeaveAnInheritedSuggestedValueNonBinding() {
+    var settings = new Settings().featureGroupChatV2Enabled(false);
 
     applier.applyPolicies(
         settings,
         Map.of(
             "featureGroupChatV2Enabled",
-            new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED).inherited(true),
-            "featureSupervisionEnabled",
             new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED).inherited(true)));
 
-    assertThat(settings.getFeatureGroupChatV2Enabled()).isTrue();
-    assertThat(settings.getFeatureSupervisionEnabled()).isTrue();
+    assertThat(settings.getFeatureGroupChatV2Enabled()).isFalse();
   }
 
   @Test

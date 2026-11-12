@@ -16,7 +16,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * Contract (#363): every Funktionszugriff feature in the {@link PermissionFeature} registry must
+ * Contract (#363): a platform lock reaches every existing Träger at once; a suggestion does not
+ * overwrite a Träger value. Every Funktionszugriff feature in the {@link PermissionFeature} registry must
  * cascade. A feature that is added to the registry but not wired into the applier fails here.
  */
 class FunctionAccessCascadeContractTest {
@@ -26,23 +27,44 @@ class FunctionAccessCascadeContractTest {
 
   static Stream<PermissionFeature> functionAccessFeatures() {
     return Arrays.stream(PermissionFeature.values())
-        .filter(f -> EffectivePermissionSettingsApplier.isFunctionAccessFeature(f.apiKey()));
+        .filter(f -> f.legacyToggleKey() != null && f != PermissionFeature.APPEARANCE);
   }
 
   @ParameterizedTest
   @MethodSource("functionAccessFeatures")
-  void inheritedSuggestionIsServed(PermissionFeature feature) throws Exception {
-    for (boolean suggested : new boolean[] {true, false}) {
+  void classifierAcceptsEveryToggleFeature(PermissionFeature feature) {
+    assertThat(EffectivePermissionSettingsApplier.isFunctionAccessFeature(feature.apiKey()))
+        .as(feature.apiKey())
+        .isTrue();
+  }
+
+  @ParameterizedTest
+  @MethodSource("functionAccessFeatures")
+  void laterPlatformLockOverridesAnExistingTraegerValue(PermissionFeature feature)
+      throws Exception {
+    for (boolean locked : new boolean[] {true, false}) {
       var settings = new Settings();
-      setSetting(settings, feature, !suggested);
+      setSetting(settings, feature, !locked);
       applier.applyPolicies(
           settings,
           Map.of(
               feature.apiKey(),
-              new BooleanPermissionPolicy(suggested, PermissionPolicyMode.SUGGESTED)
-                  .inherited(true)));
-      assertThat(getSetting(settings, feature)).as(feature.apiKey()).isEqualTo(suggested);
+              new BooleanPermissionPolicy(locked, PermissionPolicyMode.ENFORCED).inherited(true)));
+      assertThat(getSetting(settings, feature)).as(feature.apiKey()).isEqualTo(locked);
     }
+  }
+
+  @ParameterizedTest
+  @MethodSource("functionAccessFeatures")
+  void inheritedSuggestionLeavesTheTraegerValue(PermissionFeature feature) throws Exception {
+    var settings = new Settings();
+    setSetting(settings, feature, false);
+    applier.applyPolicies(
+        settings,
+        Map.of(
+            feature.apiKey(),
+            new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED).inherited(true)));
+    assertThat(getSetting(settings, feature)).as(feature.apiKey()).isFalse();
   }
 
   @ParameterizedTest

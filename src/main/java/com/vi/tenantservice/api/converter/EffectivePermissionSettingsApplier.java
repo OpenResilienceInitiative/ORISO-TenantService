@@ -334,18 +334,18 @@ public class EffectivePermissionSettingsApplier {
     }
   }
 
-  /**
-   * Funktionszugriff features (those with an Admin toggle key): as long as the Träger never chose,
-   * the platform suggestion IS the effective value, so the served settings match what the Admin
-   * shows (#363). Other inherited suggestions (asker delivery channels) stay hints.
-   */
+  /** Funktionszugriff features: registry entries that have an Admin toggle key (#363). */
   static boolean isFunctionAccessFeature(String feature) {
     return PermissionFeature.byApiKey(feature)
         .map(f -> f.legacyToggleKey() != null && f != PermissionFeature.APPEARANCE)
         .orElse(false);
   }
 
-  /** Applies locked policies, resolved tenant-local values and Funktionszugriff suggestions. */
+  /**
+   * Applies locked policies and resolved tenant-local values. Inherited suggestions are hints: a
+   * Träger keeps the values it was created with until it changes them; only a platform lock
+   * (enforced or forbidden) overrides them, at any time (#363).
+   */
   public void applyPolicies(
       Settings settings, Map<String, BooleanPermissionPolicy> permissionPolicies) {
     if (settings == null || permissionPolicies == null) {
@@ -358,9 +358,7 @@ public class EffectivePermissionSettingsApplier {
               && policy != null
               && (policy.getMode() == PermissionPolicyMode.ENFORCED
                   || Boolean.FALSE.equals(policy.getInherited())
-                  || CANONICAL_ACCOUNT_POLICY_DEFAULTS.contains(feature)
-                  || (Boolean.TRUE.equals(policy.getInherited())
-                      && isFunctionAccessFeature(feature)))) {
+                  || CANONICAL_ACCOUNT_POLICY_DEFAULTS.contains(feature))) {
             setter.accept(settings, policy.getValue());
           }
         });
