@@ -39,6 +39,38 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
     executionPhase = ExecutionPhase.BEFORE_TEST_METHOD)
 class TenantRepositoryTest {
 
+  @Test
+  void searchRequiresEveryWordAcrossNameSubdomainAndOwnerEmailsBeforePaging() {
+    var result =
+        tenantRepository.searchTenantData(
+            java.util.List.of("happy", "owner"),
+            java.util.Map.of("owner", java.util.Set.of(1L)),
+            org.springframework.data.domain.PageRequest.of(0, 1));
+    assertThat(result.getTotalElements()).isEqualTo(1);
+    assertThat(result.getContent().getFirst().getId()).isEqualTo(1L);
+    assertThat(
+            tenantRepository
+                .searchTenantData(
+                    java.util.List.of("happy", "absent"),
+                    java.util.Map.of(),
+                    org.springframework.data.domain.PageRequest.of(0, 1))
+                .getTotalElements())
+        .isZero();
+  }
+
+  @Test
+  void existingSearchEntryPointMatchesSubdomain() {
+    var tenant = tenantRepository.findById(1L).orElseThrow();
+    tenant.setSubdomain("unique-subdomain");
+    tenantRepository.saveAndFlush(tenant);
+    assertThat(
+            tenantRepository
+                .findAllTenantDataExceptTechnicalByInfix(
+                    "unique-subdomain", org.springframework.data.domain.PageRequest.of(0, 1))
+                .getTotalElements())
+        .isEqualTo(1);
+  }
+
   private static final long EXISTING_ID = 1L;
 
   @Autowired private TenantRepository tenantRepository;

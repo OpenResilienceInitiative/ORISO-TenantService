@@ -2,17 +2,17 @@ package com.vi.tenantservice.config.security;
 
 import com.vi.tenantservice.api.config.SpringFoxConfig;
 import lombok.RequiredArgsConstructor;
-import org.keycloak.adapters.springsecurity.KeycloakConfiguration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 
-/** Configuration class to provide the keycloak security configuration. */
-@KeycloakConfiguration
+/** Security configuration: Keycloak-issued JWTs via the OAuth2 resource server. */
+@Configuration
 @EnableMethodSecurity(prePostEnabled = true)
 @EnableWebSecurity
 @RequiredArgsConstructor

@@ -148,7 +148,15 @@ class TenantControllerDpaConfirmTest {
     var resolver =
         new com.vi.tenantservice.api.service.GoverningDpaResolver(
             tenants, null, org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class));
-    var service = new TenantDpaService(signatures, null, tenants, reservations, null, resolver);
+    var service =
+        new TenantDpaService(
+            signatures,
+            null,
+            tenants,
+            reservations,
+            null,
+            resolver,
+            java.time.Clock.systemDefaultZone());
     org.springframework.test.util.ReflectionTestUtils.setField(
         controller, "tenantDpaService", service);
     var version = LocalDateTime.of(2026, 7, 20, 12, 30);
@@ -181,6 +189,7 @@ class TenantControllerDpaConfirmTest {
             eq(language),
             eq("FORWARDED_EXTERNAL"),
             org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyLong(),
             eq(true)))
         .thenReturn(1);
     var request =
