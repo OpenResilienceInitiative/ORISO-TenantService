@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.facade;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
@@ -303,12 +304,70 @@ class TenantServiceFacadeTest {
   @Test
   void deleteTenant_Should_ReportTheDeletionToTheDeletionLog_AfterTheTenantWasDeleted() {
     when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(nothingLeft());
 
     tenantServiceFacade.deleteTenant(ID);
 
     var order = org.mockito.Mockito.inOrder(tenantService, deletionAuditReporter);
     order.verify(tenantService).delete(tenantEntity);
     order.verify(deletionAuditReporter).reportTenantExecuted(ID);
+  }
+
+  @Test
+  void deleteTenant_Should_RefuseAndDeleteNothing_When_theTenantStillHasAgenciesOrAccounts() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    var blockers = nothingLeft().deletable(false).agencies(2L).consultants(4L);
+    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(blockers);
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            com.vi.tenantservice.api.exception.TenantDeletionBlockedException.class,
+            () -> tenantServiceFacade.deleteTenant(ID));
+
+    org.assertj.core.api.Assertions.assertThat(thrown.getBlockers()).isSameAs(blockers);
+    verify(tenantService, never()).delete(any());
+    verify(tenantDpaService, never()).deleteSignaturesForTenant(any());
+    verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
+  void deleteTenant_Should_DeleteNothing_When_UserServiceCannotSayWhatIsLeft() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(userAdminService.getTenantDeletionBlockers(ID))
+        .thenThrow(new org.springframework.web.client.ResourceAccessException("down"));
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            org.springframework.web.server.ResponseStatusException.class,
+            () -> tenantServiceFacade.deleteTenant(ID));
+
+    org.assertj.core.api.Assertions.assertThat(thrown.getStatusCode().value()).isEqualTo(503);
+    verify(tenantService, never()).delete(any());
+    verify(tenantDpaService, never()).deleteSignaturesForTenant(any());
+    verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
+  void deleteTenant_Should_NotAskUserService_When_theTenantDoesNotExist() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.empty());
+
+    org.junit.jupiter.api.Assertions.assertThrows(
+        com.vi.tenantservice.api.exception.TenantNotFoundException.class,
+        () -> tenantServiceFacade.deleteTenant(ID));
+
+    verify(userAdminService, never()).getTenantDeletionBlockers(any());
+  }
+
+  private static com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO
+      nothingLeft() {
+    return new com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO()
+        .deletable(true)
+        .agencies(0L)
+        .consultants(0L)
+        .adviceSeekers(0L)
+        .agencyAdmins(0L)
+        .tenantAdmins(0L)
+        .openInvites(0L);
   }
 
   @Test

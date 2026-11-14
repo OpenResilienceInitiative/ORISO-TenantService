@@ -15,6 +15,7 @@ import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
 import com.vi.tenantservice.api.exception.TenantBadRequestException;
+import com.vi.tenantservice.api.exception.TenantDeletionBlockedException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
@@ -69,6 +70,7 @@ import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
+import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -503,12 +505,36 @@ public class TenantServiceFacade {
             .findTenantById(id)
             .orElseThrow(() -> new TenantNotFoundException("Tenant with id " + id + " not found"));
 
+    assertNothingLeftInTenant(id);
+
     // App-level replacement for the DB cascade dropped in changeset 0030 (#179): the tenant's
     // DPA signature rows (incl. any outstanding sign links) go with the tenant.
     tenantDpaService.deleteSignaturesForTenant(id);
     tenantService.delete(tenant);
     // Reported after the commit and best effort: the log can never undo or fail the deletion.
     deletionAuditReporter.reportTenantExecuted(id);
+  }
+
+  /**
+   * Refuses to delete a Träger that still has agencies, accounts or open invitations
+   * (ORISO-UserService#1466). Deleting it anyway left them pointing at a Träger that no longer
+   * existed ("Unknown Tenant"), where the admin interface could not delete them any more. Fails
+   * closed: when UserService cannot say what is left, nothing is deleted.
+   */
+  private void assertNothingLeftInTenant(Long id) {
+    TenantDeletionBlockersDTO blockers;
+    try {
+      blockers = userAdminService.getTenantDeletionBlockers(id);
+    } catch (RestClientException e) {
+      log.error("Could not check what still belongs to tenant {}; not deleting it", id, e);
+      throw new ResponseStatusException(
+          HttpStatus.SERVICE_UNAVAILABLE,
+          "Could not check whether the tenant still has agencies or accounts",
+          e);
+    }
+    if (blockers == null || !Boolean.TRUE.equals(blockers.getDeletable())) {
+      throw new TenantDeletionBlockedException(id, blockers);
+    }
   }
 
   private boolean isAttemptToCreateFirstNonTechnicalTenant(Long tenantId) {
