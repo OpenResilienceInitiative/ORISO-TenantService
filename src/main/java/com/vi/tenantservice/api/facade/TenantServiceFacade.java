@@ -527,14 +527,23 @@ public class TenantServiceFacade {
       blockers = userAdminService.getTenantDeletionBlockers(id);
     } catch (RestClientException e) {
       log.error("Could not check what still belongs to tenant {}; not deleting it", id, e);
-      throw new ResponseStatusException(
-          HttpStatus.SERVICE_UNAVAILABLE,
-          "Could not check whether the tenant still has agencies or accounts",
-          e);
+      throw blockerCheckUnavailable(e);
     }
-    if (blockers == null || !Boolean.TRUE.equals(blockers.getDeletable())) {
+    // No answer is no proof that something is left: say the check failed, not 409 (#1466).
+    if (blockers == null || blockers.getDeletable() == null) {
+      log.error("UserService sent no deletion verdict for tenant {}; not deleting it", id);
+      throw blockerCheckUnavailable(null);
+    }
+    if (!blockers.getDeletable()) {
       throw new TenantDeletionBlockedException(id, blockers);
     }
+  }
+
+  private static ResponseStatusException blockerCheckUnavailable(Throwable cause) {
+    return new ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Could not check whether the tenant still has agencies or accounts",
+        cause);
   }
 
   private boolean isAttemptToCreateFirstNonTechnicalTenant(Long tenantId) {

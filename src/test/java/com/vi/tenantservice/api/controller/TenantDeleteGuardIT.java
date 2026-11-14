@@ -146,6 +146,18 @@ class TenantDeleteGuardIT {
     assertThat(tenantRepository.existsById(TENANT)).isTrue();
   }
 
+  @Test
+  void deleteTenant_Should_keepTheTraegerAndAnswerServiceUnavailable_When_UserServiceSendsNoAnswer()
+      throws Exception {
+    when(userAdminService.getTenantDeletionBlockers(TENANT)).thenReturn(null);
+
+    mockMvc
+        .perform(delete(TENANT_RESOURCE_SLASH + TENANT).with(platformAdmin()))
+        .andExpect(status().isServiceUnavailable());
+
+    assertThat(tenantRepository.existsById(TENANT)).isTrue();
+  }
+
   private static TenantDeletionBlockersDTO blockers() {
     return new TenantDeletionBlockersDTO()
         .agencies(0L)

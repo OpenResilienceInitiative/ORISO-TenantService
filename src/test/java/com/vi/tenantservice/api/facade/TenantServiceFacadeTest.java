@@ -348,6 +348,38 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void
+      deleteTenant_Should_DeleteNothingAndAnswerServiceUnavailable_When_UserServiceSendsNoAnswer() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(null);
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            org.springframework.web.server.ResponseStatusException.class,
+            () -> tenantServiceFacade.deleteTenant(ID));
+
+    org.assertj.core.api.Assertions.assertThat(thrown.getStatusCode().value()).isEqualTo(503);
+    verify(tenantService, never()).delete(any());
+    verify(tenantDpaService, never()).deleteSignaturesForTenant(any());
+    verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
+  void deleteTenant_Should_DeleteNothingAndAnswerServiceUnavailable_When_theAnswerHasNoVerdict() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(nothingLeft().deletable(null));
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            org.springframework.web.server.ResponseStatusException.class,
+            () -> tenantServiceFacade.deleteTenant(ID));
+
+    org.assertj.core.api.Assertions.assertThat(thrown.getStatusCode().value()).isEqualTo(503);
+    verify(tenantService, never()).delete(any());
+    verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
   void deleteTenant_Should_NotAskUserService_When_theTenantDoesNotExist() {
     when(tenantService.findTenantById(ID)).thenReturn(Optional.empty());
 
