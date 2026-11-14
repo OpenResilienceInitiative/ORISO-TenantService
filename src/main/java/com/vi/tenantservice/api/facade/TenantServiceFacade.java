@@ -966,7 +966,8 @@ public class TenantServiceFacade {
         tenantId,
         tenantPermissionPolicyService.getResolvedPolicies(tenantId),
         tenantPermissionPolicyService.getResolvedCaseHandoverPolicies(tenantId),
-        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(tenantId));
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(tenantId),
+        tenantPermissionPolicyService.getResolvedCalendarPolicies(tenantId));
   }
 
   public TenantPermissionPolicies updateTenantPermissionPolicies(
@@ -987,7 +988,8 @@ public class TenantServiceFacade {
                             com.vi.tenantservice.api.policy.PermissionPolicyMode.valueOf(
                                 entry.getValue().getMode().name())))),
         request.getCaseHandoverPolicies(),
-        request.getInternalGroupChat());
+        request.getInternalGroupChat(),
+        request.getCalendar());
     return getTenantPermissionPolicies(tenantId);
   }
 
@@ -995,7 +997,8 @@ public class TenantServiceFacade {
       Long tenantId,
       Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> policies,
       com.vi.tenantservice.api.model.CaseHandoverPolicies caseHandoverPolicies,
-      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat) {
+      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat,
+      com.vi.tenantservice.api.model.CalendarPolicies calendar) {
     return new TenantPermissionPolicies(
             tenantId,
             policies.entrySet().stream()
@@ -1009,7 +1012,8 @@ public class TenantServiceFacade {
                                         entry.getValue().mode().name()))
                                 .inherited(entry.getValue().inherited()))))
         .caseHandoverPolicies(caseHandoverPolicies)
-        .internalGroupChat(internalGroupChat);
+        .internalGroupChat(internalGroupChat)
+        .calendar(calendar);
   }
 
   private void assertSuperAdmin() {
@@ -1108,8 +1112,11 @@ public class TenantServiceFacade {
     Map<Long, com.vi.tenantservice.api.model.InternalGroupChatPolicies> internalGroupChatByTenant =
         tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(
             policiesByTenant.keySet());
+    Map<Long, com.vi.tenantservice.api.model.CalendarPolicies> calendarByTenant =
+        tenantPermissionPolicyService.getResolvedCalendarPolicies(policiesByTenant.keySet());
     return tenants.stream()
         .filter(dto -> internalGroupChatByTenant.containsKey(dto.getId()))
+        .filter(dto -> calendarByTenant.containsKey(dto.getId()))
         .map(
             dto ->
                 withEffectiveSettings(
@@ -1117,7 +1124,8 @@ public class TenantServiceFacade {
                     controls,
                     platformTheming,
                     policiesByTenant.get(dto.getId()),
-                    internalGroupChatByTenant.get(dto.getId())))
+                    internalGroupChatByTenant.get(dto.getId()),
+                    calendarByTenant.get(dto.getId())))
         .toList();
   }
 
@@ -1133,8 +1141,9 @@ public class TenantServiceFacade {
   /**
    * Same as {@link #withEffectivePermissions(RestrictedTenantDTO)} for the single-domain override
    * paths, where the DTO keeps the main tenant's id although its settings belong to the resolved
-   * tenant. The recipient scope of internal group chats is a privacy boundary, so it is resolved
-   * for {@code resolvedTenantId}, never for the main tenant (#319).
+   * tenant. The recipient scope of internal group chats and the calendar visibility are privacy
+   * boundaries, so they are resolved for {@code resolvedTenantId}, never for the main tenant (#319,
+   * #365).
    */
   private RestrictedTenantDTO withEffectivePermissions(
       RestrictedTenantDTO dto, Long resolvedTenantId) {
@@ -1147,7 +1156,8 @@ public class TenantServiceFacade {
         tenantAdminControlsService.getControls(),
         getPlatformTheming(lang),
         publicPoliciesForResolvedTenant(dto, resolvedTenantId),
-        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantId));
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantId),
+        tenantPermissionPolicyService.getResolvedCalendarPolicies(resolvedTenantId));
   }
 
   /**
@@ -1193,9 +1203,11 @@ public class TenantServiceFacade {
       TenantAdminControls controls,
       Theming platformTheming,
       Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies,
-      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat) {
+      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat,
+      com.vi.tenantservice.api.model.CalendarPolicies calendar) {
     if (dto != null) {
       dto.setInternalGroupChat(internalGroupChat);
+      dto.setCalendar(calendar);
       Map<String, BooleanPermissionPolicy> policies =
           resolvedPolicies.entrySet().stream()
               .collect(
