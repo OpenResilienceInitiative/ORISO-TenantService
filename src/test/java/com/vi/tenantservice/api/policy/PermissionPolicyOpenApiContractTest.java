@@ -128,6 +128,57 @@ class PermissionPolicyOpenApiContractTest {
     assertThat((Map<Object, Object>) put.get("responses")).containsKey(400);
   }
 
+  /**
+   * ADR-032 / #365 - consumer contract for the calendar policies. UserService (visibility check),
+   * Admin (setting UI) and Frontend (calendar) build against exactly these names and values.
+   */
+  @Test
+  @SuppressWarnings("unchecked")
+  void openApi_shouldExposeTheCalendarPolicyContract() throws IOException {
+    Map<String, Object> specification =
+        new Yaml().load(Files.readString(Path.of("api/tenantservice.yaml")));
+    var schemas =
+        (Map<String, Object>)
+            ((Map<String, Object>) specification.get("components")).get("schemas");
+
+    var scope = (Map<String, Object>) schemas.get("CalendarVisibilityScope");
+    assertThat((List<String>) scope.get("enum")).containsExactly("AGENCY", "TENANT", "PLATFORM");
+
+    var scopePolicy = (Map<String, Object>) schemas.get("CalendarVisibilityScopePolicy");
+    assertThat((List<String>) scopePolicy.get("required")).containsExactly("value", "mode");
+    var scopePolicyProperties = (Map<String, Object>) scopePolicy.get("properties");
+    assertThat((Map<String, Object>) scopePolicyProperties.get("value"))
+        .containsEntry("$ref", "#/components/schemas/CalendarVisibilityScope");
+    assertThat((Map<String, Object>) scopePolicyProperties.get("mode"))
+        .containsEntry("$ref", "#/components/schemas/PermissionPolicyMode");
+    assertThat((Map<String, Object>) scopePolicyProperties.get("inherited"))
+        .containsEntry("readOnly", true);
+
+    var calendar = (Map<String, Object>) schemas.get("CalendarPolicies");
+    var calendarProperties = (Map<String, Object>) calendar.get("properties");
+    assertThat(calendarProperties).containsOnlyKeys("visibilityScope", "showAskerUsernames");
+    assertThat((Map<String, Object>) calendarProperties.get("visibilityScope"))
+        .containsEntry("$ref", "#/components/schemas/CalendarVisibilityScopePolicy");
+    assertThat((Map<String, Object>) calendarProperties.get("showAskerUsernames"))
+        .containsEntry("$ref", "#/components/schemas/BooleanPermissionPolicy");
+
+    // platform preset, Traeger-resolved read/write and the public payload the Frontend reads
+    for (String carrier :
+        List.of("TenantAdminControls", "TenantPermissionPolicies", "RestrictedTenantDTO")) {
+      var properties =
+          (Map<String, Object>) ((Map<String, Object>) schemas.get(carrier)).get("properties");
+      assertThat(refOf((Map<String, Object>) properties.get("calendar")))
+          .as(carrier + ".calendar")
+          .containsEntry("$ref", "#/components/schemas/CalendarPolicies");
+    }
+    var publicCalendar =
+        (Map<String, Object>)
+            ((Map<String, Object>)
+                    ((Map<String, Object>) schemas.get("RestrictedTenantDTO")).get("properties"))
+                .get("calendar");
+    assertThat(publicCalendar).containsEntry("readOnly", true);
+  }
+
   /** The property's own {@code $ref}, or the first entry of its {@code allOf} wrapper. */
   @SuppressWarnings("unchecked")
   private static Map<String, Object> refOf(Map<String, Object> property) {

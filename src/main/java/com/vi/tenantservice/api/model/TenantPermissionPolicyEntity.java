@@ -47,6 +47,10 @@ public class TenantPermissionPolicyEntity {
   @Column(name = "internal_group_chat_policies", columnDefinition = "TEXT")
   private String internalGroupChatPolicies;
 
+  /** JSON of the Traeger's {@link CalendarPolicies} override (ADR-032, #365); null = none set. */
+  @Column(name = "calendar_policies", columnDefinition = "TEXT")
+  private String calendarPolicies;
+
   @Column(name = "update_date", nullable = false)
   private LocalDateTime updateDate;
 }
