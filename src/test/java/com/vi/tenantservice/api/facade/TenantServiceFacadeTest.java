@@ -1171,6 +1171,33 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void findRestrictedTenantsByIds_Should_omitTenant_When_itsCalendarPolicyIsUnreadable() {
+    var firstTenant = mock(TenantRestrictedData.class);
+    var secondTenant = mock(TenantRestrictedData.class);
+    var firstDto = new RestrictedTenantDTO().id(1L).settings(new Settings());
+    var secondDto = new RestrictedTenantDTO().id(2L).settings(new Settings());
+    when(tenantService.findRestrictedTenantDataByIds(Set.of(1L, 2L)))
+        .thenReturn(List.of(firstTenant, secondTenant));
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(converter.toRestrictedTenantDTO(firstTenant, DE)).thenReturn(firstDto);
+    when(converter.toRestrictedTenantDTO(secondTenant, DE)).thenReturn(secondDto);
+    when(tenantAdminControlsService.getControls()).thenReturn(new TenantAdminControls());
+
+    when(tenantPermissionPolicyService.getResolvedPolicies(Set.of(1L, 2L)))
+        .thenReturn(Map.of(1L, Map.of(), 2L, Map.of()));
+    when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(Set.of(1L, 2L)))
+        .thenReturn(
+            Map.of(1L, new InternalGroupChatPolicies(), 2L, new InternalGroupChatPolicies()));
+    // the calendar policy of tenant 2 could not be read
+    when(tenantPermissionPolicyService.getResolvedCalendarPolicies(Set.of(1L, 2L)))
+        .thenReturn(Map.of(1L, new com.vi.tenantservice.api.model.CalendarPolicies()));
+
+    var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
+
+    assertThat(result).containsExactly(firstDto);
+  }
+
+  @Test
   void getSingleTenant_Should_shouldThrowIllegalStateException_When_moreTenantsArePresent() {
     // given
     TenantEntity secondTenantEntity = new TenantEntity();
