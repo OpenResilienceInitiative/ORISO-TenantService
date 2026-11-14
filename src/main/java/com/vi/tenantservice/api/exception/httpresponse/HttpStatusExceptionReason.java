@@ -35,4 +35,11 @@ public enum HttpStatusExceptionReason {
    * stored in plain text. Refused instead (#346). Answers 409 with this reason in {@code X-Reason}.
    */
   SMTP_PASSWORD_ENCRYPTION_NOT_CONFIGURED,
+
+  /**
+   * The Träger still has agencies, accounts or open invitations. Deleting it would leave them
+   * pointing at a Träger that no longer exists, where the admin interface can no longer delete them
+   * (ORISO-UserService#1466). Answers 409; the body says how many of each kind are left.
+   */
+  TENANT_HAS_DEPENDENTS,
 }

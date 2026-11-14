@@ -3,14 +3,17 @@ package com.vi.tenantservice.api.controller;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.TenantBadRequestException;
+import com.vi.tenantservice.api.exception.TenantDeletionBlockedException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
+import com.vi.tenantservice.api.exception.httpresponse.CustomHttpHeader;
 import com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason;
 import jakarta.validation.ConstraintViolationException;
 import java.util.EnumSet;
 import java.util.Set;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -43,6 +46,19 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
       return handleExceptionInternal(ex, "", customHttpHeader, HttpStatus.BAD_REQUEST, request);
     }
     return handleExceptionInternal(ex, "", customHttpHeader, HttpStatus.CONFLICT, request);
+  }
+
+  /**
+   * The Träger still has agencies, accounts or open invitations (#1466). The body lists how many of
+   * each kind are left, so the admin interface can say what has to be deleted first.
+   */
+  @ExceptionHandler(value = {TenantDeletionBlockedException.class})
+  protected ResponseEntity<Object> handle(TenantDeletionBlockedException ex, WebRequest request) {
+    logger.info("Returning HTTP 409 Conflict: " + ex.getMessage());
+    var headers =
+        new CustomHttpHeader(HttpStatusExceptionReason.TENANT_HAS_DEPENDENTS).buildHeader();
+    headers.setContentType(MediaType.APPLICATION_JSON);
+    return handleExceptionInternal(ex, ex.getBlockers(), headers, HttpStatus.CONFLICT, request);
   }
 
   @ExceptionHandler(value = {TenantIdAllocationConflictException.class})
