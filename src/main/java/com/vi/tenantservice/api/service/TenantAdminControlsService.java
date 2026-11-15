@@ -14,6 +14,7 @@ import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantAdminControlsEntity;
 import com.vi.tenantservice.api.model.TenantAdminControlsSettings;
 import com.vi.tenantservice.api.model.TenantDTO;
+import com.vi.tenantservice.api.policy.CalendarPolicyRules;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
 import com.vi.tenantservice.api.policy.InternalGroupChatPolicyRules;
@@ -75,6 +76,9 @@ public class TenantAdminControlsService {
       }
       if (controlsSettings.getInternalGroupChat() == null) {
         controlsSettings.setInternalGroupChat(existingSettings.getInternalGroupChat());
+      }
+      if (controlsSettings.getCalendar() == null) {
+        controlsSettings.setCalendar(existingSettings.getCalendar());
       }
       // the DTO never carries the translation API keys - carry the stored values over verbatim,
       // still encrypted, so this path never decrypts and re-encrypts them for nothing
@@ -382,5 +386,6 @@ public class TenantAdminControlsService {
     CaseHandoverPolicyRules.validate(settings.getCaseHandoverPolicies());
     settings.setInternalGroupChat(
         InternalGroupChatPolicyRules.normalize(settings.getInternalGroupChat()));
+    settings.setCalendar(CalendarPolicyRules.normalize(settings.getCalendar()));
   }
 }

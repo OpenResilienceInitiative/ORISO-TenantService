@@ -63,6 +63,9 @@ public class TenantAdminControlsSettings {
   /** Platform preset for the internal group chat policies (#319), e.g. the recipient scope. */
   InternalGroupChatPolicies internalGroupChat;
 
+  /** Platform preset for the calendar policies (ADR-032, #365): visibility scope, usernames. */
+  CalendarPolicies calendar;
+
   /**
    * Platform-global machine-translation provider API keys (provider id -> raw key), e.g.
    * "openrouter"/"mistral". Stored in the same tenant_admin_controls JSON blob as the other
