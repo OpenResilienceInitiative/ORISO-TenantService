@@ -874,6 +874,50 @@ class TenantControllerIT {
         .andExpect(jsonPath("$.settings.featureGuestAccountPermanentVideoEnabled", is(true)));
   }
 
+  @Test
+  void updateTenant_Should_keepEveryStoredGuestAccountMode_When_updateOmitsThem() throws Exception {
+    // UserService#1662: each of the nine guest account caps survives an older client's save
+    // independently, and each stays writable with an explicit value.
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var keys = new java.util.ArrayList<String>();
+    for (String mode : java.util.List.of("Temporary", "GuestChooses", "Permanent"))
+      for (String medium : java.util.List.of("Chat", "Audio", "Video"))
+        keys.add("featureGuestAccount" + mode + medium + "Enabled");
+    var request =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(multilingualTenantTestDataBuilder.tenantDTO().withSettings().jsonify());
+    var settings = (com.fasterxml.jackson.databind.node.ObjectNode) request.get("settings");
+    keys.forEach(key -> settings.put(key, false));
+    putTenant1AsTenantAdmin(request.toString()).andExpect(status().isOk());
+
+    settings.remove(keys);
+    putTenant1AsTenantAdmin(request.toString()).andExpect(status().isOk());
+    var stored = mapper.readTree(tenantRepository.findById(1L).orElseThrow().getSettings());
+    for (String key : keys)
+      org.assertj.core.api.Assertions.assertThat(stored.path(key).asBoolean(true))
+          .as(key)
+          .isFalse();
+
+    for (String key : keys) {
+      settings.removeAll();
+      settings.setAll(
+          (com.fasterxml.jackson.databind.node.ObjectNode)
+              mapper
+                  .readTree(multilingualTenantTestDataBuilder.tenantDTO().withSettings().jsonify())
+                  .get("settings"));
+      settings.remove(keys);
+      settings.put(key, true);
+      putTenant1AsTenantAdmin(request.toString()).andExpect(status().isOk());
+      var after = mapper.readTree(tenantRepository.findById(1L).orElseThrow().getSettings());
+      org.assertj.core.api.Assertions.assertThat(after.path(key).asBoolean()).as(key).isTrue();
+      for (String other : keys)
+        if (!keys.subList(0, keys.indexOf(key) + 1).contains(other))
+          org.assertj.core.api.Assertions.assertThat(after.path(other).asBoolean(true))
+              .as(other + " after explicit " + key)
+              .isFalse();
+    }
+  }
+
   private org.springframework.test.web.servlet.ResultActions putTenant1AsTenantAdmin(
       String jsonRequest) throws Exception {
     when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
