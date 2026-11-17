@@ -127,6 +127,29 @@ public class TenantFacadeAuthorisationService {
         && isPlatformAdministrator();
   }
 
+  /**
+   * Träger names for the platform statistics panel (ORISO-UserService#1666): the platform
+   * administrator, or the Statistik-Leser whose token names the platform tenant 0. A reader token
+   * for any other tenant, and every Träger, agency or consultant admin, is refused.
+   */
+  public boolean mayReadStatisticsNames() {
+    if (isTechnicalUser()) {
+      return false;
+    }
+    return isPlatformAdministrator()
+        || (authorisationService.hasAuthority(Authority.AuthorityValue.READ_STATISTICS_NAMES)
+            && namesPlatformTenant());
+  }
+
+  private boolean namesPlatformTenant() {
+    try {
+      return authorisationService.findTenantIdInAccessToken().filter(id -> id == 0L).isPresent();
+    } catch (Exception e) {
+      log.debug("Could not determine tenant id from access token for statistics names", e);
+      return false;
+    }
+  }
+
   void assertUserHasSufficientPermissionsToChangeAttributes(
       MultilingualTenantDTO sanitizedTenantDTO, TenantEntity existingTenant) {
     assertOperationalStatusChangeAllowed(sanitizedTenantDTO, existingTenant);

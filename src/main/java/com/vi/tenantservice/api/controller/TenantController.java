@@ -45,6 +45,7 @@ import com.vi.tenantservice.api.model.TenantMediaResponseDTO;
 import com.vi.tenantservice.api.model.TenantOperationalStatusDTO;
 import com.vi.tenantservice.api.model.TenantOperationalStatusUpdateDTO;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
+import com.vi.tenantservice.api.model.TenantStatisticsNameDTO;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeyUpdateDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeysDTO;
@@ -94,6 +95,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.NativeWebRequest;
@@ -645,6 +647,16 @@ public class TenantController implements TenantApi, TenantadminApi {
   public ResponseEntity<List<TenantLegalTextVersionDTO>> getTenantLegalTextVersions(
       Long id, String kind) {
     return ResponseEntity.ok(tenantLegalVersionFacade.list(id, kind));
+  }
+
+  /**
+   * Träger names for the platform statistics panel (ORISO-UserService#1666). Ingress exposes it as
+   * {@code /service/tenantadmin/statistics/names}.
+   */
+  @GetMapping("/tenantadmin/statistics/names")
+  @PreAuthorize("@tenantFacadeAuthorisationService.mayReadStatisticsNames()")
+  public ResponseEntity<List<TenantStatisticsNameDTO>> getTenantStatisticsNames() {
+    return ResponseEntity.ok(tenantServiceFacade.getStatisticsNamesExceptTechnical());
   }
 
   @DeleteMapping("/tenant/{id}")
