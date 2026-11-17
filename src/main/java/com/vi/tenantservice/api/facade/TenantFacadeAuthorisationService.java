@@ -104,6 +104,21 @@ public class TenantFacadeAuthorisationService {
     return !authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT);
   }
 
+  /**
+   * Creating a Träger is the platform administrator's act (TenantService#352). Every Träger admin
+   * holds {@code tenant-admin} and with it CREATE_TENANT, so the authority alone does not decide:
+   * its holder must also come from the platform tenant 0. Callers without CREATE_TENANT (the
+   * technical identity, the config-wizard task) are left to the reservation check in {@link
+   * #mayOnlyCreateReservedTenants()}. The technical identity that still carries {@code
+   * tenant-admin} at tenant 0 keeps its legacy full create right (ORISO-Helm#367 transition).
+   */
+  void assertMayCreateTenants() {
+    if (authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT)
+        && !isSuperAdmin()) {
+      throw new AccessDeniedException("Only the platform administrator may create a Träger");
+    }
+  }
+
   private boolean hasSingleTenantAccessAuthority() {
     return !mayAccessEveryTenant();
   }

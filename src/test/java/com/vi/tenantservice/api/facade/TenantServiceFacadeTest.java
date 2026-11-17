@@ -869,6 +869,25 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void createTenant_Should_refuseBeforeAnyWrite_When_theCallerMayNotCreateTenants() {
+    // TenantService#352: a Träger admin is refused up front, so there is nothing to roll back
+    tenantMultilingualDTO.setTenantIdReservationToken("reservation-token");
+    doThrow(new AccessDeniedException("Only the platform administrator may create a Träger"))
+        .when(tenantFacadeAuthorisationService)
+        .assertMayCreateTenants();
+
+    assertThrows(
+        AccessDeniedException.class, () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    verify(tenantInputSanitizer, never()).sanitize(any());
+    verify(tenantIdAllocationService, never()).getStatus(anyLong());
+    verify(tenantService, never()).create(any(), any());
+    verify(consultingTypeService, never()).createDefaultConsultingTypes(anyLong());
+    verify(tenantService, never()).delete(any());
+    verify(tenantIdAllocationService, never()).rollbackAssignment(anyLong(), any());
+  }
+
+  @Test
   void createTenant_Should_rollbackWithReservationToken_When_consultingTypeCreationFails() {
     // given (TEN-INV hardening: a consumed invite reservation must be restored, not deleted)
     tenantMultilingualDTO.setTenantIdReservationToken("reservation-token");
