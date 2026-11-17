@@ -910,11 +910,16 @@ class TenantControllerIT {
       putTenant1AsTenantAdmin(request.toString()).andExpect(status().isOk());
       var after = mapper.readTree(tenantRepository.findById(1L).orElseThrow().getSettings());
       org.assertj.core.api.Assertions.assertThat(after.path(key).asBoolean()).as(key).isTrue();
+      // Earlier explicit ONs stay on although this update omits them; the rest stay off.
+      var enabledSoFar = keys.subList(0, keys.indexOf(key) + 1);
       for (String other : keys)
-        if (!keys.subList(0, keys.indexOf(key) + 1).contains(other))
-          org.assertj.core.api.Assertions.assertThat(after.path(other).asBoolean(true))
-              .as(other + " after explicit " + key)
-              .isFalse();
+        org.assertj.core.api.Assertions.assertThat(after.path(other).isBoolean())
+            .as(other + " stored after explicit " + key)
+            .isTrue();
+      for (String other : keys)
+        org.assertj.core.api.Assertions.assertThat(after.path(other).asBoolean())
+            .as(other + " after explicit " + key)
+            .isEqualTo(enabledSoFar.contains(other));
     }
   }
 
