@@ -226,6 +226,14 @@
                     <groupId>org.liquibase</groupId>
                     <artifactId>liquibase-core</artifactId>
                 </exclusion>
+                <!-- Image CVE gate: liquibase-commercial 4.33.0 (the last release) shades
+                     jackson-core/databind 2.18.3 (CVE-2026-68494, -89407, -89425, -54512, -54513,
+                     -68497, -91776, -91777). Pinning Jackson cannot reach a shaded copy, and the
+                     open-source liquibase-core runs our changelogs without the commercial jar. -->
+                <exclusion>
+                    <groupId>org.liquibase</groupId>
+                    <artifactId>liquibase-commercial</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
