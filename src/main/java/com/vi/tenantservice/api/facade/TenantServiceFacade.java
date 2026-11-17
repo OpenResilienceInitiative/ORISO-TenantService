@@ -43,6 +43,7 @@ import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpMode;
+import com.vi.tenantservice.api.model.TenantStatisticsNameDTO;
 import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.AssistantIdentityValidator;
 import com.vi.tenantservice.api.service.DeletionAuditReporter;
@@ -1534,6 +1535,11 @@ public class TenantServiceFacade {
     }
     var tenantPage = tenantService.searchTenantData(tokens, emailMatches, pageRequest);
     return mapOf(tenantPage, emailsByTenant);
+  }
+
+  /** Träger names for the platform statistics panel; never the technical tenant 0. */
+  public List<TenantStatisticsNameDTO> getStatisticsNamesExceptTechnical() {
+    return tenantService.findStatisticsNamesExceptTechnical();
   }
 
   public List<AdminTenantDTO> getAllAdminTenantsExceptTechnical() {

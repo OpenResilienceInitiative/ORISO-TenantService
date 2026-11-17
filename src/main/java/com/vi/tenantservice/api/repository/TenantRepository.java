@@ -4,6 +4,7 @@ import com.vi.tenantservice.api.model.TenantDataView;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedDataView;
 import com.vi.tenantservice.api.model.TenantSettingsView;
+import com.vi.tenantservice.api.model.TenantStatisticsNameDTO;
 import com.vi.tenantservice.api.service.search.TenantSearchText;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
@@ -47,6 +48,12 @@ public interface TenantRepository
 
   @Query("SELECT t.id FROM TenantEntity t")
   List<Long> findAllIds();
+
+  /** Id and name of every tenant except the technical tenant 0, in one query, sorted by name. */
+  @Query(
+      "SELECT new com.vi.tenantservice.api.model.TenantStatisticsNameDTO(t.id, t.name) "
+          + "FROM TenantEntity t WHERE t.id <> 0 ORDER BY t.name ASC, t.id ASC")
+  List<TenantStatisticsNameDTO> findStatisticsNamesExceptTechnical();
 
   @Query(
       value =
