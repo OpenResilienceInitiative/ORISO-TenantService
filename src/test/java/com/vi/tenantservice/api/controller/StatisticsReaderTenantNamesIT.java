@@ -53,6 +53,7 @@ class StatisticsReaderTenantNamesIT {
 
   @Autowired private WebApplicationContext context;
   @Autowired private JwtAuthConverter jwtAuthConverter;
+  @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
   @MockitoBean private ApplicationSettingsService applicationSettingsService;
 
@@ -87,6 +88,9 @@ class StatisticsReaderTenantNamesIT {
   @Test
   void statisticsReader_Should_readEveryTraegerNameExceptTheTechnicalTenantSortedByName()
       throws Exception {
+    // An inactive Träger keeps its name, so older statistics rows still show it.
+    assertThat(jdbcTemplate.update("UPDATE tenant SET active = false WHERE id = 2")).isEqualTo(1);
+
     mvc.perform(get(NAMES).with(statisticsReader("0")))
         .andExpect(status().isOk())
         .andExpect(
