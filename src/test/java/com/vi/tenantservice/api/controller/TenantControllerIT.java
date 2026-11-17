@@ -836,6 +836,44 @@ class TenantControllerIT {
     org.assertj.core.api.Assertions.assertThat(after.path(keys.get(2)).asBoolean()).isFalse();
   }
 
+  @Test
+  void updateTenant_Should_keepStoredGuestAccountModes_When_updateOmitsThem() throws Exception {
+    // UserService#1662: the Träger offers no permanent guest accounts for video.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withVideoGuestAccountModes(true, true, false)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureGuestAccountPermanentVideoEnabled", is(false)));
+
+    // An older client saves the Träger without the fields; the stored false must survive.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withVideoGuestAccountModes(null, null, null)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureGuestAccountPermanentVideoEnabled", is(false)));
+
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureGuestAccountTemporaryVideoEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureGuestAccountGuestChoosesVideoEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureGuestAccountPermanentVideoEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureGuestAccountPermanentChatEnabled", is(true)));
+
+    // An explicit value still overrides the stored one.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withVideoGuestAccountModes(null, null, true)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureGuestAccountPermanentVideoEnabled", is(true)));
+  }
+
   private org.springframework.test.web.servlet.ResultActions putTenant1AsTenantAdmin(
       String jsonRequest) throws Exception {
     when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);

@@ -90,6 +90,16 @@ public enum PermissionFeature {
   DIRECT_INVITE_CHAT("featureDirectInviteChatEnabled", null),
   DIRECT_INVITE_AUDIO("featureDirectInviteAudioEnabled", null),
   DIRECT_INVITE_VIDEO("featureDirectInviteVideoEnabled", null),
+  // UserService#1662: guest account modes a counsellor may offer per conversation type.
+  GUEST_ACCOUNT_TEMPORARY_CHAT("featureGuestAccountTemporaryChatEnabled", null),
+  GUEST_ACCOUNT_GUEST_CHOOSES_CHAT("featureGuestAccountGuestChoosesChatEnabled", null),
+  GUEST_ACCOUNT_PERMANENT_CHAT("featureGuestAccountPermanentChatEnabled", null),
+  GUEST_ACCOUNT_TEMPORARY_AUDIO("featureGuestAccountTemporaryAudioEnabled", null),
+  GUEST_ACCOUNT_GUEST_CHOOSES_AUDIO("featureGuestAccountGuestChoosesAudioEnabled", null),
+  GUEST_ACCOUNT_PERMANENT_AUDIO("featureGuestAccountPermanentAudioEnabled", null),
+  GUEST_ACCOUNT_TEMPORARY_VIDEO("featureGuestAccountTemporaryVideoEnabled", null),
+  GUEST_ACCOUNT_GUEST_CHOOSES_VIDEO("featureGuestAccountGuestChoosesVideoEnabled", null),
+  GUEST_ACCOUNT_PERMANENT_VIDEO("featureGuestAccountPermanentVideoEnabled", null),
 
   CASE_HANDOVER("caseHandoverEnabled", null);
 

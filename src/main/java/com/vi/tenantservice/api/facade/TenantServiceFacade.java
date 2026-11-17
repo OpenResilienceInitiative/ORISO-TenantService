@@ -694,7 +694,7 @@ public class TenantServiceFacade {
     preserveStoredSmtpMode(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     validateSelectedOwnSmtp(updatedEntity, existingSettingsJson, sanitizedTenantDTO);
     preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
-    preserveStoredDirectInviteFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
+    preserveStoredOptOutFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     preserveStoredAccountFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     var entityToSave = updatedEntity;
@@ -836,39 +836,86 @@ public class TenantServiceFacade {
   }
 
   /**
-   * TS#331: the "Direkteinladung erlauben" flags are stored opt-outs. A request that omits them
-   * (any client that predates the fields) must not blank a stored {@code false}, which {@link
-   * TenantSettings#applyDefaults()} would then read back as {@code true}. A non-null request value
-   * still overrides the stored one.
+   * TS#331 / UserService#1662: the "Direkteinladung erlauben" and guest-account-mode flags are
+   * stored opt-outs. A request that omits them (any client that predates the fields) must not blank
+   * a stored {@code false}, which {@link TenantSettings#applyDefaults()} would then read back as
+   * {@code true}. A non-null request value still overrides the stored one.
    */
-  private void preserveStoredDirectInviteFlags(
+  private void preserveStoredOptOutFlags(
       String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
     if (existingSettingsJson == null || updatedEntity.getSettings() == null) {
       return;
     }
     Settings request = tenantDTO.getSettings();
-    boolean chatOmitted = request == null || request.getFeatureDirectInviteChatEnabled() == null;
-    boolean audioOmitted = request == null || request.getFeatureDirectInviteAudioEnabled() == null;
-    boolean videoOmitted = request == null || request.getFeatureDirectInviteVideoEnabled() == null;
-    if (!chatOmitted && !audioOmitted && !videoOmitted) {
+    List<StoredOptOutFlag> omitted =
+        STORED_OPT_OUT_FLAGS.stream()
+            .filter(flag -> request == null || flag.requestValue().apply(request) == null)
+            .toList();
+    if (omitted.isEmpty()) {
       return;
     }
     TenantSettings existingSettings = convertFromJson(existingSettingsJson);
     TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
-    if (chatOmitted) {
-      updatedSettings.setFeatureDirectInviteChatEnabled(
-          existingSettings.getFeatureDirectInviteChatEnabled());
-    }
-    if (audioOmitted) {
-      updatedSettings.setFeatureDirectInviteAudioEnabled(
-          existingSettings.getFeatureDirectInviteAudioEnabled());
-    }
-    if (videoOmitted) {
-      updatedSettings.setFeatureDirectInviteVideoEnabled(
-          existingSettings.getFeatureDirectInviteVideoEnabled());
-    }
+    omitted.forEach(
+        flag -> flag.store().accept(updatedSettings, flag.stored().apply(existingSettings)));
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }
+
+  private record StoredOptOutFlag(
+      java.util.function.Function<Settings, Boolean> requestValue,
+      java.util.function.Function<TenantSettings, Boolean> stored,
+      java.util.function.BiConsumer<TenantSettings, Boolean> store) {}
+
+  private static final List<StoredOptOutFlag> STORED_OPT_OUT_FLAGS =
+      List.of(
+          new StoredOptOutFlag(
+              Settings::getFeatureDirectInviteChatEnabled,
+              TenantSettings::getFeatureDirectInviteChatEnabled,
+              TenantSettings::setFeatureDirectInviteChatEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureDirectInviteAudioEnabled,
+              TenantSettings::getFeatureDirectInviteAudioEnabled,
+              TenantSettings::setFeatureDirectInviteAudioEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureDirectInviteVideoEnabled,
+              TenantSettings::getFeatureDirectInviteVideoEnabled,
+              TenantSettings::setFeatureDirectInviteVideoEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountTemporaryChatEnabled,
+              TenantSettings::getFeatureGuestAccountTemporaryChatEnabled,
+              TenantSettings::setFeatureGuestAccountTemporaryChatEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountGuestChoosesChatEnabled,
+              TenantSettings::getFeatureGuestAccountGuestChoosesChatEnabled,
+              TenantSettings::setFeatureGuestAccountGuestChoosesChatEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountPermanentChatEnabled,
+              TenantSettings::getFeatureGuestAccountPermanentChatEnabled,
+              TenantSettings::setFeatureGuestAccountPermanentChatEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountTemporaryAudioEnabled,
+              TenantSettings::getFeatureGuestAccountTemporaryAudioEnabled,
+              TenantSettings::setFeatureGuestAccountTemporaryAudioEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountGuestChoosesAudioEnabled,
+              TenantSettings::getFeatureGuestAccountGuestChoosesAudioEnabled,
+              TenantSettings::setFeatureGuestAccountGuestChoosesAudioEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountPermanentAudioEnabled,
+              TenantSettings::getFeatureGuestAccountPermanentAudioEnabled,
+              TenantSettings::setFeatureGuestAccountPermanentAudioEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountTemporaryVideoEnabled,
+              TenantSettings::getFeatureGuestAccountTemporaryVideoEnabled,
+              TenantSettings::setFeatureGuestAccountTemporaryVideoEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountGuestChoosesVideoEnabled,
+              TenantSettings::getFeatureGuestAccountGuestChoosesVideoEnabled,
+              TenantSettings::setFeatureGuestAccountGuestChoosesVideoEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountPermanentVideoEnabled,
+              TenantSettings::getFeatureGuestAccountPermanentVideoEnabled,
+              TenantSettings::setFeatureGuestAccountPermanentVideoEnabled));
 
   private void preserveStoredAccountFlags(
       String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {

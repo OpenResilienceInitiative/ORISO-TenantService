@@ -2659,6 +2659,33 @@ components:
         featureDirectInviteVideoEnabled:
           type: boolean
           description: "Effective \"Direkteinladung erlauben\" permission for the video call type (TS#331, ADR-029 §6): may counsellors create and may guests redeem direct links. Inherited platform -> Träger -> Beratungsstelle. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountTemporaryChatEnabled:
+          type: boolean
+          description: "Guest account mode TEMPORARY for chat direct and share links (UserService#1662): may a counsellor offer it (delete the guest account after the session)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountGuestChoosesChatEnabled:
+          type: boolean
+          description: "Guest account mode GUEST_CHOOSES for chat direct and share links (UserService#1662): may a counsellor offer it (the guest decides after the session whether to keep the account)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountPermanentChatEnabled:
+          type: boolean
+          description: "Guest account mode PERMANENT for chat direct and share links (UserService#1662): may a counsellor offer it (the guest account stays)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountTemporaryAudioEnabled:
+          type: boolean
+          description: "Guest account mode TEMPORARY for audio call direct and share links (UserService#1662): may a counsellor offer it (delete the guest account after the session)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountGuestChoosesAudioEnabled:
+          type: boolean
+          description: "Guest account mode GUEST_CHOOSES for audio call direct and share links (UserService#1662): may a counsellor offer it (the guest decides after the session whether to keep the account)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountPermanentAudioEnabled:
+          type: boolean
+          description: "Guest account mode PERMANENT for audio call direct and share links (UserService#1662): may a counsellor offer it (the guest account stays)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountTemporaryVideoEnabled:
+          type: boolean
+          description: "Guest account mode TEMPORARY for video call direct and share links (UserService#1662): may a counsellor offer it (delete the guest account after the session)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountGuestChoosesVideoEnabled:
+          type: boolean
+          description: "Guest account mode GUEST_CHOOSES for video call direct and share links (UserService#1662): may a counsellor offer it (the guest decides after the session whether to keep the account)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountPermanentVideoEnabled:
+          type: boolean
+          description: "Guest account mode PERMANENT for video call direct and share links (UserService#1662): may a counsellor offer it (the guest account stays)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
         featureCallsEnabled:
           type: boolean
           example: "true"
@@ -3337,6 +3364,15 @@ components:
         - featureDirectInviteChatEnabled
         - featureDirectInviteAudioEnabled
         - featureDirectInviteVideoEnabled
+        - featureGuestAccountTemporaryChatEnabled
+        - featureGuestAccountGuestChoosesChatEnabled
+        - featureGuestAccountPermanentChatEnabled
+        - featureGuestAccountTemporaryAudioEnabled
+        - featureGuestAccountGuestChoosesAudioEnabled
+        - featureGuestAccountPermanentAudioEnabled
+        - featureGuestAccountTemporaryVideoEnabled
+        - featureGuestAccountGuestChoosesVideoEnabled
+        - featureGuestAccountPermanentVideoEnabled
         - caseHandoverEnabled
 
     TenantLegalDraftDTO:

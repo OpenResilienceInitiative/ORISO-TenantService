@@ -140,6 +140,24 @@ public class TenantConverter {
         .featureDirectInviteChatEnabled(settings.getFeatureDirectInviteChatEnabled())
         .featureDirectInviteAudioEnabled(settings.getFeatureDirectInviteAudioEnabled())
         .featureDirectInviteVideoEnabled(settings.getFeatureDirectInviteVideoEnabled())
+        .featureGuestAccountTemporaryChatEnabled(
+            settings.getFeatureGuestAccountTemporaryChatEnabled())
+        .featureGuestAccountGuestChoosesChatEnabled(
+            settings.getFeatureGuestAccountGuestChoosesChatEnabled())
+        .featureGuestAccountPermanentChatEnabled(
+            settings.getFeatureGuestAccountPermanentChatEnabled())
+        .featureGuestAccountTemporaryAudioEnabled(
+            settings.getFeatureGuestAccountTemporaryAudioEnabled())
+        .featureGuestAccountGuestChoosesAudioEnabled(
+            settings.getFeatureGuestAccountGuestChoosesAudioEnabled())
+        .featureGuestAccountPermanentAudioEnabled(
+            settings.getFeatureGuestAccountPermanentAudioEnabled())
+        .featureGuestAccountTemporaryVideoEnabled(
+            settings.getFeatureGuestAccountTemporaryVideoEnabled())
+        .featureGuestAccountGuestChoosesVideoEnabled(
+            settings.getFeatureGuestAccountGuestChoosesVideoEnabled())
+        .featureGuestAccountPermanentVideoEnabled(
+            settings.getFeatureGuestAccountPermanentVideoEnabled())
         .featureCallsEnabled(settings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(settings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
@@ -551,6 +569,24 @@ public class TenantConverter {
         .featureDirectInviteChatEnabled(tenantSettings.getFeatureDirectInviteChatEnabled())
         .featureDirectInviteAudioEnabled(tenantSettings.getFeatureDirectInviteAudioEnabled())
         .featureDirectInviteVideoEnabled(tenantSettings.getFeatureDirectInviteVideoEnabled())
+        .featureGuestAccountTemporaryChatEnabled(
+            tenantSettings.getFeatureGuestAccountTemporaryChatEnabled())
+        .featureGuestAccountGuestChoosesChatEnabled(
+            tenantSettings.getFeatureGuestAccountGuestChoosesChatEnabled())
+        .featureGuestAccountPermanentChatEnabled(
+            tenantSettings.getFeatureGuestAccountPermanentChatEnabled())
+        .featureGuestAccountTemporaryAudioEnabled(
+            tenantSettings.getFeatureGuestAccountTemporaryAudioEnabled())
+        .featureGuestAccountGuestChoosesAudioEnabled(
+            tenantSettings.getFeatureGuestAccountGuestChoosesAudioEnabled())
+        .featureGuestAccountPermanentAudioEnabled(
+            tenantSettings.getFeatureGuestAccountPermanentAudioEnabled())
+        .featureGuestAccountTemporaryVideoEnabled(
+            tenantSettings.getFeatureGuestAccountTemporaryVideoEnabled())
+        .featureGuestAccountGuestChoosesVideoEnabled(
+            tenantSettings.getFeatureGuestAccountGuestChoosesVideoEnabled())
+        .featureGuestAccountPermanentVideoEnabled(
+            tenantSettings.getFeatureGuestAccountPermanentVideoEnabled())
         .featureCallsEnabled(tenantSettings.getFeatureCallsEnabled())
         .featureSupervisionEnabled(tenantSettings.getFeatureSupervisionEnabled())
         .featureSupervisionAnonymousChatsEnabled(
