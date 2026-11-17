@@ -48,7 +48,7 @@ import org.springframework.web.context.WebApplicationContext;
 @Sql(scripts = {"/database/TenantServiceDatabase.sql", "/database/MultiTenantData.sql"})
 class StatisticsReaderTenantNamesIT {
 
-  private static final String NAMES = "/tenant/statistics/names";
+  private static final String NAMES = "/tenantadmin/statistics/names";
   private static final String DEFAULT_ROLES = "default-roles-online-beratung";
 
   @Autowired private WebApplicationContext context;

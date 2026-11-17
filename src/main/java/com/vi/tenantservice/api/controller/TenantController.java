@@ -656,9 +656,9 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   /**
    * Träger names for the platform statistics panel (ORISO-UserService#1666). Ingress exposes it as
-   * {@code /service/tenant/statistics/names}.
+   * {@code /service/tenantadmin/statistics/names}.
    */
-  @GetMapping("/tenant/statistics/names")
+  @GetMapping("/tenantadmin/statistics/names")
   @PreAuthorize("@tenantFacadeAuthorisationService.mayReadStatisticsNames()")
   public ResponseEntity<List<TenantStatisticsNameDTO>> getTenantStatisticsNames() {
     return ResponseEntity.ok(tenantServiceFacade.getStatisticsNamesExceptTechnical());
