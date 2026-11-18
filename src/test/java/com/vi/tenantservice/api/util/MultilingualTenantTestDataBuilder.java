@@ -149,6 +149,19 @@ public class MultilingualTenantTestDataBuilder {
     return this;
   }
 
+  public MultilingualTenantTestDataBuilder withVideoGuestAccountModes(
+      Boolean temporary, Boolean guestChooses, Boolean permanent) {
+    if (tenantMultilingualDTO.getSettings() == null) {
+      withSettings();
+    }
+    tenantMultilingualDTO
+        .getSettings()
+        .featureGuestAccountTemporaryVideoEnabled(temporary)
+        .featureGuestAccountGuestChoosesVideoEnabled(guestChooses)
+        .featureGuestAccountPermanentVideoEnabled(permanent);
+    return this;
+  }
+
   private static Settings getSettings() {
     return new Settings()
         .featureTopicsEnabled(true)

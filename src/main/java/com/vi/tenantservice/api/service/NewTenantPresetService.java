@@ -160,7 +160,34 @@ public class NewTenantPresetService {
               TenantSettings::setFeatureDirectInviteAudioEnabled),
           Map.entry(
               "featureDirectInviteVideoEnabled",
-              TenantSettings::setFeatureDirectInviteVideoEnabled));
+              TenantSettings::setFeatureDirectInviteVideoEnabled),
+          Map.entry(
+              "featureGuestAccountTemporaryChatEnabled",
+              TenantSettings::setFeatureGuestAccountTemporaryChatEnabled),
+          Map.entry(
+              "featureGuestAccountGuestChoosesChatEnabled",
+              TenantSettings::setFeatureGuestAccountGuestChoosesChatEnabled),
+          Map.entry(
+              "featureGuestAccountPermanentChatEnabled",
+              TenantSettings::setFeatureGuestAccountPermanentChatEnabled),
+          Map.entry(
+              "featureGuestAccountTemporaryAudioEnabled",
+              TenantSettings::setFeatureGuestAccountTemporaryAudioEnabled),
+          Map.entry(
+              "featureGuestAccountGuestChoosesAudioEnabled",
+              TenantSettings::setFeatureGuestAccountGuestChoosesAudioEnabled),
+          Map.entry(
+              "featureGuestAccountPermanentAudioEnabled",
+              TenantSettings::setFeatureGuestAccountPermanentAudioEnabled),
+          Map.entry(
+              "featureGuestAccountTemporaryVideoEnabled",
+              TenantSettings::setFeatureGuestAccountTemporaryVideoEnabled),
+          Map.entry(
+              "featureGuestAccountGuestChoosesVideoEnabled",
+              TenantSettings::setFeatureGuestAccountGuestChoosesVideoEnabled),
+          Map.entry(
+              "featureGuestAccountPermanentVideoEnabled",
+              TenantSettings::setFeatureGuestAccountPermanentVideoEnabled));
 
   /** Conversation features: without an explicit preset entry they start on. */
   private static final Set<String> CONVERSATION_FEATURES =

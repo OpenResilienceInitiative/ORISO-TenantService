@@ -179,7 +179,34 @@ public class EffectivePermissionSettingsApplier {
           Map.entry(
               "featureDirectInviteAudioEnabled", Settings::setFeatureDirectInviteAudioEnabled),
           Map.entry(
-              "featureDirectInviteVideoEnabled", Settings::setFeatureDirectInviteVideoEnabled));
+              "featureDirectInviteVideoEnabled", Settings::setFeatureDirectInviteVideoEnabled),
+          Map.entry(
+              "featureGuestAccountTemporaryChatEnabled",
+              Settings::setFeatureGuestAccountTemporaryChatEnabled),
+          Map.entry(
+              "featureGuestAccountGuestChoosesChatEnabled",
+              Settings::setFeatureGuestAccountGuestChoosesChatEnabled),
+          Map.entry(
+              "featureGuestAccountPermanentChatEnabled",
+              Settings::setFeatureGuestAccountPermanentChatEnabled),
+          Map.entry(
+              "featureGuestAccountTemporaryAudioEnabled",
+              Settings::setFeatureGuestAccountTemporaryAudioEnabled),
+          Map.entry(
+              "featureGuestAccountGuestChoosesAudioEnabled",
+              Settings::setFeatureGuestAccountGuestChoosesAudioEnabled),
+          Map.entry(
+              "featureGuestAccountPermanentAudioEnabled",
+              Settings::setFeatureGuestAccountPermanentAudioEnabled),
+          Map.entry(
+              "featureGuestAccountTemporaryVideoEnabled",
+              Settings::setFeatureGuestAccountTemporaryVideoEnabled),
+          Map.entry(
+              "featureGuestAccountGuestChoosesVideoEnabled",
+              Settings::setFeatureGuestAccountGuestChoosesVideoEnabled),
+          Map.entry(
+              "featureGuestAccountPermanentVideoEnabled",
+              Settings::setFeatureGuestAccountPermanentVideoEnabled));
 
   private record ToggleBinding(
       Function<TenantAdminAllowedPermissionToggles, Boolean> getter,
