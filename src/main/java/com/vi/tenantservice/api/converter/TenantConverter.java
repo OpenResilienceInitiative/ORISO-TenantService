@@ -48,8 +48,6 @@ import com.vi.tenantservice.api.service.TemplateService;
 import com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens;
 import com.vi.tenantservice.api.util.JsonConverter;
 import com.vi.tenantservice.api.util.TranslationMetaUtil;
-import freemarker.template.TemplateException;
-import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.NonNull;
@@ -1243,24 +1241,13 @@ public class TenantConverter {
       log.info("No data protection contact template found. Skipping privacy rendering.");
       return privacyPotentiallyWithPlaceholders;
     }
-    return tryRenderTemplate(privacyPotentiallyWithPlaceholders, dataProtectionContactTemplate);
+    return templateRenderer.renderTemplate(
+        privacyPotentiallyWithPlaceholders,
+        contactPlaceholders(dataProtectionContactTemplate.getNoAgencyContext()));
   }
 
-  private String tryRenderTemplate(
-      String privacyPotentiallyWithPlaceholders,
-      DataProtectionContactTemplateDTO dataProtectionContactTemplate) {
-    try {
-      return templateRenderer.renderTemplate(
-          privacyPotentiallyWithPlaceholders,
-          placeHolderKeyValueMap(dataProtectionContactTemplate.getNoAgencyContext()));
-    } catch (IOException | TemplateException e) {
-      log.error("Error while rendering privacy template", e);
-      return privacyPotentiallyWithPlaceholders;
-    }
-  }
-
-  private Map<String, Object> placeHolderKeyValueMap(NoAgencyContextDTO noAgencyContext) {
-    Map<String, Object> dataModel = Maps.newHashMap();
+  private Map<String, String> contactPlaceholders(NoAgencyContextDTO noAgencyContext) {
+    Map<String, String> dataModel = Maps.newHashMap();
     dataModel.put(
         DATA_PROTECTION_OFFICER.getPlaceholderVariable(),
         noAgencyContext.getDataProtectionOfficerContact());

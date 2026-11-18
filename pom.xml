@@ -276,11 +276,6 @@
             <scope>test</scope>
         </dependency>
 
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-freemarker</artifactId>
-        </dependency>
-
         <!-- OpenApi/Swagger dependencies -->
         <dependency>
             <groupId>org.openapitools</groupId>
