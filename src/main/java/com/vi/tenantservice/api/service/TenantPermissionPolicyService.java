@@ -7,6 +7,9 @@ import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.exception.TenantBadRequestException;
 import com.vi.tenantservice.api.exception.TenantSettingsUnavailableException;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.CalendarPolicies;
+import com.vi.tenantservice.api.model.CalendarVisibilityScope;
+import com.vi.tenantservice.api.model.CalendarVisibilityScopePolicy;
 import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
 import com.vi.tenantservice.api.model.CaseHandoverPolicies;
 import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
@@ -20,6 +23,7 @@ import com.vi.tenantservice.api.model.RecipientScopePermissionPolicy;
 import com.vi.tenantservice.api.model.StringListPermissionPolicy;
 import com.vi.tenantservice.api.model.TenantAdminControls;
 import com.vi.tenantservice.api.model.TenantPermissionPolicyEntity;
+import com.vi.tenantservice.api.policy.CalendarPolicyRules;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
 import com.vi.tenantservice.api.policy.InternalGroupChatPolicyRules;
@@ -181,17 +185,27 @@ public class TenantPermissionPolicyService {
     saveOverrides(tenantId, overrides, caseHandoverOverrides, null);
   }
 
-  /**
-   * Saves the Traeger's overrides. A {@code null} {@code caseHandoverOverrides} or {@code
-   * internalGroupChatOverrides} leaves what is stored untouched (#319); a platform requirement
-   * (ENFORCED) rejects any change and discards an unchanged echo.
-   */
   @Transactional
   public void saveOverrides(
       Long tenantId,
       Map<String, PolicyValue<Boolean>> overrides,
       CaseHandoverPolicies caseHandoverOverrides,
       InternalGroupChatPolicies internalGroupChatOverrides) {
+    saveOverrides(tenantId, overrides, caseHandoverOverrides, internalGroupChatOverrides, null);
+  }
+
+  /**
+   * Saves the Traeger's overrides. A {@code null} {@code caseHandoverOverrides}, {@code
+   * internalGroupChatOverrides} or {@code calendarOverrides} leaves what is stored untouched (#319,
+   * #365); a platform requirement (ENFORCED) rejects any change and discards an unchanged echo.
+   */
+  @Transactional
+  public void saveOverrides(
+      Long tenantId,
+      Map<String, PolicyValue<Boolean>> overrides,
+      CaseHandoverPolicies caseHandoverOverrides,
+      InternalGroupChatPolicies internalGroupChatOverrides,
+      CalendarPolicies calendarOverrides) {
     overrides = withoutRetiredPolicy(overrides);
     overrides.keySet().forEach(this::assertKnownFeature);
     CaseHandoverPolicyRules.validate(caseHandoverOverrides);
@@ -207,6 +221,8 @@ public class TenantPermissionPolicyService {
     InternalGroupChatPolicies writableInternalGroupChat =
         sanitizeInternalGroupChatOverrides(
             platformInternalGroupChat(platform), internalGroupChatOverrides);
+    CalendarPolicies writableCalendar =
+        sanitizeCalendarOverrides(platformCalendar(platform), calendarOverrides);
     TenantPermissionPolicyEntity entity =
         repository.findByTenantId(tenantId).orElseGet(TenantPermissionPolicyEntity::new);
     entity.setTenantId(tenantId);
@@ -221,6 +237,9 @@ public class TenantPermissionPolicyService {
     }
     if (internalGroupChatOverrides != null) {
       entity.setInternalGroupChatPolicies(serializeInternalGroupChat(writableInternalGroupChat));
+    }
+    if (calendarOverrides != null) {
+      entity.setCalendarPolicies(serializeCalendar(writableCalendar));
     }
     entity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));
     try {
@@ -274,6 +293,31 @@ public class TenantPermissionPolicyService {
             tenantId ->
                 resolvedByTenant.put(
                     tenantId, resolveInternalGroupChat(parent, localByTenant.get(tenantId))));
+    return Map.copyOf(resolvedByTenant);
+  }
+
+  /** The Traeger's calendar policies (ADR-032): platform preset, Traeger override on top. */
+  public CalendarPolicies getResolvedCalendarPolicies(Long tenantId) {
+    CalendarPolicies parent = platformCalendar(platformControls.getControls());
+    CalendarPolicies local =
+        repository.findByTenantId(tenantId).map(this::deserializeCalendar).orElse(null);
+    return resolveCalendar(parent, local);
+  }
+
+  public Map<Long, CalendarPolicies> getResolvedCalendarPolicies(Set<Long> tenantIds) {
+    if (tenantIds.isEmpty()) {
+      return Map.of();
+    }
+    CalendarPolicies parent = platformCalendar(platformControls.getControls());
+    var unreadable = new LinkedHashSet<Long>();
+    var localByTenant = deserializeBatch(tenantIds, unreadable, this::deserializeCalendar);
+    Map<Long, CalendarPolicies> resolvedByTenant = new LinkedHashMap<>();
+    tenantIds.stream()
+        .filter(id -> !unreadable.contains(id))
+        .forEach(
+            tenantId ->
+                resolvedByTenant.put(
+                    tenantId, resolveCalendar(parent, localByTenant.get(tenantId))));
     return Map.copyOf(resolvedByTenant);
   }
 
@@ -355,6 +399,101 @@ public class TenantPermissionPolicyService {
     } catch (JsonProcessingException exception) {
       throw mappingFailure("serialize internal group chat policies", exception);
     }
+  }
+
+  private CalendarPolicies platformCalendar(TenantAdminControls platform) {
+    return CalendarPolicyRules.normalize(platform.getCalendar());
+  }
+
+  private CalendarPolicies resolveCalendar(CalendarPolicies parent, CalendarPolicies local) {
+    ResolvedPolicyValue<CalendarVisibilityScope> scope =
+        PermissionPolicyResolver.resolveWithOrigin(
+            toDomain(parent.getVisibilityScope()),
+            local == null ? null : toDomain(local.getVisibilityScope()));
+    return new CalendarPolicies()
+        .visibilityScope(
+            new CalendarVisibilityScopePolicy(
+                    scope.value(), PermissionPolicyMode.valueOf(scope.mode().name()))
+                .inherited(scope.inherited()))
+        .showAskerUsernames(
+            resolveBoolean(
+                parent.getShowAskerUsernames(),
+                local == null ? null : local.getShowAskerUsernames()));
+  }
+
+  /**
+   * Each calendar policy is checked on its own: a value the platform requires (ENFORCED) cannot be
+   * changed (400), an unchanged echo of it is discarded, anything else is kept as the override.
+   */
+  private CalendarPolicies sanitizeCalendarOverrides(
+      CalendarPolicies parent, CalendarPolicies local) {
+    if (local == null) {
+      return null;
+    }
+    PolicyValue<CalendarVisibilityScope> localScope = toDomain(local.getVisibilityScope());
+    PolicyValue<Boolean> localUsernames = toDomain(local.getShowAskerUsernames());
+    return new CalendarPolicies()
+        .visibilityScope(
+            writableCalendarPolicy(
+                    toDomain(parent.getVisibilityScope()), localScope, "calendar.visibilityScope")
+                ? new CalendarVisibilityScopePolicy(
+                    local.getVisibilityScope().getValue(), local.getVisibilityScope().getMode())
+                : null)
+        .showAskerUsernames(
+            writableCalendarPolicy(
+                    toDomain(parent.getShowAskerUsernames()),
+                    localUsernames,
+                    "calendar.showAskerUsernames")
+                ? new BooleanPermissionPolicy(
+                    local.getShowAskerUsernames().getValue(),
+                    local.getShowAskerUsernames().getMode())
+                : null);
+  }
+
+  /** Whether {@code local} is stored; throws when it tries to change a platform requirement. */
+  private <T> boolean writableCalendarPolicy(
+      PolicyValue<T> parent, PolicyValue<T> local, String field) {
+    if (local == null) {
+      return false;
+    }
+    if (parent.mode() == com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED) {
+      if (!Objects.equals(parent, local)) {
+        throw new TenantBadRequestException("Cannot override enforced policy: " + field);
+      }
+      return false;
+    }
+    return true;
+  }
+
+  private CalendarPolicies deserializeCalendar(TenantPermissionPolicyEntity entity) {
+    String json = entity.getCalendarPolicies();
+    if (json == null || json.isBlank()) {
+      return null;
+    }
+    try {
+      var stored = objectMapper.readValue(json, CalendarPolicies.class);
+      if (stored == null
+          || (stored.getVisibilityScope() != null && toDomain(stored.getVisibilityScope()) == null)
+          || (stored.getShowAskerUsernames() != null
+              && toDomain(stored.getShowAskerUsernames()) == null)) {
+        throw new TenantSettingsUnavailableException();
+      }
+      return stored;
+    } catch (JsonProcessingException exception) {
+      throw new TenantSettingsUnavailableException();
+    }
+  }
+
+  private String serializeCalendar(CalendarPolicies policies) {
+    try {
+      return objectMapper.writeValueAsString(policies);
+    } catch (JsonProcessingException exception) {
+      throw mappingFailure("serialize calendar policies", exception);
+    }
+  }
+
+  private PolicyValue<CalendarVisibilityScope> toDomain(CalendarVisibilityScopePolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
   }
 
   private PolicyValue<InternalGroupChatRecipientScope> toDomain(

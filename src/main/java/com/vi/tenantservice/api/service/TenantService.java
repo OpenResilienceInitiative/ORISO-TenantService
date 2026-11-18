@@ -9,6 +9,7 @@ import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.TenantStatisticsNameDTO;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.api.service.search.TenantSearchText;
@@ -232,5 +233,10 @@ public class TenantService {
 
   public void delete(TenantEntity createdTenant) {
     tenantRepository.delete(createdTenant);
+  }
+
+  @Transactional(readOnly = true)
+  public List<TenantStatisticsNameDTO> findStatisticsNamesExceptTechnical() {
+    return tenantRepository.findStatisticsNamesExceptTechnical();
   }
 }

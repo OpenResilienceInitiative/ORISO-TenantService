@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.facade;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
@@ -303,12 +304,102 @@ class TenantServiceFacadeTest {
   @Test
   void deleteTenant_Should_ReportTheDeletionToTheDeletionLog_AfterTheTenantWasDeleted() {
     when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(nothingLeft());
 
     tenantServiceFacade.deleteTenant(ID);
 
     var order = org.mockito.Mockito.inOrder(tenantService, deletionAuditReporter);
     order.verify(tenantService).delete(tenantEntity);
     order.verify(deletionAuditReporter).reportTenantExecuted(ID);
+  }
+
+  @Test
+  void deleteTenant_Should_RefuseAndDeleteNothing_When_theTenantStillHasAgenciesOrAccounts() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    var blockers = nothingLeft().deletable(false).agencies(2L).consultants(4L);
+    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(blockers);
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            com.vi.tenantservice.api.exception.TenantDeletionBlockedException.class,
+            () -> tenantServiceFacade.deleteTenant(ID));
+
+    org.assertj.core.api.Assertions.assertThat(thrown.getBlockers()).isSameAs(blockers);
+    verify(tenantService, never()).delete(any());
+    verify(tenantDpaService, never()).deleteSignaturesForTenant(any());
+    verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
+  void deleteTenant_Should_DeleteNothing_When_UserServiceCannotSayWhatIsLeft() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(userAdminService.getTenantDeletionBlockers(ID))
+        .thenThrow(new org.springframework.web.client.ResourceAccessException("down"));
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            org.springframework.web.server.ResponseStatusException.class,
+            () -> tenantServiceFacade.deleteTenant(ID));
+
+    org.assertj.core.api.Assertions.assertThat(thrown.getStatusCode().value()).isEqualTo(503);
+    verify(tenantService, never()).delete(any());
+    verify(tenantDpaService, never()).deleteSignaturesForTenant(any());
+    verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
+  void
+      deleteTenant_Should_DeleteNothingAndAnswerServiceUnavailable_When_UserServiceSendsNoAnswer() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(null);
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            org.springframework.web.server.ResponseStatusException.class,
+            () -> tenantServiceFacade.deleteTenant(ID));
+
+    org.assertj.core.api.Assertions.assertThat(thrown.getStatusCode().value()).isEqualTo(503);
+    verify(tenantService, never()).delete(any());
+    verify(tenantDpaService, never()).deleteSignaturesForTenant(any());
+    verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
+  void deleteTenant_Should_DeleteNothingAndAnswerServiceUnavailable_When_theAnswerHasNoVerdict() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(nothingLeft().deletable(null));
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            org.springframework.web.server.ResponseStatusException.class,
+            () -> tenantServiceFacade.deleteTenant(ID));
+
+    org.assertj.core.api.Assertions.assertThat(thrown.getStatusCode().value()).isEqualTo(503);
+    verify(tenantService, never()).delete(any());
+    verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
+  void deleteTenant_Should_NotAskUserService_When_theTenantDoesNotExist() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.empty());
+
+    org.junit.jupiter.api.Assertions.assertThrows(
+        com.vi.tenantservice.api.exception.TenantNotFoundException.class,
+        () -> tenantServiceFacade.deleteTenant(ID));
+
+    verify(userAdminService, never()).getTenantDeletionBlockers(any());
+  }
+
+  private static com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO
+      nothingLeft() {
+    return new com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO()
+        .deletable(true)
+        .agencies(0L)
+        .consultants(0L)
+        .adviceSeekers(0L)
+        .agencyAdmins(0L)
+        .tenantAdmins(0L)
+        .openInvites(0L);
   }
 
   @Test
@@ -778,6 +869,25 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void createTenant_Should_refuseBeforeAnyWrite_When_theCallerMayNotCreateTenants() {
+    // TenantService#352: a Träger admin is refused up front, so there is nothing to roll back
+    tenantMultilingualDTO.setTenantIdReservationToken("reservation-token");
+    doThrow(new AccessDeniedException("Only the platform administrator may create a Träger"))
+        .when(tenantFacadeAuthorisationService)
+        .assertMayCreateTenants();
+
+    assertThrows(
+        AccessDeniedException.class, () -> tenantServiceFacade.createTenant(tenantMultilingualDTO));
+
+    verify(tenantInputSanitizer, never()).sanitize(any());
+    verify(tenantIdAllocationService, never()).getStatus(anyLong());
+    verify(tenantService, never()).create(any(), any());
+    verify(consultingTypeService, never()).createDefaultConsultingTypes(anyLong());
+    verify(tenantService, never()).delete(any());
+    verify(tenantIdAllocationService, never()).rollbackAssignment(anyLong(), any());
+  }
+
+  @Test
   void createTenant_Should_rollbackWithReservationToken_When_consultingTypeCreationFails() {
     // given (TEN-INV hardening: a consumed invite reservation must be restored, not deleted)
     tenantMultilingualDTO.setTenantIdReservationToken("reservation-token");
@@ -1156,11 +1266,45 @@ class TenantServiceFacadeTest {
     when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(Set.of(1L, 2L)))
         .thenReturn(
             Map.of(1L, new InternalGroupChatPolicies(), 2L, new InternalGroupChatPolicies()));
+    when(tenantPermissionPolicyService.getResolvedCalendarPolicies(Set.of(1L, 2L)))
+        .thenReturn(
+            Map.of(
+                1L,
+                new com.vi.tenantservice.api.model.CalendarPolicies(),
+                2L,
+                new com.vi.tenantservice.api.model.CalendarPolicies()));
 
     var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
 
     assertThat(result).containsExactly(firstDto, secondDto);
     verify(tenantAdminControlsService, times(1)).getControls();
+  }
+
+  @Test
+  void findRestrictedTenantsByIds_Should_omitTenant_When_itsCalendarPolicyIsUnreadable() {
+    var firstTenant = mock(TenantRestrictedData.class);
+    var secondTenant = mock(TenantRestrictedData.class);
+    var firstDto = new RestrictedTenantDTO().id(1L).settings(new Settings());
+    var secondDto = new RestrictedTenantDTO().id(2L).settings(new Settings());
+    when(tenantService.findRestrictedTenantDataByIds(Set.of(1L, 2L)))
+        .thenReturn(List.of(firstTenant, secondTenant));
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(converter.toRestrictedTenantDTO(firstTenant, DE)).thenReturn(firstDto);
+    when(converter.toRestrictedTenantDTO(secondTenant, DE)).thenReturn(secondDto);
+    when(tenantAdminControlsService.getControls()).thenReturn(new TenantAdminControls());
+
+    when(tenantPermissionPolicyService.getResolvedPolicies(Set.of(1L, 2L)))
+        .thenReturn(Map.of(1L, Map.of(), 2L, Map.of()));
+    when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(Set.of(1L, 2L)))
+        .thenReturn(
+            Map.of(1L, new InternalGroupChatPolicies(), 2L, new InternalGroupChatPolicies()));
+    // the calendar policy of tenant 2 could not be read
+    when(tenantPermissionPolicyService.getResolvedCalendarPolicies(Set.of(1L, 2L)))
+        .thenReturn(Map.of(1L, new com.vi.tenantservice.api.model.CalendarPolicies()));
+
+    var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
+
+    assertThat(result).containsExactly(firstDto);
   }
 
   @Test
@@ -1404,6 +1548,15 @@ class TenantServiceFacadeTest {
         .when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(2L))
         .thenReturn(
             recipientScope(InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
+    var resolvedCalendar =
+        new com.vi.tenantservice.api.model.CalendarPolicies()
+            .visibilityScope(
+                new com.vi.tenantservice.api.model.CalendarVisibilityScopePolicy(
+                    com.vi.tenantservice.api.model.CalendarVisibilityScope.AGENCY,
+                    PermissionPolicyMode.ENFORCED));
+    lenient()
+        .when(tenantPermissionPolicyService.getResolvedCalendarPolicies(2L))
+        .thenReturn(resolvedCalendar);
 
     // when
     Optional<RestrictedTenantDTO> tenantDTO =
@@ -1416,6 +1569,9 @@ class TenantServiceFacadeTest {
             new RecipientScopePermissionPolicy(
                 InternalGroupChatRecipientScope.AGENCY, PermissionPolicyMode.ENFORCED));
     verify(tenantPermissionPolicyService, never()).getResolvedInternalGroupChatPolicies(1L);
+    // the calendar visibility is the same privacy boundary (#365)
+    assertThat(tenantDTO.get().getCalendar()).isEqualTo(resolvedCalendar);
+    verify(tenantPermissionPolicyService, never()).getResolvedCalendarPolicies(1L);
   }
 
   @Test

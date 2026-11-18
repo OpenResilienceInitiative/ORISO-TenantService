@@ -836,6 +836,93 @@ class TenantControllerIT {
     org.assertj.core.api.Assertions.assertThat(after.path(keys.get(2)).asBoolean()).isFalse();
   }
 
+  @Test
+  void updateTenant_Should_keepStoredGuestAccountModes_When_updateOmitsThem() throws Exception {
+    // UserService#1662: the Träger offers no permanent guest accounts for video.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withVideoGuestAccountModes(true, true, false)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureGuestAccountPermanentVideoEnabled", is(false)));
+
+    // An older client saves the Träger without the fields; the stored false must survive.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withVideoGuestAccountModes(null, null, null)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureGuestAccountPermanentVideoEnabled", is(false)));
+
+    mockMvc
+        .perform(get(EXISTING_PUBLIC_TENANT).contentType(APPLICATION_JSON))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureGuestAccountTemporaryVideoEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureGuestAccountGuestChoosesVideoEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureGuestAccountPermanentVideoEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureGuestAccountPermanentChatEnabled", is(true)));
+
+    // An explicit value still overrides the stored one.
+    putTenant1AsTenantAdmin(
+            multilingualTenantTestDataBuilder
+                .tenantDTO()
+                .withVideoGuestAccountModes(null, null, true)
+                .jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureGuestAccountPermanentVideoEnabled", is(true)));
+  }
+
+  @Test
+  void updateTenant_Should_keepEveryStoredGuestAccountMode_When_updateOmitsThem() throws Exception {
+    // UserService#1662: each of the nine guest account caps survives an older client's save
+    // independently, and each stays writable with an explicit value.
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var keys = new java.util.ArrayList<String>();
+    for (String mode : java.util.List.of("Temporary", "GuestChooses", "Permanent"))
+      for (String medium : java.util.List.of("Chat", "Audio", "Video"))
+        keys.add("featureGuestAccount" + mode + medium + "Enabled");
+    var request =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(multilingualTenantTestDataBuilder.tenantDTO().withSettings().jsonify());
+    var settings = (com.fasterxml.jackson.databind.node.ObjectNode) request.get("settings");
+    keys.forEach(key -> settings.put(key, false));
+    putTenant1AsTenantAdmin(request.toString()).andExpect(status().isOk());
+
+    settings.remove(keys);
+    putTenant1AsTenantAdmin(request.toString()).andExpect(status().isOk());
+    var stored = mapper.readTree(tenantRepository.findById(1L).orElseThrow().getSettings());
+    for (String key : keys)
+      org.assertj.core.api.Assertions.assertThat(stored.path(key).asBoolean(true))
+          .as(key)
+          .isFalse();
+
+    for (String key : keys) {
+      settings.removeAll();
+      settings.setAll(
+          (com.fasterxml.jackson.databind.node.ObjectNode)
+              mapper
+                  .readTree(multilingualTenantTestDataBuilder.tenantDTO().withSettings().jsonify())
+                  .get("settings"));
+      settings.remove(keys);
+      settings.put(key, true);
+      putTenant1AsTenantAdmin(request.toString()).andExpect(status().isOk());
+      var after = mapper.readTree(tenantRepository.findById(1L).orElseThrow().getSettings());
+      org.assertj.core.api.Assertions.assertThat(after.path(key).asBoolean()).as(key).isTrue();
+      // Earlier explicit ONs stay on although this update omits them; the rest stay off.
+      var enabledSoFar = keys.subList(0, keys.indexOf(key) + 1);
+      for (String other : keys)
+        org.assertj.core.api.Assertions.assertThat(after.path(other).isBoolean())
+            .as(other + " stored after explicit " + key)
+            .isTrue();
+      for (String other : keys)
+        org.assertj.core.api.Assertions.assertThat(after.path(other).asBoolean())
+            .as(other + " after explicit " + key)
+            .isEqualTo(enabledSoFar.contains(other));
+    }
+  }
+
   private org.springframework.test.web.servlet.ResultActions putTenant1AsTenantAdmin(
       String jsonRequest) throws Exception {
     when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
