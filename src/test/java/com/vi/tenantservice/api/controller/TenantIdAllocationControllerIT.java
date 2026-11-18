@@ -34,6 +34,7 @@ import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import java.time.LocalDateTime;
+import java.util.Optional;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -129,6 +130,10 @@ class TenantIdAllocationControllerIT {
 
   private org.springframework.test.web.servlet.request.RequestPostProcessor platformAdmin() {
     givenAuthoritiesOfRole(TENANT_ADMIN);
+    // Every Träger admin holds tenant-admin too; the platform admin is the one from tenant 0
+    // (TenantService#352).
+    when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
     return authentication(
         new AuthenticationMockBuilder().withUserRole(TENANT_ADMIN.getValue()).build());
   }

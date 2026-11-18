@@ -803,6 +803,50 @@ class TenantFacadeAuthorisationServiceTest {
   }
 
   @Test
+  void assertMayCreateTenants_Should_refuseATraegerAdmin_When_theTokenNamesTheirOwnTenant() {
+    // TenantService#352: every Träger admin holds tenant-admin and with it CREATE_TENANT
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT))
+        .thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(5L));
+
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertMayCreateTenants())
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void assertMayCreateTenants_Should_refuseACreateAuthorityWithoutTenantClaim() {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT))
+        .thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken())
+        .thenThrow(new AccessDeniedException("tenantId attribute not found in the access token"));
+
+    assertThatThrownBy(() -> tenantFacadeAuthorisationService.assertMayCreateTenants())
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void assertMayCreateTenants_Should_letThePlatformAdministratorThrough() {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT))
+        .thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertMayCreateTenants())
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void assertMayCreateTenants_Should_leaveReservationOnlyCallersToTheReservationCheck() {
+    // technical-only identity and the config-wizard task identity hold no CREATE_TENANT
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT))
+        .thenReturn(false);
+
+    assertThatCode(() -> tenantFacadeAuthorisationService.assertMayCreateTenants())
+        .doesNotThrowAnyException();
+    verify(authorisationService, org.mockito.Mockito.never()).findTenantIdInAccessToken();
+  }
+
+  @Test
   void restrictedTenantAdministratorCannotChangeAssistantIdentity() {
     TenantEntity existing = tenantWithLogo(null);
     MultilingualTenantDTO changed =

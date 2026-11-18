@@ -253,11 +253,14 @@ public class TenantServiceFacade {
   }
 
   /**
-   * A caller without the full create right (the technical service identity) may only complete a
-   * public onboarding: the request must name an ID that is currently RESERVED and carry a token.
-   * Whether the token matches is decided atomically when the reservation is consumed.
+   * Runs before anything is written. A Träger admin is refused outright (TenantService#352), so
+   * there is no half-created tenant to roll back. A caller without the full create right (the
+   * technical service identity) may only complete a public onboarding: the request must name an ID
+   * that is currently RESERVED and carry a token. Whether the token matches is decided atomically
+   * when the reservation is consumed.
    */
   private void assertCallerMayCreateThisTenant(MultilingualTenantDTO tenantDTO) {
+    tenantFacadeAuthorisationService.assertMayCreateTenants();
     if (!tenantFacadeAuthorisationService.mayOnlyCreateReservedTenants()) {
       return;
     }
