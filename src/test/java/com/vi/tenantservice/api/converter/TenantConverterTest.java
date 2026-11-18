@@ -23,8 +23,6 @@ import com.vi.tenantservice.api.service.TemplateDescriptionServiceException;
 import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
-import freemarker.template.TemplateException;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -33,7 +31,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -44,7 +41,7 @@ class TenantConverterTest {
 
   @Mock TemplateService templateService;
 
-  @Mock TemplateRenderer templateRenderer;
+  @Spy TemplateRenderer templateRenderer = new TemplateRenderer();
 
   @Mock com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens platformLegalTextTokens;
 
@@ -206,8 +203,9 @@ class TenantConverterTest {
 
   @Test
   void toRestrictedTenantDTO_should_convertAttributesProperly()
-      throws TemplateException, IOException, TemplateDescriptionServiceException {
+      throws TemplateDescriptionServiceException {
     // given
+    String privacyText = "<p>${responsible} · ${dataProtectionOfficer}</p>";
     MultilingualTenantDTO tenantDTO =
         new MultilingualTenantTestDataBuilder()
             .tenantDTO()
@@ -217,6 +215,7 @@ class TenantConverterTest {
             .withSettings()
             .build();
     tenantDTO.getSettings().extendedSettings(null);
+    tenantDTO.getContent().setPrivacy(Map.of("de", privacyText));
 
     when(templateService.getMultilingualDataProtectionTemplate())
         .thenReturn(
@@ -224,11 +223,11 @@ class TenantConverterTest {
                 "de",
                 new DataProtectionContactTemplateDTO()
                     .noAgencyContext(
-                        new NoAgencyContextDTO().dataProtectionOfficerContact("test"))));
+                        new NoAgencyContextDTO()
+                            .responsibleContact("Organisation")
+                            .dataProtectionOfficerContact("Privacy team"))));
 
     TenantEntity entity = tenantConverter.toEntity(tenantDTO);
-    when(templateRenderer.renderTemplate(Mockito.anyString(), Mockito.anyMap()))
-        .thenReturn("renderedPrivacy");
     // when
     RestrictedTenantDTO restrictedTenantDTO =
         tenantConverter.toRestrictedTenantDTO(entity, TenantConverter.DE);
@@ -240,8 +239,9 @@ class TenantConverterTest {
     assertContentIsProperlyConverted(tenantDTO, restrictedTenantDTO);
     assertRestrictedPublicSettingsAreConverted(
         tenantDTO.getSettings(), restrictedTenantDTO.getSettings());
-    Mockito.verify(templateRenderer).renderTemplate(Mockito.anyString(), Mockito.anyMap());
-    assertThat(restrictedTenantDTO.getContent().getRenderedPrivacy()).isEqualTo("renderedPrivacy");
+    assertThat(restrictedTenantDTO.getContent().getPrivacy()).isEqualTo(privacyText);
+    assertThat(restrictedTenantDTO.getContent().getRenderedPrivacy())
+        .isEqualTo("<p>Organisation · Privacy team</p>");
   }
 
   @Test
