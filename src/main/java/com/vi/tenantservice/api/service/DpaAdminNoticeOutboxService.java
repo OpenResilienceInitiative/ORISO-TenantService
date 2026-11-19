@@ -3,9 +3,12 @@ package com.vi.tenantservice.api.service;
 import com.vi.tenantservice.api.model.TenantIdReservationEntity;
 import com.vi.tenantservice.api.model.TenantIdReservationStatus;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
+import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository.PendingAdminNotice;
 import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import com.vi.tenantservice.api.repository.TenantRepository;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -29,13 +32,7 @@ public class DpaAdminNoticeOutboxService {
     var examined = page.getContent();
     var events =
         examined.stream()
-            .filter(
-                row ->
-                    eligible(
-                        row.getReservationBinding(),
-                        row.getReservationToken(),
-                        row.getReservationStatus(),
-                        row.getRegisteredTenantId() != null))
+            .filter(DpaAdminNoticeOutboxService::eligible)
             .map(
                 row ->
                     new PendingEvent(row.getId(), row.getTenantId(), row.getSignedAtEpochMillis()))
@@ -45,9 +42,32 @@ public class DpaAdminNoticeOutboxService {
     return new PendingPage(events, page.hasNext() ? examined.getLast().getId() : null);
   }
 
+  @Transactional(readOnly = true)
+  public Optional<ExactSignature> readExact(long eventId) {
+    return signatures
+        .findExactAdminNotice(eventId)
+        .filter(DpaAdminNoticeOutboxService::eligible)
+        .map(
+            row ->
+                new ExactSignature(
+                    row.getId(),
+                    row.getTenantId(),
+                    row.getSignedAtEpochMillis(),
+                    auditTimestamp(row.getDpaVersion()),
+                    auditTimestamp(row.getSignedAt()),
+                    row.getForwardedByUserId(),
+                    row.getSignerName(),
+                    row.getSignerPosition()));
+  }
+
+  private static String auditTimestamp(LocalDateTime time) {
+    return time == null ? null : time.toString();
+  }
+
   /**
-   * Clears one exact event after a future trusted caller has independently proved durable ownership
-   * of it. Intentionally has no controller or legacy-hint caller.
+   * Records the original signed-event proof and clears its pending status after a future trusted
+   * caller independently proves durable ownership. Intentionally has no controller or legacy-hint
+   * caller.
    */
   @Transactional
   boolean acknowledge(long eventId, long signedAtEpochMillis) {
@@ -83,7 +103,25 @@ public class DpaAdminNoticeOutboxService {
     return DpaSignatureOwnership.belongsToCurrentOccupant(reservationBinding, currentHash);
   }
 
+  private static boolean eligible(PendingAdminNotice row) {
+    return eligible(
+        row.getReservationBinding(),
+        row.getReservationToken(),
+        row.getReservationStatus(),
+        row.getRegisteredTenantId() != null);
+  }
+
   public record PendingEvent(long id, long tenantId, long signedAtEpochMillis) {}
 
   public record PendingPage(List<PendingEvent> events, Long nextAfterId) {}
+
+  public record ExactSignature(
+      long id,
+      long tenantId,
+      long signedAtEpochMillis,
+      String dpaVersion,
+      String signedAt,
+      String forwardedByUserId,
+      String signerName,
+      String signerPosition) {}
 }

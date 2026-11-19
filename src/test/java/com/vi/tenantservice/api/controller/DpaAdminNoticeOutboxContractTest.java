@@ -148,6 +148,50 @@ class DpaAdminNoticeOutboxContractTest {
   }
 
   @Test
+  void exactAuditExposesOnlyTheRequestedStagedSignatureToTheTaskActor() throws Exception {
+    var owner = reserve(8992L, TenantIdReservationStatus.RESERVED, "exact-owner");
+    var binding = fingerprint(owner.getToken());
+    var current = stage(owner.getTenantId(), binding, DpaSignatureStatus.SIGNED, SIGNED_AT);
+    var historical = stage(owner.getTenantId(), binding, DpaSignatureStatus.SIGNED, null);
+    var other =
+        stage(
+            owner.getTenantId(),
+            fingerprint("previous-owner"),
+            DpaSignatureStatus.SIGNED,
+            SIGNED_AT);
+    var inconsistent =
+        stage(owner.getTenantId(), binding, DpaSignatureStatus.SIGNED, SIGNED_AT + 1);
+    String url = OUTBOX + "/" + current.getId();
+    mvc.perform(get(url)).andExpect(status().isUnauthorized());
+    mvc.perform(
+            get(url)
+                .header(
+                    HttpHeaders.AUTHORIZATION,
+                    signedToken("admin-user", "app", TENANT_AUDIENCE, List.of("tenant-admin"))))
+        .andExpect(status().isForbidden());
+    mvc.perform(get(url).header(HttpHeaders.AUTHORIZATION, mailAuthorization()))
+        .andExpect(status().isOk())
+        .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"))
+        .andExpect(jsonPath("$.length()").value(8))
+        .andExpect(jsonPath("$.id").value(current.getId()))
+        .andExpect(jsonPath("$.tenantId").value(owner.getTenantId()))
+        .andExpect(jsonPath("$.signedAtEpochMillis").value(SIGNED_AT))
+        .andExpect(jsonPath("$.dpaVersion").value("2026-10-30T12:00"))
+        .andExpect(jsonPath("$.signedAt").value("2026-11-19T10:00"))
+        .andExpect(jsonPath("$.forwardedByUserId").value("forwarder"))
+        .andExpect(jsonPath("$.signerName").value("Synthetic signer"))
+        .andExpect(jsonPath("$.signerPosition").value("Director"))
+        .andExpect(jsonPath("$.signerEmail").doesNotExist())
+        .andExpect(jsonPath("$.reservationBinding").doesNotExist());
+    for (var rejected : List.of(historical, other, inconsistent)) {
+      mvc.perform(
+              get(OUTBOX + "/" + rejected.getId())
+                  .header(HttpHeaders.AUTHORIZATION, mailAuthorization()))
+          .andExpect(status().isNotFound());
+    }
+  }
+
+  @Test
   void pullIsDisabledUnlessExplicitlyEnabled() {
     new ApplicationContextRunner()
         .withUserConfiguration(DpaAdminNoticeOutboxController.class)
@@ -244,6 +288,11 @@ class DpaAdminNoticeOutboxContractTest {
             .status(status)
             .source("FORWARDED_EXTERNAL")
             .signedAtEpochMillis(SIGNED_AT)
+            .signedAt(LocalDateTime.of(2026, 11, 19, 10, 0))
+            .dpaVersion(LocalDateTime.of(2026, 10, 30, 12, 0))
+            .forwardedByUserId("forwarder")
+            .signerName("Synthetic signer")
+            .signerPosition("Director")
             .adminNoticePendingSinceEpochMillis(marker)
             .reservationTokenHash(binding)
             .signerEmail("signer@example.org")
