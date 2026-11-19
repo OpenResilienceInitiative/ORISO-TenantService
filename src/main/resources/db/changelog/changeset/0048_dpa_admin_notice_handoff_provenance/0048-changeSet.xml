@@ -1,6 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.2.xsd">
+  <changeSet author="oriso" id="checkDpaAdminNoticeHandoffProvenanceShape">
+    <preConditions onFail="HALT" onError="HALT"
+      onFailMessage="Cannot migrate an incompatible receipt provenance column. Expect a nullable BIGINT with no default.">
+      <sqlCheck expectedResult="0">
+        SELECT COUNT(*) FROM information_schema.columns
+        WHERE table_schema = SCHEMA()
+          AND LOWER(table_name) = 'tenant_dpa_signature'
+          AND LOWER(column_name) = 'admin_notice_handoff_signed_at_epoch_millis'
+          AND NOT (UPPER(data_type) = 'BIGINT' AND is_nullable = 'YES'
+            AND is_generated = 'NEVER' AND COALESCE(UPPER(column_default), 'NULL') = 'NULL')
+      </sqlCheck>
+    </preConditions>
+    <rollback/>
+  </changeSet>
   <changeSet author="oriso" id="retainDpaAdminNoticeHandoffProvenance">
+    <!-- Do not record preexisting DDL. A rollback must leave its receipt data intact. -->
+    <preConditions onFail="CONTINUE" onError="HALT">
+      <not>
+        <columnExists tableName="tenant_dpa_signature" columnName="admin_notice_handoff_signed_at_epoch_millis"/>
+      </not>
+    </preConditions>
     <addColumn tableName="tenant_dpa_signature">
       <column name="admin_notice_handoff_signed_at_epoch_millis" type="bigint"/>
     </addColumn>
