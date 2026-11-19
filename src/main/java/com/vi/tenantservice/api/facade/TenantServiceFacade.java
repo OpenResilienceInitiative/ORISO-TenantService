@@ -641,7 +641,7 @@ public class TenantServiceFacade {
     }
   }
 
-  private void updateExtendedSettingsAsConsultingType(
+  private Optional<FullConsultingTypeResponseDTO> updateExtendedSettingsAsConsultingType(
       MultilingualTenantDTO sanitizedTenantDTO, Long tenantId) {
     FullConsultingTypeResponseDTO consultingTypesByTenantId =
         consultingTypeService.getConsultingTypesByTenantId(tenantId.intValue());
@@ -650,15 +650,17 @@ public class TenantServiceFacade {
         && sanitizedTenantDTO.getSettings().getExtendedSettings() != null) {
       if (extendedTenantSettingsChanged(
           consultingTypesByTenantId, sanitizedTenantDTO.getSettings().getExtendedSettings())) {
-        consultingTypeService.patchConsultingType(
-            consultingTypesByTenantId.getId(),
-            consultingTypePatchDTOConverter.convertToConsultingTypeServiceModel(
-                sanitizedTenantDTO.getSettings().getExtendedSettings()));
+        return Optional.ofNullable(
+            consultingTypeService.patchConsultingType(
+                consultingTypesByTenantId.getId(),
+                consultingTypePatchDTOConverter.convertToConsultingTypeServiceModel(
+                    sanitizedTenantDTO.getSettings().getExtendedSettings())));
       } else {
         log.debug(
             "Skipping consulting types update during tenant update, these settings did not change");
       }
     }
+    return Optional.empty();
   }
 
   private boolean extendedTenantSettingsChanged(
@@ -705,9 +707,10 @@ public class TenantServiceFacade {
     updatedEntity =
         tenantLegalVersionService.saveRecordingPublications(
             publishedBefore, () -> tenantService.update(entityToSave));
-    updateExtendedSettingsAsConsultingType(sanitizedTenantDTO, existingTenantEntity.getId());
+    var confirmedConsultingType =
+        updateExtendedSettingsAsConsultingType(sanitizedTenantDTO, existingTenantEntity.getId());
     log.info("Tenant with id {} updated", existingTenantEntity.getId());
-    return getConvertedAndEnrichedTenant(updatedEntity);
+    return getConvertedAndEnrichedTenant(updatedEntity, confirmedConsultingType);
   }
 
   /**
@@ -1008,10 +1011,21 @@ public class TenantServiceFacade {
   }
 
   private MultilingualTenantDTO getConvertedAndEnrichedTenant(TenantData tenantEntity) {
+    return getConvertedAndEnrichedTenant(tenantEntity, Optional.empty());
+  }
+
+  private MultilingualTenantDTO getConvertedAndEnrichedTenant(
+      TenantData tenantEntity, Optional<FullConsultingTypeResponseDTO> confirmedConsultingType) {
     var multilingualTenantDTO = tenantConverter.toMultilingualDTO(tenantEntity);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(multilingualTenantDTO);
     enrichWithAdminDataIfSuperadmin(multilingualTenantDTO);
-    enrichWithConsultingTypeSettings(multilingualTenantDTO, tenantEntity.getId());
+    // A confirmed PATCH already has the same response shape as the readback.
+    var consultingType =
+        confirmedConsultingType.orElseGet(
+            () ->
+                consultingTypeService.getConsultingTypesByTenantId(
+                    tenantEntity.getId().intValue()));
+    enrichWithConsultingTypeSettings(multilingualTenantDTO, consultingType);
     return multilingualTenantDTO;
   }
 
@@ -1109,15 +1123,12 @@ public class TenantServiceFacade {
   }
 
   private void enrichWithConsultingTypeSettings(
-      MultilingualTenantDTO multilingualTenantDTO, Long tenantId) {
-    FullConsultingTypeResponseDTO consultingTypesByTenantId =
-        consultingTypeService.getConsultingTypesByTenantId(tenantId.intValue());
-    if (consultingTypesByTenantId != null) {
+      MultilingualTenantDTO multilingualTenantDTO, FullConsultingTypeResponseDTO consultingType) {
+    if (consultingType != null) {
       multilingualTenantDTO
           .getSettings()
           .setExtendedSettings(
-              consultingTypePatchDTOConverter.convertConsultingTypePatchDTO(
-                  consultingTypesByTenantId));
+              consultingTypePatchDTOConverter.convertConsultingTypePatchDTO(consultingType));
     }
   }
 
