@@ -65,29 +65,35 @@ public class DpaAdminNoticeOutboxService {
   }
 
   /**
-   * Records the original signed-event proof and clears its pending status after a future trusted
-   * caller independently proves durable ownership. Intentionally has no controller or legacy-hint
-   * caller.
+   * Confirms the exact current event after the trusted consumer has durably taken ownership.
+   * Retained handoff provenance lets the same consumer repeat a request whose response was lost.
    */
   @Transactional
-  boolean acknowledge(long eventId, long signedAtEpochMillis) {
-    var event = signatures.findPendingAdminNotice(eventId, signedAtEpochMillis);
-    if (event.isEmpty()) {
+  public boolean acknowledge(long eventId, long signedAtEpochMillis) {
+    var candidate =
+        signatures
+            .findExactAdminNotice(eventId)
+            .filter(row -> row.getSignedAtEpochMillis() == signedAtEpochMillis);
+    if (candidate.isEmpty()) {
       return false;
     }
-    var signature = event.get();
-    var tenantId = signature.getTenantId();
+    var tenantId = candidate.get().getTenantId();
     // Hold the authoritative reservation row through the conditional update so it cannot be
     // released and reused between validation and acknowledgement.
     var reservation = reservations.findByTenantIdForUpdate(tenantId);
-    if (!eligible(
-        signature.getReservationTokenHash(),
-        reservation.map(TenantIdReservationEntity::getToken).orElse(null),
-        reservation.map(TenantIdReservationEntity::getStatus).orElse(null),
-        tenants.existsById(tenantId))) {
+    // Use the current locked signature even if another request committed after discovery.
+    var locked = signatures.lockExactAdminNotice(eventId, signedAtEpochMillis);
+    if (locked.isEmpty()
+        || !eligible(
+            locked.get().getReservationTokenHash(),
+            reservation.map(TenantIdReservationEntity::getToken).orElse(null),
+            reservation.map(TenantIdReservationEntity::getStatus).orElse(null),
+            tenants.existsById(tenantId))) {
       return false;
     }
-    return signatures.clearPendingAdminNotice(eventId, signedAtEpochMillis) == 1;
+    return Long.valueOf(signedAtEpochMillis)
+            .equals(locked.get().getAdminNoticeHandoffSignedAtEpochMillis())
+        || signatures.clearPendingAdminNotice(eventId, signedAtEpochMillis) == 1;
   }
 
   private static boolean eligible(
