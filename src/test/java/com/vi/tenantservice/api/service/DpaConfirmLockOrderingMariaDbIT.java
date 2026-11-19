@@ -164,9 +164,21 @@ class DpaConfirmLockOrderingMariaDbIT {
         pool.shutdownNow();
       }
 
-      assertThat(signatureRepository.findByTenantIdAndStatus(TENANT_ID, DpaSignatureStatus.SIGNED))
-          .as("round %s: exactly one signature is recorded", round)
-          .hasSize(1);
+      var auditRows = signatureRepository.findByTenantId(TENANT_ID);
+      assertThat(auditRows).hasSize(2);
+      assertThat(auditRows)
+          .filteredOn(signature -> signature.getStatus() == DpaSignatureStatus.SIGNED)
+          .singleElement()
+          .satisfies(
+              winner -> {
+                assertThat(winner.getSignedAtEpochMillis()).isNotNull();
+                assertThat(winner.getAdminNoticePendingSinceEpochMillis())
+                    .isEqualTo(winner.getSignedAtEpochMillis());
+              });
+      assertThat(auditRows)
+          .filteredOn(signature -> signature.getStatus() == DpaSignatureStatus.INVALIDATED)
+          .singleElement()
+          .satisfies(loser -> assertThat(loser.getAdminNoticePendingSinceEpochMillis()).isNull());
     }
   }
 

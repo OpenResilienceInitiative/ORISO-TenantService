@@ -94,6 +94,13 @@ public class TenantDpaSignatureEntity {
   @Column(name = "signed_at_epoch_millis")
   private Long signedAtEpochMillis;
 
+  /**
+   * The time an external confirmation staged its ADMIN notice. The signature row ID identifies the
+   * event. Null denotes a row without a pending handoff, including historical signatures.
+   */
+  @Column(name = "admin_notice_pending_since_epoch_millis")
+  private Long adminNoticePendingSinceEpochMillis;
+
   /** Whether this contract was still governing when signed; null retains legacy audit semantics. */
   @Column(name = "current_version_when_signed")
   @Convert(converter = NumericBooleanConverter.class)
