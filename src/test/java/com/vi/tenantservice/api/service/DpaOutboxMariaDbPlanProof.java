@@ -23,6 +23,8 @@ public final class DpaOutboxMariaDbPlanProof {
   private static final long SIGNED_AT = 1_763_546_400_123L;
   private static final List<Long> CURRENT =
       List.of(QUEUE_START + 4, QUEUE_START + 5, QUEUE_START + 6);
+  private static final String STAGE_FLAG = "proof_exact_admin_stage";
+  private static final String STAGE_INDEX = "idx_proof_exact_admin_stage_id";
   private static final Pattern SIGNATURE_ALIAS =
       Pattern.compile(
           "\\bfrom\\s+(?:`?\\w+`?\\.)?`?tenant_dpa_signature`?\\s+(?:as\\s+)?`?(\\w+)`?",
@@ -58,11 +60,10 @@ public final class DpaOutboxMariaDbPlanProof {
     print("DPA_OUTBOX_MARIADB_SCHEMA", Map.of("version", version, "indexes", indexes));
 
     seedHistory(1, 10_000);
-    var small = measure(10_000);
-    jdbc.update(
-        "delete from tenant_dpa_signature where tenant_id = ? and id >= ?", tenantId, QUEUE_START);
+    seedExcludedStageVariants();
+    var small = compareIndexAt(10_000);
     seedHistory(10_001, 100_000);
-    var large = measure(100_000);
+    var large = compareIndexAt(100_000);
     var comparison = new LinkedHashMap<String, RowWork>();
     for (String scenario : small.keySet()) {
       var tenThousand = small.get(scenario);
@@ -74,7 +75,43 @@ public final class DpaOutboxMariaDbPlanProof {
     print("DPA_OUTBOX_MARIADB_HISTORY_COMPARISON", comparison);
   }
 
-  private Map<String, Double> measure(int historyRows) throws Exception {
+  private Map<String, Double> compareIndexAt(int historyRows) throws Exception {
+    var baselinePages = new LinkedHashMap<String, RawPage>();
+    var baseline = measure(historyRows, baselinePages, false);
+    clearQueue();
+    // This schema exists only inside the disposable MariaDB test container. Preserve NULL
+    // semantics by selecting 1 only where all three original predicates are true.
+    jdbc.execute(
+        """
+        alter table tenant_dpa_signature add column proof_exact_admin_stage tinyint generated always as (
+          case when signature_status = 'SIGNED' and source = 'FORWARDED_EXTERNAL'
+            and admin_notice_pending_since_epoch_millis = signed_at_epoch_millis
+          then 1 else 0 end
+        ) virtual
+        """);
+    try {
+      jdbc.execute(
+          "create index " + STAGE_INDEX + " on tenant_dpa_signature (" + STAGE_FLAG + ", id)");
+      try {
+        var candidate = measure(historyRows, baselinePages, true);
+        var comparison = new LinkedHashMap<String, IndexWork>();
+        for (var metric : candidate.entrySet()) {
+          comparison.put(
+              metric.getKey(), new IndexWork(baseline.get(metric.getKey()), metric.getValue()));
+        }
+        print("DPA_OUTBOX_MARIADB_INDEX_COMPARISON", new IndexComparison(historyRows, comparison));
+      } finally {
+        jdbc.execute("drop index " + STAGE_INDEX + " on tenant_dpa_signature");
+      }
+    } finally {
+      jdbc.execute("alter table tenant_dpa_signature drop column " + STAGE_FLAG);
+      clearQueue();
+    }
+    return baseline;
+  }
+
+  private Map<String, Double> measure(
+      int historyRows, Map<String, RawPage> baselinePages, boolean generated) throws Exception {
     assertThat(
             jdbc.queryForObject(
                 "select count(*) from tenant_dpa_signature where tenant_id = ? and id < ?",
@@ -84,23 +121,43 @@ public final class DpaOutboxMariaDbPlanProof {
         .isEqualTo(historyRows);
     jdbc.execute("ANALYZE TABLE tenant_dpa_signature");
     Map<String, Double> work = new LinkedHashMap<>();
-    work.put("empty", poll(historyRows, "empty", 0, 50, 0, List.of(), null));
-    work.put("acknowledged-key", exact(historyRows, "acknowledged-key", HISTORY_START + 2, true));
-    work.put("unstaged-key", exact(historyRows, "unstaged-key", HISTORY_START + 1, false));
+    work.put(
+        "empty", poll(historyRows, "empty", 0, 50, 0, List.of(), null, baselinePages, generated));
+    if (!generated) {
+      work.put("acknowledged-key", exact(historyRows, "acknowledged-key", HISTORY_START + 2, true));
+      work.put("unstaged-key", exact(historyRows, "unstaged-key", HISTORY_START + 1, false));
+    }
 
     for (long id : CURRENT) seedPending(id, currentBinding);
     jdbc.execute("ANALYZE TABLE tenant_dpa_signature");
-    work.put("sparse", poll(historyRows, "sparse", 0, 50, CURRENT.size(), CURRENT, null));
-    work.put("pending-key", exact(historyRows, "pending-key", CURRENT.getFirst(), true));
+    work.put(
+        "sparse",
+        poll(
+            historyRows, "sparse", 0, 50, CURRENT.size(), CURRENT, null, baselinePages, generated));
+    if (!generated)
+      work.put("pending-key", exact(historyRows, "pending-key", CURRENT.getFirst(), true));
 
     String previousBinding = DpaSignToken.hash("previous-synthetic-reservation");
     for (long id = QUEUE_START; id < CURRENT.getFirst(); id++) seedPending(id, previousBinding);
     jdbc.execute("ANALYZE TABLE tenant_dpa_signature");
     long afterStale = CURRENT.getFirst() - 1;
     work.put(
-        "stale-first-page", poll(historyRows, "stale-first-page", 0, 4, 7, List.of(), afterStale));
-    work.put("after-stale", poll(historyRows, "after-stale", afterStale, 4, 7, CURRENT, null));
-    work.put("stale-key", exact(historyRows, "stale-key", QUEUE_START, false));
+        "stale-first-page",
+        poll(
+            historyRows,
+            "stale-first-page",
+            0,
+            4,
+            7,
+            List.of(),
+            afterStale,
+            baselinePages,
+            generated));
+    work.put(
+        "after-stale",
+        poll(
+            historyRows, "after-stale", afterStale, 4, 7, CURRENT, null, baselinePages, generated));
+    if (!generated) work.put("stale-key", exact(historyRows, "stale-key", QUEUE_START, false));
     return work;
   }
 
@@ -111,18 +168,33 @@ public final class DpaOutboxMariaDbPlanProof {
       int size,
       int staged,
       List<Long> expectedIds,
-      Long next)
+      Long next,
+      Map<String, RawPage> baselinePages,
+      boolean generated)
       throws Exception {
     var captured = capture(() -> outbox.readPending(afterId, size));
     var page = captured.result();
     assertThat(page.events()).extracting(PendingEvent::id).containsExactlyElementsOf(expectedIds);
     assertThat(page.events()).allSatisfy(event -> assertThat(event.tenantId()).isEqualTo(tenantId));
     assertThat(page.nextAfterId()).isEqualTo(next);
+    String sql = generated ? useGeneratedFlag(captured.sql()) : captured.sql();
+    var bindings = List.of(afterId, size + 1);
+    var ids = jdbc.query(sql, (row, rowNumber) -> row.getLong(1), bindings.toArray());
+    Long cursor = ids.size() > size ? ids.get(size - 1) : null;
+    var raw = new RawPage(ids, cursor);
+    assertThat(raw.nextAfterId()).isEqualTo(page.nextAfterId());
+    if (generated) {
+      assertThat(raw)
+          .as("same ordered raw page and lookahead cursor for %s", scenario)
+          .isEqualTo(baselinePages.get(scenario));
+    } else {
+      baselinePages.put(scenario, raw);
+    }
     return explain(
         history,
-        scenario,
-        captured.sql(),
-        List.of(afterId, size + 1),
+        generated ? scenario + "-generated-index" : scenario,
+        sql,
+        bindings,
         Map.of(
             "stagedRows",
             staged,
@@ -130,8 +202,57 @@ public final class DpaOutboxMariaDbPlanProof {
             size,
             "returnedIds",
             expectedIds,
+            "rawOrderedIds",
+            raw.orderedIds(),
             "hasContinuation",
             next != null));
+  }
+
+  private static String useGeneratedFlag(String sql) {
+    var alias = SIGNATURE_ALIAS.matcher(sql);
+    assertThat(alias.find()).as("signature table for the candidate SQL").isTrue();
+    String prefix = alias.group(1) + ".";
+    String predicate =
+        prefix
+            + "signature_status='SIGNED' and "
+            + prefix
+            + "source='FORWARDED_EXTERNAL' and "
+            + prefix
+            + "admin_notice_pending_since_epoch_millis="
+            + prefix
+            + "signed_at_epoch_millis";
+    assertThat(sql)
+        .as("replace only the exact pending predicate of the captured SQL")
+        .containsOnlyOnce(predicate);
+    return sql.replace(predicate, prefix + STAGE_FLAG + "=1");
+  }
+
+  private void clearQueue() {
+    jdbc.update(
+        "delete from tenant_dpa_signature where tenant_id = ? and id >= ?", tenantId, QUEUE_START);
+  }
+
+  private void seedExcludedStageVariants() {
+    // These rows retain the same history size and exercise false and SQL UNKNOWN branches.
+    jdbc.update(
+        """
+        update tenant_dpa_signature
+        set admin_notice_pending_since_epoch_millis = case when id = ? then ? else ? end,
+          signature_status = case when id = ? then 'INVALIDATED' else signature_status end,
+          source = case when id = ? then 'WIZARD_SELF' when id = ? then null else source end,
+          signed_at_epoch_millis = case when id = ? then null else signed_at_epoch_millis end
+        where tenant_id = ? and id between ? and ?
+        """,
+        HISTORY_START + 5,
+        SIGNED_AT + 1,
+        SIGNED_AT,
+        HISTORY_START + 3,
+        HISTORY_START + 4,
+        HISTORY_START + 7,
+        HISTORY_START + 6,
+        tenantId,
+        HISTORY_START + 3,
+        HISTORY_START + 7);
   }
 
   private Double exact(int history, String scenario, long id, boolean visible) throws Exception {
@@ -164,7 +285,14 @@ public final class DpaOutboxMariaDbPlanProof {
     boolean counted =
         signaturePlan.path("r_rows").isNumber() && signaturePlan.path("r_loops").isNumber();
     if (bindings.size() > 1) {
-      assertThat(counted).as("actual signature rows for a page scan: %s", executed).isTrue();
+      var optimizerMessage = executed.findValue("message");
+      boolean emptyFlagRangeProvedAtPlanning =
+          scenario.equals("empty-generated-index")
+              && optimizerMessage != null
+              && optimizerMessage.asText().contains("Impossible WHERE");
+      assertThat(counted || emptyFlagRangeProvedAtPlanning)
+          .as("actual signature rows or an empty flag range optimized away: %s", executed)
+          .isTrue();
     }
     // MariaDB can evaluate a constant primary-key row during optimization. Preserve the estimate
     // or optimizer message where ANALYZE does not report runtime reads for that lookup.
@@ -267,6 +395,12 @@ public final class DpaOutboxMariaDbPlanProof {
   }
 
   private record Captured<T>(T result, String sql) {}
+
+  private record RawPage(List<Long> orderedIds, Long nextAfterId) {}
+
+  private record IndexComparison(int historyRows, Map<String, IndexWork> cases) {}
+
+  private record IndexWork(Double baselineRows, Double generatedIndexRows) {}
 
   private record RowWork(Double rowsAt10kHistory, Double rowsAt100kHistory) {}
 
