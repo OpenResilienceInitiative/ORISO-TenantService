@@ -59,6 +59,7 @@ class DpaAdminNoticeMigrationConvergenceIT {
               mariaDb.getJdbcUrl(), mariaDb.getUsername(), mariaDb.getPassword())) {
         verifyReplay(connection);
         verifyConflicts(connection);
+        verifyIgnoredIndex(connection);
       }
     }
   }
@@ -140,6 +141,31 @@ class DpaAdminNoticeMigrationConvergenceIT {
     assertThatThrownBy(() -> apply(connection, INDEX))
         .isInstanceOf(LiquibaseException.class)
         .hasStackTraceContaining("incompatible receipt pending-stage column or index");
+  }
+
+  private static void verifyIgnoredIndex(Connection connection) throws Exception {
+    var jdbc = new JdbcTemplate(new SingleConnectionDataSource(connection, true));
+    reset(jdbc);
+    jdbc.execute(ADD_STAGE);
+    jdbc.execute(ADD_INDEX + " (admin_notice_pending_stage, id)");
+    jdbc.execute(
+        """
+        ALTER TABLE tenant_dpa_signature
+          ALTER INDEX idx_dpa_admin_notice_pending_stage_id IGNORED
+        """);
+
+    assertThatThrownBy(() -> apply(connection, INDEX))
+        .isInstanceOf(LiquibaseException.class)
+        .hasStackTraceContaining("incompatible receipt pending-stage column or index");
+    assertThat(
+            jdbc.queryForList(
+                """
+                SELECT ignored FROM information_schema.statistics
+                WHERE table_schema = SCHEMA() AND table_name = 'tenant_dpa_signature'
+                  AND index_name = 'idx_dpa_admin_notice_pending_stage_id'
+                """,
+                String.class))
+        .containsExactly("YES", "YES");
   }
 
   private static void reset(JdbcTemplate jdbc) {

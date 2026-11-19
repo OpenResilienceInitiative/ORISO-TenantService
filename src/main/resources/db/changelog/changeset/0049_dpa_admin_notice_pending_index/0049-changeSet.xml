@@ -29,6 +29,7 @@
           <sqlCheck expectedResult="1">
             SELECT CASE WHEN COUNT(*) = 0 OR (COUNT(*) = 2 AND SUM(CASE
               WHEN non_unique = 1 AND UPPER(index_type) = 'BTREE' AND s.collation = 'A'
+                AND s.ignored = 'NO'
                 AND ((seq_in_index = 1 AND LOWER(column_name) = 'admin_notice_pending_stage')
                   OR (seq_in_index = 2 AND LOWER(column_name) = 'id'))
                 THEN 1 ELSE 0 END) = 2) THEN 1 ELSE 0 END
