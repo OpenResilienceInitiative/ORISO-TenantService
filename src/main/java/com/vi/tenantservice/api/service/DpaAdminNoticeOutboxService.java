@@ -9,13 +9,14 @@ import com.vi.tenantservice.api.repository.TenantRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
-@RequiredArgsConstructor
 public class DpaAdminNoticeOutboxService {
 
   private static final int MAX_BATCH = 100;
@@ -23,6 +24,18 @@ public class DpaAdminNoticeOutboxService {
   private final TenantDpaSignatureRepository signatures;
   private final TenantIdReservationRepository reservations;
   private final TenantRepository tenants;
+  private final TransactionTemplate acknowledgementTransaction;
+
+  public DpaAdminNoticeOutboxService(
+      TenantDpaSignatureRepository signatures,
+      TenantIdReservationRepository reservations,
+      TenantRepository tenants,
+      PlatformTransactionManager transactionManager) {
+    this.signatures = signatures;
+    this.reservations = reservations;
+    this.tenants = tenants;
+    this.acknowledgementTransaction = new TransactionTemplate(transactionManager);
+  }
 
   @Transactional(readOnly = true)
   public PendingPage readPending(long afterId, int limit) {
@@ -68,16 +81,23 @@ public class DpaAdminNoticeOutboxService {
    * Confirms the exact current event after the trusted consumer has durably taken ownership.
    * Retained handoff provenance lets the same consumer repeat a request whose response was lost.
    */
-  @Transactional
+  @Transactional(propagation = Propagation.NEVER)
   public boolean acknowledge(long eventId, long signedAtEpochMillis) {
+    // Discover outside the write transaction. Under MariaDB REPEATABLE READ the tenant-existence
+    // snapshot must start after the reservation and signature locks have been acquired.
     var candidate =
         signatures
             .findExactAdminNotice(eventId)
             .filter(row -> row.getSignedAtEpochMillis() == signedAtEpochMillis);
-    if (candidate.isEmpty()) {
-      return false;
-    }
-    var tenantId = candidate.get().getTenantId();
+    return candidate
+        .map(
+            row ->
+                acknowledgementTransaction.execute(
+                    status -> acknowledgeLocked(row.getTenantId(), eventId, signedAtEpochMillis)))
+        .orElse(false);
+  }
+
+  private boolean acknowledgeLocked(long tenantId, long eventId, long signedAtEpochMillis) {
     // Hold the authoritative reservation row through the conditional update so it cannot be
     // released and reused between validation and acknowledgement.
     var reservation = reservations.findByTenantIdForUpdate(tenantId);

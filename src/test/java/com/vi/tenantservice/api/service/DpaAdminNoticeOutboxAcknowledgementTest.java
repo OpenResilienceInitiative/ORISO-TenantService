@@ -9,12 +9,16 @@ import com.vi.tenantservice.api.model.TenantIdReservationStatus;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import java.time.LocalDateTime;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
@@ -25,6 +29,7 @@ import org.springframework.test.context.TestPropertySource;
       "spring.jpa.hibernate.ddl-auto=create-drop"
     })
 @Import(DpaAdminNoticeOutboxService.class)
+@Transactional(propagation = Propagation.NOT_SUPPORTED)
 class DpaAdminNoticeOutboxAcknowledgementTest {
 
   private static final long SIGNED_AT = 1_700_000_000_123L;
@@ -32,6 +37,13 @@ class DpaAdminNoticeOutboxAcknowledgementTest {
   @Autowired private DpaAdminNoticeOutboxService outbox;
   @Autowired private TenantDpaSignatureRepository signatures;
   @Autowired private TenantIdReservationRepository reservations;
+  @Autowired private JdbcTemplate jdbcTemplate;
+
+  @AfterEach
+  void cleanUp() {
+    jdbcTemplate.update("delete from tenant_dpa_signature where tenant_id in (9781, 9782, 9783)");
+    jdbcTemplate.update("delete from tenant_id_reservation where tenant_id in (9781, 9782, 9783)");
+  }
 
   @Test
   void acknowledgementIsExactAndSafeToRepeat() {

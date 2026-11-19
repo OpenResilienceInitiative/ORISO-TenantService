@@ -1,6 +1,8 @@
 package com.vi.tenantservice.api.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mockingDetails;
 
 import com.vi.tenantservice.TenantServiceApplication;
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
@@ -29,6 +31,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.MariaDBContainer;
 
 /**
@@ -65,6 +71,7 @@ import org.testcontainers.containers.MariaDBContainer;
     properties = {
       "spring.profiles.active=testing",
       "spring.datasource.driver-class-name=org.mariadb.jdbc.Driver",
+      "spring.datasource.hikari.transaction-isolation=TRANSACTION_REPEATABLE_READ",
       "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MariaDBDialect",
       "spring.liquibase.enabled=true",
       "spring.liquibase.change-log=classpath:db/changelog/tenantservice-master.xml",
@@ -97,8 +104,10 @@ class DpaConfirmLockOrderingMariaDbIT {
   @Autowired private DpaAdminNoticeOutboxService outbox;
   @Autowired private TenantRepository tenantRepository;
   @Autowired private TenantDpaSignatureRepository signatureRepository;
-  @Autowired private TenantIdReservationRepository reservationRepository;
+  @MockitoSpyBean private TenantIdReservationRepository reservationRepository;
   @Autowired private JdbcTemplate jdbcTemplate;
+  @Autowired private TenantService tenantService;
+  @Autowired private PlatformTransactionManager transactionManager;
 
   @BeforeEach
   @AfterEach
@@ -109,14 +118,22 @@ class DpaConfirmLockOrderingMariaDbIT {
   }
 
   private void givenRegisteredTenantWithReservation() {
+    givenReservation(TenantIdReservationStatus.ASSIGNED);
+    tenantRepository.saveAndFlush(tenantWithAgreement());
+  }
+
+  private void givenReservation(TenantIdReservationStatus status) {
     reservationRepository.saveAndFlush(
         TenantIdReservationEntity.builder()
             .tenantId(TENANT_ID)
             .token("reservation-token")
-            .status(TenantIdReservationStatus.ASSIGNED)
+            .status(status)
             .createDate(LocalDateTime.now())
             .updateDate(LocalDateTime.now())
             .build());
+  }
+
+  private TenantEntity tenantWithAgreement() {
     var tenant = new TenantEntity();
     tenant.setId(TENANT_ID);
     tenant.setName("Lock Ordering");
@@ -126,7 +143,7 @@ class DpaConfirmLockOrderingMariaDbIT {
     tenant.setUpdateDate(LocalDateTime.now());
     tenant.setContentDataProcessingAgreement("<p>AVV</p>");
     tenant.setContentDataProcessingAgreementActivationDate(VERSION);
-    tenantRepository.saveAndFlush(tenant);
+    return tenant;
   }
 
   @Test
@@ -171,6 +188,43 @@ class DpaConfirmLockOrderingMariaDbIT {
     assertThat(outbox.acknowledge(signed.getId(), signed.getSignedAtEpochMillis())).isTrue();
     assertThat(outbox.readPending(0, 2).events()).isEmpty();
     assertThat(outbox.readExact(signed.getId())).isPresent();
+  }
+
+  @Test
+  void acknowledge_Should_seeRegistrationCommittedBetweenDiscoveryAndReservationLock() {
+    givenReservation(TenantIdReservationStatus.RESERVED);
+    var token =
+        tenantDpaService.createSignInvite(
+            TENANT_ID, VERSION, Duration.ofDays(14), null, "reservation-token");
+    var signed =
+        tenantDpaService.confirmSignature(
+            token,
+            "Synthetic signer",
+            "Director",
+            "signer@example.test",
+            "Organisation",
+            false,
+            "de");
+    assertThat(tenantRepository.existsById(TENANT_ID)).isFalse();
+    assertThat(outbox.readPending(0, 2).events())
+        .extracting(DpaAdminNoticeOutboxService.PendingEvent::id)
+        .containsExactly(signed.getId());
+
+    var registration = new TransactionTemplate(transactionManager);
+    registration.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+    var realLock =
+        mockingDetails(reservationRepository).getMockCreationSettings().getDefaultAnswer();
+    doAnswer(
+            invocation -> {
+              registration.executeWithoutResult(
+                  status -> tenantService.create(tenantWithAgreement(), "reservation-token"));
+              return realLock.answer(invocation);
+            })
+        .when(reservationRepository)
+        .findByTenantIdForUpdate(TENANT_ID);
+
+    assertThat(outbox.acknowledge(signed.getId(), signed.getSignedAtEpochMillis())).isTrue();
+    assertThat(outbox.readPending(0, 2).events()).isEmpty();
   }
 
   @Test
