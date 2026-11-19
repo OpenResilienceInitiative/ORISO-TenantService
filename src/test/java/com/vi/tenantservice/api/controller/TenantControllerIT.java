@@ -9,7 +9,10 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -37,16 +40,24 @@ import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import com.vi.tenantservice.config.security.AuthorisationService;
+import com.vi.tenantservice.consultingtypeservice.generated.web.model.ConsultingTypePatchDTO;
+import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -55,6 +66,9 @@ import org.springframework.test.context.jdbc.Sql.ExecutionPhase;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.context.WebApplicationContext;
 
 @SpringBootTest(classes = TenantServiceApplication.class)
@@ -370,6 +384,113 @@ class TenantControllerIT {
             .andExpect(jsonPath("$.settings.topicsInRegistrationEnabled").value("true"))
             .andExpect(jsonPath("$.settings.activeLanguages").value(Lists.newArrayList("fr", "pl")))
             .andReturn();
+  }
+
+  private enum CtsSaveOutcome {
+    ACKNOWLEDGED,
+    REJECTED_BEFORE_WRITE,
+    ACKNOWLEDGEMENT_LOST_AFTER_WRITE
+  }
+
+  @ParameterizedTest
+  @EnumSource(CtsSaveOutcome.class)
+  void combinedTenantAndConsultingTypeSaveHasSeparateCommitBoundaries(CtsSaveOutcome outcome)
+      throws Exception {
+    assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+    var ctsDatabase =
+        new EmbeddedDatabaseBuilder()
+            .setType(EmbeddedDatabaseType.H2)
+            .generateUniqueName(true)
+            .build();
+    try {
+      var ctsStore = new JdbcTemplate(ctsDatabase);
+      ctsStore.execute(
+          "CREATE TABLE consulting_type (id INT PRIMARY KEY, language_formal BOOLEAN)");
+      ctsStore.update("INSERT INTO consulting_type VALUES (?, false)", CONSULTING_TYPE_ID);
+      var originalName =
+          jdbcTemplate.queryForObject("SELECT name FROM tenant WHERE id = 1", String.class);
+      var requestedName = "Settings transaction fixture";
+      giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+      when(consultingTypeService.getConsultingTypesByTenantId(1))
+          .thenAnswer(
+              call ->
+                  new FullConsultingTypeResponseDTO()
+                      .id(CONSULTING_TYPE_ID)
+                      .languageFormal(readLanguageFormality(ctsStore)));
+      when(consultingTypeService.patchConsultingType(eq(CONSULTING_TYPE_ID), any()))
+          .thenAnswer(
+              call -> {
+                assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+                assertThat(tenantRepository.findById(1L).orElseThrow().getName())
+                    .isEqualTo(requestedName);
+                ConsultingTypePatchDTO patch = call.getArgument(1);
+                assertThat(patch.getLanguageFormal()).isTrue();
+                if (outcome == CtsSaveOutcome.REJECTED_BEFORE_WRITE) {
+                  throw new HttpClientErrorException(HttpStatus.FORBIDDEN);
+                }
+                // An independent autocommit connection represents the remote CTS write.
+                try (var connection = ctsDatabase.getConnection();
+                    var update =
+                        connection.prepareStatement(
+                            "UPDATE consulting_type SET language_formal = ? WHERE id = ?")) {
+                  assertThat(connection.getAutoCommit()).isTrue();
+                  update.setBoolean(1, patch.getLanguageFormal());
+                  update.setInt(2, CONSULTING_TYPE_ID);
+                  assertThat(update.executeUpdate()).isEqualTo(1);
+                }
+                if (outcome == CtsSaveOutcome.ACKNOWLEDGEMENT_LOST_AFTER_WRITE) {
+                  throw new ResourceAccessException("Synthetic CTS acknowledgement lost");
+                }
+                return new FullConsultingTypeResponseDTO()
+                    .id(CONSULTING_TYPE_ID)
+                    .languageFormal(true);
+              });
+
+      var request =
+          multilingualTenantTestDataBuilder
+              .tenantDTO()
+              .withId(1L)
+              .withName(requestedName)
+              .withSubdomain("happylife")
+              .withLicensing(5)
+              .withSettings();
+      request
+          .build()
+          .getSettings()
+          .setExtendedSettings(
+              new com.vi.tenantservice.api.model.ConsultingTypePatchDTO().languageFormal(true));
+      var actor = new AuthenticationMockBuilder().withUserRole(TENANT_ADMIN.getValue()).build();
+      var result =
+          mockMvc
+              .perform(
+                  put(EXISTING_TENANT_VIA_ADMIN)
+                      .with(authentication(actor))
+                      .contentType(APPLICATION_JSON)
+                      .content(request.jsonify()))
+              .andReturn();
+
+      var acknowledged = outcome == CtsSaveOutcome.ACKNOWLEDGED;
+      assertThat(result.getResponse().getStatus())
+          .as("HTTP status for %s, resolved exception: %s", outcome, result.getResolvedException())
+          .isEqualTo(acknowledged ? 200 : 500);
+      if (!acknowledged) {
+        assertThat(result.getResponse().getContentAsString()).isEmpty();
+      }
+      assertThat(jdbcTemplate.queryForObject("SELECT name FROM tenant WHERE id = 1", String.class))
+          .isEqualTo(acknowledged ? requestedName : originalName);
+      assertThat(readLanguageFormality(ctsStore))
+          .isEqualTo(outcome != CtsSaveOutcome.REJECTED_BEFORE_WRITE);
+      verify(consultingTypeService).patchConsultingType(eq(CONSULTING_TYPE_ID), any());
+    } finally {
+      ctsDatabase.shutdown();
+    }
+  }
+
+  private static Boolean readLanguageFormality(JdbcTemplate ctsStore) {
+    return ctsStore.queryForObject(
+        "SELECT language_formal FROM consulting_type WHERE id = ?",
+        Boolean.class,
+        CONSULTING_TYPE_ID);
   }
 
   @Test
