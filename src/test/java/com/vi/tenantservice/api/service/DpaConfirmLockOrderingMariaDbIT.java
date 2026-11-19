@@ -69,11 +69,13 @@ import org.testcontainers.containers.MariaDBContainer;
       "spring.liquibase.enabled=true",
       "spring.liquibase.change-log=classpath:db/changelog/tenantservice-master.xml",
       "spring.liquibase.contexts=seed",
+      "spring.jpa.properties.hibernate.session_factory.statement_inspector=com.vi.tenantservice.api.service.DpaOutboxMariaDbPlanProof$SqlCapture",
       "spring.jpa.hibernate.ddl-auto=validate"
     })
 class DpaConfirmLockOrderingMariaDbIT {
 
   private static final long TENANT_ID = 777L;
+  private static final String RESERVATION_TOKEN = "reservation-token";
   private static final LocalDateTime VERSION = LocalDateTime.of(2026, 7, 1, 12, 0, 0);
   private static final int ROUNDS = 10;
 
@@ -94,6 +96,7 @@ class DpaConfirmLockOrderingMariaDbIT {
   }
 
   @Autowired private TenantDpaService tenantDpaService;
+  @Autowired private DpaAdminNoticeOutboxService outbox;
   @Autowired private TenantRepository tenantRepository;
   @Autowired private TenantDpaSignatureRepository signatureRepository;
   @Autowired private TenantIdReservationRepository reservationRepository;
@@ -111,7 +114,7 @@ class DpaConfirmLockOrderingMariaDbIT {
     reservationRepository.saveAndFlush(
         TenantIdReservationEntity.builder()
             .tenantId(TENANT_ID)
-            .token("reservation-token")
+            .token(RESERVATION_TOKEN)
             .status(TenantIdReservationStatus.ASSIGNED)
             .createDate(LocalDateTime.now())
             .updateDate(LocalDateTime.now())
@@ -126,6 +129,12 @@ class DpaConfirmLockOrderingMariaDbIT {
     tenant.setContentDataProcessingAgreement("<p>AVV</p>");
     tenant.setContentDataProcessingAgreementActivationDate(VERSION);
     tenantRepository.saveAndFlush(tenant);
+  }
+
+  @Test
+  void pendingAndExactOutboxPlansAreMeasuredAgainstFixedQueueAndGrowingHistory() throws Exception {
+    givenRegisteredTenantWithReservation();
+    new DpaOutboxMariaDbPlanProof(jdbcTemplate, outbox, TENANT_ID, RESERVATION_TOKEN).run();
   }
 
   @Test
