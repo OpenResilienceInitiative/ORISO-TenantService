@@ -1,5 +1,5 @@
 name: Reusable Docker build, scan and publish steps
-description: Build and scan the container image before optional publication to GHCR
+description: Scan the OCI archive before publishing the same image to GHCR
 
 inputs:
   push_to_ghcr:
@@ -10,7 +10,8 @@ inputs:
     required: true
   github_token:
     description: GitHub token used only to publish to GHCR
-    required: true
+    required: false
+    default: ''
   image_tags:
     description: Explicit image tags for a versioned release
     default: ''
@@ -37,31 +38,41 @@ runs:
         type=raw,value=pre-dev,enable=${{ github.ref == 'refs/heads/pre-dev' }}
         type=raw,value=speed-16aug,enable=${{ github.ref == 'refs/heads/speed/reflux-progress-exp-16-aug' }}
 
-  # Both builds use the Maven output in the same context, on the same builder
-  # and platform. Only the local Docker exporter needs attestations disabled.
-  - name: Build image locally for scanning
+  - name: Build the complete amd64 image without publishing
+    id: build
     uses: docker/build-push-action@v7
     with:
       context: .
       platforms: linux/amd64
       push: false
-      load: true
-      provenance: false
-      sbom: false
-      tags: ${{ inputs.image_name }}:ci-scan
+      outputs: type=oci,dest=${{ runner.temp }}/${{ inputs.image_name }}.tar
+      # Retain Buildx's publication provenance policy in the archive.
+      provenance: ${{ github.event.repository.private && 'mode=min' || 'mode=max' }}
       labels: ${{ inputs.image_labels || steps.meta.outputs.labels }}
       cache-from: type=gha,scope=${{ inputs.image_name }}
-      cache-to: ${{ inputs.push_to_ghcr != 'true' && format('type=gha,mode=max,scope={0}', inputs.image_name) || '' }}
+      cache-to: type=gha,mode=max,scope=${{ inputs.image_name }}
+
+  - name: Install OCI transport
+    shell: bash
+    run: |
+      if ! command -v skopeo >/dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends skopeo
+      fi
+
+  - name: Install Trivy
+    uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+    with:
+      version: v0.70.0
+      cache: true
 
   - name: Reject fixable high or critical image vulnerabilities
-    uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-    with:
-      image-ref: ${{ inputs.image_name }}:ci-scan
-      format: table
-      exit-code: '1'
-      ignore-unfixed: true
-      vuln-type: os,library
-      severity: CRITICAL,HIGH
+    id: scan
+    shell: bash
+    env:
+      IMAGE_ARCHIVE: ${{ runner.temp }}/${{ inputs.image_name }}.tar
+      EXPECTED_DIGEST: ${{ steps.build.outputs.digest }}
+    run: bash scripts/ci/scan-image-archive.sh "$IMAGE_ARCHIVE" linux/amd64 "$EXPECTED_DIGEST"
 
   - name: Login to GitHub Container Registry
     if: ${{ inputs.push_to_ghcr == 'true' }}
@@ -71,17 +82,16 @@ runs:
       username: ${{ github.actor }}
       password: ${{ inputs.github_token }}
 
-  - name: Build and publish Docker image
+  - name: Publish the scanned archive without rebuilding
+    id: publish
     if: ${{ inputs.push_to_ghcr == 'true' }}
-    uses: docker/build-push-action@v7
-    with:
-      context: .
-      platforms: linux/amd64
-      push: true
-      tags: ${{ inputs.image_tags || steps.meta.outputs.tags }}
-      labels: ${{ inputs.image_labels || steps.meta.outputs.labels }}
-      cache-from: type=gha,scope=${{ inputs.image_name }}
-      cache-to: type=gha,mode=max,scope=${{ inputs.image_name }}
+    shell: bash
+    env:
+      IMAGE_ARCHIVE: ${{ runner.temp }}/${{ inputs.image_name }}.tar
+      IMAGE_TAGS: ${{ inputs.image_tags || steps.meta.outputs.tags }}
+      EXPECTED_DIGEST: ${{ steps.build.outputs.digest }}
+      EXPECTED_ARCHIVE_SHA256: ${{ steps.scan.outputs.archive_sha256 }}
+    run: bash scripts/ci/publish-image-archive.sh "$IMAGE_ARCHIVE" "$EXPECTED_DIGEST" "$EXPECTED_ARCHIVE_SHA256"
 
   - name: Build Summary
     shell: bash
