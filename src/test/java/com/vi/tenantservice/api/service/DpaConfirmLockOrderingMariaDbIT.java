@@ -94,6 +94,7 @@ class DpaConfirmLockOrderingMariaDbIT {
   }
 
   @Autowired private TenantDpaService tenantDpaService;
+  @Autowired private DpaAdminNoticeOutboxService outbox;
   @Autowired private TenantRepository tenantRepository;
   @Autowired private TenantDpaSignatureRepository signatureRepository;
   @Autowired private TenantIdReservationRepository reservationRepository;
@@ -126,6 +127,50 @@ class DpaConfirmLockOrderingMariaDbIT {
     tenant.setContentDataProcessingAgreement("<p>AVV</p>");
     tenant.setContentDataProcessingAgreementActivationDate(VERSION);
     tenantRepository.saveAndFlush(tenant);
+  }
+
+  @Test
+  void migratedPendingIndex_Should_followConfirmationAndIdempotentAcknowledgement() {
+    givenRegisteredTenantWithReservation();
+    var token =
+        tenantDpaService.createSignInvite(
+            TENANT_ID, VERSION, Duration.ofDays(14), null, "reservation-token");
+    var signed =
+        tenantDpaService.confirmSignature(
+            token,
+            "Synthetic signer",
+            "Director",
+            "signer@example.test",
+            "Synthetic organisation",
+            false,
+            "de");
+    assertThat(
+            jdbcTemplate.queryForObject(
+                """
+        select extra from information_schema.columns
+        where table_schema = database() and table_name = 'tenant_dpa_signature'
+          and column_name = 'admin_notice_pending_stage'
+        """,
+                String.class))
+        .containsIgnoringCase("VIRTUAL GENERATED");
+    assertThat(
+            jdbcTemplate.queryForList(
+                """
+        select column_name from information_schema.statistics
+        where table_schema = database() and table_name = 'tenant_dpa_signature'
+          and index_name = 'idx_dpa_admin_notice_pending_stage_id'
+        order by seq_in_index
+        """,
+                String.class))
+        .containsExactly("admin_notice_pending_stage", "id");
+
+    assertThat(outbox.readPending(0, 2).events())
+        .extracting(DpaAdminNoticeOutboxService.PendingEvent::id)
+        .containsExactly(signed.getId());
+    assertThat(outbox.acknowledge(signed.getId(), signed.getSignedAtEpochMillis())).isTrue();
+    assertThat(outbox.acknowledge(signed.getId(), signed.getSignedAtEpochMillis())).isTrue();
+    assertThat(outbox.readPending(0, 2).events()).isEmpty();
+    assertThat(outbox.readExact(signed.getId())).isPresent();
   }
 
   @Test

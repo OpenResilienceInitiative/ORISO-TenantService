@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.2.xsd">
+  <changeSet author="oriso" id="deriveDpaAdminNoticePendingStage">
+    <!-- The generated column is virtual in MariaDB. This common syntax also runs on H2. -->
+    <sql>
+      ALTER TABLE tenant_dpa_signature ADD COLUMN admin_notice_pending_stage TINYINT GENERATED ALWAYS AS (
+        CASE WHEN signature_status = 'SIGNED' AND source = 'FORWARDED_EXTERNAL'
+          AND admin_notice_pending_since_epoch_millis = signed_at_epoch_millis
+        THEN 1 ELSE 0 END
+      )
+    </sql>
+    <rollback><dropColumn tableName="tenant_dpa_signature" columnName="admin_notice_pending_stage"/></rollback>
+  </changeSet>
+  <changeSet author="oriso" id="indexDpaAdminNoticePendingStageById">
+    <createIndex tableName="tenant_dpa_signature" indexName="idx_dpa_admin_notice_pending_stage_id">
+      <column name="admin_notice_pending_stage"/>
+      <column name="id"/>
+    </createIndex>
+    <rollback><dropIndex tableName="tenant_dpa_signature" indexName="idx_dpa_admin_notice_pending_stage_id"/></rollback>
+  </changeSet>
+</databaseChangeLog>
