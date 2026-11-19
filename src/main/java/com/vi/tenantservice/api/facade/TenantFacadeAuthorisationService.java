@@ -142,6 +142,25 @@ public class TenantFacadeAuthorisationService {
         && isPlatformAdministrator();
   }
 
+  /** Empty means the human platform administrator may search across organisations. */
+  Optional<Long> tenantRestrictionForSearch() {
+    if (mayListEveryTenant()) {
+      return Optional.empty();
+    }
+    if (isTechnicalUser()) {
+      throw new AccessDeniedException("Technical callers cannot search organisations");
+    }
+    try {
+      var tenantId = authorisationService.findTenantIdInAccessToken().filter(id -> id > 0);
+      if (tenantId.isPresent()) {
+        return tenantId;
+      }
+    } catch (NumberFormatException invalidTenantId) {
+      throw new AccessDeniedException("Invalid tenant id in access token", invalidTenantId);
+    }
+    throw new AccessDeniedException("Organisation search requires a concrete tenant");
+  }
+
   /**
    * Träger names for the platform statistics panel (ORISO-UserService#1666): the platform
    * administrator, or the Statistik-Leser whose token names the platform tenant 0. A reader token

@@ -1565,13 +1565,15 @@ public class TenantServiceFacade {
     var direction = isAscending ? Direction.ASC : Direction.DESC;
     var pageRequest = PageRequest.of(pageNumber, pageSize, direction, fieldName);
     var tokens = TenantSearchText.tokens(infix);
+    var tenantRestriction = tenantFacadeAuthorisationService.tenantRestrictionForSearch();
     if (tokens.isEmpty()) {
-      return mapOf(tenantService.findAllTenantDataExceptTechnicalByInfix(infix, pageRequest));
+      return mapOf(
+          tenantService.searchTenantData(tokens, Map.of(), pageRequest, tenantRestriction));
     }
     // Owner lookups are mandatory for matching. Do not hide an outage as an empty result.
     var emailsByTenant = new HashMap<Long, List<String>>();
     var emailMatches = new HashMap<String, Set<Long>>();
-    for (var id : tenantService.searchableTenantIds()) {
+    for (var id : tenantService.searchableTenantIds(tenantRestriction)) {
       var emails = getAdminEmails(userAdminService.getTenantAdmins(Math.toIntExact(id)));
       emailsByTenant.put(id, emails);
       for (var token : tokens) {
@@ -1583,7 +1585,8 @@ public class TenantServiceFacade {
         }
       }
     }
-    var tenantPage = tenantService.searchTenantData(tokens, emailMatches, pageRequest);
+    var tenantPage =
+        tenantService.searchTenantData(tokens, emailMatches, pageRequest, tenantRestriction);
     return mapOf(tenantPage, emailsByTenant);
   }
 
