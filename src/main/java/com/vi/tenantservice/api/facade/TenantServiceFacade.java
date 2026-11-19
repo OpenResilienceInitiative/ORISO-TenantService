@@ -1571,11 +1571,21 @@ public class TenantServiceFacade {
           tenantService.searchTenantData(tokens, Map.of(), pageRequest, tenantRestriction));
     }
     // Owner lookups are mandatory for matching. Do not hide an outage as an empty result.
+    var tenantIds = tenantService.searchableTenantIds(tenantRestriction);
     var emailsByTenant = new HashMap<Long, List<String>>();
+    if (tenantRestriction.isEmpty()
+        && tenantFacadeAuthorisationService.mayBatchTenantAdminEmails()) {
+      emailsByTenant.putAll(userAdminService.getTenantAdminLoginEmails(tenantIds));
+    } else {
+      for (var id : tenantIds) {
+        emailsByTenant.put(
+            id, getAdminEmails(userAdminService.getTenantAdmins(Math.toIntExact(id))));
+      }
+    }
     var emailMatches = new HashMap<String, Set<Long>>();
-    for (var id : tenantService.searchableTenantIds(tenantRestriction)) {
-      var emails = getAdminEmails(userAdminService.getTenantAdmins(Math.toIntExact(id)));
-      emailsByTenant.put(id, emails);
+    for (var entry : emailsByTenant.entrySet()) {
+      var id = entry.getKey();
+      var emails = entry.getValue();
       for (var token : tokens) {
         if (emails.stream()
             .filter(Objects::nonNull)
