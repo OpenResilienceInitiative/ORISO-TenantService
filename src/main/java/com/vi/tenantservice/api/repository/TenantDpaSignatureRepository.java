@@ -59,7 +59,8 @@ public interface TenantDpaSignatureRepository
    * it is stamped when the sign link is created and must not be overridable by the signing client.
    * {@code source} is likewise never taken from the client — it is only defaulted here for links
    * minted before source stamping existed, so the persisted column matches what the API returns (a
-   * legacy row would otherwise stay null in the database and be missed by every later reader).
+   * legacy row would otherwise stay null in the database and be missed by every later reader). The
+   * same update stages the ADMIN notice for a forwarded confirmation on that exact row.
    */
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
@@ -70,6 +71,9 @@ public interface TenantDpaSignatureRepository
           + "s.signerIsMember = :signerIsMember, s.language = :language, "
           + "s.source = coalesce(s.source, :defaultSource), "
           + "s.signedAt = :now, s.signedAtEpochMillis = :signedAtEpochMillis, s.tokenHash = null, "
+          + "s.adminNoticePendingSinceEpochMillis = case "
+          + "when coalesce(s.source, :defaultSource) = 'FORWARDED_EXTERNAL' "
+          + "then :signedAtEpochMillis else null end, "
           + "s.currentVersionWhenSigned = :currentVersionWhenSigned "
           + "where s.tokenHash = :tokenHash "
           + "and s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.PENDING")
