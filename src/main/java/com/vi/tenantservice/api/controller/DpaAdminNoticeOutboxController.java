@@ -7,10 +7,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -46,4 +49,24 @@ class DpaAdminNoticeOutboxController {
                     .cacheControl(CacheControl.noStore())
                     .build());
   }
+
+  @PostMapping(
+      value = "/internal/dpa-admin-notice-outbox/{eventId:[0-9]+}/acknowledgements",
+      consumes = MediaType.APPLICATION_JSON_VALUE)
+  @PreAuthorize("@taskServiceIdentity.allows(authentication, 'NOTIFICATION_DISPATCH')")
+  public ResponseEntity<Void> acknowledge(
+      @PathVariable long eventId, @RequestBody Acknowledgement request) {
+    if (eventId <= 0
+        || request.signedAtEpochMillis() == null
+        || request.signedAtEpochMillis() <= 0) {
+      return ResponseEntity.badRequest().cacheControl(CacheControl.noStore()).build();
+    }
+    var status =
+        outbox.acknowledge(eventId, request.signedAtEpochMillis())
+            ? HttpStatus.NO_CONTENT
+            : HttpStatus.NOT_FOUND;
+    return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).build();
+  }
+
+  record Acknowledgement(Long signedAtEpochMillis) {}
 }

@@ -27,6 +27,11 @@ public interface TenantDpaSignatureRepository
   String STAGED_ADMIN_NOTICE =
       FORWARDED_SIGNATURE + " and s.adminNoticePendingSinceEpochMillis = s.signedAtEpochMillis";
 
+  String EXACT_ADMIN_NOTICE =
+      FORWARDED_SIGNATURE
+          + " and (s.adminNoticePendingSinceEpochMillis = s.signedAtEpochMillis"
+          + " or s.adminNoticeHandoffSignedAtEpochMillis = s.signedAtEpochMillis)";
+
   String NOTICE_OWNERSHIP_PROJECTION =
       "s.reservationTokenHash as reservationBinding, r.token as reservationToken, "
           + "r.status as reservationStatus, t.id as registeredTenantId";
@@ -52,16 +57,16 @@ public interface TenantDpaSignatureRepository
           + NOTICE_OWNERSHIP_PROJECTION
           + NOTICE_OWNERSHIP_JOIN
           + "where s.id = :id and "
-          + FORWARDED_SIGNATURE
-          + " and (s.adminNoticePendingSinceEpochMillis = s.signedAtEpochMillis"
-          + " or s.adminNoticeHandoffSignedAtEpochMillis = s.signedAtEpochMillis)")
+          + EXACT_ADMIN_NOTICE)
   Optional<ExactAdminNotice> findExactAdminNotice(@Param("id") long id);
 
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
   @Query(
       "select s from TenantDpaSignatureEntity s "
           + "where s.id = :id and s.signedAtEpochMillis = :signedAt and "
-          + STAGED_ADMIN_NOTICE)
-  Optional<TenantDpaSignatureEntity> findPendingAdminNotice(
+          + EXACT_ADMIN_NOTICE)
+  Optional<TenantDpaSignatureEntity> lockExactAdminNotice(
       @Param("id") long id, @Param("signedAt") long signedAt);
 
   @Modifying(flushAutomatically = true, clearAutomatically = true)

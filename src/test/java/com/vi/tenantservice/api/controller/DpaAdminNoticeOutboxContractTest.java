@@ -28,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HexFormat;
 import java.util.List;
@@ -45,6 +46,8 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
@@ -244,7 +247,7 @@ class DpaAdminNoticeOutboxContractTest {
   }
 
   @Test
-  void thereIsNoPublicAcknowledgementEvenForTheNotificationActor() throws Exception {
+  void legacyBatchAcknowledgementDoesNotMutateAStagedSignature() throws Exception {
     var owner = reserve(8997L, TenantIdReservationStatus.RESERVED, "owner-proof");
     var event =
         stage(
@@ -264,6 +267,85 @@ class DpaAdminNoticeOutboxContractTest {
                 .orElseThrow()
                 .getAdminNoticePendingSinceEpochMillis())
         .isEqualTo(SIGNED_AT);
+  }
+
+  @Test
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
+  void publishesAnIdempotentAcknowledgementOnlyForTheExactCurrentSignedEvent() throws Exception {
+    var owner = reserve(8998L, TenantIdReservationStatus.RESERVED, "ack-owner");
+    var seeded = new ArrayList<Long>();
+    try {
+      var binding = fingerprint(owner.getToken());
+      var exact = stage(owner.getTenantId(), binding, DpaSignatureStatus.SIGNED, SIGNED_AT);
+      var old = stage(owner.getTenantId(), binding, DpaSignatureStatus.SIGNED, null);
+      var stale =
+          stage(
+              owner.getTenantId(),
+              fingerprint("previous-owner"),
+              DpaSignatureStatus.SIGNED,
+              SIGNED_AT);
+      seeded.addAll(List.of(exact.getId(), old.getId(), stale.getId()));
+      var mail = mailAuthorization();
+
+      mvc.perform(ack(exact.getId(), SIGNED_AT)).andExpect(status().isUnauthorized());
+      mvc.perform(
+              ack(exact.getId(), SIGNED_AT)
+                  .header(
+                      HttpHeaders.AUTHORIZATION,
+                      signedToken("admin-user", "app", TENANT_AUDIENCE, List.of("tenant-admin"))))
+          .andExpect(status().isForbidden());
+      mvc.perform(ack(exact.getId(), SIGNED_AT + 1).header(HttpHeaders.AUTHORIZATION, mail))
+          .andExpect(status().isNotFound());
+      mvc.perform(ack(old.getId(), SIGNED_AT).header(HttpHeaders.AUTHORIZATION, mail))
+          .andExpect(status().isNotFound());
+      mvc.perform(ack(stale.getId(), SIGNED_AT).header(HttpHeaders.AUTHORIZATION, mail))
+          .andExpect(status().isNotFound());
+      assertThat(
+              signatures
+                  .findById(exact.getId())
+                  .orElseThrow()
+                  .getAdminNoticePendingSinceEpochMillis())
+          .isEqualTo(SIGNED_AT);
+
+      mvc.perform(ack(exact.getId(), SIGNED_AT).header(HttpHeaders.AUTHORIZATION, mail))
+          .andExpect(status().isNoContent())
+          .andExpect(header().string(HttpHeaders.CACHE_CONTROL, "no-store"));
+      var committed = signatures.findById(exact.getId()).orElseThrow();
+      assertThat(committed.getAdminNoticePendingSinceEpochMillis()).isNull();
+      assertThat(committed.getAdminNoticeHandoffSignedAtEpochMillis()).isEqualTo(SIGNED_AT);
+      mvc.perform(ack(exact.getId(), SIGNED_AT).header(HttpHeaders.AUTHORIZATION, mail))
+          .andExpect(status().isNoContent());
+      mvc.perform(get(OUTBOX + "/" + exact.getId()).header(HttpHeaders.AUTHORIZATION, mail))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.signedAtEpochMillis").value(SIGNED_AT));
+
+      var replacement = reservations.findById(owner.getTenantId()).orElseThrow();
+      replacement.setToken("replacement-owner-after-ack");
+      reservations.saveAndFlush(replacement);
+      mvc.perform(ack(exact.getId(), SIGNED_AT).header(HttpHeaders.AUTHORIZATION, mail))
+          .andExpect(status().isNotFound());
+      assertThat(
+              signatures
+                  .findById(stale.getId())
+                  .orElseThrow()
+                  .getAdminNoticePendingSinceEpochMillis())
+          .isEqualTo(SIGNED_AT);
+      assertThat(
+              signatures
+                  .findById(old.getId())
+                  .orElseThrow()
+                  .getAdminNoticeHandoffSignedAtEpochMillis())
+          .isNull();
+    } finally {
+      signatures.deleteAllByIdInBatch(seeded);
+      reservations.deleteById(owner.getTenantId());
+    }
+  }
+
+  private MockHttpServletRequestBuilder ack(long eventId, long epoch) {
+    return post(OUTBOX + "/" + eventId + "/acknowledgements")
+        .contentType("application/json")
+        .content("{\"signedAtEpochMillis\":" + epoch + "}");
   }
 
   private TenantIdReservationEntity reserve(

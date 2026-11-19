@@ -48,7 +48,7 @@ class DpaAdminNoticeOutboxAcknowledgementTest {
     assertThat(outbox.acknowledge(old.getId(), SIGNED_AT)).isFalse();
     assertThat(outbox.acknowledge(inconsistent.getId(), SIGNED_AT)).isFalse();
     assertThat(outbox.acknowledge(confirmed.getId(), SIGNED_AT)).isTrue();
-    assertThat(outbox.acknowledge(confirmed.getId(), SIGNED_AT)).isFalse();
+    assertThat(outbox.acknowledge(confirmed.getId(), SIGNED_AT)).isTrue();
 
     assertThat(outbox.readExact(confirmed.getId()))
         .get()
