@@ -45,9 +45,7 @@ public interface TenantDpaSignatureRepository
       "select s.id as id, s.tenantId as tenantId, s.signedAtEpochMillis as signedAtEpochMillis, "
           + NOTICE_OWNERSHIP_PROJECTION
           + NOTICE_OWNERSHIP_JOIN
-          + "where s.id > :afterId and "
-          + STAGED_ADMIN_NOTICE
-          + " order by s.id")
+          + "where s.id > :afterId and s.adminNoticePendingStage = 1 order by s.id")
   Slice<PendingAdminNotice> findPendingAdminNotices(@Param("afterId") long afterId, Pageable page);
 
   @Query(
