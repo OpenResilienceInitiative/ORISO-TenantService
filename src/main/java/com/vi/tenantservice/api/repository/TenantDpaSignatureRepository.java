@@ -2,11 +2,14 @@ package com.vi.tenantservice.api.repository;
 
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
+import com.vi.tenantservice.api.model.TenantIdReservationStatus;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -16,6 +19,53 @@ import org.springframework.data.repository.query.Param;
 
 public interface TenantDpaSignatureRepository
     extends JpaRepository<TenantDpaSignatureEntity, Long> {
+
+  String STAGED_ADMIN_NOTICE =
+      "s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.SIGNED "
+          + "and s.source = 'FORWARDED_EXTERNAL' "
+          + "and s.adminNoticePendingSinceEpochMillis = s.signedAtEpochMillis";
+
+  @Query(
+      "select s.id as id, s.tenantId as tenantId, s.signedAtEpochMillis as signedAtEpochMillis, "
+          + "s.reservationTokenHash as reservationBinding, r.token as reservationToken, "
+          + "r.status as reservationStatus, t.id as registeredTenantId "
+          + "from TenantDpaSignatureEntity s "
+          + "left join TenantIdReservationEntity r on r.tenantId = s.tenantId "
+          + "left join TenantEntity t on t.id = s.tenantId "
+          + "where s.id > :afterId and "
+          + STAGED_ADMIN_NOTICE
+          + " order by s.id")
+  Slice<PendingAdminNotice> findPendingAdminNotices(@Param("afterId") long afterId, Pageable page);
+
+  @Query(
+      "select s from TenantDpaSignatureEntity s "
+          + "where s.id = :id and s.signedAtEpochMillis = :signedAt and "
+          + STAGED_ADMIN_NOTICE)
+  Optional<TenantDpaSignatureEntity> findPendingAdminNotice(
+      @Param("id") long id, @Param("signedAt") long signedAt);
+
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update TenantDpaSignatureEntity s set s.adminNoticePendingSinceEpochMillis = null "
+          + "where s.id = :id and s.signedAtEpochMillis = :signedAt and "
+          + STAGED_ADMIN_NOTICE)
+  int clearPendingAdminNotice(@Param("id") long id, @Param("signedAt") long signedAt);
+
+  interface PendingAdminNotice {
+    Long getId();
+
+    Long getTenantId();
+
+    Long getSignedAtEpochMillis();
+
+    String getReservationBinding();
+
+    String getReservationToken();
+
+    TenantIdReservationStatus getReservationStatus();
+
+    Long getRegisteredTenantId();
+  }
 
   List<TenantDpaSignatureEntity> findByTenantId(Long tenantId);
 
