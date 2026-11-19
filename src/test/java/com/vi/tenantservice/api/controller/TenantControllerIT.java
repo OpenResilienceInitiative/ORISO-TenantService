@@ -12,6 +12,7 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
@@ -32,6 +33,7 @@ import com.vi.tenantservice.api.authorisation.Authority;
 import com.vi.tenantservice.api.authorisation.UserRole;
 import com.vi.tenantservice.api.config.apiclient.ApplicationSettingsApiControllerFactory;
 import com.vi.tenantservice.api.config.apiclient.ConsultingTypeServiceApiControllerFactory;
+import com.vi.tenantservice.api.model.WelcomeMessageDTO;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
@@ -43,6 +45,7 @@ import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.ConsultingTypePatchDTO;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
@@ -389,7 +392,9 @@ class TenantControllerIT {
   private enum CtsSaveOutcome {
     ACKNOWLEDGED,
     REJECTED_BEFORE_WRITE,
-    ACKNOWLEDGEMENT_LOST_AFTER_WRITE
+    ACKNOWLEDGEMENT_LOST_AFTER_WRITE,
+    RESUBMITTED_AFTER_LOST_ACKNOWLEDGEMENT,
+    RESUBMITTED_AFTER_INTERVENING_CHANGE
   }
 
   @ParameterizedTest
@@ -410,6 +415,7 @@ class TenantControllerIT {
       var originalName =
           jdbcTemplate.queryForObject("SELECT name FROM tenant WHERE id = 1", String.class);
       var requestedName = "Settings transaction fixture";
+      var loseNextAcknowledgement = new AtomicBoolean(outcome != CtsSaveOutcome.ACKNOWLEDGED);
       giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
       when(consultingTypeService.getConsultingTypesByTenantId(1))
           .thenAnswer(
@@ -438,7 +444,7 @@ class TenantControllerIT {
                   update.setInt(2, CONSULTING_TYPE_ID);
                   assertThat(update.executeUpdate()).isEqualTo(1);
                 }
-                if (outcome == CtsSaveOutcome.ACKNOWLEDGEMENT_LOST_AFTER_WRITE) {
+                if (loseNextAcknowledgement.getAndSet(false)) {
                   throw new ResourceAccessException("Synthetic CTS acknowledgement lost");
                 }
                 return new FullConsultingTypeResponseDTO()
@@ -458,7 +464,10 @@ class TenantControllerIT {
           .build()
           .getSettings()
           .setExtendedSettings(
-              new com.vi.tenantservice.api.model.ConsultingTypePatchDTO().languageFormal(true));
+              new com.vi.tenantservice.api.model.ConsultingTypePatchDTO()
+                  .languageFormal(true)
+                  .welcomeMessage(new WelcomeMessageDTO()));
+      var requestJson = request.jsonify();
       var actor = new AuthenticationMockBuilder().withUserRole(TENANT_ADMIN.getValue()).build();
       var result =
           mockMvc
@@ -466,7 +475,7 @@ class TenantControllerIT {
                   put(EXISTING_TENANT_VIA_ADMIN)
                       .with(authentication(actor))
                       .contentType(APPLICATION_JSON)
-                      .content(request.jsonify()))
+                      .content(requestJson))
               .andReturn();
 
       var acknowledged = outcome == CtsSaveOutcome.ACKNOWLEDGED;
@@ -481,6 +490,32 @@ class TenantControllerIT {
       assertThat(readLanguageFormality(ctsStore))
           .isEqualTo(outcome != CtsSaveOutcome.REJECTED_BEFORE_WRITE);
       verify(consultingTypeService).patchConsultingType(eq(CONSULTING_TYPE_ID), any());
+
+      var interveningChange = outcome == CtsSaveOutcome.RESUBMITTED_AFTER_INTERVENING_CHANGE;
+      if (interveningChange) {
+        assertThat(
+                ctsStore.update(
+                    "UPDATE consulting_type SET language_formal = false WHERE id = ?",
+                    CONSULTING_TYPE_ID))
+            .isEqualTo(1);
+        assertThat(readLanguageFormality(ctsStore)).isFalse();
+      }
+      if (outcome == CtsSaveOutcome.RESUBMITTED_AFTER_LOST_ACKNOWLEDGEMENT || interveningChange) {
+        mockMvc
+            .perform(
+                put(EXISTING_TENANT_VIA_ADMIN)
+                    .with(authentication(actor))
+                    .contentType(APPLICATION_JSON)
+                    .content(requestJson))
+            .andExpect(status().isOk());
+
+        assertThat(
+                jdbcTemplate.queryForObject("SELECT name FROM tenant WHERE id = 1", String.class))
+            .isEqualTo(requestedName);
+        assertThat(readLanguageFormality(ctsStore)).isTrue();
+        verify(consultingTypeService, times(interveningChange ? 2 : 1))
+            .patchConsultingType(eq(CONSULTING_TYPE_ID), any());
+      }
     } finally {
       ctsDatabase.shutdown();
     }
