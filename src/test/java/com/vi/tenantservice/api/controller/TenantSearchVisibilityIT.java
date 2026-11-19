@@ -26,6 +26,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -125,20 +126,32 @@ class TenantSearchVisibilityIT {
     verifyNoMoreInteractions(userAdminService);
   }
 
-  @Test
-  void missingTenantIdentityCannotReadOrganisationListing() throws Exception {
-    mvc.perform(get(SEARCH).param("query", "*").with(caller("unscoped", null, "tenant-admin")))
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = {"invalid", "-1"})
+  void missingOrInvalidTenantIdentityCannotReadOrganisationListing(String tenantId)
+      throws Exception {
+    mvc.perform(get(SEARCH).param("query", "*").with(caller("unscoped", tenantId, "tenant-admin")))
         .andExpect(status().isForbidden());
 
     verifyNoInteractions(userAdminService);
   }
 
   @Test
-  void legacyTechnicalIdentityCannotReadOrganisationListingWithPlatformClaim() throws Exception {
+  void statisticsReaderCannotReadOrganisationListingWithPlatformClaim() throws Exception {
+    mvc.perform(get(SEARCH).param("query", "*").with(caller("reader", "0", "statistics-reader")))
+        .andExpect(status().isForbidden());
+
+    verifyNoInteractions(userAdminService);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"0", "1"})
+  void legacyTechnicalIdentityCannotReadOrganisationListing(String tenantId) throws Exception {
     mvc.perform(
             get(SEARCH)
                 .param("query", "*")
-                .with(caller("legacy-service", "0", "technical", "tenant-admin")))
+                .with(caller("legacy-service", tenantId, "technical", "tenant-admin")))
         .andExpect(status().isForbidden());
 
     verifyNoInteractions(userAdminService);
