@@ -1,4 +1,5 @@
 name: Reusable Docker build, scan and publish steps
+description: Build and scan the container image before optional publication to GHCR
 
 inputs:
   push_to_ghcr:
