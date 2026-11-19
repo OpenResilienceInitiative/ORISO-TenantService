@@ -101,6 +101,10 @@ public class TenantDpaSignatureEntity {
   @Column(name = "admin_notice_pending_since_epoch_millis")
   private Long adminNoticePendingSinceEpochMillis;
 
+  /** Original signing instant preserved when the exact pending handoff is acknowledged. */
+  @Column(name = "admin_notice_handoff_signed_at_epoch_millis")
+  private Long adminNoticeHandoffSignedAtEpochMillis;
+
   /** Whether this contract was still governing when signed; null retains legacy audit semantics. */
   @Column(name = "current_version_when_signed")
   @Convert(converter = NumericBooleanConverter.class)

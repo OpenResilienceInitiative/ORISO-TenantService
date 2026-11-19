@@ -41,18 +41,33 @@ class DpaAdminNoticeOutboxAcknowledgementTest {
     var old = signature(owner.getTenantId(), owner.getToken(), SIGNED_AT, null);
     var inconsistent = signature(owner.getTenantId(), owner.getToken(), SIGNED_AT, SIGNED_AT + 1);
 
+    assertThat(outbox.readExact(confirmed.getId())).isPresent();
+    assertThat(outbox.readExact(old.getId())).isEmpty();
+    assertThat(outbox.readExact(inconsistent.getId())).isEmpty();
     assertThat(outbox.acknowledge(confirmed.getId(), SIGNED_AT - 1)).isFalse();
     assertThat(outbox.acknowledge(old.getId(), SIGNED_AT)).isFalse();
     assertThat(outbox.acknowledge(inconsistent.getId(), SIGNED_AT)).isFalse();
     assertThat(outbox.acknowledge(confirmed.getId(), SIGNED_AT)).isTrue();
     assertThat(outbox.acknowledge(confirmed.getId(), SIGNED_AT)).isFalse();
 
+    assertThat(outbox.readExact(confirmed.getId()))
+        .get()
+        .extracting(DpaAdminNoticeOutboxService.ExactSignature::signedAtEpochMillis)
+        .isEqualTo(SIGNED_AT);
     assertThat(reload(confirmed).getAdminNoticePendingSinceEpochMillis()).isNull();
+    assertThat(reload(confirmed).getAdminNoticeHandoffSignedAtEpochMillis()).isEqualTo(SIGNED_AT);
     assertThat(reload(confirmed).getSignedAtEpochMillis()).isEqualTo(SIGNED_AT);
     assertThat(reload(confirmed).getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
     assertThat(reload(other).getAdminNoticePendingSinceEpochMillis()).isEqualTo(SIGNED_AT);
     assertThat(reload(inconsistent).getAdminNoticePendingSinceEpochMillis())
         .isEqualTo(SIGNED_AT + 1);
+
+    var replacement = reservations.findById(owner.getTenantId()).orElseThrow();
+    replacement.setToken("replacement-owner");
+    reservations.saveAndFlush(replacement);
+    assertThat(outbox.readExact(confirmed.getId())).isEmpty();
+    assertThat(outbox.readExact(other.getId())).isEmpty();
+    assertThat(reload(confirmed).getAdminNoticeHandoffSignedAtEpochMillis()).isEqualTo(SIGNED_AT);
   }
 
   @Test
@@ -70,6 +85,7 @@ class DpaAdminNoticeOutboxAcknowledgementTest {
 
     assertThat(outbox.acknowledge(prior.getId(), SIGNED_AT)).isFalse();
     assertThat(outbox.acknowledge(deleted.getId(), SIGNED_AT)).isFalse();
+    assertThat(outbox.readExact(deleted.getId())).isEmpty();
     assertThat(reload(prior).getAdminNoticePendingSinceEpochMillis()).isEqualTo(SIGNED_AT);
     assertThat(reload(deleted).getAdminNoticePendingSinceEpochMillis()).isEqualTo(SIGNED_AT);
   }

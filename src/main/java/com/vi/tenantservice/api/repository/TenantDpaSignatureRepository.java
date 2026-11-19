@@ -20,22 +20,42 @@ import org.springframework.data.repository.query.Param;
 public interface TenantDpaSignatureRepository
     extends JpaRepository<TenantDpaSignatureEntity, Long> {
 
-  String STAGED_ADMIN_NOTICE =
+  String FORWARDED_SIGNATURE =
       "s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.SIGNED "
-          + "and s.source = 'FORWARDED_EXTERNAL' "
-          + "and s.adminNoticePendingSinceEpochMillis = s.signedAtEpochMillis";
+          + "and s.source = 'FORWARDED_EXTERNAL'";
+
+  String STAGED_ADMIN_NOTICE =
+      FORWARDED_SIGNATURE + " and s.adminNoticePendingSinceEpochMillis = s.signedAtEpochMillis";
+
+  String NOTICE_OWNERSHIP_PROJECTION =
+      "s.reservationTokenHash as reservationBinding, r.token as reservationToken, "
+          + "r.status as reservationStatus, t.id as registeredTenantId";
+
+  String NOTICE_OWNERSHIP_JOIN =
+      " from TenantDpaSignatureEntity s "
+          + "left join TenantIdReservationEntity r on r.tenantId = s.tenantId "
+          + "left join TenantEntity t on t.id = s.tenantId ";
 
   @Query(
       "select s.id as id, s.tenantId as tenantId, s.signedAtEpochMillis as signedAtEpochMillis, "
-          + "s.reservationTokenHash as reservationBinding, r.token as reservationToken, "
-          + "r.status as reservationStatus, t.id as registeredTenantId "
-          + "from TenantDpaSignatureEntity s "
-          + "left join TenantIdReservationEntity r on r.tenantId = s.tenantId "
-          + "left join TenantEntity t on t.id = s.tenantId "
+          + NOTICE_OWNERSHIP_PROJECTION
+          + NOTICE_OWNERSHIP_JOIN
           + "where s.id > :afterId and "
           + STAGED_ADMIN_NOTICE
           + " order by s.id")
   Slice<PendingAdminNotice> findPendingAdminNotices(@Param("afterId") long afterId, Pageable page);
+
+  @Query(
+      "select s.id as id, s.tenantId as tenantId, s.signedAtEpochMillis as signedAtEpochMillis, "
+          + "s.dpaVersion as dpaVersion, s.signedAt as signedAt, s.forwardedByUserId as forwardedByUserId,"
+          + " s.signerName as signerName, s.signerPosition as signerPosition, "
+          + NOTICE_OWNERSHIP_PROJECTION
+          + NOTICE_OWNERSHIP_JOIN
+          + "where s.id = :id and "
+          + FORWARDED_SIGNATURE
+          + " and (s.adminNoticePendingSinceEpochMillis = s.signedAtEpochMillis"
+          + " or s.adminNoticeHandoffSignedAtEpochMillis = s.signedAtEpochMillis)")
+  Optional<ExactAdminNotice> findExactAdminNotice(@Param("id") long id);
 
   @Query(
       "select s from TenantDpaSignatureEntity s "
@@ -46,7 +66,8 @@ public interface TenantDpaSignatureRepository
 
   @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
-      "update TenantDpaSignatureEntity s set s.adminNoticePendingSinceEpochMillis = null "
+      "update TenantDpaSignatureEntity s set s.adminNoticePendingSinceEpochMillis = null, "
+          + "s.adminNoticeHandoffSignedAtEpochMillis = :signedAt "
           + "where s.id = :id and s.signedAtEpochMillis = :signedAt and "
           + STAGED_ADMIN_NOTICE)
   int clearPendingAdminNotice(@Param("id") long id, @Param("signedAt") long signedAt);
@@ -65,6 +86,18 @@ public interface TenantDpaSignatureRepository
     TenantIdReservationStatus getReservationStatus();
 
     Long getRegisteredTenantId();
+  }
+
+  interface ExactAdminNotice extends PendingAdminNotice {
+    LocalDateTime getDpaVersion();
+
+    LocalDateTime getSignedAt();
+
+    String getForwardedByUserId();
+
+    String getSignerName();
+
+    String getSignerPosition();
   }
 
   List<TenantDpaSignatureEntity> findByTenantId(Long tenantId);
