@@ -55,6 +55,9 @@ public class TenantFacadeAuthorisationService {
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
 
+  @Value("${keycloak.config.app-client-id:app}")
+  private String appClientId;
+
   private boolean userHasAnyRoleOf(List<UserRole> roles) {
     return roles.stream().anyMatch(userRole -> authorisationService.hasRole(userRole.getValue()));
   }
@@ -140,6 +143,12 @@ public class TenantFacadeAuthorisationService {
   public boolean mayListEveryTenant() {
     return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
         && isPlatformAdministrator();
+  }
+
+  boolean mayBatchTenantAdminEmails() {
+    return mayListEveryTenant()
+        && authorisationService.hasRole("agency-admin")
+        && authorisationService.isAuthorizedParty(appClientId);
   }
 
   /** Empty means the human platform administrator may search across organisations. */
