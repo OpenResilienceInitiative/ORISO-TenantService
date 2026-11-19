@@ -10,6 +10,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -439,7 +440,10 @@ class TenantControllerIT {
 
     assertThat(jdbcTemplate.queryForObject("SELECT name FROM tenant WHERE id = 1", String.class))
         .isEqualTo(requestedName);
-    verify(consultingTypeService).patchConsultingType(eq(CONSULTING_TYPE_ID), any());
+    verify(consultingTypeService)
+        .patchConsultingType(
+            eq(CONSULTING_TYPE_ID),
+            argThat(patch -> patch != null && Boolean.TRUE.equals(patch.getLanguageFormal())));
     verify(consultingTypeService, times(hasPatchBody ? 1 : 2)).getConsultingTypesByTenantId(1);
   }
 
