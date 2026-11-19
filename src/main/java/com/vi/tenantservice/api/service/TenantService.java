@@ -12,7 +12,6 @@ import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantStatisticsNameDTO;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
-import com.vi.tenantservice.api.service.search.TenantSearchText;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -191,18 +190,22 @@ public class TenantService {
     return List.copyOf(tenantRepository.findAllTenantData());
   }
 
-  public Page<TenantData> findAllTenantDataExceptTechnicalByInfix(
-      String infix, PageRequest pageRequest) {
-    return searchTenantData(TenantSearchText.tokens(infix), Map.of(), pageRequest);
-  }
-
-  public List<Long> searchableTenantIds() {
+  public List<Long> searchableTenantIds(Optional<Long> tenantRestriction) {
+    if (tenantRestriction.isPresent()) {
+      var id = tenantRestriction.get();
+      return tenantRepository.existsById(id) ? List.of(id) : List.of();
+    }
     return tenantRepository.findAllIds().stream().filter(id -> id != 0L).toList();
   }
 
   public Page<TenantData> searchTenantData(
-      List<String> tokens, Map<String, Set<Long>> emailMatches, PageRequest pageRequest) {
-    return tenantRepository.searchTenantData(tokens, emailMatches, pageRequest).map(data -> data);
+      List<String> tokens,
+      Map<String, Set<Long>> emailMatches,
+      PageRequest pageRequest,
+      Optional<Long> tenantRestriction) {
+    return tenantRepository
+        .searchTenantData(tokens, emailMatches, pageRequest, tenantRestriction)
+        .map(data -> data);
   }
 
   public List<TenantEntity> findAllByIds(List<Long> tenantIds) {

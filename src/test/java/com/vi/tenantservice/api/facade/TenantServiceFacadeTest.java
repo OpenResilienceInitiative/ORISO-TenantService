@@ -216,10 +216,10 @@ class TenantServiceFacadeTest {
       org.springframework.test.util.ReflectionTestUtils.setField(
           tenantServiceFacade, "userAdminService", owner);
       var ids = java.util.stream.LongStream.rangeClosed(1, 12).boxed().toList();
-      when(tenantService.searchableTenantIds()).thenReturn(ids);
+      when(tenantService.searchableTenantIds(Optional.empty())).thenReturn(ids);
       var data = mock(com.vi.tenantservice.api.model.TenantData.class);
       when(data.getId()).thenReturn(12L);
-      when(tenantService.searchTenantData(any(), any(), any()))
+      when(tenantService.searchTenantData(any(), any(), any(), any()))
           .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(data)));
       long start = System.nanoTime();
       var result = tenantServiceFacade.findTenantsExceptTechnicalByInfix("owner", 0, 1, "id", true);
@@ -240,7 +240,10 @@ class TenantServiceFacadeTest {
                   "tenantId", com.github.tomakehurst.wiremock.client.WireMock.equalTo("42")));
       verify(tenantService)
           .searchTenantData(
-              eq(List.of("owner")), eq(java.util.Map.of("owner", Set.copyOf(ids))), any());
+              eq(List.of("owner")),
+              eq(java.util.Map.of("owner", Set.copyOf(ids))),
+              any(),
+              eq(Optional.empty()));
       System.out.println(
           "TENANT_SEARCH_HTTP candidates="
               + ids.size()
@@ -256,7 +259,7 @@ class TenantServiceFacadeTest {
 
   @Test
   void searchResolvesAllCandidateEmailsBeforePagingAndReusesForEnrichment() {
-    when(tenantService.searchableTenantIds()).thenReturn(List.of(1L, 2L));
+    when(tenantService.searchableTenantIds(Optional.empty())).thenReturn(List.of(1L, 2L));
     when(userAdminService.getTenantAdmins(1))
         .thenReturn(
             List.of(
@@ -265,7 +268,7 @@ class TenantServiceFacadeTest {
     when(userAdminService.getTenantAdmins(2)).thenReturn(List.of());
     var data = mock(com.vi.tenantservice.api.model.TenantData.class);
     when(data.getId()).thenReturn(1L);
-    when(tenantService.searchTenantData(eq(List.of("muller", "second")), any(), any()))
+    when(tenantService.searchTenantData(eq(List.of("muller", "second")), any(), any(), any()))
         .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(data)));
     var result =
         tenantServiceFacade.findTenantsExceptTechnicalByInfix(
@@ -275,29 +278,30 @@ class TenantServiceFacadeTest {
         .searchTenantData(
             eq(List.of("muller", "second")),
             eq(java.util.Map.of("muller", Set.of(1L), "second", Set.of(1L))),
-            any());
+            any(),
+            eq(Optional.empty()));
     verify(userAdminService, times(1)).getTenantAdmins(1);
     verify(userAdminService, times(1)).getTenantAdmins(2);
   }
 
   @Test
   void searchOwnerFailureIsExplicitAndDoesNotRunPagedQuery() {
-    when(tenantService.searchableTenantIds()).thenReturn(List.of(1L));
+    when(tenantService.searchableTenantIds(Optional.empty())).thenReturn(List.of(1L));
     when(userAdminService.getTenantAdmins(1))
         .thenThrow(new IllegalStateException("owner unavailable"));
     assertThrows(
         IllegalStateException.class,
         () -> tenantServiceFacade.findTenantsExceptTechnicalByInfix("email", 0, 1, "id", true));
-    verify(tenantService, never()).searchTenantData(any(), any(), any());
+    verify(tenantService, never()).searchTenantData(any(), any(), any(), any());
   }
 
   @Test
   void clearedAndSentinelSearchDoNotResolveCandidateOwners() {
-    when(tenantService.findAllTenantDataExceptTechnicalByInfix(any(), any()))
+    when(tenantService.searchTenantData(eq(List.of()), eq(java.util.Map.of()), any(), any()))
         .thenReturn(org.springframework.data.domain.Page.empty());
     tenantServiceFacade.findTenantsExceptTechnicalByInfix(" \u2003 ", 0, 1, "id", true);
     tenantServiceFacade.findTenantsExceptTechnicalByInfix("*", 0, 1, "id", true);
-    verify(tenantService, never()).searchableTenantIds();
+    verify(tenantService, never()).searchableTenantIds(any());
     verifyNoInteractions(userAdminService);
   }
 
