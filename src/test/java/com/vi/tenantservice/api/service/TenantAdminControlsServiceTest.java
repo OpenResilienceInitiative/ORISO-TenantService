@@ -182,6 +182,23 @@ class TenantAdminControlsServiceTest {
   }
 
   @Test
+  void getControls_Should_applyRestrictiveDefault_When_enforcedPolicyEntryIsUnreadable() {
+    // The stored ENFORCED entry carries a mode this build does not know. Dropping it would let the
+    // legacy toggles (all on, SUGGESTED) fill the gap and silently lift the platform restriction.
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{"
+            + "\"featureCallsEnabled\":{\"value\":false,\"mode\":\"MANDATORY_IN_A_LATER_BUILD\"}}}");
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> captor =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(captor.capture());
+    assertThat(captor.getValue().getPermissionPolicies().get("featureCallsEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+  }
+
+  @Test
   void getTranslationApiKeys_Should_returnEmptyMap_When_noKeysStored() {
     givenStoredControlsJson("{\"permissionsPageEnabled\":true}");
 
