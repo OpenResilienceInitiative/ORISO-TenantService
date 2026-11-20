@@ -12,6 +12,7 @@ import java.util.function.Supplier;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Reads and replaces the platform-level DPIA operator master data singleton (ORISO-Admin#735). Free
@@ -27,16 +28,20 @@ public class PlatformDpiaMasterDataService {
 
   public PlatformDpiaMasterDataDTO getMasterData() {
     return platformDpiaMasterDataRepository
-        .findTopByOrderByIdAsc()
+        .findById(PlatformDpiaMasterDataEntity.SINGLETON_ID)
         .map(platformDpiaMasterDataConverter::toDto)
         .orElseGet(() -> platformDpiaMasterDataConverter.toDto(new PlatformDpiaMasterDataEntity()));
   }
 
+  @Transactional
   public PlatformDpiaMasterDataDTO updateMasterData(PlatformDpiaMasterDataDTO masterData) {
+    // Keep initialization, the complete replacement and any failure in one transaction.
+    // The upsert locks even an existing row, so competing writers cannot create extra rows.
+    platformDpiaMasterDataRepository.initializeSingletonForUpdate();
     PlatformDpiaMasterDataEntity entity =
         platformDpiaMasterDataRepository
-            .findTopByOrderByIdAsc()
-            .orElseGet(PlatformDpiaMasterDataEntity::new);
+            .findById(PlatformDpiaMasterDataEntity.SINGLETON_ID)
+            .orElseThrow();
     platformDpiaMasterDataConverter.applyDtoToEntity(masterData, entity);
     sanitizeFreeTextFields(entity);
     entity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));

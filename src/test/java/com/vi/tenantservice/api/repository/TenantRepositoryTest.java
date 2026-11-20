@@ -39,6 +39,38 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
     executionPhase = ExecutionPhase.BEFORE_TEST_METHOD)
 class TenantRepositoryTest {
 
+  @Test
+  void searchRequiresEveryWordAcrossNameSubdomainAndOwnerEmailsBeforePaging() {
+    var result =
+        tenantRepository.searchTenantData(
+            java.util.List.of("happy", "owner"),
+            java.util.Map.of("owner", java.util.Set.of(1L)),
+            org.springframework.data.domain.PageRequest.of(0, 1));
+    assertThat(result.getTotalElements()).isEqualTo(1);
+    assertThat(result.getContent().getFirst().getId()).isEqualTo(1L);
+    assertThat(
+            tenantRepository
+                .searchTenantData(
+                    java.util.List.of("happy", "absent"),
+                    java.util.Map.of(),
+                    org.springframework.data.domain.PageRequest.of(0, 1))
+                .getTotalElements())
+        .isZero();
+  }
+
+  @Test
+  void existingSearchEntryPointMatchesSubdomain() {
+    var tenant = tenantRepository.findById(1L).orElseThrow();
+    tenant.setSubdomain("unique-subdomain");
+    tenantRepository.saveAndFlush(tenant);
+    assertThat(
+            tenantRepository
+                .findAllTenantDataExceptTechnicalByInfix(
+                    "unique-subdomain", org.springframework.data.domain.PageRequest.of(0, 1))
+                .getTotalElements())
+        .isEqualTo(1);
+  }
+
   private static final long EXISTING_ID = 1L;
 
   @Autowired private TenantRepository tenantRepository;
@@ -125,5 +157,27 @@ class TenantRepositoryTest {
     // then
     assertThat(tenants.size()).isEqualTo(1);
     assertThat(tenants.get(0).getId()).isEqualTo(EXISTING_ID);
+  }
+
+  @Test
+  void findTenantDataById_Should_carryLegalNameAndContact() {
+    TenantEntity entity = tenantRepository.findById(EXISTING_ID).orElseThrow();
+    entity.setLegalName("Caritasverband für die Erzdiözese Musterstadt e.V.");
+    entity.setContactEmail("beratung@caritas-musterstadt.de");
+    entity.setContactPhone("+49 761 200-0");
+    tenantRepository.saveAndFlush(entity);
+
+    var view = tenantRepository.findTenantDataById(EXISTING_ID);
+
+    assertThat(view.getLegalName()).isEqualTo("Caritasverband für die Erzdiözese Musterstadt e.V.");
+    assertThat(view.getContactEmail()).isEqualTo("beratung@caritas-musterstadt.de");
+    assertThat(view.getContactPhone()).isEqualTo("+49 761 200-0");
+    assertThat(
+            tenantRepository.findAllTenantData().stream()
+                .filter(tenant -> tenant.getId() == EXISTING_ID)
+                .findFirst()
+                .orElseThrow()
+                .getLegalName())
+        .isEqualTo("Caritasverband für die Erzdiözese Musterstadt e.V.");
   }
 }

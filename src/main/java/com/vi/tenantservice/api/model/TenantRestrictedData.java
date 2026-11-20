@@ -6,6 +6,8 @@ public interface TenantRestrictedData {
 
   Long getId();
 
+  Boolean getActive();
+
   String getName();
 
   String getSubdomain();
@@ -15,6 +17,10 @@ public interface TenantRestrictedData {
   String getThemingAssociationLogo();
 
   String getThemingFavicon();
+
+  String getThemingAssistantName();
+
+  String getThemingAssistantIcon();
 
   String getThemingPrimaryColor();
 
@@ -39,4 +45,7 @@ public interface TenantRestrictedData {
   LocalDateTime getContentTermsAndConditionsActivationDate();
 
   String getSettings();
+
+  /** JSON contact object of the Träger's DPO, or {@code null}. Public: a DPO must be published. */
+  String getDataProtectionOfficer();
 }

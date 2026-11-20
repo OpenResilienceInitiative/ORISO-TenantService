@@ -1,0 +1,18 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Frontend#1256 - empty-string colour seeds made the public app discard the
+      entire tenant palette. The sanitiser now writes null instead of "", but
+      rows saved before that fix still store "". Backfill those to null so
+      existing tenants get their colours back without a re-save.
+
+      Whitespace-only values are treated the same as empty. Real colours are
+      left untouched. Rollback cannot restore the original empty strings
+      (they are indistinguishable from values that were already null).
+    -->
+    <changeSet author="oriso" id="nullifyEmptyThemingSeeds">
+        <sqlFile path="db/changelog/changeset/0033_nullify_empty_theming_seeds/nullifyEmptyThemingSeeds.sql" stripComments="true" />
+        <rollback><sql/></rollback>
+    </changeSet>
+</databaseChangeLog>

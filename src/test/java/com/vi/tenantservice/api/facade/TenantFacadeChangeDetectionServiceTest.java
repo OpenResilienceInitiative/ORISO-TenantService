@@ -204,11 +204,60 @@ class TenantFacadeChangeDetectionServiceTest {
         TenantSettings.builder().featureGroupChatV2Enabled(true).build();
     TenantEntity existingTenant =
         TenantEntity.builder().settings(convertToJson(existingTenantSettings)).build();
-    // when, then
+    // when, then — the stored split flags were never set, so they follow featureGroupChatV2Enabled
+    // (true). Turning group chat off flips their effective value too, so all three are reported.
     assertThat(
             tenantFacadeChangeDetectionService.determineChangedSettings(
                 sanitizedTenantDTO, existingTenant))
-        .containsOnly(FEATURE_GROUP_CHAT_V2_ENABLED);
+        .containsExactlyInAnyOrder(
+            FEATURE_GROUP_CHAT_V2_ENABLED,
+            FEATURE_INTERNAL_GROUP_CHAT_ENABLED,
+            FEATURE_SELF_HELP_GROUPS_ENABLED);
+  }
+
+  @Test
+  void
+      determineChangedSettings_Should_DetectFormatFlagChange_When_OmittedFlagFollowsUnchangedGroupChatV2() {
+    // #250 regression: an older client omits the split flags and re-sends the unchanged group chat
+    // value. The stored explicit internal flag (true) then falls back to featureGroupChatV2Enabled
+    // (false), so its effective value changes and must still be reported for the permission check -
+    // even though featureGroupChatV2Enabled itself did not change.
+    Settings settings = new Settings().featureGroupChatV2Enabled(false);
+    MultilingualTenantDTO sanitizedTenantDTO = new MultilingualTenantDTO().settings(settings);
+
+    TenantSettings existingTenantSettings =
+        TenantSettings.builder()
+            .featureGroupChatV2Enabled(false)
+            .featureInternalGroupChatEnabled(true)
+            .featureSelfHelpGroupsEnabled(true)
+            .build();
+    TenantEntity existingTenant =
+        TenantEntity.builder().settings(convertToJson(existingTenantSettings)).build();
+
+    assertThat(
+            tenantFacadeChangeDetectionService.determineChangedSettings(
+                sanitizedTenantDTO, existingTenant))
+        .containsExactlyInAnyOrder(
+            FEATURE_INTERNAL_GROUP_CHAT_ENABLED, FEATURE_SELF_HELP_GROUPS_ENABLED);
+  }
+
+  @Test
+  void
+      determineChangedSettings_Should_NotDetectFormatFlagChange_When_OmittedFlagMatchesStoredFallback() {
+    // Counterpart: the caller omits the split flags and the stored values already follow the
+    // unchanged group chat flag, so nothing effectively changes and nothing is reported.
+    Settings settings = new Settings().featureGroupChatV2Enabled(true);
+    MultilingualTenantDTO sanitizedTenantDTO = new MultilingualTenantDTO().settings(settings);
+
+    TenantSettings existingTenantSettings =
+        TenantSettings.builder().featureGroupChatV2Enabled(true).build();
+    TenantEntity existingTenant =
+        TenantEntity.builder().settings(convertToJson(existingTenantSettings)).build();
+
+    assertThat(
+            tenantFacadeChangeDetectionService.determineChangedSettings(
+                sanitizedTenantDTO, existingTenant))
+        .isEmpty();
   }
 
   @Test

@@ -29,6 +29,9 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -51,6 +54,9 @@ class TenantDpaFacadeTest {
 
   @Mock private InputSanitizer inputSanitizer;
   @Mock private AuthorisationService authorisationService;
+  @Mock private DpaSignLinkOrigin dpaSignLinkOrigin;
+  @org.mockito.Spy private java.time.Clock dpaClock = java.time.Clock.systemUTC();
+
   @InjectMocks private TenantDpaFacade tenantDpaFacade;
 
   @Test
@@ -73,7 +79,8 @@ class TenantDpaFacadeTest {
     var result = tenantDpaFacade.getSignatures(5L);
 
     // then — IDOR guard runs first
-    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
+    verify(tenantFacadeAuthorisationService)
+        .assertUserIsAuthorizedToReadTenant(5L, "NOTIFICATION_DISPATCH");
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getStatus()).isEqualTo("SIGNED");
     assertThat(result.get(0).getSignerName()).isEqualTo("Erika");
@@ -82,12 +89,45 @@ class TenantDpaFacadeTest {
     assertThat(result.get(0).getSource()).isEqualTo("PUBLIC_SIGN_LINK");
   }
 
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"de", "en"})
+  @org.junit.jupiter.params.provider.NullSource
+  void getSignatures_Should_exposeStoredLanguage_WithoutInventingLegacyLanguage(String language) {
+    var repository =
+        org.mockito.Mockito.mock(
+            com.vi.tenantservice.api.repository.TenantDpaSignatureRepository.class);
+    var service =
+        new TenantDpaService(
+            repository,
+            null,
+            null,
+            null,
+            new com.vi.tenantservice.api.service.DpaSignatureOwnership(null),
+            null,
+            java.time.Clock.systemDefaultZone());
+    org.springframework.test.util.ReflectionTestUtils.setField(
+        tenantDpaFacade, "tenantDpaService", service);
+    when(repository.findByTenantId(5L))
+        .thenReturn(
+            List.of(
+                TenantDpaSignatureEntity.builder()
+                    .tenantId(5L)
+                    .status(DpaSignatureStatus.SIGNED)
+                    .language(language)
+                    .build()));
+
+    var response = tenantDpaFacade.getSignatures(5L);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(response.getFirst());
+
+    assertThat(json.path("language").asText(null)).isEqualTo(language);
+  }
+
   @Test
   void getSignatures_Should_throw_andNotQueryService_When_notAuthorizedForTenant() {
     // given
     doThrow(new AccessDeniedException("nope"))
         .when(tenantFacadeAuthorisationService)
-        .assertUserIsAuthorizedToAccessTenant(5L);
+        .assertUserIsAuthorizedToReadTenant(5L, "NOTIFICATION_DISPATCH");
 
     // when / then
     assertThatThrownBy(() -> tenantDpaFacade.getSignatures(5L))
@@ -96,18 +136,87 @@ class TenantDpaFacadeTest {
   }
 
   @Test
-  void getGateStatus_Should_reportPublishedAndSigned_When_theAuthoritativeStatusIsValid() {
-    // given
+  void getGateStatus_Should_includeCurrentSignatureTimeInUtc_When_theAuthoritativeStatusIsValid() {
     var version = LocalDateTime.of(2026, 7, 19, 20, 0);
-    givenStatus(5L, TenantDpaStatus.VALID, version);
+    var signedAt = version.plusDays(1).plusSeconds(18);
+    when(tenantDpaStatusService.getStatus(5L))
+        .thenReturn(
+            new TenantDpaStatusService.DpaStatusView(
+                5L,
+                TenantDpaStatus.VALID,
+                version,
+                version,
+                signedAt,
+                "Signer name",
+                false,
+                null,
+                false,
+                java.time.Instant.parse("2026-07-20T20:00:18Z")));
 
-    // when
     var status = tenantDpaFacade.getGateStatus(5L);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);
 
-    // then
-    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
+    verify(tenantFacadeAuthorisationService)
+        .assertUserIsAuthorizedToReadTenant(5L, "RUNTIME_POLICY");
     assertThat(status.getDpaPublished()).isTrue();
     assertThat(status.getDpaSigned()).isTrue();
+    assertThat(json.path("dpaSignedAt").asText()).isEqualTo("2026-07-20T20:00:18Z");
+    assertThat(json.has("signedBy")).isFalse();
+  }
+
+  @Test
+  void getGateStatus_Should_omitSignatureTime_When_renewalGraceAllowsCounselling() {
+    var oldVersion = LocalDateTime.of(2026, 7, 19, 20, 0);
+    var newVersion = oldVersion.plusDays(5);
+    when(tenantDpaStatusService.getStatus(5L))
+        .thenReturn(
+            new TenantDpaStatusService.DpaStatusView(
+                5L,
+                TenantDpaStatus.OUTDATED,
+                newVersion,
+                oldVersion,
+                oldVersion.plusDays(1),
+                "Signer name",
+                false,
+                newVersion.plusDays(14),
+                true,
+                null));
+
+    var status = tenantDpaFacade.getGateStatus(5L);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);
+
+    assertThat(status.getDpaSigned()).isFalse();
+    assertThat(status.getNewCounsellingAllowed()).isTrue();
+    assertThat(json.has("dpaSignedAt")).isFalse();
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = "2026-10-25T02:30")
+  void getGateStatus_Should_omitSignatureTime_When_validSignatureHasNoKnownInstant(
+      LocalDateTime wallTime) {
+    var version = LocalDateTime.of(2026, 7, 19, 20, 0);
+    when(tenantDpaStatusService.getStatus(5L))
+        .thenReturn(
+            new TenantDpaStatusService.DpaStatusView(
+                5L, TenantDpaStatus.VALID, version, version, wallTime, null, false));
+
+    var status = tenantDpaFacade.getGateStatus(5L);
+    var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(status);
+
+    assertThat(status.getDpaSigned()).isTrue();
+    assertThat(json.has("dpaSignedAt")).isFalse();
+  }
+
+  @Test
+  void getGateStatus_Should_notReadSignature_When_notAuthorizedForTenant() {
+    doThrow(new AccessDeniedException("nope"))
+        .when(tenantFacadeAuthorisationService)
+        .assertUserIsAuthorizedToReadTenant(5L, "RUNTIME_POLICY");
+
+    assertThatThrownBy(() -> tenantDpaFacade.getGateStatus(5L))
+        .isInstanceOf(AccessDeniedException.class);
+    verifyNoInteractions(tenantDpaStatusService);
   }
 
   @Test
@@ -158,6 +267,8 @@ class TenantDpaFacadeTest {
     when(authorisationService.getUserId()).thenReturn("tenant-admin-1");
     when(tenantDpaService.createSignInvite(eq(5L), eq(version), any(), eq("tenant-admin-1")))
         .thenReturn("RAWTOKEN");
+    when(dpaSignLinkOrigin.build("RAWTOKEN"))
+        .thenReturn("https://app.example.org/dpa-sign/RAWTOKEN");
 
     // when
     var result = tenantDpaFacade.createSignInvite(5L);
@@ -165,7 +276,7 @@ class TenantDpaFacadeTest {
     // then
     verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
     assertThat(result.getToken()).isEqualTo("RAWTOKEN");
-    assertThat(result.getSignLink()).endsWith("/dpa-sign/RAWTOKEN");
+    assertThat(result.getSignLink()).isEqualTo("https://app.example.org/dpa-sign/RAWTOKEN");
     assertThat(result.getExpiresAt()).isNotBlank();
     // the authenticated forwarder is stamped on the invite (#179)
     verify(tenantDpaService).createSignInvite(eq(5L), eq(version), any(), eq("tenant-admin-1"));
@@ -194,6 +305,8 @@ class TenantDpaFacadeTest {
         .thenReturn(new GoverningDpaResolver.GoverningDpa(1L, operatorVersion));
     when(tenantDpaService.createSignInvite(eq(5L), eq(operatorVersion), any(), any()))
         .thenReturn("RAWTOKEN");
+    when(dpaSignLinkOrigin.build("RAWTOKEN"))
+        .thenReturn("https://app.example.org/dpa-sign/RAWTOKEN");
 
     var result = tenantDpaFacade.createSignInvite(5L);
 
@@ -239,12 +352,14 @@ class TenantDpaFacadeTest {
     when(tenantDpaService.createSignInvite(
             eq(42L), eq(operatorVersion), any(), eq(null), eq("reservation-token")))
         .thenReturn("RAWTOKEN");
+    when(dpaSignLinkOrigin.build("RAWTOKEN"))
+        .thenReturn("https://app.example.org/dpa-sign/RAWTOKEN");
 
     // when
     var result = tenantDpaFacade.createPublicForwardSignInvite(forwardRequest());
 
     // then: bound to the RESERVED tenant id, no forwarder account, no session assertion
-    assertThat(result.getSignLink()).endsWith("/dpa-sign/RAWTOKEN");
+    assertThat(result.getSignLink()).isEqualTo("https://app.example.org/dpa-sign/RAWTOKEN");
     verify(tenantDpaService)
         .createSignInvite(eq(42L), eq(operatorVersion), any(), eq(null), eq("reservation-token"));
     verifyNoInteractions(tenantFacadeAuthorisationService);
@@ -388,21 +503,47 @@ class TenantDpaFacadeTest {
   }
 
   @Test
+  void publishDpa_Should_checkPlatformAdministratorFirst_andTouchNothingWhenRefused() {
+    doThrow(new AccessDeniedException("no"))
+        .when(tenantFacadeAuthorisationService)
+        .assertCanPublishDpa();
+
+    assertThatThrownBy(() -> publishWithDeadline(5L, Map.of("de", "<p>x</p>")))
+        .isInstanceOf(AccessDeniedException.class);
+
+    verify(tenantFacadeAuthorisationService).assertCanPublishDpa();
+    verifyNoInteractions(tenantService, tenantDpaService, governingDpaResolver, inputSanitizer);
+  }
+
+  @Test
+  void publishLegacyDpa_Should_checkPlatformAdministratorFirst_andTouchNothingWhenRefused() {
+    doThrow(new AccessDeniedException("no"))
+        .when(tenantFacadeAuthorisationService)
+        .assertCanPublishDpa();
+
+    assertThatThrownBy(() -> tenantDpaFacade.publishLegacyDpa(5L, Map.of("de", "<p>x</p>")))
+        .isInstanceOf(AccessDeniedException.class);
+
+    verify(tenantFacadeAuthorisationService).assertCanPublishDpa();
+    verifyNoInteractions(tenantService, tenantDpaService, governingDpaResolver, inputSanitizer);
+  }
+
+  @Test
   void publishDpa_Should_sanitize_storeAsJson_stampVersion_andReturnGate() {
     // given
     var tenant = new TenantEntity();
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(tenant));
+    when(tenantService.findTenantForDpaPublication(5L)).thenReturn(Optional.of(tenant));
     when(inputSanitizer.sanitizeAllowingFormattingAndLinks("<p>x</p>")).thenReturn("<p>clean</p>");
 
     // when
-    var status = tenantDpaFacade.publishDpa(5L, Map.of("de", "<p>x</p>"));
+    var status = publishWithDeadline(5L, Map.of("de", "<p>x</p>"));
 
     // then
     verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
     assertThat(tenant.getContentDataProcessingAgreement()).contains("clean");
     assertThat(tenant.getContentDataProcessingAgreementActivationDate()).isNotNull();
     verify(tenantService).update(tenant);
-    verify(tenantDpaService).recordPublishedVersion(eq(5L), any(), any());
+    verify(tenantDpaService).recordPublishedVersion(eq(5L), any(), any(), any());
     assertThat(status.getDpaPublished()).isTrue();
     assertThat(status.getDpaSigned()).isFalse();
   }
@@ -423,7 +564,8 @@ class TenantDpaFacadeTest {
     var result = tenantDpaFacade.getVersions(5L);
 
     // then
-    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
+    verify(tenantFacadeAuthorisationService)
+        .assertUserIsAuthorizedToReadTenant(5L, "CONFIG_WIZARD");
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getContent()).isEqualTo("{\"de\":\"x\"}");
     assertThat(result.get(0).getActivationDate()).isNotBlank();
@@ -450,7 +592,8 @@ class TenantDpaFacadeTest {
     var result = tenantDpaFacade.getVersions(5L);
 
     // then the full multilingual map is passed through — the caller picks the signer's language
-    verify(tenantFacadeAuthorisationService).assertUserIsAuthorizedToAccessTenant(5L);
+    verify(tenantFacadeAuthorisationService)
+        .assertUserIsAuthorizedToReadTenant(5L, "CONFIG_WIZARD");
     verify(tenantDpaService, never()).getVersions(5L);
     assertThat(result).hasSize(1);
     assertThat(result.get(0).getContent())
@@ -460,21 +603,21 @@ class TenantDpaFacadeTest {
 
   @Test
   void publishDpa_Should_publishWithoutSanitizing_When_contentMapIsNull() {
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
+    when(tenantService.findTenantForDpaPublication(5L)).thenReturn(Optional.of(new TenantEntity()));
 
-    var status = tenantDpaFacade.publishDpa(5L, null);
+    var status = publishWithDeadline(5L, null);
 
     verify(inputSanitizer, never()).sanitizeAllowingFormattingAndLinks(any());
-    verify(tenantDpaService).recordPublishedVersion(eq(5L), any(), any());
+    verify(tenantDpaService).recordPublishedVersion(eq(5L), any(), any(), any());
     assertThat(status.getDpaPublished()).isTrue();
   }
 
   @Test
   void publishDpa_Should_useLinkAllowingSanitiser_forEveryLanguage() {
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(new TenantEntity()));
+    when(tenantService.findTenantForDpaPublication(5L)).thenReturn(Optional.of(new TenantEntity()));
     when(inputSanitizer.sanitizeAllowingFormattingAndLinks(any())).thenReturn("clean");
 
-    tenantDpaFacade.publishDpa(5L, Map.of("de", "<p>d</p>", "en", "<p>e</p>"));
+    publishWithDeadline(5L, Map.of("de", "<p>d</p>", "en", "<p>e</p>"));
 
     verify(inputSanitizer).sanitizeAllowingFormattingAndLinks("<p>d</p>");
     verify(inputSanitizer).sanitizeAllowingFormattingAndLinks("<p>e</p>");
@@ -482,11 +625,11 @@ class TenantDpaFacadeTest {
 
   @Test
   void publishDpa_Should_throwNotFound_When_tenantMissing() {
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.empty());
+    when(tenantService.findTenantForDpaPublication(5L)).thenReturn(Optional.empty());
 
-    assertThatThrownBy(() -> tenantDpaFacade.publishDpa(5L, Map.of("de", "x")))
+    assertThatThrownBy(() -> publishWithDeadline(5L, Map.of("de", "x")))
         .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
-    verify(tenantDpaService, never()).recordPublishedVersion(any(), any(), any());
+    verify(tenantDpaService, never()).recordPublishedVersion(any(), any(), any(), any());
   }
 
   // --- machine-translation metadata convention (documentation/translation-meta.md) ---
@@ -499,7 +642,7 @@ class TenantDpaFacadeTest {
     if (storedMap != null) {
       tenant.setContentDataProcessingAgreement(JsonConverter.convertToJson(storedMap));
     }
-    when(tenantService.findTenantById(5L)).thenReturn(Optional.of(tenant));
+    when(tenantService.findTenantForDpaPublication(5L)).thenReturn(Optional.of(tenant));
     return tenant;
   }
 
@@ -517,7 +660,7 @@ class TenantDpaFacadeTest {
     var tenant = givenTenantWithStoredDpa(null);
     givenIdentitySanitizer();
 
-    tenantDpaFacade.publishDpa(5L, Map.of("en", "<p>Hello</p>", "en__meta", META_EN));
+    publishWithDeadline(5L, Map.of("en", "<p>Hello</p>", "en__meta", META_EN));
 
     var stored = storedMapOf(tenant);
     assertThat(stored).containsEntry("en", "<p>Hello</p>").containsEntry("en__meta", META_EN);
@@ -531,14 +674,14 @@ class TenantDpaFacadeTest {
 
     assertThatThrownBy(
             () ->
-                tenantDpaFacade.publishDpa(
+                publishWithDeadline(
                     5L, Map.of("en", "<p>x</p>", "en__meta", "{\"mt\":true,\"evil\":\"field\"}")))
         .isInstanceOfSatisfying(
             org.springframework.web.server.ResponseStatusException.class,
             e ->
                 assertThat(e.getStatusCode())
                     .isEqualTo(org.springframework.http.HttpStatus.BAD_REQUEST));
-    verify(tenantDpaService, never()).recordPublishedVersion(any(), any(), any());
+    verify(tenantDpaService, never()).recordPublishedVersion(any(), any(), any(), any());
   }
 
   @Test
@@ -548,7 +691,7 @@ class TenantDpaFacadeTest {
     givenIdentitySanitizer();
 
     // when: a manual edit changes the HTML but the UI round-trips the old meta unchanged
-    tenantDpaFacade.publishDpa(5L, Map.of("en", "<p>manually edited</p>", "en__meta", META_EN));
+    publishWithDeadline(5L, Map.of("en", "<p>manually edited</p>", "en__meta", META_EN));
 
     // then: the machine-translated tag is cleared
     var stored = storedMapOf(tenant);
@@ -560,7 +703,7 @@ class TenantDpaFacadeTest {
     var tenant = givenTenantWithStoredDpa(Map.of("en", "<p>machine</p>", "en__meta", META_EN));
     givenIdentitySanitizer();
 
-    tenantDpaFacade.publishDpa(5L, Map.of("en", "<p>machine</p>", "en__meta", META_EN));
+    publishWithDeadline(5L, Map.of("en", "<p>machine</p>", "en__meta", META_EN));
 
     assertThat(storedMapOf(tenant)).containsEntry("en__meta", META_EN);
   }
@@ -571,7 +714,7 @@ class TenantDpaFacadeTest {
     givenIdentitySanitizer();
     var freshMeta = "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-07-04T08:00:00Z\"}";
 
-    tenantDpaFacade.publishDpa(5L, Map.of("en", "<p>new machine</p>", "en__meta", freshMeta));
+    publishWithDeadline(5L, Map.of("en", "<p>new machine</p>", "en__meta", freshMeta));
 
     var stored = storedMapOf(tenant);
     assertThat(stored)
@@ -583,7 +726,7 @@ class TenantDpaFacadeTest {
   void publishDpa_Should_dropOrphanMeta_When_languageHasNoContent() {
     var tenant = givenTenantWithStoredDpa(null);
 
-    tenantDpaFacade.publishDpa(5L, Map.of("en__meta", META_EN));
+    publishWithDeadline(5L, Map.of("en__meta", META_EN));
 
     assertThat(storedMapOf(tenant)).isEmpty();
   }
@@ -593,8 +736,24 @@ class TenantDpaFacadeTest {
     var tenant = givenTenantWithStoredDpa(Map.of("en", "<p>machine</p>", "en__meta", META_EN));
     givenIdentitySanitizer();
 
-    tenantDpaFacade.publishDpa(5L, Map.of("en", "<p>manual rewrite</p>"));
+    publishWithDeadline(5L, Map.of("en", "<p>manual rewrite</p>"));
 
     assertThat(storedMapOf(tenant)).doesNotContainKey("en__meta");
+  }
+
+  private com.vi.tenantservice.api.model.DpaGateStatusDTO publishWithDeadline(
+      Long tenantId, Map<String, String> content) {
+    org.mockito.Mockito.lenient()
+        .when(tenantDpaStatusService.getStatus(tenantId))
+        .thenReturn(
+            new TenantDpaStatusService.DpaStatusView(
+                tenantId,
+                TenantDpaStatus.UNSIGNED,
+                LocalDateTime.of(2026, 10, 1, 10, 0),
+                null,
+                null,
+                null,
+                false));
+    return tenantDpaFacade.publishDpa(tenantId, content, "2099-10-15T15:00:00Z");
   }
 }

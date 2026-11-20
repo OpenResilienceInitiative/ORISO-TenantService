@@ -2,10 +2,7 @@ package com.vi.tenantservice.api.model;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -13,6 +10,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Check;
 
 /**
  * Platform-level DPIA operator master data singleton (ORISO-Admin#735). One row, maintained by the
@@ -24,20 +22,16 @@ import lombok.NoArgsConstructor;
  */
 @Entity
 @Table(name = "platform_dpia_master_data")
+@Check(name = "ck_platform_dpia_singleton", constraints = "id = 1")
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
 public class PlatformDpiaMasterDataEntity {
 
+  public static final long SINGLETON_ID = 1L;
+
   @Id
-  @SequenceGenerator(
-      name = "platform_dpia_master_data_id_seq",
-      allocationSize = 1,
-      sequenceName = "SEQUENCE_PLATFORM_DPIA_MASTER_DATA")
-  @GeneratedValue(
-      strategy = GenerationType.SEQUENCE,
-      generator = "platform_dpia_master_data_id_seq")
   @Column(name = "id", updatable = false, nullable = false)
   private Long id;
 

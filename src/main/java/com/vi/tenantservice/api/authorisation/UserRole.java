@@ -15,7 +15,16 @@ public enum UserRole {
 
   RESTRICTED_AGENCY_ADMIN("restricted-agency-admin"),
 
-  RESTRICTED_CONSULTANT_ADMIN("restricted-consultant-admin");
+  RESTRICTED_CONSULTANT_ADMIN("restricted-consultant-admin"),
+
+  /**
+   * Statistik-Leser (ORISO-UserService#1666): reads the platform statistics panel, and here only
+   * the Träger names it shows.
+   */
+  STATISTICS_READER("statistics-reader"),
+
+  /** Service identity of the UserService (ORISO-Helm#367); never a human role. */
+  TECHNICAL("technical");
 
   private final String value;
 
