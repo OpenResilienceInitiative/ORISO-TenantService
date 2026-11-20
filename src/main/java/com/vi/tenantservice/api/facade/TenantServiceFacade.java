@@ -1565,15 +1565,31 @@ public class TenantServiceFacade {
     var direction = isAscending ? Direction.ASC : Direction.DESC;
     var pageRequest = PageRequest.of(pageNumber, pageSize, direction, fieldName);
     var tokens = TenantSearchText.tokens(infix);
+    var tenantRestriction = tenantFacadeAuthorisationService.tenantRestrictionForSearch();
+    boolean mayBatchEmails =
+        tenantRestriction.isEmpty() && tenantFacadeAuthorisationService.mayBatchTenantAdminEmails();
     if (tokens.isEmpty()) {
-      return mapOf(tenantService.findAllTenantDataExceptTechnicalByInfix(infix, pageRequest));
+      var tenantPage =
+          tenantService.searchTenantData(tokens, Map.of(), pageRequest, tenantRestriction);
+      Map<Long, List<String>> emailsByTenant =
+          mayBatchEmails && !tenantPage.isEmpty() ? lookupPageAdminEmails(tenantPage) : Map.of();
+      return mapOf(tenantPage, emailsByTenant);
     }
     // Owner lookups are mandatory for matching. Do not hide an outage as an empty result.
+    var tenantIds = tenantService.searchableTenantIds(tenantRestriction);
     var emailsByTenant = new HashMap<Long, List<String>>();
+    if (mayBatchEmails) {
+      emailsByTenant.putAll(userAdminService.getTenantAdminLoginEmails(tenantIds));
+    } else {
+      for (var id : tenantIds) {
+        emailsByTenant.put(
+            id, getAdminEmails(userAdminService.getTenantAdmins(Math.toIntExact(id))));
+      }
+    }
     var emailMatches = new HashMap<String, Set<Long>>();
-    for (var id : tenantService.searchableTenantIds()) {
-      var emails = getAdminEmails(userAdminService.getTenantAdmins(Math.toIntExact(id)));
-      emailsByTenant.put(id, emails);
+    for (var entry : emailsByTenant.entrySet()) {
+      var id = entry.getKey();
+      var emails = entry.getValue();
       for (var token : tokens) {
         if (emails.stream()
             .filter(Objects::nonNull)
@@ -1583,7 +1599,8 @@ public class TenantServiceFacade {
         }
       }
     }
-    var tenantPage = tenantService.searchTenantData(tokens, emailMatches, pageRequest);
+    var tenantPage =
+        tenantService.searchTenantData(tokens, emailMatches, pageRequest, tenantRestriction);
     return mapOf(tenantPage, emailsByTenant);
   }
 
@@ -1607,8 +1624,16 @@ public class TenantServiceFacade {
     emptyIfNull(tenants).removeIf(tenant -> tenant.getId() == TECHNICAL_TENANT_ID);
   }
 
-  private Map<String, Object> mapOf(Page<TenantData> tenantPage) {
-    return mapOf(tenantPage, Map.of());
+  private Map<Long, List<String>> lookupPageAdminEmails(Page<TenantData> tenantPage) {
+    var tenantIds = tenantPage.getContent().stream().map(TenantData::getId).toList();
+    try {
+      return userAdminService.getTenantAdminLoginEmails(tenantIds);
+    } catch (RestClientException | ResponseStatusException ex) {
+      // Display enrichment is optional. An empty lookup lets the existing mapper enrich each row.
+      log.warn(
+          "Could not resolve tenant-admin emails in a batch. Retrying for each visible tenant.");
+      return Map.of();
+    }
   }
 
   private Map<String, Object> mapOf(
