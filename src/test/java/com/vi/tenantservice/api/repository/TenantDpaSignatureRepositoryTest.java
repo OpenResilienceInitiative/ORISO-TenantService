@@ -14,9 +14,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
@@ -198,6 +201,66 @@ class TenantDpaSignatureRepositoryTest {
     assertThat(reloaded.getTokenHash()).isNull();
     assertThat(signatureRepository.findByTokenHashAndStatus("HASH", DpaSignatureStatus.PENDING))
         .isEmpty();
+  }
+
+  @Test
+  void pendingStageIndexFlag_Should_followTheExistingWriterAndAcknowledgement() {
+    var now = LocalDateTime.now();
+    var pending = pendingLink(97L, "HASH-INDEX-STAGE", now);
+    signatureRepository.flush();
+    long id = pending.getId();
+    long epoch = 1_700_000_000_000L;
+
+    assertThat(pendingStage(id)).isZero();
+    assertThat(consumeToken("HASH-INDEX-STAGE", now, epoch)).isEqualTo(1);
+    assertThat(pendingStage(id)).isEqualTo(1);
+    assertThat(signatureRepository.findPendingAdminNotices(0, PageRequest.of(0, 2)).getContent())
+        .extracting(TenantDpaSignatureRepository.PendingAdminNotice::getId)
+        .containsExactly(id);
+
+    jdbcTemplate.update(
+        "update tenant_dpa_signature set signed_at_epoch_millis = null where id = ?", id);
+    assertThat(pendingStage(id)).isZero();
+    jdbcTemplate.update(
+        "update tenant_dpa_signature set signed_at_epoch_millis = ? where id = ?", epoch + 1, id);
+    assertThat(pendingStage(id)).isZero();
+    assertThat(signatureRepository.findPendingAdminNotices(0, PageRequest.of(0, 2))).isEmpty();
+    jdbcTemplate.update(
+        "update tenant_dpa_signature set signed_at_epoch_millis = ? where id = ?", epoch, id);
+
+    assertThat(signatureRepository.clearPendingAdminNotice(id, epoch)).isEqualTo(1);
+    assertThat(pendingStage(id)).isZero();
+    assertThat(signatureRepository.findPendingAdminNotices(0, PageRequest.of(0, 2))).isEmpty();
+    assertThat(signatureRepository.findExactAdminNotice(id)).isPresent();
+  }
+
+  @ParameterizedTest
+  @CsvSource({"INVALIDATED, FORWARDED_EXTERNAL", "SIGNED, WIZARD_SELF"})
+  void pendingStageIndexFlag_Should_requireSignedForwardedNotice(
+      DpaSignatureStatus status, String source) {
+    var now = LocalDateTime.now();
+    var pending = pendingLink(97L, "HASH-INDEX-STAGE", now);
+    signatureRepository.flush();
+    long id = pending.getId();
+    long epoch = 1_700_000_000_000L;
+    assertThat(consumeToken("HASH-INDEX-STAGE", now, epoch)).isEqualTo(1);
+    assertThat(pendingStage(id)).isEqualTo(1);
+
+    jdbcTemplate.update(
+        "update tenant_dpa_signature set signature_status = ?, source = ? where id = ?",
+        status.name(),
+        source,
+        id);
+
+    assertThat(pendingStage(id)).isZero();
+    assertThat(signatureRepository.findPendingAdminNotices(0, PageRequest.of(0, 2))).isEmpty();
+  }
+
+  private Integer pendingStage(long signatureId) {
+    return jdbcTemplate.queryForObject(
+        "select admin_notice_pending_stage from tenant_dpa_signature where id = ?",
+        Integer.class,
+        signatureId);
   }
 
   @Test

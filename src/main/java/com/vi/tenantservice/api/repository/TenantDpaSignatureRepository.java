@@ -2,11 +2,14 @@ package com.vi.tenantservice.api.repository;
 
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
+import com.vi.tenantservice.api.model.TenantIdReservationStatus;
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
@@ -16,6 +19,89 @@ import org.springframework.data.repository.query.Param;
 
 public interface TenantDpaSignatureRepository
     extends JpaRepository<TenantDpaSignatureEntity, Long> {
+
+  String FORWARDED_SIGNATURE =
+      "s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.SIGNED "
+          + "and s.source = 'FORWARDED_EXTERNAL'";
+
+  String STAGED_ADMIN_NOTICE =
+      FORWARDED_SIGNATURE + " and s.adminNoticePendingSinceEpochMillis = s.signedAtEpochMillis";
+
+  String EXACT_ADMIN_NOTICE =
+      FORWARDED_SIGNATURE
+          + " and (s.adminNoticePendingSinceEpochMillis = s.signedAtEpochMillis"
+          + " or s.adminNoticeHandoffSignedAtEpochMillis = s.signedAtEpochMillis)";
+
+  String NOTICE_OWNERSHIP_PROJECTION =
+      "s.reservationTokenHash as reservationBinding, r.token as reservationToken, "
+          + "r.status as reservationStatus, t.id as registeredTenantId";
+
+  String NOTICE_OWNERSHIP_JOIN =
+      " from TenantDpaSignatureEntity s "
+          + "left join TenantIdReservationEntity r on r.tenantId = s.tenantId "
+          + "left join TenantEntity t on t.id = s.tenantId ";
+
+  @Query(
+      "select s.id as id, s.tenantId as tenantId, s.signedAtEpochMillis as signedAtEpochMillis, "
+          + NOTICE_OWNERSHIP_PROJECTION
+          + NOTICE_OWNERSHIP_JOIN
+          + "where s.id > :afterId and s.adminNoticePendingStage = 1 order by s.id")
+  Slice<PendingAdminNotice> findPendingAdminNotices(@Param("afterId") long afterId, Pageable page);
+
+  @Query(
+      "select s.id as id, s.tenantId as tenantId, s.signedAtEpochMillis as signedAtEpochMillis, "
+          + "s.dpaVersion as dpaVersion, s.signedAt as signedAt, s.forwardedByUserId as forwardedByUserId,"
+          + " s.signerName as signerName, s.signerPosition as signerPosition, "
+          + NOTICE_OWNERSHIP_PROJECTION
+          + NOTICE_OWNERSHIP_JOIN
+          + "where s.id = :id and "
+          + EXACT_ADMIN_NOTICE)
+  Optional<ExactAdminNotice> findExactAdminNotice(@Param("id") long id);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
+  @Query(
+      "select s from TenantDpaSignatureEntity s "
+          + "where s.id = :id and s.signedAtEpochMillis = :signedAt and "
+          + EXACT_ADMIN_NOTICE)
+  Optional<TenantDpaSignatureEntity> lockExactAdminNotice(
+      @Param("id") long id, @Param("signedAt") long signedAt);
+
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update TenantDpaSignatureEntity s set s.adminNoticePendingSinceEpochMillis = null, "
+          + "s.adminNoticeHandoffSignedAtEpochMillis = :signedAt "
+          + "where s.id = :id and s.signedAtEpochMillis = :signedAt and "
+          + STAGED_ADMIN_NOTICE)
+  int clearPendingAdminNotice(@Param("id") long id, @Param("signedAt") long signedAt);
+
+  interface PendingAdminNotice {
+    Long getId();
+
+    Long getTenantId();
+
+    Long getSignedAtEpochMillis();
+
+    String getReservationBinding();
+
+    String getReservationToken();
+
+    TenantIdReservationStatus getReservationStatus();
+
+    Long getRegisteredTenantId();
+  }
+
+  interface ExactAdminNotice extends PendingAdminNotice {
+    LocalDateTime getDpaVersion();
+
+    LocalDateTime getSignedAt();
+
+    String getForwardedByUserId();
+
+    String getSignerName();
+
+    String getSignerPosition();
+  }
 
   List<TenantDpaSignatureEntity> findByTenantId(Long tenantId);
 
