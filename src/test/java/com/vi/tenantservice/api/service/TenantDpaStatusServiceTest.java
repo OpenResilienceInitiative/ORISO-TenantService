@@ -17,12 +17,15 @@ import com.vi.tenantservice.api.repository.TenantDpaAdminSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaSignatureRepository;
 import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
 import com.vi.tenantservice.api.repository.TenantRepository;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -64,14 +67,21 @@ class TenantDpaStatusServiceTest {
   @BeforeEach
   void setUp() {
     // operatorTenantId stays 0 (fallback disabled) unless a test opts in via givenOperatorDpa
-    governingDpaResolver = new GoverningDpaResolver(tenantRepository, versionRepository);
+    governingDpaResolver =
+        new GoverningDpaResolver(
+            tenantRepository,
+            versionRepository,
+            org.mockito.Mockito.mock(jakarta.persistence.EntityManager.class));
     service =
         new TenantDpaStatusService(
             adminSignatureRepository,
             signatureRepository,
             new DpaSignatureOwnership(tenantIdReservationRepository),
             governingDpaResolver,
-            transactionManager);
+            transactionManager,
+            java.time.Clock.systemUTC(),
+            new LegacyDpaSigningTime(
+                "Europe/Berlin", "2026-07-01T00:00:00", "2026-10-31T23:59:59"));
   }
 
   private void givenTenantWithEmbeddedVersion(LocalDateTime version) {
@@ -204,6 +214,44 @@ class TenantDpaStatusServiceTest {
     var status = service.getStatus(TENANT_ID);
 
     assertThat(status.status()).isEqualTo(TenantDpaStatus.VALID);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "2026-07-02T15:00, true, Erika Extern, 2026-07-02T13:00:00Z",
+    "2026-07-02T14:00, true, Toni Tenantadmin, 2026-07-02T12:00:00Z",
+    "2026-07-02T13:00, true, Toni Tenantadmin, 2026-07-02T12:00:00Z",
+    "2026-10-25T02:30, true, Toni Tenantadmin, 2026-07-02T12:00:00Z",
+    "2026-11-01T16:00, true, Toni Tenantadmin, 2026-07-02T12:00:00Z",
+    "2026-07-02T15:00, false, Toni Tenantadmin, 2026-07-02T12:00:00Z"
+  })
+  void getStatus_OrdersMixedSignaturesByVersionAndKnownInstant(
+      LocalDateTime legacyWallTime,
+      boolean sameVersion,
+      String expectedSigner,
+      Instant expectedTime) {
+    givenTenantWithEmbeddedVersion(VERSION_2);
+    var recorded =
+        TenantDpaAdminSignatureEntity.builder()
+            .tenantId(TENANT_ID)
+            .dpaVersion(VERSION_2)
+            .signerName("Toni Tenantadmin")
+            .signedAt(LocalDateTime.parse("2026-07-02T08:00"))
+            .signedAtEpochMillis(Instant.parse("2026-07-02T12:00:00Z").toEpochMilli())
+            .build();
+    var legacy = legacySignedSignature(sameVersion ? VERSION_2 : VERSION_1);
+    legacy.setSignedAt(legacyWallTime);
+    when(adminSignatureRepository.findByTenantIdOrderBySignedAtDescIdDesc(TENANT_ID))
+        .thenReturn(List.of(recorded));
+    when(signatureRepository.findByTenantIdAndStatus(TENANT_ID, DpaSignatureStatus.SIGNED))
+        .thenReturn(List.of(legacy));
+
+    var status = service.getStatus(TENANT_ID);
+
+    assertThat(status.status()).isEqualTo(TenantDpaStatus.VALID);
+    assertThat(status.signedVersion()).isEqualTo(VERSION_2);
+    assertThat(status.signedBy()).isEqualTo(expectedSigner);
+    assertThat(status.signedAtInstant()).isEqualTo(expectedTime);
   }
 
   @Test
@@ -514,6 +562,8 @@ class TenantDpaStatusServiceTest {
     givenOperatorDpa(VERSION_2);
     givenTenantWithoutOwnDpa();
     givenNoSignatures();
+    when(versionRepository.findFirstByTenantIdAndActivationDate(OPERATOR_TENANT_ID, VERSION_2))
+        .thenReturn(Optional.empty());
     when(versionRepository.findFirstByTenantIdAndActivationDate(TENANT_ID, VERSION_1))
         .thenReturn(Optional.empty());
     when(versionRepository.findFirstByTenantIdAndActivationDate(OPERATOR_TENANT_ID, VERSION_1))
@@ -542,6 +592,8 @@ class TenantDpaStatusServiceTest {
     givenOperatorDpa(VERSION_2);
     givenTenantWithoutOwnDpa();
     givenNoSignatures();
+    when(versionRepository.findFirstByTenantIdAndActivationDate(OPERATOR_TENANT_ID, VERSION_2))
+        .thenReturn(Optional.empty());
     when(versionRepository.findFirstByTenantIdAndActivationDate(TENANT_ID, VERSION_1))
         .thenReturn(Optional.empty());
     when(versionRepository.findFirstByTenantIdAndActivationDate(OPERATOR_TENANT_ID, VERSION_1))

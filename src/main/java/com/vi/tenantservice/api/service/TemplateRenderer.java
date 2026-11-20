@@ -1,30 +1,25 @@
 package com.vi.tenantservice.api.service;
 
-import freemarker.cache.StringTemplateLoader;
-import freemarker.template.Template;
-import freemarker.template.TemplateException;
-import java.io.IOException;
-import java.io.StringWriter;
 import java.util.Map;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
+import java.util.Objects;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
 public class TemplateRenderer {
 
-  private final @NonNull freemarker.template.Configuration freemarkerConfiguration;
+  private static final Pattern LEGACY_PLACEHOLDER =
+      Pattern.compile("\\$\\{\\s*([a-zA-Z_][a-zA-Z_0-9]*)\\s*}");
 
-  public String renderTemplate(String templateContent, Map<String, Object> dataModel)
-      throws IOException, TemplateException {
-
-    StringTemplateLoader templateLoader =
-        (StringTemplateLoader) freemarkerConfiguration.getTemplateLoader();
-    templateLoader.putTemplate("in-memory-template", templateContent);
-    Template template = freemarkerConfiguration.getTemplate("in-memory-template");
-    StringWriter stringWriter = new StringWriter();
-    template.process(dataModel, stringWriter);
-    return stringWriter.toString();
+  /** Substitute legacy privacy contact placeholders in the current request's text. */
+  public String renderTemplate(String templateContent, Map<String, String> contacts) {
+    if (templateContent == null) {
+      return null;
+    }
+    return LEGACY_PLACEHOLDER
+        .matcher(templateContent)
+        .replaceAll(
+            match -> Matcher.quoteReplacement(Objects.toString(contacts.get(match.group(1)), "")));
   }
 }

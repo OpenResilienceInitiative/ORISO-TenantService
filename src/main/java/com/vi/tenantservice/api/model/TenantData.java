@@ -8,6 +8,12 @@ public interface TenantData extends TenantRestrictedData {
 
   String getDescription();
 
+  String getLegalName();
+
+  String getContactEmail();
+
+  String getContactPhone();
+
   Integer getLicensingAllowedNumberOfUsers();
 
   LocalDateTime getCreateDate();

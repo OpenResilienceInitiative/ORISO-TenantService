@@ -56,6 +56,28 @@ class TranslationFacadeTest {
   private void givenProviderIds() {
     org.mockito.Mockito.lenient().when(openRouterClient.getProviderId()).thenReturn("openrouter");
     org.mockito.Mockito.lenient().when(mistralClient.getProviderId()).thenReturn("mistral");
+    org.mockito.Mockito.lenient().when(openRouterClient.isConfigured()).thenReturn(true);
+    org.mockito.Mockito.lenient().when(mistralClient.isConfigured()).thenReturn(true);
+  }
+
+  @Test
+  void translate_Should_skipAProviderWithoutBaseUrl_When_noExplicitProvider() {
+    when(openRouterClient.isConfigured()).thenReturn(false);
+    when(tenantAdminControlsService.getTranslationApiKeys())
+        .thenReturn(Map.of("openrouter", OPENROUTER_KEY, "mistral", MISTRAL_KEY));
+    when(mistralClient.getModel()).thenReturn("mistral-small-latest");
+    when(mistralClient.translateHtml(MISTRAL_KEY, "de", "en", "<p>Hallo</p>"))
+        .thenReturn("<p>Hello</p>");
+
+    var response =
+        translationFacade.translate(
+            new TranslationRequestDTO()
+                .sourceLang("de")
+                .targetLangs(List.of("en"))
+                .texts(Map.of("privacy", "<p>Hallo</p>")));
+
+    assertThat(response.getProvider()).isEqualTo("mistral");
+    verify(openRouterClient, never()).translateHtml(any(), any(), any(), any());
   }
 
   private void givenSuperAdmin(boolean isSuperAdmin) {

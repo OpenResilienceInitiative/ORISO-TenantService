@@ -12,11 +12,15 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 import org.hibernate.type.NumericBooleanConverter;
 
 /**
@@ -90,6 +94,44 @@ public class TenantDpaSignatureEntity {
 
   @Column(name = "signed_at")
   private LocalDateTime signedAt;
+
+  @Column(name = "signed_at_epoch_millis")
+  private Long signedAtEpochMillis;
+
+  /**
+   * The time an external confirmation staged its ADMIN notice. The signature row ID identifies the
+   * event. Null denotes a row without a pending handoff, including historical signatures.
+   */
+  @Column(name = "admin_notice_pending_since_epoch_millis")
+  private Long adminNoticePendingSinceEpochMillis;
+
+  /** Indexed SQL predicate for the pending poll. The database computes it for every writer. */
+  @Column(
+      name = "admin_notice_pending_stage",
+      insertable = false,
+      updatable = false,
+      columnDefinition =
+          """
+          tinyint generated always as (
+            case when signature_status = 'SIGNED' and source = 'FORWARDED_EXTERNAL'
+              and admin_notice_pending_since_epoch_millis = signed_at_epoch_millis
+            then 1 else 0 end
+          )
+          """)
+  @Getter(AccessLevel.NONE)
+  @Setter(AccessLevel.NONE)
+  @EqualsAndHashCode.Exclude
+  @ToString.Exclude
+  private Byte adminNoticePendingStage;
+
+  /** Original signing instant preserved when the exact pending handoff is acknowledged. */
+  @Column(name = "admin_notice_handoff_signed_at_epoch_millis")
+  private Long adminNoticeHandoffSignedAtEpochMillis;
+
+  /** Whether this contract was still governing when signed; null retains legacy audit semantics. */
+  @Column(name = "current_version_when_signed")
+  @Convert(converter = NumericBooleanConverter.class)
+  private Boolean currentVersionWhenSigned;
 
   /** SHA-256 hash of the single-use sign-link token while PENDING; nulled once consumed. */
   @Column(name = "token_hash")

@@ -36,7 +36,26 @@ public enum Authority {
       UserRole.RESTRICTED_AGENCY_ADMIN, singletonList(AuthorityValue.GET_TENANT)),
 
   READ_TENANT_AS_CONSULTANT_ADMIN(
-      UserRole.RESTRICTED_CONSULTANT_ADMIN, singletonList(AuthorityValue.GET_TENANT));
+      UserRole.RESTRICTED_CONSULTANT_ADMIN, singletonList(AuthorityValue.GET_TENANT)),
+
+  /**
+   * The Statistik-Leser (ORISO-UserService#1666) reads Träger names for the statistics panel and
+   * nothing else: no search, no tenant data, no admin data, no settings.
+   */
+  STATISTICS_READER(
+      UserRole.STATISTICS_READER, singletonList(AuthorityValue.READ_STATISTICS_NAMES)),
+
+  /**
+   * Only what the UserService's machine calls need (ORISO-Helm#367): read one tenant's data, DPA
+   * and policies, create a tenant by consuming an open ID reservation, release a reservation. No
+   * listing, no updates, no legal content, no admin data.
+   */
+  TECHNICAL(
+      UserRole.TECHNICAL,
+      Lists.newArrayList(
+          AuthorityValue.TECHNICAL_READ_TENANT,
+          AuthorityValue.TECHNICAL_CREATE_RESERVED_TENANT,
+          AuthorityValue.TECHNICAL_RELEASE_TENANT_ID_RESERVATION));
 
   private final UserRole userRole;
   private final List<String> grantedAuthorities;
@@ -67,5 +86,11 @@ public enum Authority {
         PREFIX + "UPDATE_EXTENDED_TENANT_SETTINGS";
     public static final String TRANSLATE_GROUP_CHAT_CONTENT =
         PREFIX + "TRANSLATE_GROUP_CHAT_CONTENT";
+    public static final String READ_STATISTICS_NAMES = PREFIX + "READ_STATISTICS_NAMES";
+    public static final String TECHNICAL_READ_TENANT = PREFIX + "TECHNICAL_READ_TENANT";
+    public static final String TECHNICAL_CREATE_RESERVED_TENANT =
+        PREFIX + "TECHNICAL_CREATE_RESERVED_TENANT";
+    public static final String TECHNICAL_RELEASE_TENANT_ID_RESERVATION =
+        PREFIX + "TECHNICAL_RELEASE_TENANT_ID_RESERVATION";
   }
 }

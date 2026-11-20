@@ -41,4 +41,40 @@ class InheritedBrandingEchoStripperTest {
 
     assertThat(submitted.getLogo()).isEqualTo("tenant-logo");
   }
+
+  @Test
+  void strip_shouldNotMaterializeInheritedColoursOnAnUnchangedTenantSave() {
+    var submitted =
+        new Theming()
+            .primaryColor("#111111")
+            .secondaryColor("#222222")
+            .accent("#333333")
+            .signal("#444444");
+    var existing = new TenantEntity();
+    var platform = new TenantEntity();
+    platform.setThemingPrimaryColor("#111111");
+    platform.setThemingSecondaryColor("#222222");
+    platform.setThemingAccent("#333333");
+    platform.setThemingSignal("#444444");
+
+    stripper.strip(submitted, existing, platform);
+
+    assertThat(submitted.getPrimaryColor()).isNull();
+    assertThat(submitted.getSecondaryColor()).isNull();
+    assertThat(submitted.getAccent()).isNull();
+    assertThat(submitted.getSignal()).isNull();
+  }
+
+  @Test
+  void strip_shouldKeepAColourTheTenantChoseItself() {
+    var submitted = new Theming().primaryColor("#111111");
+    var existing = new TenantEntity();
+    existing.setThemingPrimaryColor("#111111");
+    var platform = new TenantEntity();
+    platform.setThemingPrimaryColor("#111111");
+
+    stripper.strip(submitted, existing, platform);
+
+    assertThat(submitted.getPrimaryColor()).isEqualTo("#111111");
+  }
 }

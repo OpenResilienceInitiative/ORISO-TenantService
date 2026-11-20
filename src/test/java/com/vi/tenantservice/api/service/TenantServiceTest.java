@@ -41,6 +41,12 @@ class TenantServiceTest {
   }
 
   @Test
+  void searchCandidatesExcludeTechnicalTenantBeforeOwnerLookups() {
+    when(tenantRepository.findAllIds()).thenReturn(java.util.List.of(0L, 1L, 2L));
+    assertThat(tenantService.searchableTenantIds()).containsExactly(1L, 2L);
+  }
+
+  @Test
   void create_Should_CreateTenantAndSetCreationDate() {
     // given
     TenantEntity tenantEntity = new TenantEntity();

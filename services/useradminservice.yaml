@@ -1068,8 +1068,127 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
         - Bearer: []
+  /users/deletion-audit-logs:
+    post:
+      tags:
+        - deletion-audit-logs-controller
+      summary: 'Reports a deleted Beratungsstelle or Traeger to the deletion log (best effort). [Authorization: technical, tenant-admin, single-tenant-admin, restricted-agency-admin]'
+      operationId: recordDeletion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeletionAuditEntryRequestDTO'
+      responses:
+        '204':
+          description: NO CONTENT - accepted
+        '400':
+          description: BAD REQUEST - unsupported target type or malformed ids
+        '401':
+          description: UNAUTHORIZED - no/invalid role/authorization
+        '403':
+          description: FORBIDDEN - caller may not report for this tenant
+        '500':
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: []
+  /useradmin/tenants/{tenantId}/deletion-blockers:
+    get:
+      tags:
+        - admin-user-controller
+      summary: >-
+        Lists what still belongs to a Träger and therefore blocks its deletion
+        (ORISO-UserService#1466). [Authorization: tenant-admin, single-tenant-admin or user-admin]
+      operationId: getTenantDeletionBlockers
+      parameters:
+        - name: tenantId
+          in: path
+          description: Träger (tenant) id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        200:
+          description: OK - successful operation
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/TenantDeletionBlockersDTO'
+        401:
+          description: UNAUTHORIZED - no/invalid role/authorization
+        403:
+          description: FORBIDDEN - the Träger is outside the caller's reach
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
 components:
   schemas:
+    TenantDeletionBlockersDTO:
+      type: object
+      required:
+        - deletable
+        - agencies
+        - consultants
+        - adviceSeekers
+        - agencyAdmins
+        - tenantAdmins
+        - openInvites
+      properties:
+        deletable:
+          type: boolean
+        agencies:
+          type: integer
+          format: int64
+        consultants:
+          type: integer
+          format: int64
+        adviceSeekers:
+          type: integer
+          format: int64
+        agencyAdmins:
+          type: integer
+          format: int64
+        tenantAdmins:
+          type: integer
+          format: int64
+        openInvites:
+          type: integer
+          format: int64
+    DeletionAuditEntryRequestDTO:
+      type: object
+      required:
+        - targetType
+        - targetId
+        - outcome
+      properties:
+        targetType:
+          type: string
+          enum:
+            - AGENCY
+            - TENANT
+        targetId:
+          type: string
+          pattern: '[0-9]{1,18}'
+          description: Opaque numeric id of the deleted agency or tenant
+        tenantId:
+          type: integer
+          format: int64
+        outcome:
+          type: string
+          enum:
+            - SCHEDULED
+            - EXECUTED
+            - CANCELLED
+        actorId:
+          type: string
+          pattern: '[A-Za-z0-9-]{1,64}'
+          description: Honoured for the technical account only
+        actorRole:
+          type: string
+          pattern: '[A-Z_]{1,32}'
     RootDTO:
       type: object
       required:

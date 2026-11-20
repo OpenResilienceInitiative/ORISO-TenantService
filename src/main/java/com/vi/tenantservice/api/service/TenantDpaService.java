@@ -10,6 +10,7 @@ import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -55,6 +56,7 @@ public class TenantDpaService {
   private final TenantIdReservationRepository tenantIdReservationRepository;
   private final DpaSignatureOwnership dpaSignatureOwnership;
   private final GoverningDpaResolver governingDpaResolver;
+  private final Clock dpaClock;
 
   /** Persists a SIGNED confirmation of the given DPA version for a tenant. */
   public TenantDpaSignatureEntity recordSignature(
@@ -89,7 +91,8 @@ public class TenantDpaService {
       String source,
       boolean signerIsMember,
       String language) {
-    var now = LocalDateTime.now();
+    var instant = dpaClock.instant();
+    var now = LocalDateTime.ofInstant(instant, dpaClock.getZone());
     return signatureRepository.save(
         TenantDpaSignatureEntity.builder()
             .tenantId(tenantId)
@@ -104,6 +107,7 @@ public class TenantDpaService {
             .language(language)
             .status(DpaSignatureStatus.SIGNED)
             .signedAt(now)
+            .signedAtEpochMillis(instant.toEpochMilli())
             .createDate(now)
             .build());
   }
@@ -131,13 +135,30 @@ public class TenantDpaService {
         tenantId, signatureRepository.findByTenantId(tenantId));
   }
 
-  /** Appends a published-version snapshot (called on every publish) for the "look back" history. */
+  /** Most recent own publication, including retained history after a legacy embedded-date reset. */
+  public LocalDateTime latestPublicationDate(Long tenantId) {
+    return versionRepository
+        .findFirstByTenantIdOrderByActivationDateDescIdDesc(tenantId)
+        .map(TenantDpaVersionEntity::getActivationDate)
+        .orElse(null);
+  }
+
+  /** Appends a published-version snapshot; legacy fixture/import callers may have no deadline. */
   public void recordPublishedVersion(Long tenantId, String content, LocalDateTime activationDate) {
+    recordPublishedVersion(tenantId, content, activationDate, null);
+  }
+
+  public void recordPublishedVersion(
+      Long tenantId,
+      String content,
+      LocalDateTime activationDate,
+      LocalDateTime signingDeadlineAt) {
     versionRepository.save(
         TenantDpaVersionEntity.builder()
             .tenantId(tenantId)
             .content(content)
             .activationDate(activationDate)
+            .signingDeadlineAt(signingDeadlineAt)
             .createDate(LocalDateTime.now())
             .build());
   }
@@ -308,6 +329,13 @@ public class TenantDpaService {
       boolean signerIsMember,
       String language) {
     var pending = requireValidPendingSignature(rawToken);
+    governingDpaResolver.lockForSigning(pending.getTenantId());
+    var governing = governingDpaResolver.resolve(pending.getTenantId());
+    if (governing == null) {
+      governing = governingDpaResolver.resolveForUnregisteredTenant();
+    }
+    boolean currentVersionWhenSigned =
+        governing != null && governing.version().equals(pending.getDpaVersion());
     // The token alone is not enough: the tenant it points at must still be live (existing, or a
     // still-RESERVED onboarding id). Without this, a released reservation or a deleted tenant
     // would leave a confirmable orphan behind — the tenant foreign key that used to prevent that
@@ -321,7 +349,8 @@ public class TenantDpaService {
     // longer PENDING and gets the defined "already used" answer (410).
     signatureRepository.lockOutstandingByTenantId(pending.getTenantId());
     var tokenHash = DpaSignToken.hash(rawToken);
-    var now = LocalDateTime.now();
+    var instant = dpaClock.instant();
+    var now = LocalDateTime.ofInstant(instant, dpaClock.getZone());
     // Atomic single-use: only the still-PENDING row is updated, so a concurrent double-submit
     // produces exactly one winner (1 row) and the rest see 0.
     int consumed =
@@ -334,7 +363,9 @@ public class TenantDpaService {
             signerIsMember,
             language,
             SOURCE_FORWARDED_EXTERNAL,
-            now);
+            now,
+            instant.toEpochMilli(),
+            currentVersionWhenSigned);
     if (consumed == 0) {
       throw new InvalidDpaSignTokenException("Sign token has already been used");
     }
@@ -353,6 +384,8 @@ public class TenantDpaService {
     pending.setLanguage(language);
     pending.setStatus(DpaSignatureStatus.SIGNED);
     pending.setSignedAt(now);
+    pending.setSignedAtEpochMillis(instant.toEpochMilli());
+    pending.setCurrentVersionWhenSigned(currentVersionWhenSigned);
     pending.setTokenHash(null);
     return pending;
   }

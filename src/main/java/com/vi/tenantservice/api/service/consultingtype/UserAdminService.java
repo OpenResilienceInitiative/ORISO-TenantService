@@ -5,6 +5,7 @@ import com.vi.tenantservice.api.service.httpheader.SecurityHeaderSupplier;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.useradminservice.generated.ApiClient;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
+import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO;
 import java.util.List;
 import java.util.Optional;
 import lombok.NonNull;
@@ -25,6 +26,16 @@ public class UserAdminService {
     var controllerApi = userAdminServiceApiControllerFactory.createControllerApi();
     addDefaultHeadersWithKeycloak(controllerApi.getApiClient());
     return controllerApi.getTenantAdmins(tenantId);
+  }
+
+  /**
+   * Asks UserService what still belongs to the Träger, with the deleting admin's own token, so the
+   * answer stays within that admin's reach (#1466).
+   */
+  public TenantDeletionBlockersDTO getTenantDeletionBlockers(Long tenantId) {
+    var controllerApi = userAdminServiceApiControllerFactory.createControllerApi();
+    addDefaultHeadersWithKeycloak(controllerApi.getApiClient());
+    return controllerApi.getTenantDeletionBlockers(tenantId);
   }
 
   private void addDefaultHeadersWithKeycloak(ApiClient apiClient) {
