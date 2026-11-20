@@ -295,7 +295,9 @@ class TenantSearchBatchIT {
         "[{\"tenantId\":2,\"emails\":[]}]",
         "[{\"tenantId\":1}]",
         "[{\"tenantId\":1,\"emails\":null}]",
-        "[{\"tenantId\":1,\"emails\":[null]}]"
+        "[{\"tenantId\":1,\"emails\":[null]}]",
+        "{\"tenantId\":1,\"emails\":[]}",
+        "not json"
       })
   void invalidBatchPayloadFailsRatherThanReturningIncompleteResults(String body) throws Exception {
     seedTenants(1);
