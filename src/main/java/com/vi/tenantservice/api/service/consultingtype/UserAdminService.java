@@ -66,9 +66,18 @@ public class UserAdminService {
     return emailsByTenant;
   }
 
-  private static ResponseStatusException invalidLoginEmailResponse() {
-    return new ResponseStatusException(
-        HttpStatus.BAD_GATEWAY, "Invalid tenant-admin email response");
+  private static InvalidLoginEmailResponseException invalidLoginEmailResponse() {
+    return new InvalidLoginEmailResponseException();
+  }
+
+  /**
+   * UserService answered, but the answer breaks the batch contract. Unlike an unreachable or
+   * missing endpoint this is not something a per-tenant retry should paper over.
+   */
+  public static class InvalidLoginEmailResponseException extends ResponseStatusException {
+    InvalidLoginEmailResponseException() {
+      super(HttpStatus.BAD_GATEWAY, "Invalid tenant-admin email response");
+    }
   }
 
   /**
