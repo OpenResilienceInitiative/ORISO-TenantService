@@ -43,17 +43,14 @@ public class DpaSignatureOwnership {
     }
     var currentHash = currentReservationTokenHash(tenantId);
     return signatures.stream()
-        .filter(signature -> belongsToCurrentOccupant(signature, currentHash))
+        .filter(
+            signature -> belongsToCurrentOccupant(signature.getReservationTokenHash(), currentHash))
         .toList();
   }
 
-  private static boolean belongsToCurrentOccupant(
-      TenantDpaSignatureEntity signature, String currentReservationTokenHash) {
-    if (!isBound(signature)) {
-      return true;
-    }
-    return currentReservationTokenHash != null
-        && currentReservationTokenHash.equals(signature.getReservationTokenHash());
+  static boolean belongsToCurrentOccupant(
+      String reservationBinding, String currentReservationTokenHash) {
+    return reservationBinding == null || reservationBinding.equals(currentReservationTokenHash);
   }
 
   private static boolean isBound(TenantDpaSignatureEntity signature) {
