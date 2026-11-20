@@ -345,6 +345,12 @@ public class TenantAdminControlsService {
    * <p>The merge is deliberately top-level only. Going deeper would preserve unknown nested keys
    * but would also make clearing a known nested field impossible, because a value this build
    * intentionally removed would keep being merged back in from the stored document.
+   *
+   * <p><b>Known, accepted loss (decision 2026-11-20):</b> a field that a newer build added
+   * <i>inside an object this build owns</i> (for example {@code
+   * allowedPermissionToggles.futureToggle}) is replaced together with that object on the next save
+   * by a rolled-back build. Only unknown top-level fields survive. Pinned by {@code
+   * updateControls_Should_replaceOwnedObjectsWholesale_NotMergeThemRecursively}.
    */
   private void saveControlsSettings(
       TenantAdminControlsSettings controlsSettings, TenantAdminControlsEntity entity) {
