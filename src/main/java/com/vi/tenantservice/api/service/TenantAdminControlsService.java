@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.vi.tenantservice.api.converter.TenantConverter;
@@ -59,6 +60,9 @@ public class TenantAdminControlsService {
    */
   private static final ObjectMapper OBJECT_MAPPER =
       new ObjectMapper().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
+  private static final ObjectReader STORED_TREE_READER =
+      new ObjectMapper().reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
 
   private final @NonNull TenantAdminControlsRepository tenantAdminControlsRepository;
   private final @NonNull TenantConverter tenantConverter;
@@ -375,7 +379,8 @@ public class TenantAdminControlsService {
       return OBJECT_MAPPER.createObjectNode();
     }
     try {
-      JsonNode tree = OBJECT_MAPPER.readTree(controlsJson);
+      // Decimals stay exact: a double would round the value of an unknown field on the way through.
+      JsonNode tree = STORED_TREE_READER.readTree(controlsJson);
       // A blob that is not a JSON object is not something this service wrote, and there is nothing
       // in it to preserve. The read path uses defaults for these roots as well.
       return tree.isObject() ? (ObjectNode) tree : OBJECT_MAPPER.createObjectNode();

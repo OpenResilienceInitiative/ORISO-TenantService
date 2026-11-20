@@ -393,6 +393,51 @@ class TenantAdminControlsServiceTest {
   }
 
   @Test
+  void updateControls_Should_keepDecimalValuesOfUnknownFieldsExact() throws Exception {
+    givenStoredControlsJson("{\"permissionsPageEnabled\":true,\"futureLimit\":9007199254740993.0}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    // a double would round this to 9007199254740992.0
+    var saved =
+        new com.fasterxml.jackson.databind.ObjectMapper()
+            .reader()
+            .with(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+            .readTree(capturedSavedControls());
+    assertThat(saved.get("futureLimit").decimalValue())
+        .isEqualByComparingTo(new java.math.BigDecimal("9007199254740993.0"));
+  }
+
+  @Test
+  void updateControls_Should_overwriteOwnedObjectWithNull_AndKeepUnknownFields() throws Exception {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"aFieldOnlyANewerBuildKnows\":{\"nested\":true},"
+            + "\"allowedPermissionToggles\":{\"videoCalls\":false}}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(
+            TenantAdminControlsSettings.builder()
+                .permissionsPageEnabled(false)
+                .allowedPermissionToggles(null)
+                .build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    var saved = new com.fasterxml.jackson.databind.ObjectMapper().readTree(capturedSavedControls());
+    assertThat(saved.has("allowedPermissionToggles")).isTrue();
+    assertThat(saved.get("allowedPermissionToggles").isNull()).isTrue();
+    assertThat(saved.has("aFieldOnlyANewerBuildKnows")).isTrue();
+  }
+
+  @Test
   void updateControls_Should_preserveCanonicalPoliciesOmittedByAPartialRequest() {
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,"
