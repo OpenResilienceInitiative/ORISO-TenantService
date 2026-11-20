@@ -127,19 +127,65 @@ class TenantSearchBatchIT {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"*", " \u2003 "})
-  void blankPlatformSearchOnlyEnrichesTheRequestedPage(String query) throws Exception {
+  @ValueSource(strings = {"", "*", " \u2003 "})
+  void blankPlatformSearchBatchesOnlyTheRequestedPage(String query) throws Exception {
     seedTenants(12);
 
     search(query, 0L, APP, 2)
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.total").value(12))
-        .andExpect(jsonPath("$._embedded.length()").value(2));
+        .andExpect(jsonPath("$._embedded.length()").value(2))
+        .andExpect(jsonPath("$._embedded[0].id").value(2))
+        .andExpect(jsonPath("$._embedded[0].adminEmails[0]").value("alpha-2@example.test"))
+        .andExpect(jsonPath("$._embedded[1].id").value(1))
+        .andExpect(jsonPath("$._embedded[1].adminEmails[0]").value("alpha-1@example.test"));
 
-    assertThat(owners.requests).extracting(OwnerRequest::path).containsOnly(OWNERS);
+    assertThat(owners.requests)
+        .containsExactly(new OwnerRequest(BATCH, List.of(2L, 1L), "Bearer " + TOKEN));
+  }
+
+  @Test
+  void blankPageWithoutVisibleRowsDoesNotResolveOwnerEmails() throws Exception {
+    seedTenants(12);
+
+    search("*", 0L, APP, 3).andExpect(status().isOk()).andExpect(jsonPath("$.total").value(12));
+
+    assertThat(owners.requests).isEmpty();
+  }
+
+  @Test
+  void blankScopedSearchKeepsItsSingleOwnerLookup() throws Exception {
+    seedTenants(12);
+
+    search("*", 2L, APP, 1)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.total").value(1))
+        .andExpect(jsonPath("$._embedded[0].id").value(2));
+
+    assertThat(owners.requests)
+        .containsExactly(new OwnerRequest(OWNERS, List.of(2L), "Bearer " + TOKEN));
+  }
+
+  @Test
+  void blankPlatformSearchFallsBackToPerRowDisplayWhenBatchFails() throws Exception {
+    seedTenants(12);
+    owners.batchStatus = 503;
+    owners.unavailableOwner = 2L;
+
+    search("*", 0L, APP, 2)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.total").value(12))
+        .andExpect(jsonPath("$._embedded[0].id").value(2))
+        .andExpect(jsonPath("$._embedded[0].adminEmails").isEmpty())
+        .andExpect(jsonPath("$._embedded[1].id").value(1))
+        .andExpect(jsonPath("$._embedded[1].adminEmails[0]").value("alpha-1@example.test"));
+
+    assertThat(owners.requests)
+        .extracting(OwnerRequest::path)
+        .containsExactly(BATCH, OWNERS, OWNERS);
     assertThat(owners.requests)
         .extracting(OwnerRequest::ids)
-        .containsExactly(List.of(2L), List.of(1L));
+        .containsExactly(List.of(2L, 1L), List.of(2L), List.of(1L));
   }
 
   @Test
@@ -331,6 +377,7 @@ class TenantSearchBatchIT {
     private final ConcurrentLinkedQueue<OwnerRequest> requests = new ConcurrentLinkedQueue<>();
     private volatile int batchStatus = 200;
     private volatile String batchBody;
+    private volatile Long unavailableOwner;
 
     private OwnerServer() throws IOException {
       server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -346,6 +393,7 @@ class TenantSearchBatchIT {
       requests.clear();
       batchStatus = 200;
       batchBody = null;
+      unavailableOwner = null;
     }
 
     private void respond(HttpExchange exchange) throws IOException {
@@ -369,7 +417,11 @@ class TenantSearchBatchIT {
         byte[] json = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.getResponseHeaders().set("Connection", "close");
-        exchange.sendResponseHeaders(batch ? batchStatus : 200, json.length);
+        int responseStatus = batch ? batchStatus : 200;
+        if (!batch && ids.getFirst().equals(unavailableOwner)) {
+          responseStatus = 503;
+        }
+        exchange.sendResponseHeaders(responseStatus, json.length);
         exchange.getResponseBody().write(json);
       }
     }

@@ -299,6 +299,7 @@ class TenantServiceFacadeTest {
   void clearedAndSentinelSearchDoNotResolveCandidateOwners() {
     when(tenantService.searchTenantData(eq(List.of()), eq(java.util.Map.of()), any(), any()))
         .thenReturn(org.springframework.data.domain.Page.empty());
+    tenantServiceFacade.findTenantsExceptTechnicalByInfix(null, 0, 1, "id", true);
     tenantServiceFacade.findTenantsExceptTechnicalByInfix(" \u2003 ", 0, 1, "id", true);
     tenantServiceFacade.findTenantsExceptTechnicalByInfix("*", 0, 1, "id", true);
     verify(tenantService, never()).searchableTenantIds(any());
