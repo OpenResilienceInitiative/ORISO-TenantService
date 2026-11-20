@@ -72,7 +72,7 @@ public class LenientPolicyValueMapDeserializer
 
     JsonNode modeNode = node.get("mode");
     if (modeNode == null || !modeNode.isTextual()) {
-      return drop(feature, "its mode is missing");
+      return drop(feature, "its mode is missing or not a string");
     }
     PermissionPolicyMode mode;
     try {

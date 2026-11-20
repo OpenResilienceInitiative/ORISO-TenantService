@@ -95,6 +95,18 @@ class LenientPolicyValueMapDeserializerTest {
   }
 
   @Test
+  void shouldTreatNonObjectPolicyMapAsEmptyAndKeepSiblingFields() throws Exception {
+    var settings =
+        read(
+            """
+        {"permissionsPageEnabled":true,"permissionPolicies":[]}
+        """);
+
+    assertThat(settings.getPermissionPolicies()).isEmpty();
+    assertThat(settings.isPermissionsPageEnabled()).isTrue();
+  }
+
+  @Test
   void shouldDropEntryThatIsNotAnObject() throws Exception {
     var settings =
         read(
