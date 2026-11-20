@@ -62,23 +62,23 @@ public class LenientPolicyValueMapDeserializer
       return drop(feature, "it is not a known feature in this build");
     }
     if (node == null || !node.isObject()) {
-      return drop(feature, "its policy is not a JSON object");
+      return restrict(feature, "its policy is not a JSON object");
     }
 
     JsonNode valueNode = node.get("value");
     if (valueNode == null || !valueNode.isBoolean()) {
-      return drop(feature, "its value is not a boolean");
+      return restrict(feature, "its value is not a boolean");
     }
 
     JsonNode modeNode = node.get("mode");
     if (modeNode == null || !modeNode.isTextual()) {
-      return drop(feature, "its mode is missing or not a string");
+      return restrict(feature, "its mode is missing or not a string");
     }
     PermissionPolicyMode mode;
     try {
       mode = PermissionPolicyMode.valueOf(modeNode.asText());
     } catch (IllegalArgumentException unknownMode) {
-      return drop(feature, "its mode '" + modeNode.asText() + "' is unknown to this build");
+      return restrict(feature, "its mode '" + modeNode.asText() + "' is unknown to this build");
     }
 
     return Optional.of(new PolicyValue<>(valueNode.booleanValue(), mode));
@@ -90,5 +90,21 @@ public class LenientPolicyValueMapDeserializer
         feature,
         reason);
     return Optional.empty();
+  }
+
+  /**
+   * A known feature whose stored policy cannot be read gets the most restrictive policy (off,
+   * enforced) instead of vanishing: a missing entry would be refilled from the legacy toggles
+   * (everything on, suggested) and could silently lift a platform restriction that was stored as
+   * ENFORCED. The tenant keeps its bootstrap; the feature stays off until the policy is saved
+   * again.
+   */
+  private Optional<PolicyValue<Boolean>> restrict(String feature, String reason) {
+    log.warn(
+        "Stored permission policy for '{}' is unreadable because {}. Applying the restrictive"
+            + " default (off, enforced) until it is saved again.",
+        feature,
+        reason);
+    return Optional.of(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
   }
 }

@@ -11,8 +11,9 @@ import org.junit.jupiter.api.Test;
 /**
  * The controls blob is read on the bootstrap path, so a single unreadable policy entry must not
  * cost the whole tenant its settings. These tests pin the one-way tolerance described on {@link
- * TenantAdminControlsSettings}: drop what cannot be understood, keep everything else, and still
- * fail loudly when the document itself is broken.
+ * TenantAdminControlsSettings}: drop unknown features, give unreadable known features the
+ * restrictive default (off, enforced), keep everything else, and still fail loudly when the
+ * document itself is broken.
  */
 class LenientPolicyValueMapDeserializerTest {
 
@@ -54,7 +55,7 @@ class LenientPolicyValueMapDeserializerTest {
   }
 
   @Test
-  void shouldDropEntryWhoseModeIsUnknown() throws Exception {
+  void shouldApplyRestrictiveDefaultToEntryWhoseModeIsUnknown() throws Exception {
     var settings =
         read(
             """
@@ -63,11 +64,14 @@ class LenientPolicyValueMapDeserializerTest {
               "featureThreadsEnabled":{"value":true,"mode":"SUGGESTED"}}}
             """);
 
-    assertThat(settings.getPermissionPolicies()).containsOnlyKeys("featureThreadsEnabled");
+    assertThat(settings.getPermissionPolicies())
+        .containsOnlyKeys("featureCallsEnabled", "featureThreadsEnabled");
+    assertThat(settings.getPermissionPolicies().get("featureCallsEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
   }
 
   @Test
-  void shouldDropEntryWhoseValueIsNotABoolean() throws Exception {
+  void shouldApplyRestrictiveDefaultToEntryWhoseValueIsNotABoolean() throws Exception {
     var settings =
         read(
             """
@@ -76,11 +80,14 @@ class LenientPolicyValueMapDeserializerTest {
               "featureThreadsEnabled":{"value":true,"mode":"ENFORCED"}}}
             """);
 
-    assertThat(settings.getPermissionPolicies()).containsOnlyKeys("featureThreadsEnabled");
+    assertThat(settings.getPermissionPolicies())
+        .containsOnlyKeys("featureCallsEnabled", "featureThreadsEnabled");
+    assertThat(settings.getPermissionPolicies().get("featureCallsEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
   }
 
   @Test
-  void shouldDropEntryMissingValueOrMode() throws Exception {
+  void shouldApplyRestrictiveDefaultToEntryMissingValueOrMode() throws Exception {
     var settings =
         read(
             """
@@ -91,7 +98,18 @@ class LenientPolicyValueMapDeserializerTest {
               "featureMediaUploadEnabled":{"value":true,"mode":"ENFORCED"}}}
             """);
 
-    assertThat(settings.getPermissionPolicies()).containsOnlyKeys("featureMediaUploadEnabled");
+    assertThat(settings.getPermissionPolicies())
+        .containsOnlyKeys(
+            "featureCallsEnabled",
+            "featureThreadsEnabled",
+            "featureVoiceMessagesEnabled",
+            "featureMediaUploadEnabled");
+    assertThat(settings.getPermissionPolicies().get("featureCallsEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+    assertThat(settings.getPermissionPolicies().get("featureThreadsEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+    assertThat(settings.getPermissionPolicies().get("featureVoiceMessagesEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
   }
 
   @Test
@@ -107,7 +125,7 @@ class LenientPolicyValueMapDeserializerTest {
   }
 
   @Test
-  void shouldDropEntryThatIsNotAnObject() throws Exception {
+  void shouldApplyRestrictiveDefaultToEntryThatIsNotAnObject() throws Exception {
     var settings =
         read(
             """
@@ -116,7 +134,10 @@ class LenientPolicyValueMapDeserializerTest {
               "featureThreadsEnabled":{"value":true,"mode":"ENFORCED"}}}
             """);
 
-    assertThat(settings.getPermissionPolicies()).containsOnlyKeys("featureThreadsEnabled");
+    assertThat(settings.getPermissionPolicies())
+        .containsOnlyKeys("featureCallsEnabled", "featureThreadsEnabled");
+    assertThat(settings.getPermissionPolicies().get("featureCallsEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
   }
 
   @Test
