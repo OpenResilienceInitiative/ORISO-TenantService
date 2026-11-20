@@ -102,6 +102,22 @@ class TenantSearchVisibilityIT {
   }
 
   @Test
+  void organisationAdminSearchReturnsNoRowsWhenOnlyAnotherOrganisationMatches() throws Exception {
+    when(userAdminService.getTenantAdmins(1)).thenReturn(adminsWithEmail("owner@example.test"));
+
+    mvc.perform(
+            get(SEARCH)
+                .param("query", "examplesubdomain")
+                .with(caller("organisation", "1", "tenant-admin", "agency-admin", "user-admin")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.total").value(0))
+        .andExpect(jsonPath("$._embedded").isEmpty());
+
+    verify(userAdminService).getTenantAdmins(1);
+    verifyNoMoreInteractions(userAdminService);
+  }
+
+  @Test
   void platformAdminSearchCountsAllMatchingOrganisationsBeforePaging() throws Exception {
     when(userAdminService.getTenantAdmins(1)).thenReturn(adminsWithEmail("owner-one@example.test"));
     when(userAdminService.getTenantAdmins(3))

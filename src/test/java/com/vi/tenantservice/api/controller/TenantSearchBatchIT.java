@@ -126,6 +126,13 @@ class TenantSearchBatchIT {
     comparePlatformSearches(candidates, candidates / 100);
   }
 
+  @Test
+  void platformSearchIncludesThePartialBatchAfterAFullBatch() throws Exception {
+    comparePlatformSearches(101, 2);
+
+    assertThat(owners.requests).extracting(request -> request.ids().size()).containsExactly(100, 1);
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {"", "*", " \u2003 "})
   void blankPlatformSearchBatchesOnlyTheRequestedPage(String query) throws Exception {
