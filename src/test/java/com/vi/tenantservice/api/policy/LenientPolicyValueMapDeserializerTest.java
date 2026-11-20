@@ -68,6 +68,8 @@ class LenientPolicyValueMapDeserializerTest {
         .containsOnlyKeys("featureCallsEnabled", "featureThreadsEnabled");
     assertThat(settings.getPermissionPolicies().get("featureCallsEnabled"))
         .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+    assertThat(settings.getPermissionPolicies().get("featureThreadsEnabled"))
+        .isEqualTo(new PolicyValue<>(true, PermissionPolicyMode.SUGGESTED));
   }
 
   @Test
@@ -84,6 +86,8 @@ class LenientPolicyValueMapDeserializerTest {
         .containsOnlyKeys("featureCallsEnabled", "featureThreadsEnabled");
     assertThat(settings.getPermissionPolicies().get("featureCallsEnabled"))
         .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+    assertThat(settings.getPermissionPolicies().get("featureThreadsEnabled"))
+        .isEqualTo(new PolicyValue<>(true, PermissionPolicyMode.ENFORCED));
   }
 
   @Test
@@ -110,6 +114,8 @@ class LenientPolicyValueMapDeserializerTest {
         .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
     assertThat(settings.getPermissionPolicies().get("featureVoiceMessagesEnabled"))
         .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+    assertThat(settings.getPermissionPolicies().get("featureMediaUploadEnabled"))
+        .isEqualTo(new PolicyValue<>(true, PermissionPolicyMode.ENFORCED));
   }
 
   @Test
@@ -138,6 +144,8 @@ class LenientPolicyValueMapDeserializerTest {
         .containsOnlyKeys("featureCallsEnabled", "featureThreadsEnabled");
     assertThat(settings.getPermissionPolicies().get("featureCallsEnabled"))
         .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+    assertThat(settings.getPermissionPolicies().get("featureThreadsEnabled"))
+        .isEqualTo(new PolicyValue<>(true, PermissionPolicyMode.ENFORCED));
   }
 
   @Test
