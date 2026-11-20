@@ -38,6 +38,12 @@ public class AuthorisationService {
     return roles != null && roles.contains(roleName);
   }
 
+  public boolean isAuthorizedParty(String clientId) {
+    return getPrincipal().getClaims().get("azp") instanceof String authorizedParty
+        && !authorizedParty.isBlank()
+        && authorizedParty.equals(clientId);
+  }
+
   public Optional<Long> findTenantIdInAccessToken() {
     Jwt principal = getPrincipal();
     Object tenantIdClaim = principal.getClaims().get("tenantId");

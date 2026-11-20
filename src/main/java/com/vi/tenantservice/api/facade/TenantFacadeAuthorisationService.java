@@ -55,6 +55,9 @@ public class TenantFacadeAuthorisationService {
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
 
+  @Value("${keycloak.config.app-client-id:app}")
+  private String appClientId;
+
   private boolean userHasAnyRoleOf(List<UserRole> roles) {
     return roles.stream().anyMatch(userRole -> authorisationService.hasRole(userRole.getValue()));
   }
@@ -140,6 +143,31 @@ public class TenantFacadeAuthorisationService {
   public boolean mayListEveryTenant() {
     return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
         && isPlatformAdministrator();
+  }
+
+  boolean mayBatchTenantAdminEmails() {
+    return mayListEveryTenant()
+        && authorisationService.hasRole("agency-admin")
+        && authorisationService.isAuthorizedParty(appClientId);
+  }
+
+  /** Empty means the human platform administrator may search across organisations. */
+  Optional<Long> tenantRestrictionForSearch() {
+    if (mayListEveryTenant()) {
+      return Optional.empty();
+    }
+    if (isTechnicalUser()) {
+      throw new AccessDeniedException("Technical callers cannot search organisations");
+    }
+    try {
+      var tenantId = authorisationService.findTenantIdInAccessToken().filter(id -> id > 0);
+      if (tenantId.isPresent()) {
+        return tenantId;
+      }
+    } catch (NumberFormatException invalidTenantId) {
+      throw new AccessDeniedException("Invalid tenant id in access token", invalidTenantId);
+    }
+    throw new AccessDeniedException("Organisation search requires a concrete tenant");
   }
 
   /**
