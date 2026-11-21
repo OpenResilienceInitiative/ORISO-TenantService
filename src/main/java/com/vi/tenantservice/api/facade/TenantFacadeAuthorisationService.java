@@ -442,6 +442,11 @@ public class TenantFacadeAuthorisationService {
     return isSuperAdmin() && !isTechnicalUser();
   }
 
+  public boolean mayManageTenantIdReservations() {
+    return isPlatformAdministrator()
+        && authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT);
+  }
+
   /**
    * Publishing a data processing agreement stamps a version every tenant must sign and sets the
    * deadline after which new counselling stops, so it is the platform administrator's act alone. A
