@@ -42,6 +42,8 @@ import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -1852,6 +1854,147 @@ class TenantControllerIT {
                 .contentType(APPLICATION_JSON)
                 .content("{\"apiKey\":\"sk-or-v1-0123456789abcd\"}"))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void updateTenant_Should_rejectFirstReplyChangesWhenTheDisclosureIsMissing() throws Exception {
+    expectRejectedFirstReplyDisclosure(null);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "<p>&nbsp;\u200B<br></p>"})
+  void updateTenant_Should_rejectFirstReplyChangesWhenTheDisclosureIsEmpty(String disclosure)
+      throws Exception {
+    expectRejectedFirstReplyDisclosure(disclosure);
+  }
+
+  private void expectRejectedFirstReplyDisclosure(String disclosure) throws Exception {
+    var request = tenant1FirstReplyRequest();
+    request.build().getContent().setErstantwortClosing(java.util.Map.of("de", "Bis bald."));
+    if (disclosure != null) {
+      request
+          .build()
+          .getContent()
+          .setErstantwortWhoReadsAlong(
+              java.util.Map.of(
+                  "de", disclosure,
+                  "en", "An earlier English translation.",
+                  "en__meta", "{\"mt\":true,\"src\":\"de\"}"));
+    }
+
+    putTenant1AsTenantAdmin(request.jsonify())
+        .andExpect(status().isBadRequest())
+        .andExpect(header().string("X-Reason", "ERSTANTWORT_WHO_READS_ALONG_REQUIRED"));
+
+    var stored = tenantRepository.findById(1L).orElseThrow();
+    assertThat(stored.getContentErstantwortClosing()).isNull();
+    assertThat(stored.getContentErstantwortWhoReadsAlong()).isNull();
+    assertThat(stored.getName()).isEqualTo("Happylife Gmbh");
+  }
+
+  @Test
+  void updateTenant_Should_keepTheAuthoredDisclosure_WhenOnlyAnotherFirstReplyFieldChanges()
+      throws Exception {
+    String disclosure = "<p>Unser Beratungsteam liest deine Nachrichten.</p>";
+    String disclosurePath = "$.content.erstantwortWhoReadsAlong['de@informal']";
+    var authored = tenant1FirstReplyRequest();
+    authored
+        .build()
+        .getContent()
+        .setErstantwortWhoReadsAlong(java.util.Map.of("de@informal", disclosure));
+
+    putTenant1AsTenantAdmin(authored.jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(disclosurePath, is(disclosure)));
+
+    var closingOnly = tenant1FirstReplyRequest();
+    closingOnly.build().getContent().setErstantwortClosing(java.util.Map.of("de", "Bis bald."));
+
+    putTenant1AsTenantAdmin(closingOnly.jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content.erstantwortClosing.de", is("Bis bald.")))
+        .andExpect(jsonPath(disclosurePath, is(disclosure)));
+  }
+
+  @Test
+  void updateTenant_Should_acceptTheAuthoredLanguageDeclaredByTranslationMetadata()
+      throws Exception {
+    String disclosure = "Our counselling team reads along.";
+    var request = tenant1FirstReplyRequest();
+    request
+        .build()
+        .getContent()
+        .setErstantwortWhoReadsAlong(
+            java.util.Map.of(
+                "en", disclosure,
+                "fr", "Notre équipe de conseil lit les messages.",
+                "fr__meta", "{\"mt\":true,\"src\":\"en\"}"));
+
+    putTenant1AsTenantAdmin(request.jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content.erstantwortWhoReadsAlong.en", is(disclosure)))
+        .andExpect(jsonPath("$.content.erstantwortWhoReadsAlong.de").doesNotExist());
+  }
+
+  @Test
+  void updateTenant_Should_allowAnUnrelatedSettingChange_WhenFullPutEchoesLegacyFirstReply()
+      throws Exception {
+    var legacy = tenantRepository.findById(1L).orElseThrow();
+    legacy.setContentErstantwortGreeting("{\"de\":\"Willkommen.\"}");
+    tenantRepository.saveAndFlush(legacy);
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+    var caller = new AuthenticationMockBuilder().withUserRole(TENANT_ADMIN.getValue());
+    var current =
+        mockMvc
+            .perform(get(EXISTING_TENANT_VIA_ADMIN).with(authentication(caller.build())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.settings.topicsInRegistrationEnabled", is(true)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var echoed = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(current);
+    var settings = (com.fasterxml.jackson.databind.node.ObjectNode) echoed.get("settings");
+    settings.put("topicsInRegistrationEnabled", false);
+
+    putTenant1AsTenantAdmin(mapper.writeValueAsString(echoed))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.topicsInRegistrationEnabled", is(false)))
+        .andExpect(jsonPath("$.content.erstantwortGreeting.de", is("Willkommen.")))
+        .andExpect(jsonPath("$.content.erstantwortWhoReadsAlong").isEmpty());
+  }
+
+  @Test
+  void createTenant_Should_rejectFirstReplyPublicationWithoutSourceDisclosure() throws Exception {
+    long tenantCount = tenantRepository.count();
+    var request =
+        new MultilingualTenantTestDataBuilder()
+            .withName("First reply tenant")
+            .withSubdomain("firstreplytenant")
+            .withLicensing()
+            .withContent();
+    request.build().getContent().setErstantwortResponseDeadlineDays(3);
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+    var caller = new AuthenticationMockBuilder().withUserRole(TENANT_ADMIN.getValue());
+
+    mockMvc
+        .perform(
+            post(TENANTADMIN_RESOURCE)
+                .with(authentication(caller.build()))
+                .contentType(APPLICATION_JSON)
+                .content(request.jsonify()))
+        .andExpect(status().isBadRequest())
+        .andExpect(header().string("X-Reason", "ERSTANTWORT_WHO_READS_ALONG_REQUIRED"));
+
+    assertThat(tenantRepository.count()).isEqualTo(tenantCount);
+  }
+
+  private MultilingualTenantTestDataBuilder tenant1FirstReplyRequest() {
+    return multilingualTenantTestDataBuilder
+        .tenantDTO()
+        .withSubdomain("happylife")
+        .withLicensing(5)
+        .withContent();
   }
 
   // --- Träger legal name and contact (Frank, 2026-09-23): the mail footer names the Träger's own

@@ -47,7 +47,7 @@ import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
 import com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens;
 import com.vi.tenantservice.api.util.JsonConverter;
-import com.vi.tenantservice.api.util.TranslationMetaUtil;
+import com.vi.tenantservice.api.validation.ErstantwortPublication;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.NonNull;
@@ -308,28 +308,7 @@ public class TenantConverter {
     if (incoming == null || incoming.isEmpty()) {
       return stored;
     }
-    var kept = new java.util.LinkedHashMap<String, String>();
-    incoming.forEach(
-        (key, value) -> {
-          if (key != null
-              && !TranslationMetaUtil.isMetaKey(key)
-              && value != null
-              && !value.isBlank()) {
-            kept.put(key, value);
-          }
-        });
-    // Meta is kept only for retained languages: an orphan meta of a cleared language is dropped.
-    incoming.forEach(
-        (key, value) -> {
-          if (key != null
-              && TranslationMetaUtil.isMetaKey(key)
-              && value != null
-              && !value.isBlank()
-              && kept.containsKey(TranslationMetaUtil.languageOf(key))) {
-            kept.put(key, value);
-          }
-        });
-    return convertToJson(kept);
+    return convertToJson(ErstantwortPublication.retainedTranslations(incoming));
   }
 
   private static boolean hasJson(String json) {
