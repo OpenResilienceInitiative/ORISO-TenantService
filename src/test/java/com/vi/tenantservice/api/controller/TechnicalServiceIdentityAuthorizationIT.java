@@ -419,6 +419,8 @@ class TechnicalServiceIdentityAuthorizationIT {
     var retainedAssignment = reservationRepository.findById(FREE_ID).orElseThrow();
     retainedAssignment.setStatus(TenantIdReservationStatus.ASSIGNED);
     reservationRepository.saveAndFlush(retainedAssignment);
+    assertThat(tenantIdAllocationService.hasMatchingAssignment(RESERVED_ID, retainedProof))
+        .isFalse();
     mvc.perform(get(assignment, FREE_ID).with(worker).header("X-Reservation-Token", retainedProof))
         .andExpect(status().isNotFound());
   }
