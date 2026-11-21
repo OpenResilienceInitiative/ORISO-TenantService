@@ -580,6 +580,24 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
+  @PreAuthorize(
+      "(hasAuthority('AUTHORIZATION_CREATE_TENANT')"
+          + " and @tenantFacadeAuthorisationService.isPlatformAdministrator())"
+          + " or hasAuthority('AUTHORIZATION_TECHNICAL_READ_TENANT')"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')"
+          + " or @taskServiceIdentity.allows(authentication, 'CONFIG_WIZARD')")
+  public ResponseEntity<Void> checkTenantIdAssignmentProof(Long id, String reservationToken) {
+    if (reservationToken == null || reservationToken.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reservation proof is required");
+    }
+    HttpStatus status =
+        tenantIdAllocationService.hasMatchingAssignment(id, reservationToken)
+            ? HttpStatus.NO_CONTENT
+            : HttpStatus.NOT_FOUND;
+    return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).build();
+  }
+
+  @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<TenantOperationalStatusDTO> updateTenantOperationalStatus(
       @Min(1) Long id, @Valid TenantOperationalStatusUpdateDTO request) {
