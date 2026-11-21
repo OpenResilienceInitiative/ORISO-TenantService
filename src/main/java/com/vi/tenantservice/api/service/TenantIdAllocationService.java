@@ -74,6 +74,15 @@ public class TenantIdAllocationService {
         : TenantIdAllocationStatus.FREE;
   }
 
+  @Transactional(readOnly = true)
+  public boolean hasMatchingAssignment(long tenantId, String token) {
+    return reservationRepository
+        .findMatchingAssignmentProof(tenantId, TenantIdReservationStatus.ASSIGNED, token)
+        // The database collation can equate strings that are distinct proofs.
+        .filter(token::equals)
+        .isPresent();
+  }
+
   /**
    * Returns the next free tenant ID from {@code from} (exclusive) in the given direction, skipping
    * assigned and reserved IDs. Empty if no free ID exists in that direction.
