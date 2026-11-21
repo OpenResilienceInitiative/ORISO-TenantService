@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.service.consultingtype;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.config.apiclient.ConsultingTypeServiceApiControllerFactory;
+import com.vi.tenantservice.api.exception.ConsultingSettingsOutcomeUnknownException;
 import com.vi.tenantservice.api.service.ConfigurationFileLoader;
 import com.vi.tenantservice.api.service.httpheader.SecurityHeaderSupplier;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
@@ -16,8 +17,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.UnknownContentTypeException;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
@@ -91,7 +96,19 @@ public class ConsultingTypeService {
     addDefaultHeaders(consultingTypeControllerApi.getApiClient());
     try {
       return consultingTypeControllerApi.patchConsultingType(id, consultingTypeDTO);
+    } catch (ResponseStatusException e) {
+      // The CTS response handler preserves its explicit HTTP status.
+      if (e.getStatusCode().is5xxServerError()) {
+        throw new ConsultingSettingsOutcomeUnknownException(e);
+      }
+      throw e;
     } catch (RestClientException e) {
+      if (e instanceof ResourceAccessException
+          || e instanceof UnknownContentTypeException
+          || e.getCause() instanceof IOException
+          || e.getCause() instanceof HttpMessageNotReadableException) {
+        throw new ConsultingSettingsOutcomeUnknownException(e);
+      }
       log.error("Error while patching consulting type {}", id, e);
       throw e;
     }

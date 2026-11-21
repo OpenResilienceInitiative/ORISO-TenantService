@@ -1,5 +1,6 @@
 package com.vi.tenantservice.api.controller;
 
+import com.vi.tenantservice.api.exception.ConsultingSettingsOutcomeUnknownException;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.TenantBadRequestException;
@@ -71,6 +72,16 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
   @ResponseStatus(HttpStatus.CONFLICT)
   protected void handleSettingsUpdateConflict(SettingsUpdateConflictException e) {
     logger.info("Returning HTTP 409 Conflict for concurrent settings update: " + e.getMessage());
+  }
+
+  @ExceptionHandler(ConsultingSettingsOutcomeUnknownException.class)
+  protected ResponseEntity<Object> handle(
+      ConsultingSettingsOutcomeUnknownException ex, WebRequest request) {
+    logger.warn(ex.getMessage() + ": " + ex.getCause().getClass().getSimpleName());
+    var headers =
+        new CustomHttpHeader(HttpStatusExceptionReason.CONSULTING_SETTINGS_OUTCOME_UNKNOWN)
+            .buildHeader();
+    return handleExceptionInternal(ex, null, headers, HttpStatus.BAD_GATEWAY, request);
   }
 
   @ExceptionHandler(value = {TenantAuthorisationException.class})

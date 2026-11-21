@@ -761,6 +761,16 @@ paths:
           description: CONFLICT - unique constraint validation fails
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+        502:
+          description: >-
+            ConsultingTypeService did not confirm the update. TenantService rolled back its
+            changes. Check the current consulting settings before retrying.
+          headers:
+            X-Reason:
+              description: The outcome of the consulting settings write is unknown.
+              schema:
+                type: string
+                enum: [CONSULTING_SETTINGS_OUTCOME_UNKNOWN]
     get:
       tags:
         - tenant-controller
