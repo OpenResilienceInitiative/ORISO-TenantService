@@ -479,7 +479,8 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   @PreAuthorize(
-      "hasAuthority('AUTHORIZATION_CREATE_TENANT') or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
+      "@tenantFacadeAuthorisationService.mayManageTenantIdReservations()"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
   public ResponseEntity<TenantIdAvailabilityDTO> getTenantIdAvailability(Long id) {
     var status = tenantIdAllocationService.getStatus(id);
     return ResponseEntity.ok(
@@ -489,7 +490,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  @PreAuthorize("@tenantFacadeAuthorisationService.mayManageTenantIdReservations()")
   public ResponseEntity<NextFreeTenantIdDTO> getNextFreeTenantId(Long from, String direction) {
     boolean upwards = "UP".equalsIgnoreCase(direction);
     if (!upwards && !"DOWN".equalsIgnoreCase(direction)) {
@@ -502,7 +503,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  @PreAuthorize("@tenantFacadeAuthorisationService.mayManageTenantIdReservations()")
   public ResponseEntity<TenantIdReservationDTO> reserveTenantId(
       TenantIdReservationRequestDTO tenantIdReservationRequestDTO) {
     var requestedId =
@@ -522,8 +523,9 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   @PreAuthorize(
-      "hasAnyAuthority('AUTHORIZATION_CREATE_TENANT',"
-          + " 'AUTHORIZATION_TECHNICAL_RELEASE_TENANT_ID_RESERVATION') or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
+      "@tenantFacadeAuthorisationService.mayManageTenantIdReservations()"
+          + " or hasAuthority('AUTHORIZATION_TECHNICAL_RELEASE_TENANT_ID_RESERVATION')"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
   public ResponseEntity<Void> releaseTenantIdReservation(Long id, String reservationToken) {
     log.info(
         "Releasing tenant ID reservation {} by user {}", id, authorisationService.getUsername());
