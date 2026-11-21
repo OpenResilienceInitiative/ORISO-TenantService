@@ -444,6 +444,29 @@ class TechnicalServiceIdentityAuthorizationIT {
   }
 
   @Test
+  void assignmentProofCheck_Should_requireAssignedStatusWhenTenantExists() throws Exception {
+    var wizard = task("wizard-subject", "backend-config-wizard", "config-wizard", "tenantservice");
+    String proof = reserve(RESERVED_ID);
+    String assignment = "/tenantadmin/tenant-ids/reservations/{id}/assignment";
+    mvc.perform(createTenant(wizard, RESERVED_ID, proof, "assignmentstatus"))
+        .andExpect(status().isOk());
+
+    var reservation = reservationRepository.findById(RESERVED_ID).orElseThrow();
+    assertThat(reservation.getStatus()).isEqualTo(TenantIdReservationStatus.ASSIGNED);
+    reservation.setStatus(TenantIdReservationStatus.RESERVED);
+    reservationRepository.saveAndFlush(reservation);
+    mvc.perform(get(assignment, RESERVED_ID).with(wizard).header("X-Reservation-Token", proof))
+        .andExpect(status().isNotFound())
+        .andExpect(header().string("Cache-Control", "no-store"));
+
+    reservation.setStatus(TenantIdReservationStatus.ASSIGNED);
+    reservationRepository.saveAndFlush(reservation);
+    mvc.perform(get(assignment, RESERVED_ID).with(wizard).header("X-Reservation-Token", proof))
+        .andExpect(status().isNoContent())
+        .andExpect(header().string("Cache-Control", "no-store"));
+  }
+
+  @Test
   void runtimePolicyReadsOnlyGateAndPolicies() throws Exception {
     var policy =
         task("policy-subject", "backend-runtime-policy", "runtime-policy", "tenantservice");
