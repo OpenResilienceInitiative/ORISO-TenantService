@@ -419,10 +419,28 @@ class TechnicalServiceIdentityAuthorizationIT {
     var retainedAssignment = reservationRepository.findById(FREE_ID).orElseThrow();
     retainedAssignment.setStatus(TenantIdReservationStatus.ASSIGNED);
     reservationRepository.saveAndFlush(retainedAssignment);
-    assertThat(tenantIdAllocationService.hasMatchingAssignment(RESERVED_ID, retainedProof))
-        .isFalse();
+    mvc.perform(
+            get(assignment, RESERVED_ID).with(worker).header("X-Reservation-Token", retainedProof))
+        .andExpect(status().isNotFound())
+        .andExpect(header().string("Cache-Control", "no-store"));
     mvc.perform(get(assignment, FREE_ID).with(worker).header("X-Reservation-Token", retainedProof))
-        .andExpect(status().isNotFound());
+        .andExpect(status().isNotFound())
+        .andExpect(header().string("Cache-Control", "no-store"));
+
+    var wrongWorkerSubject =
+        task(
+            "foreign-subject",
+            "backend-invite-reservations",
+            "invitation-reservations",
+            "tenantservice");
+    var wrongWorkerClient =
+        task("reservation-subject", "wrong-client", "invitation-reservations", "tenantservice");
+    for (RequestPostProcessor unauthorized :
+        List.of(foreignSubjectWithTechnicalRole(), wrongWorkerSubject, wrongWorkerClient)) {
+      mvc.perform(
+              get(assignment, RESERVED_ID).with(unauthorized).header("X-Reservation-Token", proof))
+          .andExpect(status().isForbidden());
+    }
   }
 
   @Test
