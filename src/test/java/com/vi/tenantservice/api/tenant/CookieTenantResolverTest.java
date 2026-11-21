@@ -49,11 +49,13 @@ class CookieTenantResolverTest {
         .isEmpty();
   }
 
-  @Test
-  void resolve_Should_returnEmptyTenant_When_StoredKeycloakSelectionIsUnreadable() {
+  @ParameterizedTest
+  // Missing payload, invalid Base64url, and Base64url-encoded text "not-json".
+  @ValueSource(strings = {"unreadable", "fixture.!.fixture", "fixture.bm90LWpzb24.fixture"})
+  void resolve_Should_returnEmptyTenant_When_StoredKeycloakSelectionIsUnreadable(String value) {
     ReflectionTestUtils.setField(cookieTenantResolver, "multitenancyWithSingleDomain", true);
     var request = new MockHttpServletRequest();
-    request.setCookies(new Cookie("keycloak", "unreadable"), new Cookie("tenantId", "43"));
+    request.setCookies(new Cookie("keycloak", value), new Cookie("tenantId", "43"));
 
     assertThat(cookieTenantResolver.resolveTenantFromRequest(request)).isEmpty();
   }
