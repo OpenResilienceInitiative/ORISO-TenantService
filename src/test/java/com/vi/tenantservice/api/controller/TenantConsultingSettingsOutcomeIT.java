@@ -177,14 +177,6 @@ class TenantConsultingSettingsOutcomeIT {
                   };
                 });
       }
-      if (outcome == Outcome.PATCH_ACKNOWLEDGED) {
-        // Older dev revisions reread after success. The confirmed-response path skips it.
-        server
-            .expect(ExpectedCount.max(1), requestTo(READ_PATH))
-            .andExpect(method(HttpMethod.GET))
-            .andExpect(request -> assertThat(request.getHeaders().getFirst(REQUEST_ID)).isNull())
-            .andRespond(withSuccess(consultingTypeResponse(true), APPLICATION_JSON));
-      }
 
       var mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
       var response =
