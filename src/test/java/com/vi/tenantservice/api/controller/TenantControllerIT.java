@@ -9,7 +9,12 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -37,6 +42,7 @@ import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import com.vi.tenantservice.config.security.AuthorisationService;
+import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
@@ -57,6 +63,8 @@ import org.springframework.test.context.jdbc.Sql.ExecutionPhase;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.context.WebApplicationContext;
 
 @SpringBootTest(classes = TenantServiceApplication.class)
@@ -372,6 +380,71 @@ class TenantControllerIT {
             .andExpect(jsonPath("$.settings.topicsInRegistrationEnabled").value("true"))
             .andExpect(jsonPath("$.settings.activeLanguages").value(Lists.newArrayList("fr", "pl")))
             .andReturn();
+  }
+
+  @ParameterizedTest(name = "PATCH response body present: {0}")
+  @ValueSource(booleans = {true, false})
+  void updateTenantShouldUseConfirmedConsultingTypeSettingsInResponse(boolean hasPatchBody)
+      throws Exception {
+    var requestedName = "Settings transaction fixture";
+    var currentCtsSettings =
+        new FullConsultingTypeResponseDTO().id(CONSULTING_TYPE_ID).languageFormal(false);
+    var savedCtsSettings =
+        new FullConsultingTypeResponseDTO()
+            .id(CONSULTING_TYPE_ID)
+            .languageFormal(true)
+            .isVideoCallAllowed(true)
+            .sendFurtherStepsMessage(true);
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+    var ctsRead = when(consultingTypeService.getConsultingTypesByTenantId(1));
+    if (hasPatchBody) {
+      ctsRead
+          .thenReturn(currentCtsSettings)
+          .thenThrow(new ResourceAccessException("Synthetic CTS read failed after PATCH"));
+    } else {
+      ctsRead.thenReturn(currentCtsSettings, savedCtsSettings);
+    }
+    when(consultingTypeService.patchConsultingType(eq(CONSULTING_TYPE_ID), any()))
+        .thenAnswer(
+            call -> {
+              assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+              assertThat(tenantRepository.findById(1L).orElseThrow().getName())
+                  .isEqualTo(requestedName);
+              return hasPatchBody ? savedCtsSettings : null;
+            });
+    var request =
+        multilingualTenantTestDataBuilder
+            .tenantDTO()
+            .withId(1L)
+            .withName(requestedName)
+            .withSubdomain("happylife")
+            .withLicensing(5)
+            .withSettings();
+    request
+        .build()
+        .getSettings()
+        .setExtendedSettings(
+            new com.vi.tenantservice.api.model.ConsultingTypePatchDTO().languageFormal(true));
+    var actor = new AuthenticationMockBuilder().withUserRole(TENANT_ADMIN.getValue()).build();
+
+    mockMvc
+        .perform(
+            put(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(actor))
+                .contentType(APPLICATION_JSON)
+                .content(request.jsonify()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.extendedSettings.languageFormal").value(true))
+        .andExpect(jsonPath("$.settings.extendedSettings.isVideoCallAllowed").value(true))
+        .andExpect(jsonPath("$.settings.extendedSettings.sendFurtherStepsMessage").value(true));
+
+    assertThat(jdbcTemplate.queryForObject("SELECT name FROM tenant WHERE id = 1", String.class))
+        .isEqualTo(requestedName);
+    verify(consultingTypeService)
+        .patchConsultingType(
+            eq(CONSULTING_TYPE_ID),
+            argThat(patch -> patch != null && Boolean.TRUE.equals(patch.getLanguageFormal())));
+    verify(consultingTypeService, times(hasPatchBody ? 1 : 2)).getConsultingTypesByTenantId(1);
   }
 
   @Test
