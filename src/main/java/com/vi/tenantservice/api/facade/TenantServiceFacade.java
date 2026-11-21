@@ -66,6 +66,7 @@ import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.service.search.TenantSearchText;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
+import com.vi.tenantservice.api.validation.ErstantwortPublication;
 import com.vi.tenantservice.api.validation.SubdomainValidator;
 import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
@@ -204,6 +205,7 @@ public class TenantServiceFacade {
         sanitizedTenantDTO);
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
+    ErstantwortPublication.of(entity).requireDisclosureForChangeFrom(ErstantwortPublication.EMPTY);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
     validateSelectedOwnSmtp(entity, null, sanitizedTenantDTO);
     if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
@@ -690,7 +692,9 @@ public class TenantServiceFacade {
     // toEntity mutates existingTenantEntity, so capture the stored settings first
     var existingSettingsJson = existingTenantEntity.getSettings();
     var publishedBefore = PublishedLegalTexts.of(existingTenantEntity);
+    var firstReplyBefore = ErstantwortPublication.of(existingTenantEntity);
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
+    ErstantwortPublication.of(updatedEntity).requireDisclosureForChangeFrom(firstReplyBefore);
     if (sanitizedTenantDTO.getSettings() == null) {
       updatedEntity.setSettings(existingSettingsJson);
     }

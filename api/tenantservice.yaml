@@ -26,6 +26,11 @@ paths:
                 $ref: '#/components/schemas/MultilingualTenantDTO'
         400:
           description: BAD REQUEST - invalid/incomplete request or body object
+          headers:
+            X-Reason:
+              description: ERSTANTWORT_WHO_READS_ALONG_REQUIRED when a first reply has no disclosure in its source language
+              schema:
+                type: string
         401:
           description: UNAUTHORIZED - no/invalid Keycloak token
         409:
@@ -755,6 +760,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MultilingualTenantDTO'
+        400:
+          description: Bad request, including a changed first reply without a disclosure in its source language
+          headers:
+            X-Reason:
+              description: Validation reason, for example ERSTANTWORT_WHO_READS_ALONG_REQUIRED
+              schema:
+                type: string
         401:
           description: UNAUTHORIZED - no/invalid Keycloak token
         409:
