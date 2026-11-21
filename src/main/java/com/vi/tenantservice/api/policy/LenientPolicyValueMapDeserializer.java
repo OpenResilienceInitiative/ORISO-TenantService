@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -33,6 +35,35 @@ public class LenientPolicyValueMapDeserializer
   private static final Logger log =
       LoggerFactory.getLogger(LenientPolicyValueMapDeserializer.class);
 
+  private static final List<String> MODES =
+      Arrays.stream(PermissionPolicyMode.values()).map(Enum::name).toList();
+
+  /** What an unreadable entry of a known feature reads as until it is saved again. */
+  public static final PolicyValue<Boolean> UNREADABLE_ENTRY_POLICY =
+      new PolicyValue<>(false, PermissionPolicyMode.ENFORCED);
+
+  /**
+   * The stored entries of a {@code permissionPolicies} object that this build does not read as
+   * stored — unknown features and entries it replaces with {@link #UNREADABLE_ENTRY_POLICY} — keyed
+   * by feature, as raw JSON. A writer puts them back unchanged so that an unrelated save does not
+   * destroy what a newer build (or a later repair) can still read (#386). Never serve these to a
+   * client.
+   */
+  public static Map<String, JsonNode> unreadableEntries(JsonNode policies) {
+    Map<String, JsonNode> unreadable = new LinkedHashMap<>();
+    if (policies == null || !policies.isObject()) {
+      return unreadable;
+    }
+    Iterator<Map.Entry<String, JsonNode>> entries = policies.fields();
+    while (entries.hasNext()) {
+      Map.Entry<String, JsonNode> entry = entries.next();
+      if (problemWith(entry.getKey(), entry.getValue()) != null) {
+        unreadable.put(entry.getKey(), entry.getValue().deepCopy());
+      }
+    }
+    return unreadable;
+  }
+
   @Override
   public Map<String, PolicyValue<Boolean>> deserialize(
       JsonParser parser, DeserializationContext context) throws IOException {
@@ -58,30 +89,38 @@ public class LenientPolicyValueMapDeserializer
   }
 
   private Optional<PolicyValue<Boolean>> readEntry(String feature, JsonNode node) {
+    String problem = problemWith(feature, node);
+    if (problem == null) {
+      return Optional.of(
+          new PolicyValue<>(
+              node.get("value").booleanValue(),
+              PermissionPolicyMode.valueOf(node.get("mode").asText())));
+    }
+    return PermissionFeature.byApiKey(feature).isEmpty()
+        ? drop(feature, problem)
+        : restrict(feature, problem);
+  }
+
+  /** Why this build cannot read the entry as stored, or {@code null} when it can. */
+  private static String problemWith(String feature, JsonNode node) {
     if (PermissionFeature.byApiKey(feature).isEmpty()) {
-      return drop(feature, "it is not a known feature in this build");
+      return "it is not a known feature in this build";
     }
     if (node == null || !node.isObject()) {
-      return restrict(feature, "its policy is not a JSON object");
+      return "its policy is not a JSON object";
     }
-
     JsonNode valueNode = node.get("value");
     if (valueNode == null || !valueNode.isBoolean()) {
-      return restrict(feature, "its value is not a boolean");
+      return "its value is not a boolean";
     }
-
     JsonNode modeNode = node.get("mode");
     if (modeNode == null || !modeNode.isTextual()) {
-      return restrict(feature, "its mode is missing or not a string");
+      return "its mode is missing or not a string";
     }
-    PermissionPolicyMode mode;
-    try {
-      mode = PermissionPolicyMode.valueOf(modeNode.asText());
-    } catch (IllegalArgumentException unknownMode) {
-      return restrict(feature, "its mode '" + modeNode.asText() + "' is unknown to this build");
+    if (!MODES.contains(modeNode.asText())) {
+      return "its mode '" + modeNode.asText() + "' is unknown to this build";
     }
-
-    return Optional.of(new PolicyValue<>(valueNode.booleanValue(), mode));
+    return null;
   }
 
   private Optional<PolicyValue<Boolean>> drop(String feature, String reason) {
@@ -105,6 +144,6 @@ public class LenientPolicyValueMapDeserializer
             + " default (off, enforced) until it is saved again.",
         feature,
         reason);
-    return Optional.of(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+    return Optional.of(UNREADABLE_ENTRY_POLICY);
   }
 }

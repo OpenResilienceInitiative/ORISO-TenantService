@@ -23,6 +23,7 @@ import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
 import com.vi.tenantservice.api.policy.InternalGroupChatPolicyRules;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
+import com.vi.tenantservice.api.policy.LenientPolicyValueMapDeserializer;
 import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
@@ -39,6 +40,7 @@ import java.util.Optional;
 import java.util.Set;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -47,6 +49,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TenantAdminControlsService {
@@ -100,6 +103,9 @@ public class TenantAdminControlsService {
       // the DTO never carries the translation API keys - carry the stored values over verbatim,
       // still encrypted, so this path never decrypts and re-encrypts them for nothing
       controlsSettings.setTranslationApiKeys(existingSettings.getTranslationApiKeys());
+      // unreadable stored policy entries ride along until their feature is saved (#386)
+      controlsSettings.setUnreadablePermissionPolicies(
+          existingSettings.getUnreadablePermissionPolicies());
       // Only versioned subresources can change account creation defaults.
       controlsSettings.setChatRecoverySettings(existingSettings.getChatRecoverySettings());
       controlsSettings.setAccountInactivitySettings(
@@ -390,7 +396,9 @@ public class TenantAdminControlsService {
   }
 
   private ObjectNode serializeControlsSettingsToTree(TenantAdminControlsSettings controlsSettings) {
-    return OBJECT_MAPPER.valueToTree(controlsSettings);
+    ObjectNode serialized = OBJECT_MAPPER.valueToTree(controlsSettings);
+    restoreUnreadablePolicyEntries(controlsSettings, serialized);
+    return serialized;
   }
 
   private Optional<TenantAdminControlsEntity> findExistingControls() {
@@ -408,10 +416,50 @@ public class TenantAdminControlsService {
       }
       TenantAdminControlsSettings settings =
           OBJECT_MAPPER.treeToValue(tree, TenantAdminControlsSettings.class);
+      // kept raw with exact decimals, like the rest of the stored document (#225, #386)
+      settings.setUnreadablePermissionPolicies(
+          LenientPolicyValueMapDeserializer.unreadableEntries(
+              STORED_TREE_READER.readTree(controlsJson).get("permissionPolicies")));
       hydrateCanonicalPolicies(settings);
       return settings;
     } catch (JsonProcessingException exception) {
       throw new RuntimeJsonMappingException(exception.getMessage());
+    }
+  }
+
+  /**
+   * Writes each stored policy entry this build could not read back verbatim, unless its feature is
+   * being saved with a value other than the one it was served ({@link
+   * LenientPolicyValueMapDeserializer#UNREADABLE_ENTRY_POLICY}, or nothing for an unknown feature).
+   * Echoing the served value is how the admin UI sends untouched features, so it counts as no
+   * decision — the same rule {@link #explicitPolicyKeys} applies (#386).
+   */
+  private static void restoreUnreadablePolicyEntries(
+      TenantAdminControlsSettings settings, ObjectNode serialized) {
+    Map<String, JsonNode> unreadable = settings.getUnreadablePermissionPolicies();
+    if (unreadable == null || unreadable.isEmpty()) {
+      return;
+    }
+    Map<String, PolicyValue<Boolean>> written =
+        settings.getPermissionPolicies() == null ? Map.of() : settings.getPermissionPolicies();
+    JsonNode existing = serialized.get("permissionPolicies");
+    ObjectNode policies =
+        existing instanceof ObjectNode object ? object : serialized.putObject("permissionPolicies");
+    Set<String> kept = new LinkedHashSet<>();
+    unreadable.forEach(
+        (feature, raw) -> {
+          PolicyValue<Boolean> policy = written.get(feature);
+          if (policy == null
+              || policy.equals(LenientPolicyValueMapDeserializer.UNREADABLE_ENTRY_POLICY)) {
+            policies.set(feature, raw);
+            kept.add(feature);
+          }
+        });
+    if (!kept.isEmpty()) {
+      log.warn(
+          "Kept unreadable stored permission policies {} unchanged in the platform controls. They"
+              + " read as off and enforced until a platform admin saves them again.",
+          kept);
     }
   }
 
