@@ -158,15 +158,28 @@ public class TenantIdAllocationService {
 
   @Transactional
   public boolean releaseWithProof(long tenantId, String token) {
-    if (token == null
-        || token.isBlank()
-        || reservationRepository.deleteWithProof(
-                tenantId, TenantIdReservationStatus.RESERVED, token)
-            == 0) {
+    if (token == null || token.isBlank() || !releaseMatchingReservation(tenantId, token)) {
       throw new org.springframework.security.access.AccessDeniedException(
           "Reservation ownership proof required");
     }
     return true;
+  }
+
+  /** Deletes only the open reservation matching the proof. A retry can find no matching row. */
+  @Transactional
+  public boolean releaseMatchingReservation(long tenantId, String token) {
+    return reservationRepository.deleteWithProof(
+            tenantId, TenantIdReservationStatus.RESERVED, token)
+        > 0;
+  }
+
+  @Transactional(readOnly = true)
+  public boolean hasMatchingOpenReservation(long tenantId, String token) {
+    return reservationRepository
+        .findMatchingReservationProof(tenantId, TenantIdReservationStatus.RESERVED, token)
+        // The database collation can equate strings that are distinct proofs.
+        .filter(token::equals)
+        .isPresent();
   }
 
   /**
