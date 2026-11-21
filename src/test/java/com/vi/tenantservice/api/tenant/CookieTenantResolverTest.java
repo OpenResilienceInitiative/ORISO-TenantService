@@ -6,6 +6,8 @@ import jakarta.servlet.http.Cookie;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -32,6 +34,24 @@ class CookieTenantResolverTest {
     Optional<Long> tenantId =
         cookieTenantResolver.resolveTenantFromRequest(requestWithTenantIdCookie("43"));
     assertThat(tenantId).contains(43L);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "unreadable"})
+  void resolve_Should_returnEmptyTenant_When_StoredTenantIdIsUnreadable(String value) {
+    ReflectionTestUtils.setField(cookieTenantResolver, "multitenancyWithSingleDomain", true);
+
+    assertThat(cookieTenantResolver.resolveTenantFromRequest(requestWithTenantIdCookie(value)))
+        .isEmpty();
+  }
+
+  @Test
+  void resolve_Should_returnEmptyTenant_When_StoredKeycloakSelectionIsUnreadable() {
+    ReflectionTestUtils.setField(cookieTenantResolver, "multitenancyWithSingleDomain", true);
+    var request = new MockHttpServletRequest();
+    request.setCookies(new Cookie("keycloak", "unreadable"), new Cookie("tenantId", "43"));
+
+    assertThat(cookieTenantResolver.resolveTenantFromRequest(request)).isEmpty();
   }
 
   @Test

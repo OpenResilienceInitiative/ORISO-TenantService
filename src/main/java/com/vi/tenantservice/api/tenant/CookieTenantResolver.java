@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
@@ -48,35 +49,41 @@ public class CookieTenantResolver implements TenantResolver {
 
   private Optional<Long> tryResolveFromTenantIdCookie(HttpServletRequest request) {
     Cookie tenantId = WebUtils.getCookie(request, TENANT_ID);
+    return tenantId == null ? Optional.empty() : parseTenantHint(tenantId.getValue());
+  }
 
-    if (tenantId != null && tenantId.getValue() != null) {
-      return Optional.of(Long.valueOf(tenantId.getValue()));
-    } else {
+  private Optional<Long> resolveFromCookieValue(Cookie token) {
+    String value = token.getValue();
+    if (value == null) {
+      return Optional.empty();
+    }
+    String[] chunks = value.split("\\.", 3);
+    if (chunks.length < 2 || chunks[1].isEmpty()) {
+      return Optional.empty();
+    }
+    try {
+      String payload = new String(Base64.getUrlDecoder().decode(chunks[1]), StandardCharsets.UTF_8);
+      var objectMapper =
+          new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+      Map<?, ?> claims = objectMapper.readValue(payload, Map.class);
+      return claims == null ? Optional.empty() : parseTenantHint(claims.get(TENANT_ID));
+    } catch (JsonProcessingException | IllegalArgumentException unreadable) {
       return Optional.empty();
     }
   }
 
-  private Optional<Long> resolveFromCookieValue(Cookie token) {
-    String[] chunks = token.getValue().split("\\.");
-    Base64.Decoder decoder = Base64.getUrlDecoder();
-    String payload = new String(decoder.decode(chunks[1]));
-    var objectMapper =
-        new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    try {
-      Map<String, Object> map = objectMapper.readValue(payload, Map.class);
-      Object tenantIdFromCookie = map.get(TENANT_ID);
-      if (tenantIdFromCookie == null) {
-        return Optional.empty();
-      } else if (tenantIdFromCookie instanceof Number) {
-        return Optional.of(((Number) tenantIdFromCookie).longValue());
-      } else if (tenantIdFromCookie instanceof String) {
-        return Optional.of(Long.parseLong((String) tenantIdFromCookie));
-      } else {
+  private static Optional<Long> parseTenantHint(Object value) {
+    if (value instanceof Number numeric) {
+      return Optional.of(numeric.longValue());
+    }
+    if (value instanceof String text) {
+      try {
+        return Optional.of(Long.parseLong(text));
+      } catch (NumberFormatException unreadable) {
         return Optional.empty();
       }
-    } catch (JsonProcessingException | NumberFormatException e) {
-      return Optional.empty();
     }
+    return Optional.empty();
   }
 
   @Override
