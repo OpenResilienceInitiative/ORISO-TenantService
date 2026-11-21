@@ -35,6 +35,7 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
   private static final Set<HttpStatusExceptionReason> BAD_REQUEST_REASONS =
       EnumSet.of(
           HttpStatusExceptionReason.LANGUAGE_KEY_NOT_VALID,
+          HttpStatusExceptionReason.ERSTANTWORT_WHO_READS_ALONG_REQUIRED,
           HttpStatusExceptionReason.SUBDOMAIN_INVALID);
 
   @ExceptionHandler(value = {TenantValidationException.class})

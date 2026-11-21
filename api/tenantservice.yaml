@@ -26,6 +26,11 @@ paths:
                 $ref: '#/components/schemas/MultilingualTenantDTO'
         400:
           description: BAD REQUEST - invalid/incomplete request or body object
+          headers:
+            X-Reason:
+              description: ERSTANTWORT_WHO_READS_ALONG_REQUIRED when a first reply has no disclosure in its source language
+              schema:
+                type: string
         401:
           description: UNAUTHORIZED - no/invalid Keycloak token
         409:
@@ -755,6 +760,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MultilingualTenantDTO'
+        400:
+          description: Bad request, including a changed first reply without a disclosure in its source language
+          headers:
+            X-Reason:
+              description: Validation reason, for example ERSTANTWORT_WHO_READS_ALONG_REQUIRED
+              schema:
+                type: string
         401:
           description: UNAUTHORIZED - no/invalid Keycloak token
         409:
@@ -829,6 +841,42 @@ paths:
           description: FORBIDDEN - no platform admin authority
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
+  /tenantadmin/tenant-ids/reservations/{id}/assignment:
+    get:
+      tags:
+        - tenant-controller
+      summary: Check whether the original reservation became an existing tenant
+      operationId: checkTenantIdAssignmentProof
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: X-Reservation-Token
+          in: header
+          required: true
+          description: Proof issued for the original reservation.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        204:
+          description: The proof matches the assignment of an existing tenant.
+        400:
+          description: Missing or blank reservation proof or invalid tenant ID.
+        401:
+          description: Missing or invalid access token.
+        403:
+          description: Caller is not authorized to check tenant ID assignments.
+        404:
+          description: No existing tenant has an assignment matching the proof.
+        500:
+          description: Assignment check could not be completed.
       security:
         - Bearer: [ ]
   /tenantadmin/tenant-ids/next-free:
@@ -908,6 +956,41 @@ paths:
       security:
         - Bearer: [ ]
   /tenantadmin/tenant-ids/reservations/{id}:
+    get:
+      tags:
+        - tenant-controller
+      summary: Check whether the original reservation is still open
+      operationId: checkTenantIdReservationProof
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: X-Reservation-Token
+          in: header
+          required: true
+          description: Proof issued for the original reservation.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        204:
+          description: The proof matches the current open reservation.
+        400:
+          description: Missing or blank reservation proof or invalid tenant ID.
+        401:
+          description: Missing or invalid access token.
+        403:
+          description: Caller is not authorized to check tenant ID reservations.
+        404:
+          description: No open reservation matches the proof.
+        500:
+          description: Reservation check could not be completed.
+      security:
+        - Bearer: [ ]
     delete:
       tags:
         - tenant-controller
@@ -940,6 +1023,40 @@ paths:
           description: NOT FOUND - no open reservation exists for this ID
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
+  /tenantadmin/tenant-ids/reservations/{id}/release:
+    post:
+      tags:
+        - tenant-controller
+      summary: Release the original open reservation using its proof
+      operationId: releaseTenantIdReservationWithProof
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: X-Reservation-Token
+          in: header
+          required: true
+          description: Proof issued for the original reservation.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        204:
+          description: The original reservation has been released or is already gone.
+        400:
+          description: Missing or blank reservation proof or invalid tenant ID.
+        401:
+          description: Missing or invalid access token.
+        403:
+          description: Caller is not authorized to release tenant ID reservations.
+        500:
+          description: Reservation release could not be completed.
       security:
         - Bearer: [ ]
   /tenant:

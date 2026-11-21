@@ -469,6 +469,37 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   @PreAuthorize(
+      "(hasAuthority('AUTHORIZATION_CREATE_TENANT')"
+          + " and @tenantFacadeAuthorisationService.isPlatformAdministrator())"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
+  public ResponseEntity<Void> checkTenantIdReservationProof(Long id, String reservationToken) {
+    if (reservationToken == null || reservationToken.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reservation proof is required");
+    }
+    HttpStatus status =
+        tenantIdAllocationService.hasMatchingOpenReservation(id, reservationToken)
+            ? HttpStatus.NO_CONTENT
+            : HttpStatus.NOT_FOUND;
+    return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).build();
+  }
+
+  @Override
+  @PreAuthorize(
+      "(hasAuthority('AUTHORIZATION_CREATE_TENANT')"
+          + " and @tenantFacadeAuthorisationService.isPlatformAdministrator())"
+          + " or hasAuthority('AUTHORIZATION_TECHNICAL_RELEASE_TENANT_ID_RESERVATION')"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
+  public ResponseEntity<Void> releaseTenantIdReservationWithProof(
+      Long id, String reservationToken) {
+    if (reservationToken == null || reservationToken.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reservation proof is required");
+    }
+    tenantIdAllocationService.releaseMatchingReservation(id, reservationToken);
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  @PreAuthorize(
       "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')")
   public ResponseEntity<MultilingualTenantDTO> getMultilingualTenantById(Long id) {
     var tenantById = tenantServiceFacade.findMultilingualTenantById(id);
@@ -479,7 +510,8 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   @PreAuthorize(
-      "hasAuthority('AUTHORIZATION_CREATE_TENANT') or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
+      "@tenantFacadeAuthorisationService.mayManageTenantIdReservations()"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
   public ResponseEntity<TenantIdAvailabilityDTO> getTenantIdAvailability(Long id) {
     var status = tenantIdAllocationService.getStatus(id);
     return ResponseEntity.ok(
@@ -489,7 +521,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  @PreAuthorize("@tenantFacadeAuthorisationService.mayManageTenantIdReservations()")
   public ResponseEntity<NextFreeTenantIdDTO> getNextFreeTenantId(Long from, String direction) {
     boolean upwards = "UP".equalsIgnoreCase(direction);
     if (!upwards && !"DOWN".equalsIgnoreCase(direction)) {
@@ -502,7 +534,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  @PreAuthorize("@tenantFacadeAuthorisationService.mayManageTenantIdReservations()")
   public ResponseEntity<TenantIdReservationDTO> reserveTenantId(
       TenantIdReservationRequestDTO tenantIdReservationRequestDTO) {
     var requestedId =
@@ -522,8 +554,9 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   @PreAuthorize(
-      "hasAnyAuthority('AUTHORIZATION_CREATE_TENANT',"
-          + " 'AUTHORIZATION_TECHNICAL_RELEASE_TENANT_ID_RESERVATION') or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
+      "@tenantFacadeAuthorisationService.mayManageTenantIdReservations()"
+          + " or hasAuthority('AUTHORIZATION_TECHNICAL_RELEASE_TENANT_ID_RESERVATION')"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
   public ResponseEntity<Void> releaseTenantIdReservation(Long id, String reservationToken) {
     log.info(
         "Releasing tenant ID reservation {} by user {}", id, authorisationService.getUsername());
@@ -544,6 +577,24 @@ public class TenantController implements TenantApi, TenantadminApi {
     log.info("Creating tenant by user {} ", authorisationService.getUsername());
     var tenant = tenantServiceFacade.createTenant(tenantMultilingualDTO);
     return new ResponseEntity<>(tenant, HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize(
+      "(hasAuthority('AUTHORIZATION_CREATE_TENANT')"
+          + " and @tenantFacadeAuthorisationService.isPlatformAdministrator())"
+          + " or hasAuthority('AUTHORIZATION_TECHNICAL_READ_TENANT')"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')"
+          + " or @taskServiceIdentity.allows(authentication, 'CONFIG_WIZARD')")
+  public ResponseEntity<Void> checkTenantIdAssignmentProof(Long id, String reservationToken) {
+    if (reservationToken == null || reservationToken.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reservation proof is required");
+    }
+    HttpStatus status =
+        tenantIdAllocationService.hasMatchingAssignment(id, reservationToken)
+            ? HttpStatus.NO_CONTENT
+            : HttpStatus.NOT_FOUND;
+    return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).build();
   }
 
   @Override
