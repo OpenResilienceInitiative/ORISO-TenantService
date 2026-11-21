@@ -37,14 +37,12 @@ import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import com.vi.tenantservice.config.security.AuthorisationService;
-import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -1858,19 +1856,27 @@ class TenantControllerIT {
         .andExpect(status().isForbidden());
   }
 
+  @Test
+  void updateTenant_Should_rejectFirstReplyChangesWhenTheDisclosureIsMissing() throws Exception {
+    expectRejectedFirstReplyDisclosure(null);
+  }
+
   @ParameterizedTest
-  @NullAndEmptySource
-  @ValueSource(strings = {"<p>&nbsp;\u200B<br></p>"})
-  void updateTenant_Should_rejectFirstReplyChangesWithoutSourceDisclosure(String disclosure)
+  @ValueSource(strings = {"", "<p>&nbsp;\u200B<br></p>"})
+  void updateTenant_Should_rejectFirstReplyChangesWhenTheDisclosureIsEmpty(String disclosure)
       throws Exception {
+    expectRejectedFirstReplyDisclosure(disclosure);
+  }
+
+  private void expectRejectedFirstReplyDisclosure(String disclosure) throws Exception {
     var request = tenant1FirstReplyRequest();
-    request.build().getContent().setErstantwortClosing(Map.of("de", "Bis bald."));
+    request.build().getContent().setErstantwortClosing(java.util.Map.of("de", "Bis bald."));
     if (disclosure != null) {
       request
           .build()
           .getContent()
           .setErstantwortWhoReadsAlong(
-              Map.of(
+              java.util.Map.of(
                   "de", disclosure,
                   "en", "An earlier English translation.",
                   "en__meta", "{\"mt\":true,\"src\":\"de\"}"));
@@ -1892,14 +1898,17 @@ class TenantControllerIT {
     String disclosure = "<p>Unser Beratungsteam liest deine Nachrichten.</p>";
     String disclosurePath = "$.content.erstantwortWhoReadsAlong['de@informal']";
     var authored = tenant1FirstReplyRequest();
-    authored.build().getContent().setErstantwortWhoReadsAlong(Map.of("de@informal", disclosure));
+    authored
+        .build()
+        .getContent()
+        .setErstantwortWhoReadsAlong(java.util.Map.of("de@informal", disclosure));
 
     putTenant1AsTenantAdmin(authored.jsonify())
         .andExpect(status().isOk())
         .andExpect(jsonPath(disclosurePath, is(disclosure)));
 
     var closingOnly = tenant1FirstReplyRequest();
-    closingOnly.build().getContent().setErstantwortClosing(Map.of("de", "Bis bald."));
+    closingOnly.build().getContent().setErstantwortClosing(java.util.Map.of("de", "Bis bald."));
 
     putTenant1AsTenantAdmin(closingOnly.jsonify())
         .andExpect(status().isOk())
@@ -1916,7 +1925,7 @@ class TenantControllerIT {
         .build()
         .getContent()
         .setErstantwortWhoReadsAlong(
-            Map.of(
+            java.util.Map.of(
                 "en", disclosure,
                 "fr", "Notre équipe de conseil lit les messages.",
                 "fr__meta", "{\"mt\":true,\"src\":\"en\"}"));
