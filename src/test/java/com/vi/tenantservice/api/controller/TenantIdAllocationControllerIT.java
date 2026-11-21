@@ -241,6 +241,43 @@ class TenantIdAllocationControllerIT {
   }
 
   @Test
+  void reservationReleaseRetry_Should_leaveAReplacementReservationIntact() throws Exception {
+    String originalProof = reserveViaApi(21L);
+
+    mockMvc
+        .perform(
+            post(RESERVATIONS + "/21/release")
+                .with(platformAdmin())
+                .header("X-Reservation-Token", originalProof))
+        .andExpect(status().isNoContent());
+    reserveViaApi(21L);
+
+    mockMvc
+        .perform(
+            post(RESERVATIONS + "/21/release")
+                .with(platformAdmin())
+                .header("X-Reservation-Token", originalProof))
+        .andExpect(status().isNoContent());
+    mockMvc
+        .perform(get(AVAILABILITY.formatted(21)).with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("status", is("RESERVED")));
+  }
+
+  @Test
+  void reservationReleaseRetry_Should_requireANonBlankProofHeader() throws Exception {
+    mockMvc
+        .perform(post(RESERVATIONS + "/21/release").with(platformAdmin()))
+        .andExpect(status().isBadRequest());
+    mockMvc
+        .perform(
+            post(RESERVATIONS + "/21/release")
+                .with(platformAdmin())
+                .header("X-Reservation-Token", " "))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void allocationEndpoints_Should_returnForbidden_When_userLacksPlatformAdminAuthority()
       throws Exception {
     mockMvc

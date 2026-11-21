@@ -932,6 +932,40 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
         - Bearer: [ ]
+  /tenantadmin/tenant-ids/reservations/{id}/release:
+    post:
+      tags:
+        - tenant-controller
+      summary: Release the original open reservation using its proof
+      operationId: releaseTenantIdReservationWithProof
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: X-Reservation-Token
+          in: header
+          required: true
+          description: Proof issued for the original reservation.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        204:
+          description: The original reservation has been released or is already gone.
+        400:
+          description: Missing or blank reservation proof or invalid tenant ID.
+        401:
+          description: Missing or invalid access token.
+        403:
+          description: Caller is not authorized to release tenant ID reservations.
+        500:
+          description: Reservation release could not be completed.
+      security:
+        - Bearer: [ ]
   /tenant:
     get:
       tags:

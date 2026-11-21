@@ -288,6 +288,19 @@ class TechnicalServiceIdentityAuthorizationIT {
         .andExpect(status().isNoContent());
   }
 
+  @Test
+  void technicalOnly_Should_releaseTheOriginalReservationWithProof() throws Exception {
+    String proof = reserve(RESERVED_ID);
+
+    mvc.perform(
+            post("/tenantadmin/tenant-ids/reservations/{id}/release", RESERVED_ID)
+                .with(technicalOnly())
+                .header("X-Reservation-Token", proof))
+        .andExpect(status().isNoContent());
+
+    assertThat(reservationRepository.findById(RESERVED_ID)).isEmpty();
+  }
+
   // ---- the role alone is not the service identity ----
 
   @Test
@@ -449,6 +462,25 @@ class TechnicalServiceIdentityAuthorizationIT {
         .andExpect(status().isForbidden());
     mvc.perform(createTenant(caller, FREE_ID, own, "invalidworker"))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void reservationWorker_Should_repeatReleaseOfTheSameReservation() throws Exception {
+    String proof = reserve(RESERVED_ID);
+    var caller =
+        task(
+            "reservation-subject",
+            "backend-invite-reservations",
+            "invitation-reservations",
+            "tenantservice");
+    String path = "/tenantadmin/tenant-ids/reservations/{id}/release";
+
+    mvc.perform(post(path, RESERVED_ID).with(caller).header("X-Reservation-Token", proof))
+        .andExpect(status().isNoContent());
+    mvc.perform(post(path, RESERVED_ID).with(caller).header("X-Reservation-Token", proof))
+        .andExpect(status().isNoContent());
+
+    assertThat(reservationRepository.findById(RESERVED_ID)).isEmpty();
   }
 
   @Test
