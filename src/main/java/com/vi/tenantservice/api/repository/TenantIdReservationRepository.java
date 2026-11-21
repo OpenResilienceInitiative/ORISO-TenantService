@@ -83,4 +83,12 @@ public interface TenantIdReservationRepository
       @Param("tenantId") long tenantId,
       @Param("status") TenantIdReservationStatus status,
       @Param("token") String token);
+
+  @Query(
+      "SELECT r.token FROM TenantIdReservationEntity r"
+          + " WHERE r.tenantId = :tenantId AND r.status = :status AND r.token = :token")
+  Optional<String> findMatchingReservationProof(
+      @Param("tenantId") long tenantId,
+      @Param("status") TenantIdReservationStatus status,
+      @Param("token") String token);
 }

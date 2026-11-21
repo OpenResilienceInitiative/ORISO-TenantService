@@ -173,6 +173,15 @@ public class TenantIdAllocationService {
         > 0;
   }
 
+  @Transactional(readOnly = true)
+  public boolean hasMatchingOpenReservation(long tenantId, String token) {
+    return reservationRepository
+        .findMatchingReservationProof(tenantId, TenantIdReservationStatus.RESERVED, token)
+        // The database collation can equate strings that are distinct proofs.
+        .filter(token::equals)
+        .isPresent();
+  }
+
   /**
    * Assigns the definitive ID to a tenant that is about to be created, inside the creating
    * transaction (atomic consumption).
