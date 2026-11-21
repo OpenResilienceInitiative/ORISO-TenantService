@@ -3,10 +3,14 @@ package com.vi.tenantservice.api.tenant;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import jakarta.servlet.http.Cookie;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -52,6 +56,31 @@ class CookieTenantResolverTest {
     request.setCookies(new Cookie("keycloak", "unreadable"), new Cookie("tenantId", "43"));
 
     assertThat(cookieTenantResolver.resolveTenantFromRequest(request)).isEmpty();
+  }
+
+  @ParameterizedTest
+  @MethodSource("unrepresentableNumbers")
+  void parseTenantHint_Should_ignoreNumbersThatAreNotExactLongs(Number value) {
+    assertThat(CookieTenantResolver.parseTenantHint(value)).isEmpty();
+  }
+
+  private static Stream<Number> unrepresentableNumbers() {
+    return Stream.of(
+        new BigDecimal("42.5"),
+        BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE),
+        BigInteger.valueOf(Long.MIN_VALUE).subtract(BigInteger.ONE),
+        Double.MAX_VALUE,
+        Double.NaN);
+  }
+
+  @Test
+  void parseTenantHint_Should_preserveWholeNumbersAndNumericText() {
+    assertThat(CookieTenantResolver.parseTenantHint(42)).contains(42L);
+    assertThat(CookieTenantResolver.parseTenantHint(Long.MIN_VALUE)).contains(Long.MIN_VALUE);
+    assertThat(CookieTenantResolver.parseTenantHint(BigDecimal.valueOf(Long.MAX_VALUE).setScale(1)))
+        .contains(Long.MAX_VALUE);
+    assertThat(CookieTenantResolver.parseTenantHint(Long.toString(Long.MAX_VALUE)))
+        .contains(Long.MAX_VALUE);
   }
 
   @Test

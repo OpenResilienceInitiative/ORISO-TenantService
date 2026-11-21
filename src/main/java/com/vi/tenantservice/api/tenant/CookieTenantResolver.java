@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
@@ -64,7 +66,9 @@ public class CookieTenantResolver implements TenantResolver {
     try {
       String payload = new String(Base64.getUrlDecoder().decode(chunks[1]), StandardCharsets.UTF_8);
       var objectMapper =
-          new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+          new ObjectMapper()
+              .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+              .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
       Map<?, ?> claims = objectMapper.readValue(payload, Map.class);
       return claims == null ? Optional.empty() : parseTenantHint(claims.get(TENANT_ID));
     } catch (JsonProcessingException | IllegalArgumentException unreadable) {
@@ -72,18 +76,19 @@ public class CookieTenantResolver implements TenantResolver {
     }
   }
 
-  private static Optional<Long> parseTenantHint(Object value) {
-    if (value instanceof Number numeric) {
-      return Optional.of(numeric.longValue());
+  static Optional<Long> parseTenantHint(Object value) {
+    try {
+      return switch (value) {
+        case Integer integer -> Optional.of(integer.longValue());
+        case Long integer -> Optional.of(integer);
+        case BigInteger integer -> Optional.of(integer.longValueExact());
+        case BigDecimal decimal -> Optional.of(decimal.longValueExact());
+        case String text -> Optional.of(Long.parseLong(text));
+        case null, default -> Optional.empty();
+      };
+    } catch (ArithmeticException | NumberFormatException unreadable) {
+      return Optional.empty();
     }
-    if (value instanceof String text) {
-      try {
-        return Optional.of(Long.parseLong(text));
-      } catch (NumberFormatException unreadable) {
-        return Optional.empty();
-      }
-    }
-    return Optional.empty();
   }
 
   @Override
