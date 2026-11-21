@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.config.apiclient.ConsultingTypeServiceApiControllerFactory;
 import com.vi.tenantservice.api.exception.ConsultingSettingsOutcomeUnknownException;
 import com.vi.tenantservice.api.service.ConfigurationFileLoader;
+import com.vi.tenantservice.api.service.consultingtype.ConsultingSettingsTelemetry.Outcome;
 import com.vi.tenantservice.api.service.httpheader.SecurityHeaderSupplier;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.ConsultingTypeDTO;
@@ -11,6 +12,8 @@ import com.vi.tenantservice.consultingtypeservice.generated.web.model.Consulting
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import java.io.File;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
 import java.util.Optional;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +37,7 @@ public class ConsultingTypeService {
   private final @NonNull SecurityHeaderSupplier securityHeaderSupplier;
   private final @NonNull TenantResolverService tenantResolverService;
   private final @NonNull ConfigurationFileLoader configurationFileLoader;
+  private final @NonNull ConsultingSettingsTelemetry settingsTelemetry;
 
   @Value("${default.consulting.types.json.path}")
   private String defaultConsultingTypesFilePath;
@@ -94,23 +98,46 @@ public class ConsultingTypeService {
     var consultingTypeControllerApi =
         consultingTypeServiceApiControllerFactory.createControllerApi();
     addDefaultHeaders(consultingTypeControllerApi.getApiClient());
-    try {
+    if (id == null) {
+      // Let the generated client apply its input validation without counting a network attempt.
       return consultingTypeControllerApi.patchConsultingType(id, consultingTypeDTO);
+    }
+    var attempt = settingsTelemetry.startPatch();
+    consultingTypeControllerApi
+        .getApiClient()
+        .addDefaultHeader(
+            ConsultingSettingsTelemetry.REQUEST_ID_HEADER, attempt.requestId().toString());
+    var outcome = Outcome.OTHER;
+    try {
+      var result = consultingTypeControllerApi.patchConsultingType(id, consultingTypeDTO);
+      outcome = Outcome.CONFIRMED;
+      return result;
     } catch (ResponseStatusException e) {
       // The CTS response handler preserves its explicit HTTP status.
       if (e.getStatusCode().is5xxServerError()) {
+        outcome = Outcome.UPSTREAM_ERROR;
         throw new ConsultingSettingsOutcomeUnknownException(e);
+      }
+      if (e.getStatusCode().is4xxClientError()) {
+        outcome = Outcome.REFUSED;
       }
       throw e;
     } catch (RestClientException e) {
-      if (e instanceof ResourceAccessException
-          || e instanceof UnknownContentTypeException
-          || e.getCause() instanceof IOException
+      if (e instanceof UnknownContentTypeException
           || e.getCause() instanceof HttpMessageNotReadableException) {
+        outcome = Outcome.INVALID_RESPONSE;
         throw new ConsultingSettingsOutcomeUnknownException(e);
       }
-      log.error("Error while patching consulting type {}", id, e);
+      if (e instanceof ResourceAccessException || e.getCause() instanceof IOException) {
+        outcome =
+            e.contains(HttpTimeoutException.class) || e.contains(SocketTimeoutException.class)
+                ? Outcome.TIMEOUT
+                : Outcome.TRANSPORT_ERROR;
+        throw new ConsultingSettingsOutcomeUnknownException(e);
+      }
       throw e;
+    } finally {
+      settingsTelemetry.recordPatch(attempt, outcome);
     }
   }
 

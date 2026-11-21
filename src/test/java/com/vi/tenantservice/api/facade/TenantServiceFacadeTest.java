@@ -59,6 +59,7 @@ import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
+import com.vi.tenantservice.api.service.consultingtype.ConsultingSettingsTelemetry;
 import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
@@ -133,6 +134,8 @@ class TenantServiceFacadeTest {
   @Mock private TranslationService translationService;
 
   @Mock private ConsultingTypeService consultingTypeService;
+
+  @Mock private ConsultingSettingsTelemetry settingsTelemetry;
 
   @Mock private ApplicationSettingsService applicationSettingsService;
 
