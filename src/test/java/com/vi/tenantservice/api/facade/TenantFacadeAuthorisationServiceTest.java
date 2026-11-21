@@ -735,6 +735,7 @@ class TenantFacadeAuthorisationServiceTest {
   @Test
   void mayManageTenantIdReservations_Should_refuseATraegerAdministrator() {
     when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(ID));
+    lenient().when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
     lenient()
         .when(authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT))
         .thenReturn(true);
