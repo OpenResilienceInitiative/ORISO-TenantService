@@ -15,6 +15,7 @@ import com.vi.tenantservice.applicationsettingsservice.generated.web.model.Appli
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 import org.jeasy.random.EasyRandom;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -38,6 +39,12 @@ class TenantServiceTest {
   @AfterEach
   void tearDown() {
     ReflectionTestUtils.setField(tenantService, "multitenancyWithSingleDomain", false);
+  }
+
+  @Test
+  void searchCandidatesExcludeTechnicalTenantBeforeOwnerLookups() {
+    when(tenantRepository.findAllIds()).thenReturn(java.util.List.of(0L, 1L, 2L));
+    assertThat(tenantService.searchableTenantIds(Optional.empty())).containsExactly(1L, 2L);
   }
 
   @Test

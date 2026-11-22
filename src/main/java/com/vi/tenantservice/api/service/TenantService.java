@@ -3,11 +3,13 @@ package com.vi.tenantservice.api.service;
 import static com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason.SUBDOMAIN_NOT_UNIQUE;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vi.tenantservice.api.exception.TenantNotFoundException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.model.TenantData;
 import com.vi.tenantservice.api.model.TenantEntity;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
+import com.vi.tenantservice.api.model.TenantStatisticsNameDTO;
 import com.vi.tenantservice.api.repository.TenantRepository;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import java.io.File;
@@ -104,6 +106,17 @@ public class TenantService {
     return existingTenantId != null && !existingTenantId.equals(tenantEntity.getId());
   }
 
+  @Transactional
+  public TenantEntity updateOperationalStatus(Long id, boolean active) {
+    if (tenantRepository.updateOperationalStatus(id, active, LocalDateTime.now(ZoneOffset.UTC))
+        == 0) {
+      throw new TenantNotFoundException("Tenant not found: " + id);
+    }
+    return tenantRepository
+        .findById(id)
+        .orElseThrow(() -> new TenantNotFoundException("Tenant not found: " + id));
+  }
+
   public TenantEntity update(TenantEntity tenantEntity) {
     validateTenant(tenantEntity);
     overrideSubdomainIfNeededForSingleDomainMultitenancy(tenantEntity);
@@ -111,6 +124,8 @@ public class TenantService {
     return tenantRepository.save(tenantEntity);
   }
 
+  // Keep loaded entities managed through the save: detached merge can copy a stale own status.
+  @Transactional
   public void updateTenantSettingsBatch(Map<Long, String> settingsByTenantId) {
     if (settingsByTenantId == null || settingsByTenantId.isEmpty()) {
       return;
@@ -135,6 +150,11 @@ public class TenantService {
 
   public Optional<TenantEntity> findTenantById(Long id) {
     return tenantRepository.findById(id);
+  }
+
+  /** Serializes contract versions for one document owner inside the publication transaction. */
+  public Optional<TenantEntity> findTenantForDpaPublication(Long id) {
+    return tenantRepository.findForDpaPublication(id);
   }
 
   public Optional<TenantData> findTenantDataById(Long id) {
@@ -170,11 +190,22 @@ public class TenantService {
     return List.copyOf(tenantRepository.findAllTenantData());
   }
 
-  public Page<TenantData> findAllTenantDataExceptTechnicalByInfix(
-      String infix, PageRequest pageRequest) {
+  public List<Long> searchableTenantIds(Optional<Long> tenantRestriction) {
+    if (tenantRestriction.isPresent()) {
+      var id = tenantRestriction.get();
+      return tenantRepository.existsById(id) ? List.of(id) : List.of();
+    }
+    return tenantRepository.findAllIds().stream().filter(id -> id != 0L).toList();
+  }
+
+  public Page<TenantData> searchTenantData(
+      List<String> tokens,
+      Map<String, Set<Long>> emailMatches,
+      PageRequest pageRequest,
+      Optional<Long> tenantRestriction) {
     return tenantRepository
-        .findAllTenantDataExceptTechnicalByInfix(infix, pageRequest)
-        .map(tenantData -> tenantData);
+        .searchTenantData(tokens, emailMatches, pageRequest, tenantRestriction)
+        .map(data -> data);
   }
 
   public List<TenantEntity> findAllByIds(List<Long> tenantIds) {
@@ -205,5 +236,10 @@ public class TenantService {
 
   public void delete(TenantEntity createdTenant) {
     tenantRepository.delete(createdTenant);
+  }
+
+  @Transactional(readOnly = true)
+  public List<TenantStatisticsNameDTO> findStatisticsNamesExceptTechnical() {
+    return tenantRepository.findStatisticsNamesExceptTechnical();
   }
 }

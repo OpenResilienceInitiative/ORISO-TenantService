@@ -8,6 +8,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -102,6 +103,32 @@ public class TranslationMetaUtil {
     } catch (Exception e) {
       return false;
     }
+  }
+
+  /** Reads the declared source the same way the UserService first-reply renderer does. */
+  public static Optional<String> declaredSourceLanguage(Map<String, String> translations) {
+    for (var entry : translations.entrySet()) {
+      if (!isMetaKey(entry.getKey()) || entry.getValue() == null) {
+        continue;
+      }
+      try {
+        var metadata =
+            OBJECT_MAPPER
+                .reader()
+                .without(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                .readTree(entry.getValue());
+        if (metadata == null) {
+          continue;
+        }
+        var source = metadata.path(FIELD_SRC);
+        if (source.isTextual() && !source.asText().isBlank()) {
+          return Optional.of(source.asText());
+        }
+      } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
+        // An unreadable translation marker does not establish a source language.
+      }
+    }
+    return Optional.empty();
   }
 
   /** Returns a copy of the map without any meta keys (content-only view). */

@@ -1,15 +1,23 @@
-name: Reusable Docker Build and Publish steps
+name: Reusable Docker build, scan and publish steps
+description: Scan the OCI archive before publishing the same image to GHCR
 
 inputs:
-  push_to_ghcr: 
+  push_to_ghcr:
+    description: Whether to publish the image to GHCR
     required: true
-    type: boolean
-  image_name: 
+  image_name:
+    description: GHCR image name without the registry and organization
     required: true
-    type: string
   github_token:
-    required: true
-    type: string
+    description: GitHub token used only to publish to GHCR
+    required: false
+    default: ''
+  image_tags:
+    description: Explicit image tags for a versioned release
+    default: ''
+  image_labels:
+    description: Explicit OCI labels for a versioned release
+    default: ''
 
 runs:
   using: 'composite'
@@ -17,15 +25,9 @@ runs:
   - name: Set up Docker Buildx
     uses: docker/setup-buildx-action@v4
 
-  - name: Login to GitHub Container Registry
-    uses: docker/login-action@v4
-    with:
-      registry: ${{ env.REGISTRY }}
-      username: ${{ github.actor }}
-      password: ${{ inputs.github_token }}
-    
   - name: Extract Metadata
     id: meta
+    if: ${{ inputs.image_tags == '' }}
     uses: docker/metadata-action@v6
     with:
       images: ${{ env.REGISTRY }}/${{ env.ORG }}/${{ inputs.image_name }}
@@ -34,34 +36,76 @@ runs:
         type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
         type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
         type=raw,value=pre-dev,enable=${{ github.ref == 'refs/heads/pre-dev' }}
-      
-  - name: Build and Push Docker image
+        type=raw,value=speed-16aug,enable=${{ github.ref == 'refs/heads/speed/reflux-progress-exp-16-aug' }}
+
+  - name: Build the complete amd64 image without publishing
     id: build
     uses: docker/build-push-action@v7
     with:
       context: .
-      push: ${{ inputs.push_to_ghcr }}
-      tags: ${{ steps.meta.outputs.tags }}
-      labels: ${{ steps.meta.outputs.labels }}
-      # Scope the GHA cache per image so images built from this shared action
-      # can't collide on one cache namespace — future-proofs against a second
-      # image being added (root cause of OpenResilienceInitiative/ORISO-Admin#424).
+      platforms: linux/amd64
+      push: false
+      outputs: type=oci,dest=${{ runner.temp }}/${{ inputs.image_name }}.tar
+      # Retain Buildx's publication provenance policy in the archive.
+      provenance: ${{ github.event.repository.private && 'mode=min' || 'mode=max' }}
+      labels: ${{ inputs.image_labels || steps.meta.outputs.labels }}
       cache-from: type=gha,scope=${{ inputs.image_name }}
       cache-to: type=gha,mode=max,scope=${{ inputs.image_name }}
-  
-  - name: Build Summary
+
+  - name: Install OCI transport
     shell: bash
     run: |
-      echo "### Docker Build Summary" >> $GITHUB_STEP_SUMMARY
-      if [ "${{ steps.build.outcome }}" == "success" ]; then
-        echo "✅ **Status:** Success" >> $GITHUB_STEP_SUMMARY
-        echo "📦 **Image:** \`${{ env.REGISTRY }}/${{ env.ORG }}/${{ inputs.image_name }}\`" >> $GITHUB_STEP_SUMMARY
-        echo "🏷️ **Tags:**" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-      else
-        echo "❌ **Status:** Failed" >> $GITHUB_STEP_SUMMARY
-        echo "Please check the build logs for details." >> $GITHUB_STEP_SUMMARY
+      if ! command -v skopeo >/dev/null; then
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends skopeo
       fi
-      echo "" >> $GITHUB_STEP_SUMMARY
+
+  - name: Install Trivy
+    uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+    with:
+      version: v0.70.0
+      cache: true
+
+  - name: Reject fixable high or critical image vulnerabilities
+    id: scan
+    shell: bash
+    env:
+      IMAGE_ARCHIVE: ${{ runner.temp }}/${{ inputs.image_name }}.tar
+      EXPECTED_DIGEST: ${{ steps.build.outputs.digest }}
+    run: bash scripts/ci/scan-image-archive.sh "$IMAGE_ARCHIVE" linux/amd64 "$EXPECTED_DIGEST"
+
+  - name: Login to GitHub Container Registry
+    if: ${{ inputs.push_to_ghcr == 'true' }}
+    uses: docker/login-action@v4
+    with:
+      registry: ${{ env.REGISTRY }}
+      username: ${{ github.actor }}
+      password: ${{ inputs.github_token }}
+
+  - name: Publish the scanned archive without rebuilding
+    id: publish
+    if: ${{ inputs.push_to_ghcr == 'true' }}
+    shell: bash
+    env:
+      IMAGE_ARCHIVE: ${{ runner.temp }}/${{ inputs.image_name }}.tar
+      IMAGE_TAGS: ${{ inputs.image_tags || steps.meta.outputs.tags }}
+      EXPECTED_DIGEST: ${{ steps.build.outputs.digest }}
+      EXPECTED_ARCHIVE_SHA256: ${{ steps.scan.outputs.archive_sha256 }}
+    run: bash scripts/ci/publish-image-archive.sh "$IMAGE_ARCHIVE" "$EXPECTED_DIGEST" "$EXPECTED_ARCHIVE_SHA256"
+
+  - name: Build Summary
+    shell: bash
+    env:
+      IMAGE: ${{ env.REGISTRY }}/${{ env.ORG }}/${{ inputs.image_name }}
+      TAGS: ${{ inputs.image_tags || steps.meta.outputs.tags }}
+    run: |
+      {
+        echo '### Docker Build Summary'
+        echo '✅ **Status:** Build and image scan passed'
+        echo "📦 **Image:** \`$IMAGE\`"
+        echo '🏷️ **Tags:**'
+        echo '```'
+        echo "$TAGS"
+        echo '```'
+        echo
+      } >> "$GITHUB_STEP_SUMMARY"

@@ -2,16 +2,106 @@ package com.vi.tenantservice.api.repository;
 
 import com.vi.tenantservice.api.model.DpaSignatureStatus;
 import com.vi.tenantservice.api.model.TenantDpaSignatureEntity;
+import com.vi.tenantservice.api.model.TenantIdReservationStatus;
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 public interface TenantDpaSignatureRepository
     extends JpaRepository<TenantDpaSignatureEntity, Long> {
+
+  String FORWARDED_SIGNATURE =
+      "s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.SIGNED "
+          + "and s.source = 'FORWARDED_EXTERNAL'";
+
+  String STAGED_ADMIN_NOTICE =
+      FORWARDED_SIGNATURE + " and s.adminNoticePendingSinceEpochMillis = s.signedAtEpochMillis";
+
+  String EXACT_ADMIN_NOTICE =
+      FORWARDED_SIGNATURE
+          + " and (s.adminNoticePendingSinceEpochMillis = s.signedAtEpochMillis"
+          + " or s.adminNoticeHandoffSignedAtEpochMillis = s.signedAtEpochMillis)";
+
+  String NOTICE_OWNERSHIP_PROJECTION =
+      "s.reservationTokenHash as reservationBinding, r.token as reservationToken, "
+          + "r.status as reservationStatus, t.id as registeredTenantId";
+
+  String NOTICE_OWNERSHIP_JOIN =
+      " from TenantDpaSignatureEntity s "
+          + "left join TenantIdReservationEntity r on r.tenantId = s.tenantId "
+          + "left join TenantEntity t on t.id = s.tenantId ";
+
+  @Query(
+      "select s.id as id, s.tenantId as tenantId, s.signedAtEpochMillis as signedAtEpochMillis, "
+          + NOTICE_OWNERSHIP_PROJECTION
+          + NOTICE_OWNERSHIP_JOIN
+          + "where s.id > :afterId and s.adminNoticePendingStage = 1 order by s.id")
+  Slice<PendingAdminNotice> findPendingAdminNotices(@Param("afterId") long afterId, Pageable page);
+
+  @Query(
+      "select s.id as id, s.tenantId as tenantId, s.signedAtEpochMillis as signedAtEpochMillis, "
+          + "s.dpaVersion as dpaVersion, s.signedAt as signedAt, s.forwardedByUserId as forwardedByUserId,"
+          + " s.signerName as signerName, s.signerPosition as signerPosition, "
+          + NOTICE_OWNERSHIP_PROJECTION
+          + NOTICE_OWNERSHIP_JOIN
+          + "where s.id = :id and "
+          + EXACT_ADMIN_NOTICE)
+  Optional<ExactAdminNotice> findExactAdminNotice(@Param("id") long id);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
+  @Query(
+      "select s from TenantDpaSignatureEntity s "
+          + "where s.id = :id and s.signedAtEpochMillis = :signedAt and "
+          + EXACT_ADMIN_NOTICE)
+  Optional<TenantDpaSignatureEntity> lockExactAdminNotice(
+      @Param("id") long id, @Param("signedAt") long signedAt);
+
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update TenantDpaSignatureEntity s set s.adminNoticePendingSinceEpochMillis = null, "
+          + "s.adminNoticeHandoffSignedAtEpochMillis = :signedAt "
+          + "where s.id = :id and s.signedAtEpochMillis = :signedAt and "
+          + STAGED_ADMIN_NOTICE)
+  int clearPendingAdminNotice(@Param("id") long id, @Param("signedAt") long signedAt);
+
+  interface PendingAdminNotice {
+    Long getId();
+
+    Long getTenantId();
+
+    Long getSignedAtEpochMillis();
+
+    String getReservationBinding();
+
+    String getReservationToken();
+
+    TenantIdReservationStatus getReservationStatus();
+
+    Long getRegisteredTenantId();
+  }
+
+  interface ExactAdminNotice extends PendingAdminNotice {
+    LocalDateTime getDpaVersion();
+
+    LocalDateTime getSignedAt();
+
+    String getForwardedByUserId();
+
+    String getSignerName();
+
+    String getSignerPosition();
+  }
 
   List<TenantDpaSignatureEntity> findByTenantId(Long tenantId);
 
@@ -24,20 +114,53 @@ public interface TenantDpaSignatureRepository
   long deleteByStatusAndCreateDateBefore(DpaSignatureStatus status, LocalDateTime cutoff);
 
   /**
+   * Whether an unexpired sign link for exactly this DPA version is still outstanding — the
+   * "contract on hold" predicate. The version is part of the question on purpose (#179): a link
+   * minted for a superseded version can only ever produce an OUTDATED signature, so reporting the
+   * CURRENT contract as "awaiting a signer" because of it would mislead the wizard and the gate.
+   */
+  List<TenantDpaSignatureEntity> findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+      Long tenantId, LocalDateTime dpaVersion, DpaSignatureStatus status, LocalDateTime now);
+
+  /** App-level replacement for the dropped DB cascade: removes all rows of a deleted tenant. */
+  long deleteByTenantId(Long tenantId);
+
+  /**
+   * Outstanding, unexpired links minted from ONE specific reservation — throttle input for the
+   * public forward endpoint. Scoped by the reservation hash, not merely by tenant id: an id that
+   * was released and reserved again keeps its number, and the previous reservation's links are
+   * already dead (their binding no longer matches), so counting them would spend the new
+   * onboarding's budget on links nobody can use.
+   */
+  long countByTenantIdAndReservationTokenHashAndStatusAndTokenExpiresAtAfter(
+      Long tenantId, String reservationTokenHash, DpaSignatureStatus status, LocalDateTime now);
+
+  /**
    * Atomically consumes a PENDING sign token: flips it to SIGNED, records the signer, and clears
    * the token — all in one conditional UPDATE. Only the row that is still PENDING is affected, so
    * under a concurrent double-submit exactly one caller wins (rows affected = 1) and the rest get
    * 0. This is what makes "single-use" hold under concurrency (the read-then-write path cannot).
+   *
+   * <p>{@code forwardedByUserId} is deliberately NOT part of the update (ORISO-TenantService#179):
+   * it is stamped when the sign link is created and must not be overridable by the signing client.
+   * {@code source} is likewise never taken from the client — it is only defaulted here for links
+   * minted before source stamping existed, so the persisted column matches what the API returns (a
+   * legacy row would otherwise stay null in the database and be missed by every later reader). The
+   * same update stages the ADMIN notice for a forwarded confirmation on that exact row.
    */
-  @Modifying(clearAutomatically = true)
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
   @Query(
       "update TenantDpaSignatureEntity s set "
           + "s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.SIGNED, "
           + "s.signerName = :signerName, s.signerPosition = :signerPosition, "
           + "s.signerEmail = :signerEmail, s.signerOrganisation = :signerOrganisation, "
-          + "s.forwardedByUserId = :forwardedByUserId, s.source = :source, "
           + "s.signerIsMember = :signerIsMember, s.language = :language, "
-          + "s.signedAt = :now, s.tokenHash = null "
+          + "s.source = coalesce(s.source, :defaultSource), "
+          + "s.signedAt = :now, s.signedAtEpochMillis = :signedAtEpochMillis, s.tokenHash = null, "
+          + "s.adminNoticePendingSinceEpochMillis = case "
+          + "when coalesce(s.source, :defaultSource) = 'FORWARDED_EXTERNAL' "
+          + "then :signedAtEpochMillis else null end, "
+          + "s.currentVersionWhenSigned = :currentVersionWhenSigned "
           + "where s.tokenHash = :tokenHash "
           + "and s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.PENDING")
   int consumeSignToken(
@@ -46,9 +169,50 @@ public interface TenantDpaSignatureRepository
       @Param("signerPosition") String signerPosition,
       @Param("signerEmail") String signerEmail,
       @Param("signerOrganisation") String signerOrganisation,
-      @Param("forwardedByUserId") String forwardedByUserId,
-      @Param("source") String source,
       @Param("signerIsMember") Boolean signerIsMember,
       @Param("language") String language,
-      @Param("now") LocalDateTime now);
+      @Param("defaultSource") String defaultSource,
+      @Param("now") LocalDateTime now,
+      @Param("signedAtEpochMillis") long signedAtEpochMillis,
+      @Param("currentVersionWhenSigned") Boolean currentVersionWhenSigned);
+
+  /**
+   * Locks every outstanding sign link of the tenant, in ascending id order, before a confirmation
+   * touches any of them.
+   *
+   * <p>Deadlock avoidance, not throttling. {@code confirmSignature} locks its own row via {@link
+   * #consumeSignToken} and then calls {@link #invalidateOutstandingByTenantId}, which needs every
+   * OTHER pending row of the tenant. Two confirmations with distinct tokens for the same tenant
+   * therefore each hold what the other wants, and InnoDB breaks the cycle by rolling one back —
+   * turning a committed, legally valid signature into an HTTP 500 for its signer.
+   *
+   * <p>Taking the whole set up front in a stable order removes the cycle instead of retrying around
+   * it: both transactions request the same rows in the same sequence, so the second simply waits,
+   * then finds its own row no longer PENDING and answers the defined 410. A retry would have
+   * papered over the lock ordering while leaving it intact.
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
+  @Query(
+      "select s from TenantDpaSignatureEntity s "
+          + "where s.tenantId = :tenantId "
+          + "and s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.PENDING "
+          + "order by s.id")
+  List<TenantDpaSignatureEntity> lockOutstandingByTenantId(@Param("tenantId") Long tenantId);
+
+  /**
+   * Invalidates every outstanding sign link of the tenant (ORISO-TenantService#179): the moment any
+   * signature is recorded, all still-PENDING rows flip to INVALIDATED and lose their token, so
+   * every outstanding link resolves to the defined "no longer valid" state.
+   */
+  // flushAutomatically matters: this runs in the same transaction as the signature insert, and a
+  // bulk update that only cleared the persistence context would discard the not-yet-flushed row.
+  @Modifying(flushAutomatically = true, clearAutomatically = true)
+  @Query(
+      "update TenantDpaSignatureEntity s set "
+          + "s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.INVALIDATED, "
+          + "s.tokenHash = null "
+          + "where s.tenantId = :tenantId "
+          + "and s.status = com.vi.tenantservice.api.model.DpaSignatureStatus.PENDING")
+  int invalidateOutstandingByTenantId(@Param("tenantId") Long tenantId);
 }

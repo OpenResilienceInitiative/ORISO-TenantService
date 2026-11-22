@@ -1,0 +1,791 @@
+package com.vi.tenantservice.api.service;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
+import com.vi.tenantservice.api.exception.TenantBadRequestException;
+import com.vi.tenantservice.api.exception.TenantSettingsUnavailableException;
+import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
+import com.vi.tenantservice.api.model.CalendarPolicies;
+import com.vi.tenantservice.api.model.CalendarVisibilityScope;
+import com.vi.tenantservice.api.model.CalendarVisibilityScopePolicy;
+import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
+import com.vi.tenantservice.api.model.CaseHandoverPolicies;
+import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
+import com.vi.tenantservice.api.model.ConsentPermissionPolicy;
+import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
+import com.vi.tenantservice.api.model.InternalGroupChatPolicies;
+import com.vi.tenantservice.api.model.InternalGroupChatRecipientScope;
+import com.vi.tenantservice.api.model.MultilingualTextPermissionPolicy;
+import com.vi.tenantservice.api.model.PermissionPolicyMode;
+import com.vi.tenantservice.api.model.RecipientScopePermissionPolicy;
+import com.vi.tenantservice.api.model.StringListPermissionPolicy;
+import com.vi.tenantservice.api.model.TenantAdminControls;
+import com.vi.tenantservice.api.model.TenantPermissionPolicyEntity;
+import com.vi.tenantservice.api.policy.CalendarPolicyRules;
+import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
+import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
+import com.vi.tenantservice.api.policy.InternalGroupChatPolicyRules;
+import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
+import com.vi.tenantservice.api.policy.PermissionFeature;
+import com.vi.tenantservice.api.policy.PermissionPolicyResolver;
+import com.vi.tenantservice.api.policy.PolicyValue;
+import com.vi.tenantservice.api.policy.ResolvedPolicyValue;
+import com.vi.tenantservice.api.repository.TenantPermissionPolicyRepository;
+import com.vi.tenantservice.api.repository.TenantRepository;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class TenantPermissionPolicyService {
+
+  private final @NonNull TenantPermissionPolicyRepository repository;
+  private final @NonNull TenantAdminControlsService platformControls;
+  private final @NonNull TenantRepository tenants;
+  private static final String RETIRED_LIVE_CHAT_COLLECTION =
+      "featureAskerEmailCollectionLiveChatEnabled";
+  private static final Set<String> ACCOUNT_PREFERENCE_FIELDS =
+      Set.of(
+          "featureAskerEmailCollectionAgencyCounsellingEnabled",
+          "featureAskerEmailCollectionSelfHelpEnabled",
+          "featureDisplayNameEditableAgencyCounsellingEnabled",
+          "featureDisplayNameEditableLiveChatEnabled",
+          "featureDisplayNameEditableSelfHelpEnabled");
+  private final ObjectMapper objectMapper = new ObjectMapper();
+
+  public Map<String, ResolvedPolicyValue<Boolean>> getResolvedPolicies(Long tenantId) {
+    Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platformControls.getControls());
+    Map<String, PolicyValue<Boolean>> overrides =
+        repository.findByTenantId(tenantId).map(this::deserialize).orElse(Map.of());
+    var unreadable = new LinkedHashSet<Long>();
+    var optOuts = accountOptOuts(Set.of(tenantId), unreadable);
+    if (unreadable.contains(tenantId)) throw new TenantSettingsUnavailableException();
+    return resolvePolicies(
+        inherited, withAccountOptOuts(overrides, optOuts.getOrDefault(tenantId, Map.of())));
+  }
+
+  public Map<Long, Map<String, ResolvedPolicyValue<Boolean>>> getResolvedPolicies(
+      Set<Long> tenantIds) {
+    if (tenantIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platformControls.getControls());
+    var unreadable = new LinkedHashSet<Long>();
+    var overridesByTenant = deserializeBatch(tenantIds, unreadable, this::deserialize);
+    var optOutsByTenant = accountOptOuts(tenantIds, unreadable);
+    Map<Long, Map<String, ResolvedPolicyValue<Boolean>>> resolvedByTenant = new LinkedHashMap<>();
+    tenantIds.stream()
+        .filter(id -> !unreadable.contains(id))
+        .forEach(
+            tenantId ->
+                resolvedByTenant.put(
+                    tenantId,
+                    resolvePolicies(
+                        inherited,
+                        withAccountOptOuts(
+                            overridesByTenant.getOrDefault(tenantId, Map.of()),
+                            optOutsByTenant.getOrDefault(tenantId, Map.of())))));
+    return Map.copyOf(resolvedByTenant);
+  }
+
+  /** Raw FALSE remains a restrictive preference until an explicit typed choice supersedes it. */
+  private Map<String, PolicyValue<Boolean>> withAccountOptOuts(
+      Map<String, PolicyValue<Boolean>> overrides, Map<String, PolicyValue<Boolean>> optOuts) {
+    var combined = new LinkedHashMap<>(optOuts);
+    combined.putAll(overrides);
+    return combined;
+  }
+
+  /** One repository read for the whole page, never one settings lookup per tenant. */
+  private Map<Long, Map<String, PolicyValue<Boolean>>> accountOptOuts(
+      Set<Long> tenantIds, Set<Long> unreadable) {
+    Map<Long, Map<String, PolicyValue<Boolean>>> result = new LinkedHashMap<>();
+    for (var tenant : tenants.findSettingsByIdIn(tenantIds)) {
+      if (!tenantIds.contains(tenant.getId())) continue;
+      String json = tenant.getSettings();
+      if (json == null || json.isBlank()) continue;
+      try {
+        var settings = objectMapper.readTree(json);
+        if (settings == null || !settings.isObject())
+          throw new TenantSettingsUnavailableException();
+        Map<String, PolicyValue<Boolean>> optOuts = new LinkedHashMap<>();
+        for (String field : ACCOUNT_PREFERENCE_FIELDS) {
+          var value = settings.get(field);
+          if (value == null || value.isNull()) continue;
+          if (!value.isBoolean()) throw new TenantSettingsUnavailableException();
+          if (!value.booleanValue())
+            optOuts.put(
+                field,
+                new PolicyValue<>(
+                    false, com.vi.tenantservice.api.policy.PermissionPolicyMode.SUGGESTED));
+        }
+        result.put(tenant.getId(), optOuts);
+      } catch (JsonProcessingException | TenantSettingsUnavailableException invalid) {
+        // Tenant settings may contain credentials. Never log parser errors or raw JSON.
+        unreadable.add(tenant.getId());
+      }
+    }
+    return result;
+  }
+
+  /**
+   * The platform rule for every registry feature. The stored platform list may be partial (dev
+   * carried only {@code caseHandoverEnabled}, #254); the missing features take the same default the
+   * platform read uses: the legacy toggle mapping, else SUGGESTED/on.
+   */
+  private Map<String, PolicyValue<Boolean>> platformPolicies(TenantAdminControls platform) {
+    return LegacyPermissionPolicyMapper.complete(
+        toDomain(platform.getPermissionPolicies()),
+        platform.getAllowedPermissionToggles(),
+        platform.getEnforcedPermissionToggles());
+  }
+
+  private Map<String, ResolvedPolicyValue<Boolean>> resolvePolicies(
+      Map<String, PolicyValue<Boolean>> inherited, Map<String, PolicyValue<Boolean>> overrides) {
+    Map<String, ResolvedPolicyValue<Boolean>> resolved = new LinkedHashMap<>();
+    // tenant overrides stored before the group chat formats were split out (#250) still apply
+    Map<String, PolicyValue<Boolean>> effectiveOverrides =
+        PermissionFeature.withTransitionFallbacks(overrides);
+    // resolve over the registry, never over the platform keys: a tenant override for a feature the
+    // platform list does not mention must survive the read (#254)
+    for (PermissionFeature feature : PermissionFeature.values()) {
+      String key = feature.apiKey();
+      resolved.put(
+          key,
+          PermissionPolicyResolver.resolveWithOrigin(
+              inherited.get(key), effectiveOverrides.get(key)));
+    }
+    return Map.copyOf(resolved);
+  }
+
+  @Transactional
+  public void saveOverrides(Long tenantId, Map<String, PolicyValue<Boolean>> overrides) {
+    saveOverrides(tenantId, overrides, null);
+  }
+
+  @Transactional
+  public void saveOverrides(
+      Long tenantId,
+      Map<String, PolicyValue<Boolean>> overrides,
+      CaseHandoverPolicies caseHandoverOverrides) {
+    saveOverrides(tenantId, overrides, caseHandoverOverrides, null);
+  }
+
+  @Transactional
+  public void saveOverrides(
+      Long tenantId,
+      Map<String, PolicyValue<Boolean>> overrides,
+      CaseHandoverPolicies caseHandoverOverrides,
+      InternalGroupChatPolicies internalGroupChatOverrides) {
+    saveOverrides(tenantId, overrides, caseHandoverOverrides, internalGroupChatOverrides, null);
+  }
+
+  /**
+   * Saves the Traeger's overrides. A {@code null} {@code caseHandoverOverrides}, {@code
+   * internalGroupChatOverrides} or {@code calendarOverrides} leaves what is stored untouched (#319,
+   * #365); a platform requirement (ENFORCED) rejects any change and discards an unchanged echo.
+   */
+  @Transactional
+  public void saveOverrides(
+      Long tenantId,
+      Map<String, PolicyValue<Boolean>> overrides,
+      CaseHandoverPolicies caseHandoverOverrides,
+      InternalGroupChatPolicies internalGroupChatOverrides,
+      CalendarPolicies calendarOverrides) {
+    overrides = withoutRetiredPolicy(overrides);
+    overrides.keySet().forEach(this::assertKnownFeature);
+    CaseHandoverPolicyRules.validate(caseHandoverOverrides);
+    TenantAdminControls platform = platformControls.getControls();
+    Map<String, PolicyValue<Boolean>> writableOverrides =
+        sanitizeBooleanOverrides(platformPolicies(platform), overrides);
+    CaseHandoverPolicies parentCaseHandover = platform.getCaseHandoverPolicies();
+    if (parentCaseHandover == null) {
+      parentCaseHandover = CaseHandoverPolicyDefaults.create();
+    }
+    CaseHandoverPolicies writableCaseHandoverOverrides =
+        sanitizeCaseHandoverOverrides(parentCaseHandover, caseHandoverOverrides);
+    InternalGroupChatPolicies writableInternalGroupChat =
+        sanitizeInternalGroupChatOverrides(
+            platformInternalGroupChat(platform), internalGroupChatOverrides);
+    CalendarPolicies writableCalendar =
+        sanitizeCalendarOverrides(platformCalendar(platform), calendarOverrides);
+    TenantPermissionPolicyEntity entity =
+        repository.findByTenantId(tenantId).orElseGet(TenantPermissionPolicyEntity::new);
+    entity.setTenantId(tenantId);
+    Map<String, PolicyValue<Boolean>> merged =
+        entity.getPolicies() == null
+            ? new LinkedHashMap<>()
+            : new LinkedHashMap<>(deserialize(entity));
+    merged.putAll(writableOverrides);
+    entity.setPolicies(serialize(merged));
+    if (caseHandoverOverrides != null) {
+      entity.setCaseHandoverPolicies(serializeCaseHandover(writableCaseHandoverOverrides));
+    }
+    if (internalGroupChatOverrides != null) {
+      entity.setInternalGroupChatPolicies(serializeInternalGroupChat(writableInternalGroupChat));
+    }
+    if (calendarOverrides != null) {
+      entity.setCalendarPolicies(serializeCalendar(writableCalendar));
+    }
+    entity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));
+    try {
+      repository.saveAndFlush(entity);
+    } catch (OptimisticLockingFailureException | DataIntegrityViolationException exception) {
+      throw new SettingsUpdateConflictException(exception);
+    }
+  }
+
+  public CaseHandoverPolicies getResolvedCaseHandoverPolicies(Long tenantId) {
+    CaseHandoverPolicies parent = platformControls.getControls().getCaseHandoverPolicies();
+    if (parent == null) {
+      parent = CaseHandoverPolicyDefaults.create();
+    }
+    CaseHandoverPolicies local =
+        repository
+            .findByTenantId(tenantId)
+            .map(TenantPermissionPolicyEntity::getCaseHandoverPolicies)
+            .filter(value -> value != null && !value.isBlank())
+            .map(this::deserializeCaseHandover)
+            .orElse(null);
+    Map<String, CaseHandoverReasonPolicy> resolved = new LinkedHashMap<>();
+    for (var entry : parent.getReasons().entrySet()) {
+      CaseHandoverReasonPolicy localReason =
+          local == null ? null : local.getReasons().get(entry.getKey());
+      resolved.put(entry.getKey(), resolveReason(entry.getValue(), localReason));
+    }
+    return new CaseHandoverPolicies(Map.copyOf(resolved));
+  }
+
+  /** The Traeger's internal group chat policies: platform preset, Traeger override on top. */
+  public InternalGroupChatPolicies getResolvedInternalGroupChatPolicies(Long tenantId) {
+    InternalGroupChatPolicies parent = platformInternalGroupChat(platformControls.getControls());
+    InternalGroupChatPolicies local =
+        repository.findByTenantId(tenantId).map(this::deserializeInternalGroupChat).orElse(null);
+    return resolveInternalGroupChat(parent, local);
+  }
+
+  public Map<Long, InternalGroupChatPolicies> getResolvedInternalGroupChatPolicies(
+      Set<Long> tenantIds) {
+    if (tenantIds.isEmpty()) {
+      return Map.of();
+    }
+    InternalGroupChatPolicies parent = platformInternalGroupChat(platformControls.getControls());
+    var unreadable = new LinkedHashSet<Long>();
+    var localByTenant = deserializeBatch(tenantIds, unreadable, this::deserializeInternalGroupChat);
+    Map<Long, InternalGroupChatPolicies> resolvedByTenant = new LinkedHashMap<>();
+    tenantIds.stream()
+        .filter(id -> !unreadable.contains(id))
+        .forEach(
+            tenantId ->
+                resolvedByTenant.put(
+                    tenantId, resolveInternalGroupChat(parent, localByTenant.get(tenantId))));
+    return Map.copyOf(resolvedByTenant);
+  }
+
+  /** The Traeger's calendar policies (ADR-032): platform preset, Traeger override on top. */
+  public CalendarPolicies getResolvedCalendarPolicies(Long tenantId) {
+    CalendarPolicies parent = platformCalendar(platformControls.getControls());
+    CalendarPolicies local =
+        repository.findByTenantId(tenantId).map(this::deserializeCalendar).orElse(null);
+    return resolveCalendar(parent, local);
+  }
+
+  public Map<Long, CalendarPolicies> getResolvedCalendarPolicies(Set<Long> tenantIds) {
+    if (tenantIds.isEmpty()) {
+      return Map.of();
+    }
+    CalendarPolicies parent = platformCalendar(platformControls.getControls());
+    var unreadable = new LinkedHashSet<Long>();
+    var localByTenant = deserializeBatch(tenantIds, unreadable, this::deserializeCalendar);
+    Map<Long, CalendarPolicies> resolvedByTenant = new LinkedHashMap<>();
+    tenantIds.stream()
+        .filter(id -> !unreadable.contains(id))
+        .forEach(
+            tenantId ->
+                resolvedByTenant.put(
+                    tenantId, resolveCalendar(parent, localByTenant.get(tenantId))));
+    return Map.copyOf(resolvedByTenant);
+  }
+
+  /** Batch reads keep healthy tenants without serving default permissions for corrupt rows. */
+  private <T> Map<Long, T> deserializeBatch(
+      Set<Long> tenantIds, Set<Long> unreadable, Function<TenantPermissionPolicyEntity, T> reader) {
+    Map<Long, T> results = new LinkedHashMap<>();
+    for (var entity : repository.findByTenantIdIn(tenantIds)) {
+      try {
+        results.put(entity.getTenantId(), reader.apply(entity));
+      } catch (TenantSettingsUnavailableException invalid) {
+        unreadable.add(entity.getTenantId());
+      }
+    }
+    return results;
+  }
+
+  private InternalGroupChatPolicies platformInternalGroupChat(TenantAdminControls platform) {
+    return InternalGroupChatPolicyRules.normalize(platform.getInternalGroupChat());
+  }
+
+  private InternalGroupChatPolicies resolveInternalGroupChat(
+      InternalGroupChatPolicies parent, InternalGroupChatPolicies local) {
+    ResolvedPolicyValue<InternalGroupChatRecipientScope> scope =
+        PermissionPolicyResolver.resolveWithOrigin(
+            toDomain(parent.getRecipientScope()),
+            local == null ? null : toDomain(local.getRecipientScope()));
+    return new InternalGroupChatPolicies()
+        .recipientScope(
+            new RecipientScopePermissionPolicy(
+                    scope.value(), PermissionPolicyMode.valueOf(scope.mode().name()))
+                .inherited(scope.inherited()));
+  }
+
+  private InternalGroupChatPolicies sanitizeInternalGroupChatOverrides(
+      InternalGroupChatPolicies parent, InternalGroupChatPolicies local) {
+    if (local == null) {
+      return null;
+    }
+    PolicyValue<InternalGroupChatRecipientScope> parentScope = toDomain(parent.getRecipientScope());
+    PolicyValue<InternalGroupChatRecipientScope> localScope = toDomain(local.getRecipientScope());
+    if (localScope != null
+        && parentScope.mode() == com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED) {
+      if (!Objects.equals(parentScope, localScope)) {
+        throw new TenantBadRequestException(
+            "Cannot override enforced policy: internalGroupChat.recipientScope");
+      }
+      return new InternalGroupChatPolicies();
+    }
+    return new InternalGroupChatPolicies()
+        .recipientScope(
+            localScope == null
+                ? null
+                : new RecipientScopePermissionPolicy(
+                    local.getRecipientScope().getValue(), local.getRecipientScope().getMode()));
+  }
+
+  private InternalGroupChatPolicies deserializeInternalGroupChat(
+      TenantPermissionPolicyEntity entity) {
+    String json = entity.getInternalGroupChatPolicies();
+    if (json == null || json.isBlank()) {
+      return null;
+    }
+    try {
+      var stored = objectMapper.readValue(json, InternalGroupChatPolicies.class);
+      if (stored == null
+          || (stored.getRecipientScope() != null && toDomain(stored.getRecipientScope()) == null)) {
+        throw new TenantSettingsUnavailableException();
+      }
+      return stored;
+    } catch (JsonProcessingException exception) {
+      throw new TenantSettingsUnavailableException();
+    }
+  }
+
+  private String serializeInternalGroupChat(InternalGroupChatPolicies policies) {
+    try {
+      return objectMapper.writeValueAsString(policies);
+    } catch (JsonProcessingException exception) {
+      throw mappingFailure("serialize internal group chat policies", exception);
+    }
+  }
+
+  private CalendarPolicies platformCalendar(TenantAdminControls platform) {
+    return CalendarPolicyRules.normalize(platform.getCalendar());
+  }
+
+  private CalendarPolicies resolveCalendar(CalendarPolicies parent, CalendarPolicies local) {
+    ResolvedPolicyValue<CalendarVisibilityScope> scope =
+        PermissionPolicyResolver.resolveWithOrigin(
+            toDomain(parent.getVisibilityScope()),
+            local == null ? null : toDomain(local.getVisibilityScope()));
+    return new CalendarPolicies()
+        .visibilityScope(
+            new CalendarVisibilityScopePolicy(
+                    scope.value(), PermissionPolicyMode.valueOf(scope.mode().name()))
+                .inherited(scope.inherited()))
+        .showAskerUsernames(
+            resolveBoolean(
+                parent.getShowAskerUsernames(),
+                local == null ? null : local.getShowAskerUsernames()));
+  }
+
+  /**
+   * Each calendar policy is checked on its own: a value the platform requires (ENFORCED) cannot be
+   * changed (400), an unchanged echo of it is discarded, anything else is kept as the override.
+   */
+  private CalendarPolicies sanitizeCalendarOverrides(
+      CalendarPolicies parent, CalendarPolicies local) {
+    if (local == null) {
+      return null;
+    }
+    PolicyValue<CalendarVisibilityScope> localScope = toDomain(local.getVisibilityScope());
+    PolicyValue<Boolean> localUsernames = toDomain(local.getShowAskerUsernames());
+    return new CalendarPolicies()
+        .visibilityScope(
+            writableCalendarPolicy(
+                    toDomain(parent.getVisibilityScope()), localScope, "calendar.visibilityScope")
+                ? new CalendarVisibilityScopePolicy(
+                    local.getVisibilityScope().getValue(), local.getVisibilityScope().getMode())
+                : null)
+        .showAskerUsernames(
+            writableCalendarPolicy(
+                    toDomain(parent.getShowAskerUsernames()),
+                    localUsernames,
+                    "calendar.showAskerUsernames")
+                ? new BooleanPermissionPolicy(
+                    local.getShowAskerUsernames().getValue(),
+                    local.getShowAskerUsernames().getMode())
+                : null);
+  }
+
+  /** Whether {@code local} is stored; throws when it tries to change a platform requirement. */
+  private <T> boolean writableCalendarPolicy(
+      PolicyValue<T> parent, PolicyValue<T> local, String field) {
+    if (local == null) {
+      return false;
+    }
+    if (parent.mode() == com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED) {
+      if (!Objects.equals(parent, local)) {
+        throw new TenantBadRequestException("Cannot override enforced policy: " + field);
+      }
+      return false;
+    }
+    return true;
+  }
+
+  private CalendarPolicies deserializeCalendar(TenantPermissionPolicyEntity entity) {
+    String json = entity.getCalendarPolicies();
+    if (json == null || json.isBlank()) {
+      return null;
+    }
+    try {
+      var stored = objectMapper.readValue(json, CalendarPolicies.class);
+      if (stored == null
+          || (stored.getVisibilityScope() != null && toDomain(stored.getVisibilityScope()) == null)
+          || (stored.getShowAskerUsernames() != null
+              && toDomain(stored.getShowAskerUsernames()) == null)) {
+        throw new TenantSettingsUnavailableException();
+      }
+      return stored;
+    } catch (JsonProcessingException exception) {
+      throw new TenantSettingsUnavailableException();
+    }
+  }
+
+  private String serializeCalendar(CalendarPolicies policies) {
+    try {
+      return objectMapper.writeValueAsString(policies);
+    } catch (JsonProcessingException exception) {
+      throw mappingFailure("serialize calendar policies", exception);
+    }
+  }
+
+  private PolicyValue<CalendarVisibilityScope> toDomain(CalendarVisibilityScopePolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
+  }
+
+  private PolicyValue<InternalGroupChatRecipientScope> toDomain(
+      RecipientScopePermissionPolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
+  }
+
+  private Map<String, PolicyValue<Boolean>> toDomain(
+      Map<String, BooleanPermissionPolicy> policies) {
+    if (policies == null) {
+      return Map.of();
+    }
+    Map<String, PolicyValue<Boolean>> result = new LinkedHashMap<>();
+    policies.forEach(
+        (feature, policy) -> {
+          if (RETIRED_LIVE_CHAT_COLLECTION.equals(feature)) return;
+          assertKnownFeature(feature);
+          result.put(
+              feature,
+              new PolicyValue<>(
+                  policy.getValue(),
+                  com.vi.tenantservice.api.policy.PermissionPolicyMode.valueOf(
+                      policy.getMode().name())));
+        });
+    return Map.copyOf(result);
+  }
+
+  private Map<String, PolicyValue<Boolean>> deserialize(TenantPermissionPolicyEntity entity) {
+    try {
+      var stored =
+          objectMapper.readValue(
+              entity.getPolicies(), new TypeReference<Map<String, PolicyValue<Boolean>>>() {});
+      if (stored == null) throw new TenantSettingsUnavailableException();
+      var policies = withoutRetiredPolicy(stored);
+      if (policies.containsValue(null)) throw new TenantSettingsUnavailableException();
+      return policies;
+    } catch (JsonProcessingException | IllegalArgumentException exception) {
+      throw new TenantSettingsUnavailableException();
+    }
+  }
+
+  private static Map<String, PolicyValue<Boolean>> withoutRetiredPolicy(
+      Map<String, PolicyValue<Boolean>> policies) {
+    if (!policies.containsKey(RETIRED_LIVE_CHAT_COLLECTION)) return policies;
+    var current = new LinkedHashMap<>(policies);
+    current.remove(RETIRED_LIVE_CHAT_COLLECTION);
+    return current;
+  }
+
+  private String serialize(Map<String, PolicyValue<Boolean>> policies) {
+    try {
+      return objectMapper.writeValueAsString(policies);
+    } catch (JsonProcessingException exception) {
+      throw mappingFailure("serialize permission policies", exception);
+    }
+  }
+
+  private CaseHandoverPolicies deserializeCaseHandover(String policies) {
+    try {
+      return objectMapper.readValue(policies, CaseHandoverPolicies.class);
+    } catch (JsonProcessingException exception) {
+      throw mappingFailure("deserialize Case Handover policies", exception);
+    }
+  }
+
+  private String serializeCaseHandover(CaseHandoverPolicies policies) {
+    try {
+      return objectMapper.writeValueAsString(policies);
+    } catch (JsonProcessingException exception) {
+      throw mappingFailure("serialize Case Handover policies", exception);
+    }
+  }
+
+  private IllegalStateException mappingFailure(
+      String operation, JsonProcessingException exception) {
+    return new IllegalStateException("Could not " + operation, exception);
+  }
+
+  private Map<String, PolicyValue<Boolean>> sanitizeBooleanOverrides(
+      Map<String, PolicyValue<Boolean>> inherited, Map<String, PolicyValue<Boolean>> overrides) {
+    Map<String, PolicyValue<Boolean>> writable = new LinkedHashMap<>();
+    overrides.forEach(
+        (feature, local) -> {
+          PolicyValue<Boolean> parent = inherited.get(feature);
+          if (parent == null
+              || parent.mode() != com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED) {
+            writable.put(feature, local);
+          } else {
+            assertEnforcedEcho(parent, local, feature);
+          }
+        });
+    return Map.copyOf(writable);
+  }
+
+  private CaseHandoverPolicies sanitizeCaseHandoverOverrides(
+      CaseHandoverPolicies parent, CaseHandoverPolicies local) {
+    if (local == null) {
+      return null;
+    }
+    Map<String, CaseHandoverReasonPolicy> writableReasons = new LinkedHashMap<>();
+    local
+        .getReasons()
+        .forEach(
+            (code, localReason) -> {
+              CaseHandoverReasonPolicy parentReason = parent.getReasons().get(code);
+              ConsentPermissionPolicy consent =
+                  sanitizePolicy(
+                      CaseHandoverPolicyRules.effectiveConsent(parentReason),
+                      CaseHandoverPolicyRules.effectiveConsent(localReason),
+                      code + ".clientConsent");
+              writableReasons.put(
+                  code,
+                  new CaseHandoverReasonPolicy(
+                          localReason.getCode(),
+                          sanitizePolicy(
+                              parentReason.getLabels(), localReason.getLabels(), code + ".labels"),
+                          sanitizePolicy(
+                              parentReason.getEnabled(),
+                              localReason.getEnabled(),
+                              code + ".enabled"),
+                          sanitizePolicy(
+                              parentReason.getAccessAllowed(),
+                              localReason.getAccessAllowed(),
+                              code + ".accessAllowed"),
+                          CaseHandoverPolicyRules.legacyConsentMirror(consent),
+                          sanitizePolicy(
+                              parentReason.getApprovalRoles(),
+                              localReason.getApprovalRoles(),
+                              code + ".approvalRoles"),
+                          sanitizePolicy(
+                              parentReason.getClientNotificationTemplates(),
+                              localReason.getClientNotificationTemplates(),
+                              code + ".clientNotificationTemplates"))
+                      .clientConsent(consent)
+                      .maxAccessDurationMinutes(
+                          sanitizePolicy(
+                              parentReason.getMaxAccessDurationMinutes(),
+                              localReason.getMaxAccessDurationMinutes(),
+                              code + ".maxAccessDurationMinutes")));
+            });
+    return new CaseHandoverPolicies(Map.copyOf(writableReasons));
+  }
+
+  private BooleanPermissionPolicy sanitizePolicy(
+      BooleanPermissionPolicy parent, BooleanPermissionPolicy local, String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private IntegerPermissionPolicy sanitizePolicy(
+      IntegerPermissionPolicy parent, IntegerPermissionPolicy local, String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private ConsentPermissionPolicy sanitizePolicy(
+      ConsentPermissionPolicy parent, ConsentPermissionPolicy local, String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private StringListPermissionPolicy sanitizePolicy(
+      StringListPermissionPolicy parent, StringListPermissionPolicy local, String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private MultilingualTextPermissionPolicy sanitizePolicy(
+      MultilingualTextPermissionPolicy parent,
+      MultilingualTextPermissionPolicy local,
+      String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private <T, P> P sanitizePolicy(
+      P parent, P local, String field, java.util.function.Function<P, PolicyValue<T>> converter) {
+    if (parent == null || local == null) {
+      return local;
+    }
+    PolicyValue<T> parentPolicy = converter.apply(parent);
+    if (parentPolicy.mode() != com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED) {
+      return local;
+    }
+    assertEnforcedEcho(parentPolicy, converter.apply(local), field);
+    return null;
+  }
+
+  private <T> void assertEnforcedEcho(PolicyValue<T> parent, PolicyValue<T> local, String field) {
+    if (!Objects.equals(parent, local)) {
+      throw new IllegalArgumentException("Cannot override enforced policy: " + field);
+    }
+  }
+
+  private CaseHandoverReasonPolicy resolveReason(
+      CaseHandoverReasonPolicy parent, CaseHandoverReasonPolicy local) {
+    ConsentPermissionPolicy consent =
+        resolveConsent(
+            CaseHandoverPolicyRules.effectiveConsent(parent),
+            local == null ? null : CaseHandoverPolicyRules.effectiveConsent(local));
+    return new CaseHandoverReasonPolicy(
+            parent.getCode(),
+            resolveMultilingual(parent.getLabels(), local == null ? null : local.getLabels()),
+            resolveBoolean(parent.getEnabled(), local == null ? null : local.getEnabled()),
+            resolveBoolean(
+                parent.getAccessAllowed(), local == null ? null : local.getAccessAllowed()),
+            CaseHandoverPolicyRules.legacyConsentMirror(consent),
+            resolveStringList(
+                parent.getApprovalRoles(), local == null ? null : local.getApprovalRoles()),
+            resolveMultilingual(
+                parent.getClientNotificationTemplates(),
+                local == null ? null : local.getClientNotificationTemplates()))
+        .clientConsent(consent)
+        .maxAccessDurationMinutes(
+            parent.getMaxAccessDurationMinutes() == null
+                ? null
+                : resolveInteger(
+                    parent.getMaxAccessDurationMinutes(),
+                    local == null ? null : local.getMaxAccessDurationMinutes()));
+  }
+
+  private BooleanPermissionPolicy resolveBoolean(
+      BooleanPermissionPolicy parent, BooleanPermissionPolicy local) {
+    ResolvedPolicyValue<Boolean> resolved =
+        PermissionPolicyResolver.resolveWithOrigin(toDomain(parent), toDomain(local));
+    return new BooleanPermissionPolicy(
+            resolved.value(), PermissionPolicyMode.valueOf(resolved.mode().name()))
+        .inherited(resolved.inherited());
+  }
+
+  private ConsentPermissionPolicy resolveConsent(
+      ConsentPermissionPolicy parent, ConsentPermissionPolicy local) {
+    ResolvedPolicyValue<CaseHandoverConsentValue> resolved =
+        PermissionPolicyResolver.resolveWithOrigin(toDomain(parent), toDomain(local));
+    return new ConsentPermissionPolicy(
+            resolved.value(), PermissionPolicyMode.valueOf(resolved.mode().name()))
+        .inherited(resolved.inherited());
+  }
+
+  private IntegerPermissionPolicy resolveInteger(
+      IntegerPermissionPolicy parent, IntegerPermissionPolicy local) {
+    ResolvedPolicyValue<Integer> resolved =
+        PermissionPolicyResolver.resolveWithOrigin(toDomain(parent), toDomain(local));
+    return new IntegerPermissionPolicy(
+            resolved.value(), PermissionPolicyMode.valueOf(resolved.mode().name()))
+        .inherited(resolved.inherited());
+  }
+
+  private StringListPermissionPolicy resolveStringList(
+      StringListPermissionPolicy parent, StringListPermissionPolicy local) {
+    ResolvedPolicyValue<Set<String>> resolved =
+        PermissionPolicyResolver.resolveWithOrigin(toDomain(parent), toDomain(local));
+    return new StringListPermissionPolicy(
+            resolved.value(), PermissionPolicyMode.valueOf(resolved.mode().name()))
+        .inherited(resolved.inherited());
+  }
+
+  private MultilingualTextPermissionPolicy resolveMultilingual(
+      MultilingualTextPermissionPolicy parent, MultilingualTextPermissionPolicy local) {
+    ResolvedPolicyValue<Map<String, String>> resolved =
+        PermissionPolicyResolver.resolveWithOrigin(toDomain(parent), toDomain(local));
+    return new MultilingualTextPermissionPolicy(
+            resolved.value(), PermissionPolicyMode.valueOf(resolved.mode().name()))
+        .inherited(resolved.inherited());
+  }
+
+  private <T> PolicyValue<T> toDomain(
+      com.vi.tenantservice.api.model.PermissionPolicyMode mode, T value) {
+    return value == null || mode == null
+        ? null
+        : new PolicyValue<>(
+            value, com.vi.tenantservice.api.policy.PermissionPolicyMode.valueOf(mode.name()));
+  }
+
+  private PolicyValue<Boolean> toDomain(BooleanPermissionPolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
+  }
+
+  private PolicyValue<CaseHandoverConsentValue> toDomain(ConsentPermissionPolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
+  }
+
+  private PolicyValue<Integer> toDomain(IntegerPermissionPolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
+  }
+
+  private PolicyValue<Set<String>> toDomain(StringListPermissionPolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
+  }
+
+  private PolicyValue<Map<String, String>> toDomain(MultilingualTextPermissionPolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
+  }
+
+  private void assertKnownFeature(String feature) {
+    if (PermissionFeature.byApiKey(feature).isEmpty()) {
+      throw new IllegalArgumentException("Unknown permission feature: " + feature);
+    }
+  }
+}

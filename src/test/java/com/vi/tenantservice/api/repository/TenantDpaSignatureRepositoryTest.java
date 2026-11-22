@@ -9,13 +9,24 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Self-contained persistence test for the AVV / Data Processing Agreement model. The module's other
@@ -35,8 +46,12 @@ import org.springframework.test.context.junit.jupiter.SpringExtension;
 @DataJpaTest
 class TenantDpaSignatureRepositoryTest {
 
+  private static final LocalDateTime VERSION = LocalDateTime.of(2026, 7, 1, 12, 0);
+
   @Autowired private TenantDpaSignatureRepository signatureRepository;
   @Autowired private TenantRepository tenantRepository;
+  @Autowired private JdbcTemplate jdbcTemplate;
+  @Autowired private PlatformTransactionManager transactionManager;
 
   @Test
   void tenantEntity_Should_persistDataProcessingAgreementFields() {
@@ -125,13 +140,15 @@ class TenantDpaSignatureRepositoryTest {
 
   @Test
   void consumeSignToken_Should_signExactlyOnce_andRejectReuse() {
-    // given a PENDING row carrying a token
+    // given a PENDING row carrying a token and the forwarder identity stamped at creation (#179)
     var now = LocalDateTime.now();
     var pending =
         signatureRepository.saveAndFlush(
             TenantDpaSignatureEntity.builder()
                 .tenantId(3L)
                 .status(DpaSignatureStatus.PENDING)
+                .forwardedByUserId("admin-1")
+                .source("FORWARDED_EXTERNAL")
                 .tokenHash("HASH")
                 .tokenExpiresAt(now.plusDays(1))
                 .createDate(now)
@@ -145,11 +162,12 @@ class TenantDpaSignatureRepositoryTest {
             "GF",
             "e@example.org",
             "Caritas",
-            "admin-1",
-            "PUBLIC_SIGN_LINK",
             false,
             "de",
-            now);
+            "FORWARDED_EXTERNAL",
+            now,
+            1_700_000_000_000L,
+            true);
     // and a second consume of the same token affects nothing (single-use)
     int second =
         signatureRepository.consumeSignToken(
@@ -158,11 +176,12 @@ class TenantDpaSignatureRepositoryTest {
             "X",
             "m@example.org",
             "Bad Org",
-            "admin-2",
-            "PUBLIC_SIGN_LINK",
             true,
             "en",
-            now);
+            "FORWARDED_EXTERNAL",
+            now,
+            1_800_000_000_000L,
+            false);
     signatureRepository.flush();
 
     // then
@@ -170,14 +189,354 @@ class TenantDpaSignatureRepositoryTest {
     assertThat(second).isZero();
     var reloaded = signatureRepository.findById(pending.getId()).orElseThrow();
     assertThat(reloaded.getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
+    assertThat(reloaded.getCurrentVersionWhenSigned()).isTrue();
+    assertThat(reloaded.getSignedAtEpochMillis()).isEqualTo(1_700_000_000_000L);
+    assertThat(adminNoticePendingSince(reloaded.getId())).isEqualTo(1_700_000_000_000L);
     assertThat(reloaded.getSignerName()).isEqualTo("Erika"); // not overwritten by the 2nd attempt
     assertThat(reloaded.getSignerEmail()).isEqualTo("e@example.org");
     assertThat(reloaded.getSignerOrganisation()).isEqualTo("Caritas");
+    // the stamped forwarder identity survives the consume untouched (#179)
     assertThat(reloaded.getForwardedByUserId()).isEqualTo("admin-1");
-    assertThat(reloaded.getSource()).isEqualTo("PUBLIC_SIGN_LINK");
+    assertThat(reloaded.getSource()).isEqualTo("FORWARDED_EXTERNAL");
     assertThat(reloaded.getTokenHash()).isNull();
     assertThat(signatureRepository.findByTokenHashAndStatus("HASH", DpaSignatureStatus.PENDING))
         .isEmpty();
+  }
+
+  @Test
+  void pendingStageIndexFlag_Should_followTheExistingWriterAndAcknowledgement() {
+    var now = LocalDateTime.now();
+    var pending = pendingLink(97L, "HASH-INDEX-STAGE", now);
+    signatureRepository.flush();
+    long id = pending.getId();
+    long epoch = 1_700_000_000_000L;
+
+    assertThat(pendingStage(id)).isZero();
+    assertThat(consumeToken("HASH-INDEX-STAGE", now, epoch)).isEqualTo(1);
+    assertThat(pendingStage(id)).isEqualTo(1);
+    assertThat(signatureRepository.findPendingAdminNotices(0, PageRequest.of(0, 2)).getContent())
+        .extracting(TenantDpaSignatureRepository.PendingAdminNotice::getId)
+        .containsExactly(id);
+
+    jdbcTemplate.update(
+        "update tenant_dpa_signature set signed_at_epoch_millis = null where id = ?", id);
+    assertThat(pendingStage(id)).isZero();
+    jdbcTemplate.update(
+        "update tenant_dpa_signature set signed_at_epoch_millis = ? where id = ?", epoch + 1, id);
+    assertThat(pendingStage(id)).isZero();
+    assertThat(signatureRepository.findPendingAdminNotices(0, PageRequest.of(0, 2))).isEmpty();
+    jdbcTemplate.update(
+        "update tenant_dpa_signature set signed_at_epoch_millis = ? where id = ?", epoch, id);
+
+    assertThat(signatureRepository.clearPendingAdminNotice(id, epoch)).isEqualTo(1);
+    assertThat(pendingStage(id)).isZero();
+    assertThat(signatureRepository.findPendingAdminNotices(0, PageRequest.of(0, 2))).isEmpty();
+    assertThat(signatureRepository.findExactAdminNotice(id)).isPresent();
+  }
+
+  @ParameterizedTest
+  @CsvSource({"INVALIDATED, FORWARDED_EXTERNAL", "SIGNED, WIZARD_SELF"})
+  void pendingStageIndexFlag_Should_requireSignedForwardedNotice(
+      DpaSignatureStatus status, String source) {
+    var now = LocalDateTime.now();
+    var pending = pendingLink(97L, "HASH-INDEX-STAGE", now);
+    signatureRepository.flush();
+    long id = pending.getId();
+    long epoch = 1_700_000_000_000L;
+    assertThat(consumeToken("HASH-INDEX-STAGE", now, epoch)).isEqualTo(1);
+    assertThat(pendingStage(id)).isEqualTo(1);
+
+    jdbcTemplate.update(
+        "update tenant_dpa_signature set signature_status = ?, source = ? where id = ?",
+        status.name(),
+        source,
+        id);
+
+    assertThat(pendingStage(id)).isZero();
+    assertThat(signatureRepository.findPendingAdminNotices(0, PageRequest.of(0, 2))).isEmpty();
+  }
+
+  private Integer pendingStage(long signatureId) {
+    return jdbcTemplate.queryForObject(
+        "select admin_notice_pending_stage from tenant_dpa_signature where id = ?",
+        Integer.class,
+        signatureId);
+  }
+
+  @Test
+  void adminNoticeStaging_Should_leaveHistoricalAndOtherRowsUnmarked() {
+    var now = LocalDateTime.now();
+    var historical =
+        signatureRepository.saveAndFlush(
+            TenantDpaSignatureEntity.builder()
+                .tenantId(94L)
+                .status(DpaSignatureStatus.SIGNED)
+                .source("FORWARDED_EXTERNAL")
+                .signedAt(now.minusDays(1))
+                .signedAtEpochMillis(1_699_999_999_999L)
+                .createDate(now.minusDays(1))
+                .build());
+    var direct =
+        signatureRepository.saveAndFlush(
+            TenantDpaSignatureEntity.builder()
+                .tenantId(94L)
+                .status(DpaSignatureStatus.SIGNED)
+                .source("WIZARD_SELF")
+                .signedAt(now)
+                .signedAtEpochMillis(1_700_000_000_000L)
+                .createDate(now)
+                .build());
+    var outstanding = pendingLink(94L, "HASH-NOT-CONFIRMED", now);
+    signatureRepository.invalidateOutstandingByTenantId(94L);
+
+    assertThat(adminNoticePendingSince(historical.getId())).isNull();
+    assertThat(adminNoticePendingSince(direct.getId())).isNull();
+    assertThat(adminNoticePendingSince(outstanding.getId())).isNull();
+  }
+
+  @Test
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
+  void adminNoticeStaging_Should_rollBackWithConfirmation() {
+    var now = LocalDateTime.now();
+    var pending =
+        signatureRepository.saveAndFlush(boundPendingLink(95L, "HASH-ROLLBACK", "OWNER", now));
+    var transaction = new TransactionTemplate(transactionManager);
+    try {
+      transaction.executeWithoutResult(
+          status -> {
+            assertThat(consumeToken("HASH-ROLLBACK", now, 1_700_000_000_000L)).isEqualTo(1);
+            assertThat(adminNoticePendingSince(pending.getId())).isEqualTo(1_700_000_000_000L);
+            status.setRollbackOnly();
+          });
+      assertThat(signatureRepository.findById(pending.getId()).orElseThrow().getStatus())
+          .isEqualTo(DpaSignatureStatus.PENDING);
+      assertThat(adminNoticePendingSince(pending.getId())).isNull();
+    } finally {
+      signatureRepository.deleteById(pending.getId());
+    }
+  }
+
+  @Test
+  @Transactional(propagation = Propagation.NOT_SUPPORTED)
+  void adminNoticeStaging_Should_useTheWinningConcurrentConfirmation() throws Exception {
+    var now = LocalDateTime.now();
+    var pending =
+        signatureRepository.saveAndFlush(boundPendingLink(96L, "HASH-RACE", "OWNER", now));
+    var transaction = new TransactionTemplate(transactionManager);
+    var ready = new CyclicBarrier(2);
+    long firstSigningInstant = 1_700_000_000_000L;
+    long secondSigningInstant = 1_700_000_000_001L;
+    try (var executor = Executors.newFixedThreadPool(2)) {
+      var first =
+          executor.submit(
+              () -> {
+                ready.await(10, TimeUnit.SECONDS);
+                return transaction.execute(
+                    status -> consumeToken("HASH-RACE", now, firstSigningInstant));
+              });
+      var second =
+          executor.submit(
+              () -> {
+                ready.await(10, TimeUnit.SECONDS);
+                return transaction.execute(
+                    status -> consumeToken("HASH-RACE", now, secondSigningInstant));
+              });
+      int firstCount = first.get(15, TimeUnit.SECONDS);
+      assertThat(List.of(firstCount, second.get(15, TimeUnit.SECONDS)))
+          .containsExactlyInAnyOrder(0, 1);
+      long winningInstant = firstCount == 1 ? firstSigningInstant : secondSigningInstant;
+      var signed = signatureRepository.findById(pending.getId()).orElseThrow();
+      assertThat(signed.getStatus()).isEqualTo(DpaSignatureStatus.SIGNED);
+      assertThat(signed.getSignedAtEpochMillis()).isEqualTo(winningInstant);
+      assertThat(signed.getReservationTokenHash()).isEqualTo("OWNER");
+      assertThat(adminNoticePendingSince(pending.getId())).isEqualTo(winningInstant);
+    } finally {
+      signatureRepository.deleteById(pending.getId());
+    }
+  }
+
+  private int consumeToken(String tokenHash, LocalDateTime now, long signingInstant) {
+    return signatureRepository.consumeSignToken(
+        tokenHash,
+        "Signer",
+        "Director",
+        "signer@example.org",
+        "Test organisation",
+        false,
+        "de",
+        "FORWARDED_EXTERNAL",
+        now,
+        signingInstant,
+        true);
+  }
+
+  private Long adminNoticePendingSince(Long signatureId) {
+    return jdbcTemplate.queryForObject(
+        "select admin_notice_pending_since_epoch_millis from tenant_dpa_signature where id = ?",
+        Long.class,
+        signatureId);
+  }
+
+  @Test
+  void invalidateOutstandingByTenantId_Should_killOnlyPendingRowsOfThatTenant() {
+    // given: two outstanding links for tenant 4, a signed row for tenant 4, a link for tenant 5
+    var now = LocalDateTime.now();
+    var outstanding1 = pendingLink(4L, "HASH-A", now);
+    var outstanding2 = pendingLink(4L, "HASH-B", now);
+    var signedRow =
+        signatureRepository.save(
+            TenantDpaSignatureEntity.builder()
+                .tenantId(4L)
+                .status(DpaSignatureStatus.SIGNED)
+                .createDate(now)
+                .build());
+    var otherTenantLink = pendingLink(5L, "HASH-C", now);
+    signatureRepository.flush();
+
+    // when
+    int invalidated = signatureRepository.invalidateOutstandingByTenantId(4L);
+    signatureRepository.flush();
+
+    // then
+    assertThat(invalidated).isEqualTo(2);
+    assertThat(signatureRepository.findById(outstanding1.getId()).orElseThrow().getStatus())
+        .isEqualTo(DpaSignatureStatus.INVALIDATED);
+    assertThat(signatureRepository.findById(outstanding2.getId()).orElseThrow().getTokenHash())
+        .isNull();
+    assertThat(signatureRepository.findById(signedRow.getId()).orElseThrow().getStatus())
+        .isEqualTo(DpaSignatureStatus.SIGNED);
+    assertThat(signatureRepository.findById(otherTenantLink.getId()).orElseThrow().getStatus())
+        .isEqualTo(DpaSignatureStatus.PENDING);
+    // an invalidated link no longer resolves as PENDING -> public endpoints answer 410
+    assertThat(signatureRepository.findByTokenHashAndStatus("HASH-A", DpaSignatureStatus.PENDING))
+        .isEmpty();
+  }
+
+  @Test
+  void outstandingLinkPredicate_Should_seeOnlyUnexpiredPendingLinks() {
+    // given one expired and one live link for tenant 6
+    var now = LocalDateTime.now();
+    signatureRepository.save(
+        TenantDpaSignatureEntity.builder()
+            .tenantId(6L)
+            .dpaVersion(VERSION)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash("HASH-EXPIRED")
+            .tokenExpiresAt(now.minusMinutes(1))
+            .createDate(now)
+            .build());
+    signatureRepository.flush();
+
+    assertThat(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                6L, VERSION, DpaSignatureStatus.PENDING, now))
+        .isEmpty();
+
+    pendingLink(6L, "HASH-LIVE", now);
+    signatureRepository.flush();
+
+    assertThat(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                6L, VERSION, DpaSignatureStatus.PENDING, now))
+        .hasSize(1);
+  }
+
+  @Test
+  void outstandingLinkPredicate_Should_ignoreLinksForASupersededVersion() {
+    // given a live link minted for the PREVIOUS version, then a republish (#179)
+    var now = LocalDateTime.now();
+    var supersededVersion = VERSION.minusDays(10);
+    pendingLink(10L, "HASH-OLD-VERSION", supersededVersion, now);
+    signatureRepository.flush();
+
+    // the stale link can only ever produce an OUTDATED signature, so the CURRENT contract is not
+    // "awaiting a signer" because of it
+    assertThat(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                10L, VERSION, DpaSignatureStatus.PENDING, now))
+        .isEmpty();
+    assertThat(
+            signatureRepository.findByTenantIdAndDpaVersionAndStatusAndTokenExpiresAtAfter(
+                10L, supersededVersion, DpaSignatureStatus.PENDING, now))
+        .hasSize(1);
+  }
+
+  @Test
+  void outstandingCount_Should_beScopedToTheReservationThatMintedTheLinks() {
+    // tenant 11 was reserved once (A), released, then reserved again (B). A's links are already
+    // unusable, so they must not count against B's budget.
+    var now = LocalDateTime.now();
+    var hashA = "HASH-RESERVATION-A";
+    var hashB = "HASH-RESERVATION-B";
+    signatureRepository.save(boundPendingLink(11L, "L1", hashA, now));
+    signatureRepository.save(boundPendingLink(11L, "L2", hashA, now));
+    signatureRepository.save(boundPendingLink(11L, "L3", hashB, now));
+    signatureRepository.flush();
+
+    assertThat(
+            signatureRepository
+                .countByTenantIdAndReservationTokenHashAndStatusAndTokenExpiresAtAfter(
+                    11L, hashB, DpaSignatureStatus.PENDING, now))
+        .isEqualTo(1);
+    assertThat(
+            signatureRepository
+                .countByTenantIdAndReservationTokenHashAndStatusAndTokenExpiresAtAfter(
+                    11L, hashA, DpaSignatureStatus.PENDING, now))
+        .isEqualTo(2);
+  }
+
+  private TenantDpaSignatureEntity boundPendingLink(
+      Long tenantId, String tokenHash, String reservationTokenHash, LocalDateTime now) {
+    return TenantDpaSignatureEntity.builder()
+        .tenantId(tenantId)
+        .dpaVersion(VERSION)
+        .status(DpaSignatureStatus.PENDING)
+        .tokenHash(tokenHash)
+        .reservationTokenHash(reservationTokenHash)
+        .tokenExpiresAt(now.plusDays(1))
+        .createDate(now)
+        .build();
+  }
+
+  @Test
+  void deleteByTenantId_Should_removeAllRowsOfTheTenant() {
+    // given
+    var now = LocalDateTime.now();
+    pendingLink(7L, "HASH-D", now);
+    signatureRepository.save(
+        TenantDpaSignatureEntity.builder()
+            .tenantId(7L)
+            .status(DpaSignatureStatus.SIGNED)
+            .createDate(now)
+            .build());
+    pendingLink(8L, "HASH-E", now);
+    signatureRepository.flush();
+
+    // when
+    long removed = signatureRepository.deleteByTenantId(7L);
+    signatureRepository.flush();
+
+    // then
+    assertThat(removed).isEqualTo(2);
+    assertThat(signatureRepository.findByTenantId(7L)).isEmpty();
+    assertThat(signatureRepository.findByTenantId(8L)).hasSize(1);
+  }
+
+  private TenantDpaSignatureEntity pendingLink(Long tenantId, String tokenHash, LocalDateTime now) {
+    return pendingLink(tenantId, tokenHash, VERSION, now);
+  }
+
+  private TenantDpaSignatureEntity pendingLink(
+      Long tenantId, String tokenHash, LocalDateTime dpaVersion, LocalDateTime now) {
+    return signatureRepository.save(
+        TenantDpaSignatureEntity.builder()
+            .tenantId(tenantId)
+            .dpaVersion(dpaVersion)
+            .status(DpaSignatureStatus.PENDING)
+            .tokenHash(tokenHash)
+            .tokenExpiresAt(now.plusDays(1))
+            .createDate(now)
+            .build());
   }
 
   @Test

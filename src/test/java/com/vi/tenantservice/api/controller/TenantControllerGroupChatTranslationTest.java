@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.vi.tenantservice.api.facade.TenantDpaFacade;
+import com.vi.tenantservice.api.facade.TenantLegalDraftFacade;
 import com.vi.tenantservice.api.facade.TenantServiceFacade;
 import com.vi.tenantservice.api.facade.TranslationFacade;
 import com.vi.tenantservice.api.model.TranslationRequestDTO;
@@ -36,9 +37,18 @@ class TenantControllerGroupChatTranslationTest {
   @Mock private TenantDtoMapper tenantDtoMapper;
   @Mock private TenantDpaService tenantDpaService;
   @Mock private TenantDpaFacade tenantDpaFacade;
+  @Mock private TenantLegalDraftFacade tenantLegalDraftFacade;
+  @Mock private com.vi.tenantservice.api.facade.TenantLegalProposalFacade tenantLegalProposalFacade;
+
+  @Mock private com.vi.tenantservice.api.facade.TenantLegalVersionFacade tenantLegalVersionFacade;
+
+  @Mock
+  private com.vi.tenantservice.api.service.DpaSignedNoticeHintService dpaSignedNoticeHintService;
+
   @Mock private TranslationFacade translationFacade;
   @Mock com.vi.tenantservice.api.service.TenantMediaService tenantMediaService;
   @Mock com.vi.tenantservice.api.service.TenantIdAllocationService tenantIdAllocationService;
+  @Mock com.vi.tenantservice.api.service.PublicBrandingAssetService publicBrandingAssetService;
 
   @Mock com.vi.tenantservice.api.facade.PlatformDpiaMasterDataFacade platformDpiaMasterDataFacade;
 

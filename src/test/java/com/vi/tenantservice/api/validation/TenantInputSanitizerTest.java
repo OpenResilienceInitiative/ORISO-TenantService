@@ -4,11 +4,15 @@ import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 import static org.mockito.Mockito.*;
 
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
+import com.vi.tenantservice.api.model.Theming;
 import java.util.HashMap;
 import java.util.Map;
 import org.jeasy.random.EasyRandom;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
@@ -76,6 +80,59 @@ class TenantInputSanitizerTest {
     return map;
   }
 
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"   ", "\t"})
+  void sanitize_Should_turnBlankThemingSeedsIntoNull(String blankSeed) {
+    MultilingualTenantDTO tenantDTO = tenantWithSeeds(blankSeed, blankSeed, blankSeed, blankSeed);
+
+    MultilingualTenantDTO sanitized =
+        new TenantInputSanitizer(new InputSanitizer()).sanitize(tenantDTO);
+
+    assertThat(sanitized.getTheming().getPrimaryColor()).isNull();
+    assertThat(sanitized.getTheming().getSecondaryColor()).isNull();
+    assertThat(sanitized.getTheming().getAccent()).isNull();
+    assertThat(sanitized.getTheming().getSignal()).isNull();
+  }
+
+  @Test
+  void sanitize_Should_keepValidThemingSeeds() {
+    MultilingualTenantDTO tenantDTO = tenantWithSeeds("#8B1A2B", "#FFFFFF", "#FFB3C7", "#E53935");
+
+    MultilingualTenantDTO sanitized =
+        new TenantInputSanitizer(new InputSanitizer()).sanitize(tenantDTO);
+
+    assertThat(sanitized.getTheming().getPrimaryColor()).isEqualTo("#8B1A2B");
+    assertThat(sanitized.getTheming().getSecondaryColor()).isEqualTo("#FFFFFF");
+    assertThat(sanitized.getTheming().getAccent()).isEqualTo("#FFB3C7");
+    assertThat(sanitized.getTheming().getSignal()).isEqualTo("#E53935");
+  }
+
+  @Test
+  void sanitize_Should_nullOnlyTheBlankSeedAndKeepTheValidOnes() {
+    MultilingualTenantDTO tenantDTO = tenantWithSeeds("#8B1A2B", "", "  ", "#E53935");
+
+    MultilingualTenantDTO sanitized =
+        new TenantInputSanitizer(new InputSanitizer()).sanitize(tenantDTO);
+
+    assertThat(sanitized.getTheming().getPrimaryColor()).isEqualTo("#8B1A2B");
+    assertThat(sanitized.getTheming().getSecondaryColor()).isNull();
+    assertThat(sanitized.getTheming().getAccent()).isNull();
+    assertThat(sanitized.getTheming().getSignal()).isEqualTo("#E53935");
+  }
+
+  private static MultilingualTenantDTO tenantWithSeeds(
+      String primary, String secondary, String accent, String signal) {
+    EasyRandom generator = new EasyRandom();
+    MultilingualTenantDTO tenantDTO = generator.nextObject(MultilingualTenantDTO.class);
+    Theming theming = tenantDTO.getTheming();
+    theming.setPrimaryColor(primary);
+    theming.setSecondaryColor(secondary);
+    theming.setAccent(accent);
+    theming.setSignal(signal);
+    return tenantDTO;
+  }
+
   @Test
   void sanitize_Should_sanitizeAndAllowImageSrcForContentInTenantDTO() {
     // given
@@ -98,11 +155,94 @@ class TenantInputSanitizerTest {
         .isEqualTo(getDefaultTranslationsAsMap(IMAGE_CONTENT));
   }
 
+  @Test
+  void sanitize_Should_keepErstantwortBausteineAndDeadline() {
+    // given
+    MultilingualTenantDTO tenantDTO = new MultilingualTenantDTO();
+    tenantDTO.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    tenantDTO.getContent().setErstantwortClosing(Map.of("de", "<p>x</p>"));
+    tenantDTO.getContent().setErstantwortResponseDeadlineDays(5);
+    lenient()
+        .when(inputSanitizer.sanitizeAllowingFormatting(anyString()))
+        .thenAnswer(i -> i.getArgument(0));
+    lenient()
+        .when(inputSanitizer.sanitizeAllowingFormattingAndLinks(anyString()))
+        .thenAnswer(i -> i.getArgument(0));
+
+    // when
+    MultilingualTenantDTO sanitized = tenantInputSanitizer.sanitize(tenantDTO);
+
+    // then
+    assertThat(sanitized.getContent().getErstantwortClosing()).isEqualTo(Map.of("de", "<p>x</p>"));
+    assertThat(sanitized.getContent().getErstantwortResponseDeadlineDays()).isEqualTo(5);
+  }
+
+  @Test
+  void sanitize_Should_keepBlankAndNullBausteinValuesAsClearSignal() {
+    // given
+    MultilingualTenantDTO tenantDTO = new MultilingualTenantDTO();
+    tenantDTO.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    Map<String, String> closing = new java.util.HashMap<>();
+    closing.put("de", "");
+    closing.put("en", null);
+    closing.put("fr", "<p>x</p>");
+    tenantDTO.getContent().setErstantwortClosing(closing);
+    tenantDTO.getContent().setErstantwortResponseDeadlineDays(0);
+    lenient()
+        .when(inputSanitizer.sanitizeAllowingFormatting(anyString()))
+        .thenAnswer(i -> i.getArgument(0));
+    lenient()
+        .when(inputSanitizer.sanitizeAllowingFormattingAndLinks(anyString()))
+        .thenAnswer(i -> i.getArgument(0));
+
+    // when
+    MultilingualTenantDTO sanitized = tenantInputSanitizer.sanitize(tenantDTO);
+
+    // then
+    assertThat(sanitized.getContent().getErstantwortClosing())
+        .containsEntry("de", "")
+        .containsEntry("en", "")
+        .containsEntry("fr", "<p>x</p>");
+    assertThat(sanitized.getContent().getErstantwortResponseDeadlineDays()).isZero();
+  }
+
+  @Test
+  void sanitize_Should_keepMetaKeysVerbatimAndSanitizeBausteinHtml() {
+    // given
+    String meta = "{\"mt\":true,\"src\":\"de\",\"at\":\"2026-10-14T10:00:00Z\"}";
+    MultilingualTenantDTO tenantDTO = new MultilingualTenantDTO();
+    tenantDTO.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    tenantDTO
+        .getContent()
+        .setErstantwortGreeting(Map.of("de", "<p>hi</p><script>x</script>", "en__meta", meta));
+    when(inputSanitizer.sanitizeAllowingFormattingAndLinks(anyString()))
+        .thenAnswer(i -> ((String) i.getArgument(0)).replace("<script>x</script>", ""));
+
+    // when
+    MultilingualTenantDTO sanitized = tenantInputSanitizer.sanitize(tenantDTO);
+
+    // then
+    assertThat(sanitized.getContent().getErstantwortGreeting())
+        .isEqualTo(Map.of("de", "<p>hi</p>", "en__meta", meta));
+    verify(inputSanitizer, never()).sanitizeAllowingFormattingAndLinks(meta);
+  }
+
   private void verifyNeededSanitizationsAreCalled(MultilingualTenantDTO tenantDTO) {
     verify(inputSanitizer).sanitize(tenantDTO.getName());
     verify(inputSanitizer).sanitize(tenantDTO.getSubdomain());
     verify(inputSanitizer).sanitize(tenantDTO.getAddress());
     verify(inputSanitizer).sanitize(tenantDTO.getDescription());
+    // Plain text shown in mail footers: markup removed, but not HTML-encoded ("+49", "@").
+    verify(inputSanitizer).sanitizePlainText(tenantDTO.getLegalName());
+    verify(inputSanitizer).sanitizePlainText(tenantDTO.getContactEmail());
+    verify(inputSanitizer).sanitizePlainText(tenantDTO.getContactPhone());
+    var dpo = tenantDTO.getDataProtectionOfficer();
+    verify(inputSanitizer).sanitizePlainText(dpo.getNameAndLegalForm());
+    verify(inputSanitizer).sanitizePlainText(dpo.getStreet());
+    verify(inputSanitizer).sanitizePlainText(dpo.getPostcode());
+    verify(inputSanitizer).sanitizePlainText(dpo.getCity());
+    verify(inputSanitizer).sanitizePlainText(dpo.getPhoneNumber());
+    verify(inputSanitizer).sanitizePlainText(dpo.getEmail());
     // Assets go through the URL whitelist, NOT the HTML sanitizer — the latter
     // encoded their base64 payload and broke every stored logo/favicon.
     verify(inputSanitizer).sanitizeAssetUrl(tenantDTO.getTheming().getLogo());
@@ -125,5 +265,19 @@ class TenantInputSanitizerTest {
     assertThat(tenantDTO.getUpdateDate()).isEqualTo(sanitized.getUpdateDate());
     assertThat(tenantDTO.getLicensing().getAllowedNumberOfUsers())
         .isEqualTo(sanitized.getLicensing().getAllowedNumberOfUsers());
+  }
+
+  @Test
+  void sanitize_Should_preserveNullDeadlineDistinctFromZero() {
+    // given
+    MultilingualTenantDTO tenantDTO = new MultilingualTenantDTO();
+    tenantDTO.setContent(new com.vi.tenantservice.api.model.MultilingualContent());
+    tenantDTO.getContent().setErstantwortResponseDeadlineDays(null);
+
+    // when
+    MultilingualTenantDTO sanitized = tenantInputSanitizer.sanitize(tenantDTO);
+
+    // then
+    assertThat(sanitized.getContent().getErstantwortResponseDeadlineDays()).isNull();
   }
 }

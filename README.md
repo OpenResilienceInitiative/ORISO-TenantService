@@ -87,6 +87,23 @@ Required runtime values are validated by `ConfigurationValidator`:
 Use Kubernetes DNS names for service URLs and database hosts. Avoid hardcoded
 cluster IPs because they break when services or pods are recreated.
 
+### Legacy DPA signing times
+
+The DPA gate uses the stored signing instant for new signatures. To interpret
+older wall times for a verified historical writer, configure all three settings
+for that deployment.
+
+| Environment variable | Value |
+| --- | --- |
+| `ORISO_DPA_LEGACY_SIGNING_ZONE` | Verified historical writer zone as a Java zone ID |
+| `ORISO_DPA_LEGACY_SIGNING_FROM` | First verified local wall time, inclusive |
+| `ORISO_DPA_LEGACY_SIGNING_TO` | Last verified local wall time, inclusive |
+
+Both limits use ISO local date and time without an offset. An incomplete set
+disables legacy conversion, and an end before the start rejects the configuration.
+The gate omits the timestamp for legacy rows outside the verified interval and
+for ambiguous or nonexistent local times.
+
 ## Local Development
 
 For the full mixed local frontend/UserService/TenantService setup, see

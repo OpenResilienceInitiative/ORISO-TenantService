@@ -3,9 +3,11 @@ package com.vi.tenantservice.api.service;
 import com.vi.tenantservice.api.model.TenantDpaVersionEntity;
 import com.vi.tenantservice.api.repository.TenantDpaVersionRepository;
 import com.vi.tenantservice.api.repository.TenantRepository;
+import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -42,6 +44,7 @@ public class GoverningDpaResolver {
 
   private final TenantRepository tenantRepository;
   private final TenantDpaVersionRepository versionRepository;
+  private final EntityManager entityManager;
 
   /**
    * Tenant holding the governing operator DPA document; {@code 0} or negative disables the fallback
@@ -69,6 +72,25 @@ public class GoverningDpaResolver {
     if (!operatorFallbackApplies(tenantId)) {
       return null;
     }
+    return resolveOperatorDpa();
+  }
+
+  /**
+   * The DPA document in force for a tenant that does NOT exist yet (ORISO-TenantService#179): a
+   * sign link created from the public onboarding wizard is bound to a RESERVED tenant id. Such a
+   * tenant cannot have authored an own DPA, so the governing document is always the operator's —
+   * exactly what {@link #resolve} would answer the moment the registration completes. {@code null}
+   * when the operator fallback is disabled or nothing is published.
+   */
+  public GoverningDpa resolveForUnregisteredTenant() {
+    if (operatorTenantId <= 0) {
+      return null;
+    }
+    return resolveOperatorDpa();
+  }
+
+  /** The governing operator document, or {@code null} when the operator published nothing. */
+  private GoverningDpa resolveOperatorDpa() {
     var operatorVersion =
         tenantRepository
             .findById(operatorTenantId)
@@ -88,6 +110,39 @@ public class GoverningDpaResolver {
   public long documentTenantIdFor(Long tenantId) {
     var governing = resolve(tenantId);
     return governing == null ? tenantId : governing.documentTenantId();
+  }
+
+  /** Metadata of this exact document owner; missing legacy history never borrows another owner. */
+  public Optional<TenantDpaVersionEntity> findCurrentPublishedVersion(GoverningDpa governing) {
+    return governing == null
+        ? Optional.empty()
+        : versionRepository.findFirstByTenantIdAndActivationDate(
+            governing.documentTenantId(), governing.version());
+  }
+
+  /** Lock and refresh recipient/owner in one order before resolving a publication or signature. */
+  public void lockForSigning(Long tenantId) {
+    var ids =
+        operatorFallbackApplies(tenantId) ? Set.of(tenantId, operatorTenantId) : Set.of(tenantId);
+    tenantRepository
+        .findForDpaSigning(ids)
+        // OSIV may have loaded these before another request published. A lock alone does not
+        // refresh managed fields. Detach and hydrate with a current locking read: Hibernate's
+        // refresh of an already locked entity uses a snapshot read under MariaDB REPEATABLE_READ.
+        .forEach(entityManager::detach);
+    tenantRepository.findForDpaSigning(ids);
+  }
+
+  /** Call only after owner/recipient locks: v1 remains available until deadline-policy adoption. */
+  public boolean requiresVersionedDpaMutation(Long tenantId) {
+    var ownerId = documentTenantIdFor(tenantId);
+    return java.util.stream.Stream.of(tenantId, ownerId)
+        .distinct()
+        .sorted()
+        .map(
+            versionRepository
+                ::findFirstByTenantIdAndSigningDeadlineAtIsNotNullOrderByActivationDateDescIdDesc)
+        .anyMatch(Optional::isPresent);
   }
 
   /**

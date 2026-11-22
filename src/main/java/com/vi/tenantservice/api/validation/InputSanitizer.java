@@ -4,10 +4,14 @@ import java.net.URI;
 import java.util.Base64;
 import java.util.regex.Pattern;
 import org.owasp.html.HtmlPolicyBuilder;
+import org.owasp.html.PolicyFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.HtmlUtils;
 
 @Component
 public class InputSanitizer {
+
+  private static final PolicyFactory NO_MARKUP = new HtmlPolicyBuilder().toFactory();
 
   private static final String[] HEADING_ELEMENTS = {"h1", "h2", "h3", "h4", "h5", "h6"};
 
@@ -33,8 +37,27 @@ public class InputSanitizer {
       Pattern.compile("^https?://[^\\s\"'<>]+$", Pattern.CASE_INSENSITIVE);
 
   public String sanitize(String input) {
-    var sanitizer = new HtmlPolicyBuilder().toFactory();
-    return sanitizer.sanitize(input);
+    return NO_MARKUP.sanitize(input);
+  }
+
+  /**
+   * For fields that are plain text everywhere they are shown (a Träger's legal name, contact e-mail
+   * and phone): markup is removed, but the result is not HTML-encoded, because {@link
+   * #sanitize(String)} would store "+49" as "&amp;#43;49" and an e-mail address with "&amp;#64;".
+   * Angle brackets are dropped after decoding, so markup cannot come back in as entities. Renderers
+   * still escape on output.
+   *
+   * @return {@code null} for {@code null}, so "not sent" stays distinguishable from "blank"
+   */
+  public String sanitizePlainText(String input) {
+    if (input == null) {
+      return null;
+    }
+    return visibleText(input).replace("<", "").replace(">", "");
+  }
+
+  static String visibleText(String html) {
+    return html == null ? "" : HtmlUtils.htmlUnescape(NO_MARKUP.sanitize(html));
   }
 
   /**

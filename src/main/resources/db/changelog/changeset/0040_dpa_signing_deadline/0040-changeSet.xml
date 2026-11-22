@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.2.xsd">
+  <!-- Existing publications retain null: no guessed grace period or default signing deadline. -->
+  <changeSet author="oriso" id="addDpaPublicationSigningDeadline">
+    <addColumn tableName="tenant_dpa_version">
+      <column name="signing_deadline_at" type="datetime"/>
+    </addColumn>
+    <rollback><dropColumn tableName="tenant_dpa_version" columnName="signing_deadline_at"/></rollback>
+  </changeSet>
+  <!-- Old signatures remain eligible; new obsolete signatures are audit-only for grace. -->
+  <changeSet author="oriso" id="trackCurrentDpaVersionAtSigning">
+    <addColumn tableName="tenant_dpa_signature">
+      <column name="current_version_when_signed" type="int"/>
+    </addColumn>
+    <addColumn tableName="tenant_dpa_admin_signature">
+      <column name="current_version_when_signed" type="int"/>
+    </addColumn>
+    <rollback>
+      <dropColumn tableName="tenant_dpa_signature" columnName="current_version_when_signed"/>
+      <dropColumn tableName="tenant_dpa_admin_signature" columnName="current_version_when_signed"/>
+    </rollback>
+  </changeSet>
+</databaseChangeLog>

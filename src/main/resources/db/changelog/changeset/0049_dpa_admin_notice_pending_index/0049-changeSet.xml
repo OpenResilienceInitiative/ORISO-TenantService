@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.2.xsd">
+  <changeSet author="oriso" id="checkDpaAdminNoticePendingIndexShape">
+    <preConditions onFail="HALT" onError="HALT"
+      onFailMessage="Cannot migrate an incompatible receipt pending-stage column or index.">
+      <sqlCheck expectedResult="0">
+        SELECT COUNT(*) FROM information_schema.columns
+        WHERE table_schema = SCHEMA()
+          AND LOWER(table_name) = 'tenant_dpa_signature'
+          AND LOWER(column_name) = 'admin_notice_pending_stage'
+          AND NOT (UPPER(data_type) = 'TINYINT' AND is_generated = 'ALWAYS'
+            AND LOCATE('''SIGNED''', generation_expression) > 0
+            AND LOCATE('''FORWARDED_EXTERNAL''', generation_expression) > 0
+            AND REGEXP_REPLACE(
+              REPLACE(REPLACE(UPPER(generation_expression), CHAR(13), ''), CHAR(10), ''),
+              '[`"() ]', ''
+            ) = 'CASEWHENSIGNATURE_STATUS=''SIGNED''ANDSOURCE=''FORWARDED_EXTERNAL''ANDADMIN_NOTICE_PENDING_SINCE_EPOCH_MILLIS=SIGNED_AT_EPOCH_MILLISTHEN1ELSE0END')
+      </sqlCheck>
+      <or>
+        <and>
+          <dbms type="mariadb"/>
+          <sqlCheck expectedResult="0">
+            SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema = SCHEMA()
+              AND LOWER(table_name) = 'tenant_dpa_signature'
+              AND LOWER(column_name) = 'admin_notice_pending_stage'
+              AND UPPER(extra) NOT LIKE '%VIRTUAL GENERATED%'
+          </sqlCheck>
+          <sqlCheck expectedResult="1">
+            SELECT CASE WHEN COUNT(*) = 0 OR (COUNT(*) = 2 AND SUM(CASE
+              WHEN non_unique = 1 AND UPPER(index_type) = 'BTREE' AND s.collation = 'A'
+                AND s.ignored = 'NO'
+                AND ((seq_in_index = 1 AND LOWER(column_name) = 'admin_notice_pending_stage')
+                  OR (seq_in_index = 2 AND LOWER(column_name) = 'id'))
+                THEN 1 ELSE 0 END) = 2) THEN 1 ELSE 0 END
+            FROM information_schema.statistics s
+            WHERE table_schema = SCHEMA() AND LOWER(table_name) = 'tenant_dpa_signature'
+              AND LOWER(index_name) = 'idx_dpa_admin_notice_pending_stage_id'
+          </sqlCheck>
+        </and>
+        <and>
+          <dbms type="h2"/>
+          <sqlCheck expectedResult="1">
+            SELECT CASE WHEN COUNT(*) = 0 OR (COUNT(*) = 2 AND SUM(CASE
+              WHEN is_unique = FALSE AND ordering_specification = 'ASC'
+                AND ((ordinal_position = 1 AND LOWER(column_name) = 'admin_notice_pending_stage')
+                  OR (ordinal_position = 2 AND LOWER(column_name) = 'id'))
+                THEN 1 ELSE 0 END) = 2) THEN 1 ELSE 0 END
+            FROM information_schema.index_columns
+            WHERE table_schema = SCHEMA() AND LOWER(table_name) = 'tenant_dpa_signature'
+              AND LOWER(index_name) = 'idx_dpa_admin_notice_pending_stage_id'
+          </sqlCheck>
+        </and>
+      </or>
+    </preConditions>
+    <rollback/>
+  </changeSet>
+  <changeSet author="oriso" id="deriveDpaAdminNoticePendingStage">
+    <!-- MariaDB can commit an object before Liquibase records the change. Leave that object intact. -->
+    <preConditions onFail="CONTINUE" onError="HALT">
+      <not><columnExists tableName="tenant_dpa_signature" columnName="admin_notice_pending_stage"/></not>
+    </preConditions>
+    <!-- The generated column is virtual in MariaDB. This common syntax also runs on H2. -->
+    <sql>
+      ALTER TABLE tenant_dpa_signature ADD COLUMN admin_notice_pending_stage TINYINT GENERATED ALWAYS AS (
+        CASE WHEN signature_status = 'SIGNED' AND source = 'FORWARDED_EXTERNAL'
+          AND admin_notice_pending_since_epoch_millis = signed_at_epoch_millis
+        THEN 1 ELSE 0 END
+      )
+    </sql>
+    <rollback><dropColumn tableName="tenant_dpa_signature" columnName="admin_notice_pending_stage"/></rollback>
+  </changeSet>
+  <changeSet author="oriso" id="indexDpaAdminNoticePendingStageById">
+    <preConditions onFail="CONTINUE" onError="HALT">
+      <not><indexExists tableName="tenant_dpa_signature" indexName="idx_dpa_admin_notice_pending_stage_id"/></not>
+    </preConditions>
+    <createIndex tableName="tenant_dpa_signature" indexName="idx_dpa_admin_notice_pending_stage_id">
+      <column name="admin_notice_pending_stage"/>
+      <column name="id"/>
+    </createIndex>
+    <rollback><dropIndex tableName="tenant_dpa_signature" indexName="idx_dpa_admin_notice_pending_stage_id"/></rollback>
+  </changeSet>
+</databaseChangeLog>
