@@ -61,6 +61,7 @@ import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
+import com.vi.tenantservice.api.service.consultingtype.ConsultingSettingsTelemetry;
 import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.service.search.TenantSearchText;
@@ -137,6 +138,7 @@ public class TenantServiceFacade {
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TranslationService translationService;
   private final @NonNull ConsultingTypeService consultingTypeService;
+  private final @NonNull ConsultingSettingsTelemetry settingsTelemetry;
   private final @NonNull SubdomainExtractor subdomainExtractor;
   private final @NonNull ApplicationSettingsService applicationSettingsService;
 
@@ -688,6 +690,7 @@ public class TenantServiceFacade {
     }
     tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
         sanitizedTenantDTO, existingTenantEntity);
+    settingsTelemetry.recordSave();
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
         sanitizedTenantDTO, existingTenantEntity);
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);

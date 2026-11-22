@@ -44,4 +44,6 @@ public enum HttpStatusExceptionReason {
    * (ORISO-UserService#1466). Answers 409; the body says how many of each kind are left.
    */
   TENANT_HAS_DEPENDENTS,
+
+  CONSULTING_SETTINGS_OUTCOME_UNKNOWN,
 }
