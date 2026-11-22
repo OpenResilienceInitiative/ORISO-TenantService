@@ -152,6 +152,73 @@ class TenantSearchBatchIT {
   }
 
   @Test
+  void fullPlatformDirectoryUsesBoundedBatchesAndKeepsTheResponse() throws Exception {
+    seedTenants(101);
+    owners.tenantWithoutOwners = 101L;
+
+    var legacy =
+        fullDirectory(LEGACY_APP)
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(101))
+            .andExpect(jsonPath("$[?(@.id == 101)].adminEmails[0]").isEmpty())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(owners.requests).hasSize(101).extracting(OwnerRequest::path).containsOnly(OWNERS);
+    owners.requests.clear();
+
+    var batched =
+        fullDirectory(APP)
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(batched).isEqualTo(legacy);
+    assertThat(owners.requests).hasSize(2).extracting(OwnerRequest::path).containsOnly(BATCH);
+    assertThat(owners.requests).extracting(request -> request.ids().size()).containsExactly(100, 1);
+    assertThat(
+            owners.requests.stream().flatMap(request -> request.ids().stream()).sorted().toList())
+        .containsExactlyElementsOf(
+            IntStream.rangeClosed(1, 101).mapToLong(id -> id).boxed().toList());
+  }
+
+  @Test
+  void fullPlatformDirectoryFallsBackToLegacyEnrichmentWhenBatchFails() throws Exception {
+    seedTenants(2);
+    owners.unavailableOwner = 2L;
+    var legacy =
+        fullDirectory(LEGACY_APP)
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    owners.requests.clear();
+    owners.batchStatus = 503;
+
+    var fallback =
+        fullDirectory(APP)
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(fallback).isEqualTo(legacy);
+    assertThat(owners.requests)
+        .extracting(OwnerRequest::path)
+        .containsExactly(BATCH, OWNERS, OWNERS);
+  }
+
+  @Test
+  void fullPlatformDirectoryWithoutVisibleTenantsSkipsEnrichment() throws Exception {
+    seedTenants(0);
+
+    fullDirectory(APP).andExpect(status().isNoContent());
+
+    assertThat(owners.requests).isEmpty();
+  }
+
+  @Test
   void blankPageWithoutVisibleRowsDoesNotResolveOwnerEmails() throws Exception {
     seedTenants(12);
 
@@ -362,6 +429,10 @@ class TenantSearchBatchIT {
             .with(caller(tenant, client, roles)));
   }
 
+  private ResultActions fullDirectory(String client) throws Exception {
+    return mvc.perform(get("/tenantadmin").with(caller(0L, client, PLATFORM_ROLES)));
+  }
+
   private RequestPostProcessor caller(long tenant, String client, String[] roles) {
     return jwt()
         .jwt(
@@ -385,6 +456,7 @@ class TenantSearchBatchIT {
     private volatile int batchStatus = 200;
     private volatile String batchBody;
     private volatile Long unavailableOwner;
+    private volatile Long tenantWithoutOwners;
 
     private OwnerServer() throws IOException {
       server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -401,6 +473,7 @@ class TenantSearchBatchIT {
       batchStatus = 200;
       batchBody = null;
       unavailableOwner = null;
+      tenantWithoutOwners = null;
     }
 
     private void respond(HttpExchange exchange) throws IOException {
@@ -433,20 +506,25 @@ class TenantSearchBatchIT {
       }
     }
 
-    private static String batchEmails(List<Long> ids) {
+    private String batchEmails(List<Long> ids) {
       return "["
           + String.join(
               ",",
               ids.stream()
                   .map(
                       id ->
-                          "{\"tenantId\":%d,\"emails\":[\"alpha-%d@example.test\",\"beta-%d@example.test\"]}"
-                              .formatted(id, id, id))
+                          id.equals(tenantWithoutOwners)
+                              ? "{\"tenantId\":%d,\"emails\":[]}".formatted(id)
+                              : "{\"tenantId\":%d,\"emails\":[\"alpha-%d@example.test\",\"beta-%d@example.test\"]}"
+                                  .formatted(id, id, id))
                   .toList())
           + "]";
     }
 
-    private static String singleEmails(long id) {
+    private String singleEmails(long id) {
+      if (Long.valueOf(id).equals(tenantWithoutOwners)) {
+        return "[]";
+      }
       return "[{\"_embedded\":{\"email\":\"alpha-%d@example.test\"}},{\"_embedded\":{\"email\":\"beta-%d@example.test\"}}]"
           .formatted(id, id);
     }
