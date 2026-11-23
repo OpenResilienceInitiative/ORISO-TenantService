@@ -136,6 +136,9 @@ public class EffectivePermissionSettingsApplier {
           Map.entry(
               "featureMediaAiScanSupervisionChatsEnabled",
               Settings::setFeatureMediaAiScanSupervisionChatsEnabled),
+          Map.entry(
+              "featureTeamDiscussionAfterAcceptEnabled",
+              Settings::setFeatureTeamDiscussionAfterAcceptEnabled),
           Map.entry("featureTeamDiscussionEnabled", Settings::setFeatureTeamDiscussionEnabled),
           Map.entry(
               "featureVideoCallsTeamDiscussionsEnabled",
@@ -366,6 +369,9 @@ public class EffectivePermissionSettingsApplier {
           new ToggleBinding(
               TenantAdminAllowedPermissionToggles::getMediaAiScanSupervisionChats,
               Settings::setFeatureMediaAiScanSupervisionChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getTeamDiscussionAfterAccept,
+              Settings::setFeatureTeamDiscussionAfterAcceptEnabled),
           new ToggleBinding(
               TenantAdminAllowedPermissionToggles::getTeamDiscussion,
               Settings::setFeatureTeamDiscussionEnabled),

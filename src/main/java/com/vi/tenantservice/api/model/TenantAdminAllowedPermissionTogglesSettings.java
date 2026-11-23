@@ -54,6 +54,7 @@ public class TenantAdminAllowedPermissionTogglesSettings {
   Boolean mediaAiScanOneOnOneChats;
   Boolean mediaAiScanGroupChats;
   Boolean mediaAiScanSupervisionChats;
+  Boolean teamDiscussionAfterAccept;
   Boolean teamDiscussion;
   Boolean videoCallsTeamDiscussions;
   Boolean audioCallsTeamDiscussions;

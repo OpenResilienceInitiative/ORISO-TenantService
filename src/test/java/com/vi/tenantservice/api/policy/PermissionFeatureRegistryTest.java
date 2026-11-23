@@ -82,4 +82,13 @@ class PermissionFeatureRegistryTest {
           assertThat(feature.orElseThrow().transitionFallback()).isEmpty();
         });
   }
+
+  @Test
+  void registry_shouldKeepTheTeamChatAfterAcceptOffByDefault() {
+    // ORISO-Frontend#2491: today the team chat is archived at accept.
+    var afterAccept = PermissionFeature.byApiKey("featureTeamDiscussionAfterAcceptEnabled");
+    assertThat(afterAccept).contains(PermissionFeature.TEAM_DISCUSSION_AFTER_ACCEPT);
+    assertThat(afterAccept.orElseThrow().legacyToggleKey()).isEqualTo("teamDiscussionAfterAccept");
+    assertThat(afterAccept.orElseThrow().defaultValue()).isFalse();
+  }
 }

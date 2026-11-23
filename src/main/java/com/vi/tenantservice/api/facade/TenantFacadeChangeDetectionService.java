@@ -300,6 +300,11 @@ public class TenantFacadeChangeDetectionService {
         existingSettingsToCompare.getFeatureMediaAiScanSupervisionChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_MEDIA_AI_SCAN_SUPERVISION_CHATS_ENABLED);
     }
+    if (isChanged(
+        inputSettings.getFeatureTeamDiscussionAfterAcceptEnabled(),
+        existingSettingsToCompare.getFeatureTeamDiscussionAfterAcceptEnabled())) {
+      resultList.add(TenantSetting.FEATURE_TEAM_DISCUSSION_AFTER_ACCEPT_ENABLED);
+    }
     if (nullAsTrue(inputSettings.getFeatureVideoCallsTeamDiscussionsEnabled())
         != nullAsTrue(existingSettingsToCompare.getFeatureVideoCallsTeamDiscussionsEnabled())) {
       resultList.add(TenantSetting.FEATURE_VIDEO_CALLS_TEAM_DISCUSSIONS_ENABLED);

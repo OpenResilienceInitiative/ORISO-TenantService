@@ -222,6 +222,8 @@ public class TenantConverter {
         .featureMediaAiScanGroupChatsEnabled(settings.getFeatureMediaAiScanGroupChatsEnabled())
         .featureMediaAiScanSupervisionChatsEnabled(
             settings.getFeatureMediaAiScanSupervisionChatsEnabled())
+        .featureTeamDiscussionAfterAcceptEnabled(
+            settings.getFeatureTeamDiscussionAfterAcceptEnabled())
         .featureVideoCallsTeamDiscussionsEnabled(
             settings.getFeatureVideoCallsTeamDiscussionsEnabled())
         .featureAudioCallsTeamDiscussionsEnabled(
@@ -649,6 +651,8 @@ public class TenantConverter {
             tenantSettings.getFeatureMediaAiScanGroupChatsEnabled())
         .featureMediaAiScanSupervisionChatsEnabled(
             tenantSettings.getFeatureMediaAiScanSupervisionChatsEnabled())
+        .featureTeamDiscussionAfterAcceptEnabled(
+            tenantSettings.getFeatureTeamDiscussionAfterAcceptEnabled())
         .featureVideoCallsTeamDiscussionsEnabled(
             tenantSettings.getFeatureVideoCallsTeamDiscussionsEnabled())
         .featureAudioCallsTeamDiscussionsEnabled(
@@ -763,6 +767,8 @@ public class TenantConverter {
         .mediaAiScanGroupChats(nullAsTrue(allowedPermissionToggles.getMediaAiScanGroupChats()))
         .mediaAiScanSupervisionChats(
             nullAsTrue(allowedPermissionToggles.getMediaAiScanSupervisionChats()))
+        .teamDiscussionAfterAccept(
+            nullAsTrue(allowedPermissionToggles.getTeamDiscussionAfterAccept()))
         .teamDiscussion(nullAsTrue(allowedPermissionToggles.getTeamDiscussion()))
         .videoCallsTeamDiscussions(
             nullAsTrue(allowedPermissionToggles.getVideoCallsTeamDiscussions()))
@@ -919,6 +925,8 @@ public class TenantConverter {
             nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanGroupChats()))
         .mediaAiScanSupervisionChats(
             nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()))
+        .teamDiscussionAfterAccept(
+            nullAsTrue(allowedPermissionTogglesSettings.getTeamDiscussionAfterAccept()))
         .teamDiscussion(nullAsTrue(allowedPermissionTogglesSettings.getTeamDiscussion()))
         .videoCallsTeamDiscussions(
             nullAsTrue(allowedPermissionTogglesSettings.getVideoCallsTeamDiscussions()))
@@ -1005,6 +1013,8 @@ public class TenantConverter {
         .mediaAiScanGroupChats(nullAsFalse(allowedPermissionToggles.getMediaAiScanGroupChats()))
         .mediaAiScanSupervisionChats(
             nullAsFalse(allowedPermissionToggles.getMediaAiScanSupervisionChats()))
+        .teamDiscussionAfterAccept(
+            nullAsFalse(allowedPermissionToggles.getTeamDiscussionAfterAccept()))
         .teamDiscussion(nullAsFalse(allowedPermissionToggles.getTeamDiscussion()))
         .videoCallsTeamDiscussions(
             nullAsFalse(allowedPermissionToggles.getVideoCallsTeamDiscussions()))
@@ -1119,6 +1129,8 @@ public class TenantConverter {
             nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanGroupChats()))
         .mediaAiScanSupervisionChats(
             nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()))
+        .teamDiscussionAfterAccept(
+            nullAsFalse(allowedPermissionTogglesSettings.getTeamDiscussionAfterAccept()))
         .teamDiscussion(nullAsFalse(allowedPermissionTogglesSettings.getTeamDiscussion()))
         .videoCallsTeamDiscussions(
             nullAsFalse(allowedPermissionTogglesSettings.getVideoCallsTeamDiscussions()))

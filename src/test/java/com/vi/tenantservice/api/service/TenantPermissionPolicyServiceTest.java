@@ -714,6 +714,8 @@ class TenantPermissionPolicyServiceTest {
         .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
     assertThat(resolved.get(44L).get("featureVideoCallsTeamDiscussionsEnabled"))
         .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
+    assertThat(resolved.get(44L).get("featureTeamDiscussionAfterAcceptEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(false, SUGGESTED, true));
   }
 
   @Test

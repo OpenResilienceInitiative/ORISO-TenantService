@@ -70,6 +70,8 @@ public enum PermissionFeature {
   MEDIA_AI_SCAN_GROUP_CHATS("featureMediaAiScanGroupChatsEnabled", "mediaAiScanGroupChats"),
   MEDIA_AI_SCAN_SUPERVISION_CHATS(
       "featureMediaAiScanSupervisionChatsEnabled", "mediaAiScanSupervisionChats"),
+  TEAM_DISCUSSION_AFTER_ACCEPT(
+      "featureTeamDiscussionAfterAcceptEnabled", "teamDiscussionAfterAccept"),
   // ORISO-Frontend#2491: team chat on an open enquiry, governed like supervision.
   TEAM_DISCUSSION("featureTeamDiscussionEnabled", "teamDiscussion"),
   VIDEO_CALLS_TEAM_DISCUSSIONS(
@@ -131,7 +133,8 @@ public enum PermissionFeature {
   }
 
   public boolean defaultValue() {
-    return this != ASKER_EMAIL_LIVE_CHAT;
+    // ORISO-Frontend#2491: the team chat is archived at accept unless a policy says otherwise.
+    return this != ASKER_EMAIL_LIVE_CHAT && this != TEAM_DISCUSSION_AFTER_ACCEPT;
   }
 
   public String apiKey() {

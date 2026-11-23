@@ -148,6 +148,9 @@ public class NewTenantPresetService {
               "featureMediaAiScanSupervisionChatsEnabled",
               TenantSettings::setFeatureMediaAiScanSupervisionChatsEnabled),
           Map.entry(
+              "featureTeamDiscussionAfterAcceptEnabled",
+              TenantSettings::setFeatureTeamDiscussionAfterAcceptEnabled),
+          Map.entry(
               "featureTeamDiscussionEnabled", TenantSettings::setFeatureTeamDiscussionEnabled),
           Map.entry(
               "featureVideoCallsTeamDiscussionsEnabled",

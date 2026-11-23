@@ -286,7 +286,8 @@ class EffectivePermissionSettingsApplierTest {
     {"featureThreadsTeamDiscussionsEnabled", "threadsTeamDiscussions"},
     {"featureMediaUploadTeamDiscussionsEnabled", "mediaUploadTeamDiscussions"},
     {"featureMediaInlineDisplayTeamDiscussionsEnabled", "mediaInlineDisplayTeamDiscussions"},
-    {"featureMediaAiScanTeamDiscussionsEnabled", "mediaAiScanTeamDiscussions"}
+    {"featureMediaAiScanTeamDiscussionsEnabled", "mediaAiScanTeamDiscussions"},
+    {"featureTeamDiscussionAfterAcceptEnabled", "teamDiscussionAfterAccept"}
   };
 
   static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments>

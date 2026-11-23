@@ -57,6 +57,7 @@ class TenantSettingsTest {
     var legacyAbsent = JsonConverter.convertFromJson("{}").applyDefaults();
     assertThat(legacyAbsent.getFeatureMediaUploadEnabled()).isTrue();
     assertThat(legacyAbsent.getFeatureMediaUploadTeamDiscussionsEnabled()).isTrue();
+    assertThat(legacyAbsent.getFeatureTeamDiscussionAfterAcceptEnabled()).isFalse();
   }
 
   @Test

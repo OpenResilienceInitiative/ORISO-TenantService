@@ -425,7 +425,21 @@ class NewTenantPlatformPresetIT {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.settings.featureTeamDiscussionEnabled", is(false)))
         .andExpect(jsonPath("$.settings.featureVideoCallsTeamDiscussionsEnabled", is(true)))
-        .andExpect(jsonPath("$.settings.featureMediaAiScanTeamDiscussionsEnabled", is(false)));
+        .andExpect(jsonPath("$.settings.featureMediaAiScanTeamDiscussionsEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureTeamDiscussionAfterAcceptEnabled", is(false)));
+  }
+
+  @Test
+  void newTenant_should_followExplicitPlatformPolicyOn_forTeamDiscussionAfterAccept()
+      throws Exception {
+    savePlatformPolicies(
+        "{\"featureTeamDiscussionAfterAcceptEnabled\":{\"value\":true,\"mode\":\"SUGGESTED\"}}");
+
+    String newTenant = createTenant("teamchatafteraccept");
+
+    mvc.perform(get(newTenant))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureTeamDiscussionAfterAcceptEnabled", is(true)));
   }
 
   @Test

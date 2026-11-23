@@ -135,6 +135,7 @@ public class TenantSettings {
   Boolean featureMediaAiScanOneOnOneChatsEnabled;
   Boolean featureMediaAiScanGroupChatsEnabled;
   Boolean featureMediaAiScanSupervisionChatsEnabled;
+  Boolean featureTeamDiscussionAfterAcceptEnabled;
   Boolean featureVideoCallsTeamDiscussionsEnabled;
   Boolean featureAudioCallsTeamDiscussionsEnabled;
   Boolean featureVoiceMessagesTeamDiscussionsEnabled;
@@ -254,6 +255,7 @@ public class TenantSettings {
               Map.entry("featureMediaAiScanOneOnOneChatsEnabled", false),
               Map.entry("featureMediaAiScanGroupChatsEnabled", false),
               Map.entry("featureMediaAiScanSupervisionChatsEnabled", false),
+              Map.entry("featureTeamDiscussionAfterAcceptEnabled", false),
               Map.entry("featureVideoCallsTeamDiscussionsEnabled", true),
               Map.entry("featureAudioCallsTeamDiscussionsEnabled", true),
               Map.entry("featureVoiceMessagesTeamDiscussionsEnabled", true),
@@ -600,6 +602,10 @@ public class TenantSettings {
     if (featureMediaAiScanSupervisionChatsEnabled == null) {
       featureMediaAiScanSupervisionChatsEnabled =
           BOOLEAN_FIELD_DEFAULTS.get("featureMediaAiScanSupervisionChatsEnabled");
+    }
+    if (featureTeamDiscussionAfterAcceptEnabled == null) {
+      featureTeamDiscussionAfterAcceptEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureTeamDiscussionAfterAcceptEnabled");
     }
     if (featureVideoCallsTeamDiscussionsEnabled == null) {
       featureVideoCallsTeamDiscussionsEnabled =
