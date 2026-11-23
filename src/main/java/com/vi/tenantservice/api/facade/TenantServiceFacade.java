@@ -1590,7 +1590,10 @@ public class TenantServiceFacade {
       var tenantPage =
           tenantService.searchTenantData(tokens, Map.of(), pageRequest, tenantRestriction);
       Map<Long, List<String>> emailsByTenant =
-          mayBatchEmails && !tenantPage.isEmpty() ? lookupPageAdminEmails(tenantPage) : Map.of();
+          mayBatchEmails
+              ? lookupAdminEmailsForDisplay(
+                  tenantPage.getContent().stream().map(TenantData::getId).toList())
+              : Map.of();
       return mapOf(tenantPage, emailsByTenant);
     }
     // Owner lookups are mandatory for matching. Do not hide an outage as an empty result.
@@ -1632,9 +1635,20 @@ public class TenantServiceFacade {
     excludeTechnicalTenantFrom(tenantEntities);
     List<AdminTenantDTO> adminTenantDTOS =
         tenantEntities.stream().map(tenantConverter::toAdminTenantDTO).toList();
+    Map<Long, List<String>> emailsByTenant =
+        tenantFacadeAuthorisationService.mayBatchTenantAdminEmails()
+            ? lookupAdminEmailsForDisplay(
+                adminTenantDTOS.stream().map(AdminTenantDTO::getId).toList())
+            : Map.of();
     adminTenantDTOS.forEach(
-        adminTenantDTO ->
-            enrichWithAdminData(adminTenantDTO.getId().intValue(), adminTenantDTO::setAdminEmails));
+        tenant -> {
+          var emails = emailsByTenant.get(tenant.getId());
+          if (emails == null) {
+            enrichWithAdminData(tenant.getId().intValue(), tenant::setAdminEmails);
+          } else if (!emails.isEmpty()) {
+            tenant.setAdminEmails(emails);
+          }
+        });
     return adminTenantDTOS;
   }
 
@@ -1642,12 +1656,14 @@ public class TenantServiceFacade {
     emptyIfNull(tenants).removeIf(tenant -> tenant.getId() == TECHNICAL_TENANT_ID);
   }
 
-  private Map<Long, List<String>> lookupPageAdminEmails(Page<TenantData> tenantPage) {
-    var tenantIds = tenantPage.getContent().stream().map(TenantData::getId).toList();
+  private Map<Long, List<String>> lookupAdminEmailsForDisplay(List<Long> tenantIds) {
+    if (tenantIds.isEmpty()) {
+      return Map.of();
+    }
     try {
       return userAdminService.getTenantAdminLoginEmails(tenantIds);
     } catch (RestClientException | ResponseStatusException ex) {
-      // Display enrichment is optional. An empty lookup lets the existing mapper enrich each row.
+      // Display enrichment is optional. An empty map lets callers enrich each visible tenant.
       log.warn(
           "Could not resolve tenant-admin emails in a batch. Retrying for each visible tenant.");
       return Map.of();
