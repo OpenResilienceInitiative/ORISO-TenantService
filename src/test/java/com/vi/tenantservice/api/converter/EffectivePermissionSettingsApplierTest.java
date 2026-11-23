@@ -234,4 +234,132 @@ class EffectivePermissionSettingsApplierTest {
     assertThat(settings.getEmailVisible()).isTrue();
     assertThat(settings.getFeatureAskerEmailLiveChatEnabled()).isFalse();
   }
+
+  @Test
+  void applyPolicies_should_governTeamDiscussionLikeSupervision() {
+    // ORISO-Frontend#2491: a platform requirement wins, an inherited suggestion is only a hint.
+    var settings =
+        new Settings()
+            .featureTeamDiscussionEnabled(true)
+            .featureVideoCallsTeamDiscussionsEnabled(false)
+            .featureMediaAiScanTeamDiscussionsEnabled(false);
+
+    applier.applyPolicies(
+        settings,
+        Map.of(
+            "featureTeamDiscussionEnabled",
+            new BooleanPermissionPolicy(false, PermissionPolicyMode.ENFORCED).inherited(true),
+            "featureVideoCallsTeamDiscussionsEnabled",
+            new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED).inherited(true),
+            "featureMediaAiScanTeamDiscussionsEnabled",
+            new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED).inherited(false)));
+
+    assertThat(settings.getFeatureTeamDiscussionEnabled()).isFalse();
+    assertThat(settings.getFeatureVideoCallsTeamDiscussionsEnabled()).isFalse();
+    assertThat(settings.getFeatureMediaAiScanTeamDiscussionsEnabled()).isTrue();
+  }
+
+  @Test
+  void applyTo_should_forceTeamDiscussionTogglesLikeSupervision() {
+    var settings =
+        new Settings()
+            .featureTeamDiscussionEnabled(true)
+            .featureThreadsTeamDiscussionsEnabled(false);
+    var controls =
+        new TenantAdminControls()
+            .allowedPermissionToggles(
+                new TenantAdminAllowedPermissionToggles().teamDiscussion(false))
+            .enforcedPermissionToggles(
+                new TenantAdminAllowedPermissionToggles().threadsTeamDiscussions(true));
+
+    applier.applyTo(settings, controls);
+
+    assertThat(settings.getFeatureTeamDiscussionEnabled()).isFalse();
+    assertThat(settings.getFeatureThreadsTeamDiscussionsEnabled()).isTrue();
+  }
+
+  private static final String[][] TEAM_DISCUSSION_MAPPINGS = {
+    {"featureTeamDiscussionEnabled", "teamDiscussion"},
+    {"featureVideoCallsTeamDiscussionsEnabled", "videoCallsTeamDiscussions"},
+    {"featureAudioCallsTeamDiscussionsEnabled", "audioCallsTeamDiscussions"},
+    {"featureVoiceMessagesTeamDiscussionsEnabled", "voiceMessagesTeamDiscussions"},
+    {"featureThreadsTeamDiscussionsEnabled", "threadsTeamDiscussions"},
+    {"featureMediaUploadTeamDiscussionsEnabled", "mediaUploadTeamDiscussions"},
+    {"featureMediaInlineDisplayTeamDiscussionsEnabled", "mediaInlineDisplayTeamDiscussions"},
+    {"featureMediaAiScanTeamDiscussionsEnabled", "mediaAiScanTeamDiscussions"},
+    {"featureTeamDiscussionAfterAcceptEnabled", "teamDiscussionAfterAccept"}
+  };
+
+  static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments>
+      teamDiscussionMappings() {
+    return java.util.Arrays.stream(TEAM_DISCUSSION_MAPPINGS)
+        .flatMap(
+            m ->
+                java.util.stream.Stream.of(true, false)
+                    .map(v -> org.junit.jupiter.params.provider.Arguments.of(m[0], m[1], v)));
+  }
+
+  private static boolean settingValue(Settings settings, String key) {
+    return new com.fasterxml.jackson.databind.ObjectMapper()
+        .valueToTree(settings)
+        .path(key)
+        .asBoolean();
+  }
+
+  private static Settings settingsWith(String key, boolean value) {
+    var node = new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode().put(key, value);
+    return new com.fasterxml.jackson.databind.ObjectMapper().convertValue(node, Settings.class);
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.MethodSource("teamDiscussionMappings")
+  void applyPolicies_should_mapEveryTeamDiscussionPolicy(String key, String toggle, boolean value) {
+    // enforced value wins over the opposite stored value
+    var enforced = settingsWith(key, !value);
+    applier.applyPolicies(
+        enforced,
+        Map.of(
+            key,
+            new BooleanPermissionPolicy(value, PermissionPolicyMode.ENFORCED).inherited(true)));
+    assertThat(settingValue(enforced, key)).as(key + " enforced").isEqualTo(value);
+
+    // a local suggestion is the own value
+    var local = settingsWith(key, !value);
+    applier.applyPolicies(
+        local,
+        Map.of(
+            key,
+            new BooleanPermissionPolicy(value, PermissionPolicyMode.SUGGESTED).inherited(false)));
+    assertThat(settingValue(local, key)).as(key + " local").isEqualTo(value);
+
+    // an inherited suggestion is only a hint: the stored value stays
+    var inherited = settingsWith(key, !value);
+    applier.applyPolicies(
+        inherited,
+        Map.of(
+            key,
+            new BooleanPermissionPolicy(value, PermissionPolicyMode.SUGGESTED).inherited(true)));
+    assertThat(settingValue(inherited, key)).as(key + " inherited").isEqualTo(!value);
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.MethodSource("teamDiscussionMappings")
+  void applyTo_should_mapEveryTeamDiscussionControl(String key, String toggle, boolean value) {
+    var settings = settingsWith(key, !value);
+    var toggles =
+        new com.fasterxml.jackson.databind.ObjectMapper()
+            .convertValue(
+                new com.fasterxml.jackson.databind.ObjectMapper()
+                    .createObjectNode()
+                    .put(toggle, value),
+                TenantAdminAllowedPermissionToggles.class);
+    var controls =
+        value
+            ? new TenantAdminControls().enforcedPermissionToggles(toggles)
+            : new TenantAdminControls().allowedPermissionToggles(toggles);
+
+    applier.applyTo(settings, controls);
+
+    assertThat(settingValue(settings, key)).as(key + " control").isEqualTo(value);
+  }
 }

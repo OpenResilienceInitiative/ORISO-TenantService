@@ -29,7 +29,9 @@ import org.springframework.stereotype.Service;
  * unless the platform admin set a policy for them. Every other registry feature (media handling,
  * advice-seeker switches) keeps whatever the default settings file or {@code
  * TenantSettings.applyDefaults()} already gives it — in particular AI scan is not switched on by a
- * policy entry that was merely derived from the legacy toggles.
+ * policy entry that was merely derived from the legacy toggles. The team chat on an enquiry ({@code
+ * featureTeamDiscussionEnabled}, ORISO-Frontend#2491) is a conversation feature and starts on; its
+ * chat sub-flags keep the {@code TenantSettings.applyDefaults()} values (AI scan off).
  */
 @Service
 @RequiredArgsConstructor
@@ -145,6 +147,32 @@ public class NewTenantPresetService {
           Map.entry(
               "featureMediaAiScanSupervisionChatsEnabled",
               TenantSettings::setFeatureMediaAiScanSupervisionChatsEnabled),
+          Map.entry(
+              "featureTeamDiscussionAfterAcceptEnabled",
+              TenantSettings::setFeatureTeamDiscussionAfterAcceptEnabled),
+          Map.entry(
+              "featureTeamDiscussionEnabled", TenantSettings::setFeatureTeamDiscussionEnabled),
+          Map.entry(
+              "featureVideoCallsTeamDiscussionsEnabled",
+              TenantSettings::setFeatureVideoCallsTeamDiscussionsEnabled),
+          Map.entry(
+              "featureAudioCallsTeamDiscussionsEnabled",
+              TenantSettings::setFeatureAudioCallsTeamDiscussionsEnabled),
+          Map.entry(
+              "featureVoiceMessagesTeamDiscussionsEnabled",
+              TenantSettings::setFeatureVoiceMessagesTeamDiscussionsEnabled),
+          Map.entry(
+              "featureThreadsTeamDiscussionsEnabled",
+              TenantSettings::setFeatureThreadsTeamDiscussionsEnabled),
+          Map.entry(
+              "featureMediaUploadTeamDiscussionsEnabled",
+              TenantSettings::setFeatureMediaUploadTeamDiscussionsEnabled),
+          Map.entry(
+              "featureMediaInlineDisplayTeamDiscussionsEnabled",
+              TenantSettings::setFeatureMediaInlineDisplayTeamDiscussionsEnabled),
+          Map.entry(
+              "featureMediaAiScanTeamDiscussionsEnabled",
+              TenantSettings::setFeatureMediaAiScanTeamDiscussionsEnabled),
           Map.entry("featureDisplayNameEditable", TenantSettings::setFeatureDisplayNameEditable),
           Map.entry("featureAskerEmailEnabled", TenantSettings::setFeatureAskerEmailEnabled),
           Map.entry(
@@ -212,7 +240,8 @@ public class NewTenantPresetService {
           "featureVoiceMessagesEnabled",
           "featureVoiceMessagesAnonymousChatsEnabled",
           "featureVoiceMessagesOneOnOneChatsEnabled",
-          "featureVoiceMessagesGroupChatsEnabled");
+          "featureVoiceMessagesGroupChatsEnabled",
+          "featureTeamDiscussionEnabled");
 
   /**
    * Supervision (decision 2026-09-16, #251): not tested yet, so without an explicit platform policy
@@ -256,8 +285,6 @@ public class NewTenantPresetService {
         setter.accept(newTenantSettings, false);
       }
     }
-    // team discussions are a conversation feature outside the permission registry: start on
-    newTenantSettings.setFeatureTeamDiscussionEnabled(true);
     return newTenantSettings;
   }
 }
