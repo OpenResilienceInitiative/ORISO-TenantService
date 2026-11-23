@@ -3,9 +3,15 @@ package com.vi.tenantservice.api.tenant;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import jakarta.servlet.http.Cookie;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -32,6 +38,51 @@ class CookieTenantResolverTest {
     Optional<Long> tenantId =
         cookieTenantResolver.resolveTenantFromRequest(requestWithTenantIdCookie("43"));
     assertThat(tenantId).contains(43L);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "unreadable"})
+  void resolve_Should_returnEmptyTenant_When_StoredTenantIdIsUnreadable(String value) {
+    ReflectionTestUtils.setField(cookieTenantResolver, "multitenancyWithSingleDomain", true);
+
+    assertThat(cookieTenantResolver.resolveTenantFromRequest(requestWithTenantIdCookie(value)))
+        .isEmpty();
+  }
+
+  @ParameterizedTest
+  // Missing payload, invalid Base64url, and Base64url-encoded text "not-json".
+  @ValueSource(strings = {"unreadable", "fixture.!.fixture", "fixture.bm90LWpzb24.fixture"})
+  void resolve_Should_returnEmptyTenant_When_StoredKeycloakSelectionIsUnreadable(String value) {
+    ReflectionTestUtils.setField(cookieTenantResolver, "multitenancyWithSingleDomain", true);
+    var request = new MockHttpServletRequest();
+    request.setCookies(new Cookie("keycloak", value), new Cookie("tenantId", "43"));
+
+    assertThat(cookieTenantResolver.resolveTenantFromRequest(request)).isEmpty();
+  }
+
+  @ParameterizedTest
+  @MethodSource("unrepresentableNumbers")
+  void parseTenantHint_Should_ignoreNumbersThatAreNotExactLongs(Number value) {
+    assertThat(CookieTenantResolver.parseTenantHint(value)).isEmpty();
+  }
+
+  private static Stream<Number> unrepresentableNumbers() {
+    return Stream.of(
+        new BigDecimal("42.5"),
+        BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE),
+        BigInteger.valueOf(Long.MIN_VALUE).subtract(BigInteger.ONE),
+        Double.MAX_VALUE,
+        Double.NaN);
+  }
+
+  @Test
+  void parseTenantHint_Should_preserveWholeNumbersAndNumericText() {
+    assertThat(CookieTenantResolver.parseTenantHint(42)).contains(42L);
+    assertThat(CookieTenantResolver.parseTenantHint(Long.MIN_VALUE)).contains(Long.MIN_VALUE);
+    assertThat(CookieTenantResolver.parseTenantHint(BigDecimal.valueOf(Long.MAX_VALUE).setScale(1)))
+        .contains(Long.MAX_VALUE);
+    assertThat(CookieTenantResolver.parseTenantHint(Long.toString(Long.MAX_VALUE)))
+        .contains(Long.MAX_VALUE);
   }
 
   @Test
