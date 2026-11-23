@@ -234,4 +234,47 @@ class EffectivePermissionSettingsApplierTest {
     assertThat(settings.getEmailVisible()).isTrue();
     assertThat(settings.getFeatureAskerEmailLiveChatEnabled()).isFalse();
   }
+
+  @Test
+  void applyPolicies_should_governTeamDiscussionLikeSupervision() {
+    // ORISO-Frontend#2491: a platform requirement wins, an inherited suggestion is only a hint.
+    var settings =
+        new Settings()
+            .featureTeamDiscussionEnabled(true)
+            .featureVideoCallsTeamDiscussionsEnabled(false)
+            .featureMediaAiScanTeamDiscussionsEnabled(false);
+
+    applier.applyPolicies(
+        settings,
+        Map.of(
+            "featureTeamDiscussionEnabled",
+            new BooleanPermissionPolicy(false, PermissionPolicyMode.ENFORCED).inherited(true),
+            "featureVideoCallsTeamDiscussionsEnabled",
+            new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED).inherited(true),
+            "featureMediaAiScanTeamDiscussionsEnabled",
+            new BooleanPermissionPolicy(true, PermissionPolicyMode.SUGGESTED).inherited(false)));
+
+    assertThat(settings.getFeatureTeamDiscussionEnabled()).isFalse();
+    assertThat(settings.getFeatureVideoCallsTeamDiscussionsEnabled()).isFalse();
+    assertThat(settings.getFeatureMediaAiScanTeamDiscussionsEnabled()).isTrue();
+  }
+
+  @Test
+  void applyTo_should_forceTeamDiscussionTogglesLikeSupervision() {
+    var settings =
+        new Settings()
+            .featureTeamDiscussionEnabled(true)
+            .featureThreadsTeamDiscussionsEnabled(false);
+    var controls =
+        new TenantAdminControls()
+            .allowedPermissionToggles(
+                new TenantAdminAllowedPermissionToggles().teamDiscussion(false))
+            .enforcedPermissionToggles(
+                new TenantAdminAllowedPermissionToggles().threadsTeamDiscussions(true));
+
+    applier.applyTo(settings, controls);
+
+    assertThat(settings.getFeatureTeamDiscussionEnabled()).isFalse();
+    assertThat(settings.getFeatureThreadsTeamDiscussionsEnabled()).isTrue();
+  }
 }

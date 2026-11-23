@@ -136,6 +136,28 @@ public class EffectivePermissionSettingsApplier {
           Map.entry(
               "featureMediaAiScanSupervisionChatsEnabled",
               Settings::setFeatureMediaAiScanSupervisionChatsEnabled),
+          Map.entry("featureTeamDiscussionEnabled", Settings::setFeatureTeamDiscussionEnabled),
+          Map.entry(
+              "featureVideoCallsTeamDiscussionsEnabled",
+              Settings::setFeatureVideoCallsTeamDiscussionsEnabled),
+          Map.entry(
+              "featureAudioCallsTeamDiscussionsEnabled",
+              Settings::setFeatureAudioCallsTeamDiscussionsEnabled),
+          Map.entry(
+              "featureVoiceMessagesTeamDiscussionsEnabled",
+              Settings::setFeatureVoiceMessagesTeamDiscussionsEnabled),
+          Map.entry(
+              "featureThreadsTeamDiscussionsEnabled",
+              Settings::setFeatureThreadsTeamDiscussionsEnabled),
+          Map.entry(
+              "featureMediaUploadTeamDiscussionsEnabled",
+              Settings::setFeatureMediaUploadTeamDiscussionsEnabled),
+          Map.entry(
+              "featureMediaInlineDisplayTeamDiscussionsEnabled",
+              Settings::setFeatureMediaInlineDisplayTeamDiscussionsEnabled),
+          Map.entry(
+              "featureMediaAiScanTeamDiscussionsEnabled",
+              Settings::setFeatureMediaAiScanTeamDiscussionsEnabled),
           Map.entry("featureDisplayNameEditable", Settings::setFeatureDisplayNameEditable),
           Map.entry("featureAskerEmailEnabled", Settings::setFeatureAskerEmailEnabled),
           Map.entry(
@@ -343,7 +365,31 @@ public class EffectivePermissionSettingsApplier {
               Settings::setFeatureMediaAiScanGroupChatsEnabled),
           new ToggleBinding(
               TenantAdminAllowedPermissionToggles::getMediaAiScanSupervisionChats,
-              Settings::setFeatureMediaAiScanSupervisionChatsEnabled));
+              Settings::setFeatureMediaAiScanSupervisionChatsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getTeamDiscussion,
+              Settings::setFeatureTeamDiscussionEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getVideoCallsTeamDiscussions,
+              Settings::setFeatureVideoCallsTeamDiscussionsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getAudioCallsTeamDiscussions,
+              Settings::setFeatureAudioCallsTeamDiscussionsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getVoiceMessagesTeamDiscussions,
+              Settings::setFeatureVoiceMessagesTeamDiscussionsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getThreadsTeamDiscussions,
+              Settings::setFeatureThreadsTeamDiscussionsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaUploadTeamDiscussions,
+              Settings::setFeatureMediaUploadTeamDiscussionsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaInlineDisplayTeamDiscussions,
+              Settings::setFeatureMediaInlineDisplayTeamDiscussionsEnabled),
+          new ToggleBinding(
+              TenantAdminAllowedPermissionToggles::getMediaAiScanTeamDiscussions,
+              Settings::setFeatureMediaAiScanTeamDiscussionsEnabled));
 
   public void applyTo(Settings settings, TenantAdminControls controls) {
     if (settings == null || controls == null) {

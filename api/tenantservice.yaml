@@ -2716,6 +2716,7 @@ components:
         featureTeamDiscussionEnabled:
           type: boolean
           example: "false"
+          description: "Master toggle for the team chat on an open enquiry (team discussion, ORISO-Frontend#2491). Governed by the permission policy featureTeamDiscussionEnabled like featureSupervisionEnabled. A Traeger value stored before the policy existed reads as the Traeger's own policy value."
         featureToolsEnabled:
           type: boolean
           example: "false"
@@ -2968,6 +2969,34 @@ components:
           type: boolean
           example: "false"
           description: "AI media scan when a user is in supervision mode."
+        featureVideoCallsTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable the video call button in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureAudioCallsTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable the audio call button in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureVoiceMessagesTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable voice messages in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureThreadsTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable threads in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureMediaUploadTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable media upload in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureMediaInlineDisplayTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Inline media display in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureMediaAiScanTeamDiscussionsEnabled:
+          type: boolean
+          example: "false"
+          description: "AI media scan in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
         featureToolsOICDToken:
           type: string
           example: "1234-1234-1234-1234"
@@ -3473,6 +3502,14 @@ components:
         - featureMediaAiScanOneOnOneChatsEnabled
         - featureMediaAiScanGroupChatsEnabled
         - featureMediaAiScanSupervisionChatsEnabled
+        - featureTeamDiscussionEnabled
+        - featureVideoCallsTeamDiscussionsEnabled
+        - featureAudioCallsTeamDiscussionsEnabled
+        - featureVoiceMessagesTeamDiscussionsEnabled
+        - featureThreadsTeamDiscussionsEnabled
+        - featureMediaUploadTeamDiscussionsEnabled
+        - featureMediaInlineDisplayTeamDiscussionsEnabled
+        - featureMediaAiScanTeamDiscussionsEnabled
         - featureDisplayNameEditable
         - featureAskerEmailEnabled
         - featureAskerEmailCollectionAgencyCounsellingEnabled
@@ -3826,6 +3863,30 @@ components:
           type: boolean
           example: "true"
         mediaAiScanSupervisionChats:
+          type: boolean
+          example: "true"
+        teamDiscussion:
+          type: boolean
+          example: "true"
+        videoCallsTeamDiscussions:
+          type: boolean
+          example: "true"
+        audioCallsTeamDiscussions:
+          type: boolean
+          example: "true"
+        voiceMessagesTeamDiscussions:
+          type: boolean
+          example: "true"
+        threadsTeamDiscussions:
+          type: boolean
+          example: "true"
+        mediaUploadTeamDiscussions:
+          type: boolean
+          example: "true"
+        mediaInlineDisplayTeamDiscussions:
+          type: boolean
+          example: "true"
+        mediaAiScanTeamDiscussions:
           type: boolean
           example: "true"
 

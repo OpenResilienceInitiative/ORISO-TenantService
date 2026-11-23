@@ -300,6 +300,36 @@ public class TenantFacadeChangeDetectionService {
         existingSettingsToCompare.getFeatureMediaAiScanSupervisionChatsEnabled())) {
       resultList.add(TenantSetting.FEATURE_MEDIA_AI_SCAN_SUPERVISION_CHATS_ENABLED);
     }
+    if (nullAsTrue(inputSettings.getFeatureVideoCallsTeamDiscussionsEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureVideoCallsTeamDiscussionsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_VIDEO_CALLS_TEAM_DISCUSSIONS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureAudioCallsTeamDiscussionsEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureAudioCallsTeamDiscussionsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_AUDIO_CALLS_TEAM_DISCUSSIONS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureVoiceMessagesTeamDiscussionsEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureVoiceMessagesTeamDiscussionsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_VOICE_MESSAGES_TEAM_DISCUSSIONS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureThreadsTeamDiscussionsEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureThreadsTeamDiscussionsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_THREADS_TEAM_DISCUSSIONS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureMediaUploadTeamDiscussionsEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureMediaUploadTeamDiscussionsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_UPLOAD_TEAM_DISCUSSIONS_ENABLED);
+    }
+    if (nullAsTrue(inputSettings.getFeatureMediaInlineDisplayTeamDiscussionsEnabled())
+        != nullAsTrue(
+            existingSettingsToCompare.getFeatureMediaInlineDisplayTeamDiscussionsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_INLINE_DISPLAY_TEAM_DISCUSSIONS_ENABLED);
+    }
+    if (isChanged(
+        inputSettings.getFeatureMediaAiScanTeamDiscussionsEnabled(),
+        existingSettingsToCompare.getFeatureMediaAiScanTeamDiscussionsEnabled())) {
+      resultList.add(TenantSetting.FEATURE_MEDIA_AI_SCAN_TEAM_DISCUSSIONS_ENABLED);
+    }
     if (isChangedIgnoringOrder(
         inputSettings.getActiveLanguages(), existingSettingsToCompare.getActiveLanguages())) {
       resultList.add(TenantSetting.FEATURE_ACTIVE_LANGUAGES);

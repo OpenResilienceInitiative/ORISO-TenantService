@@ -690,4 +690,68 @@ class TenantPermissionPolicyServiceTest {
 
     assertThat(service.getResolvedPolicies(Set.of(42L, 84L))).containsOnlyKeys(84L);
   }
+
+  @Test
+  void teamDiscussion_shouldReadAStoredTraegerSwitchAsTheTraegersOwnPolicyValue() {
+    // ORISO-Frontend#2491: the plain Träger switch predates the policy and keeps its effect.
+    when(tenants.findSettingsByIdIn(Set.of(42L, 43L, 44L)))
+        .thenReturn(
+            java.util.List.of(
+                new com.vi.tenantservice.api.model.TenantSettingsView(
+                    42L, "{\"featureTeamDiscussionEnabled\":false}"),
+                new com.vi.tenantservice.api.model.TenantSettingsView(
+                    43L, "{\"featureTeamDiscussionEnabled\":true}"),
+                new com.vi.tenantservice.api.model.TenantSettingsView(44L, "{}")));
+    when(platformControls.getControls()).thenReturn(new TenantAdminControls());
+
+    var resolved = service.getResolvedPolicies(Set.of(42L, 43L, 44L));
+
+    assertThat(resolved.get(42L).get("featureTeamDiscussionEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(false, SUGGESTED, false));
+    assertThat(resolved.get(43L).get("featureTeamDiscussionEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, false));
+    assertThat(resolved.get(44L).get("featureTeamDiscussionEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
+    assertThat(resolved.get(44L).get("featureVideoCallsTeamDiscussionsEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, true));
+  }
+
+  @Test
+  void teamDiscussion_shouldLetATypedPolicyAndAPlatformRequirementWinOverTheStoredSwitch()
+      throws Exception {
+    when(tenants.findSettingsByIdIn(Set.of(42L)))
+        .thenReturn(
+            java.util.List.of(
+                new com.vi.tenantservice.api.model.TenantSettingsView(
+                    42L, "{\"featureTeamDiscussionEnabled\":false}")));
+    when(repository.findByTenantIdIn(Set.of(42L)))
+        .thenReturn(
+            java.util.List.of(
+                TenantPermissionPolicyEntity.builder()
+                    .tenantId(42L)
+                    .policies(
+                        new ObjectMapper()
+                            .writeValueAsString(
+                                Map.of(
+                                    "featureTeamDiscussionEnabled",
+                                    new PolicyValue<>(true, SUGGESTED))))
+                    .build()));
+    when(platformControls.getControls()).thenReturn(new TenantAdminControls());
+
+    assertThat(
+            service.getResolvedPolicies(Set.of(42L)).get(42L).get("featureTeamDiscussionEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(true, SUGGESTED, false));
+
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls()
+                .permissionPolicies(
+                    Map.of(
+                        "featureTeamDiscussionEnabled",
+                        new BooleanPermissionPolicy(false, PermissionPolicyMode.ENFORCED))));
+
+    assertThat(
+            service.getResolvedPolicies(Set.of(42L)).get(42L).get("featureTeamDiscussionEnabled"))
+        .isEqualTo(new ResolvedPolicyValue<>(false, ENFORCED, true));
+  }
 }

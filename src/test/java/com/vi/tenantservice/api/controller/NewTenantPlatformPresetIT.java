@@ -412,4 +412,31 @@ class NewTenantPlatformPresetIT {
         .andExpect(jsonPath("$.settings.featureMediaAiScanEnabled", is(false)))
         .andExpect(jsonPath("$.settings.featureGroupChatV2Enabled", is(true)));
   }
+
+  @Test
+  void newTenant_should_followExplicitPlatformPolicyOff_forTeamDiscussion() throws Exception {
+    // ORISO-Frontend#2491: the team chat is preset on the platform like supervision.
+    savePlatformPolicies(
+        "{\"featureTeamDiscussionEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}}");
+
+    String newTenant = createTenant("teamchatoff");
+
+    mvc.perform(get(newTenant))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureTeamDiscussionEnabled", is(false)))
+        .andExpect(jsonPath("$.settings.featureVideoCallsTeamDiscussionsEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureMediaAiScanTeamDiscussionsEnabled", is(false)));
+  }
+
+  @Test
+  void existingTenant_should_followAnEnforcedPlatformPolicy_forTeamDiscussion() throws Exception {
+    savePlatformPolicies(
+        "{\"featureTeamDiscussionEnabled\":{\"value\":true,\"mode\":\"ENFORCED\"},"
+            + "\"featureThreadsTeamDiscussionsEnabled\":{\"value\":false,\"mode\":\"ENFORCED\"}}");
+
+    mvc.perform(get(PUBLIC_TENANT_1))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureTeamDiscussionEnabled", is(true)))
+        .andExpect(jsonPath("$.settings.featureThreadsTeamDiscussionsEnabled", is(false)));
+  }
 }

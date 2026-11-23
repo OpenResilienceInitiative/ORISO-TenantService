@@ -65,6 +65,14 @@ public class TenantPermissionPolicyService {
           "featureDisplayNameEditableAgencyCounsellingEnabled",
           "featureDisplayNameEditableLiveChatEnabled",
           "featureDisplayNameEditableSelfHelpEnabled");
+
+  /**
+   * Plain Träger settings that predate their permission policy (ORISO-Frontend#2491). A stored
+   * value, on or off, is the Träger's own choice and reads as its own (SUGGESTED) policy value
+   * until the Träger stores a typed policy, so an existing team chat switch keeps its effect.
+   */
+  private static final Set<String> LEGACY_OWN_VALUE_FIELDS = Set.of("featureTeamDiscussionEnabled");
+
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   public Map<String, ResolvedPolicyValue<Boolean>> getResolvedPolicies(Long tenantId) {
@@ -132,6 +140,16 @@ public class TenantPermissionPolicyService {
                 field,
                 new PolicyValue<>(
                     false, com.vi.tenantservice.api.policy.PermissionPolicyMode.SUGGESTED));
+        }
+        for (String field : LEGACY_OWN_VALUE_FIELDS) {
+          var value = settings.get(field);
+          if (value == null || value.isNull()) continue;
+          if (!value.isBoolean()) throw new TenantSettingsUnavailableException();
+          optOuts.put(
+              field,
+              new PolicyValue<>(
+                  value.booleanValue(),
+                  com.vi.tenantservice.api.policy.PermissionPolicyMode.SUGGESTED));
         }
         result.put(tenant.getId(), optOuts);
       } catch (JsonProcessingException | TenantSettingsUnavailableException invalid) {
