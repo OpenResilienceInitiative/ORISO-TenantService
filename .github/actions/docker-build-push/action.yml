@@ -19,6 +19,11 @@ inputs:
     description: Explicit OCI labels for a versioned release
     default: ''
 
+outputs:
+  digest:
+    description: Immutable digest of the scanned and published image
+    value: ${{ steps.publish.outputs.digest }}
+
 runs:
   using: 'composite'
   steps:
