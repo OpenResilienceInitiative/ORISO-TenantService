@@ -607,4 +607,115 @@ class TenantAdminControlsServiceTest {
             "featureCallsEnabled", new PolicyValue<>(true, PermissionPolicyMode.SUGGESTED))
         .doesNotContainKey("someFutureFeatureEnabled");
   }
+
+  // --- #386: unreadable stored policy entries survive unrelated writes ---
+
+  private static final String UNREADABLE_CALLS_ENTRY =
+      "\"featureCallsEnabled\":{\"value\":false,\"mode\":\"MANDATORY_IN_A_LATER_BUILD\"}";
+  private static final String VALID_VIDEO_ENTRY =
+      "\"featureVideoCallsEnabled\":{\"value\":true,\"mode\":\"SUGGESTED\"}";
+  private static final String BLOB_WITH_UNREADABLE_ENTRY =
+      "{\"permissionsPageEnabled\":true,\"permissionPolicies\":{"
+          + UNREADABLE_CALLS_ENTRY
+          + ","
+          + VALID_VIDEO_ENTRY
+          + "}}";
+
+  private void givenUpdateRequestCarrying(Map<String, PolicyValue<Boolean>> policies) {
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(
+            TenantAdminControlsSettings.builder()
+                .permissionsPageEnabled(false)
+                .permissionPolicies(policies == null ? null : new java.util.HashMap<>(policies))
+                .build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+    tenantAdminControlsService.updateControls(request);
+  }
+
+  @Test
+  void updateAccountInactivitySettings_Should_keepUnreadablePolicyEntryVerbatim() {
+    givenStoredControlsJson(BLOB_WITH_UNREADABLE_ENTRY);
+
+    tenantAdminControlsService.updateAccountInactivitySettings(
+        new com.vi.tenantservice.api.model.AccountInactivitySettings(12, 12, 12, 0L));
+
+    assertThat(capturedSavedControls())
+        .contains(UNREADABLE_CALLS_ENTRY)
+        .contains(VALID_VIDEO_ENTRY)
+        .contains("\"askerMonths\":12");
+  }
+
+  @Test
+  void updateControls_Should_keepUnreadablePolicyEntryVerbatim_When_requestOmitsPolicies() {
+    givenStoredControlsJson(BLOB_WITH_UNREADABLE_ENTRY);
+
+    givenUpdateRequestCarrying(null);
+
+    assertThat(capturedSavedControls())
+        .contains(UNREADABLE_CALLS_ENTRY)
+        .contains(VALID_VIDEO_ENTRY);
+  }
+
+  @Test
+  void updateControls_Should_keepUnreadableEntry_When_requestEchoesServedValue() {
+    // The admin UI sends the whole map back. For the unreadable feature it echoes what it was
+    // served: the restrictive default. That is not a decision about this feature.
+    givenStoredControlsJson(BLOB_WITH_UNREADABLE_ENTRY);
+
+    givenUpdateRequestCarrying(
+        Map.of(
+            "featureCallsEnabled", new PolicyValue<>(false, PermissionPolicyMode.ENFORCED),
+            "featureVideoCallsEnabled", new PolicyValue<>(false, PermissionPolicyMode.SUGGESTED)));
+
+    assertThat(capturedSavedControls())
+        .contains(UNREADABLE_CALLS_ENTRY)
+        .contains("\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}");
+  }
+
+  @Test
+  void updateControls_Should_replaceUnreadablePolicyEntry_When_thatFeatureIsSavedExplicitly() {
+    givenStoredControlsJson(BLOB_WITH_UNREADABLE_ENTRY);
+
+    givenUpdateRequestCarrying(
+        Map.of("featureCallsEnabled", new PolicyValue<>(true, PermissionPolicyMode.SUGGESTED)));
+
+    assertThat(capturedSavedControls())
+        .doesNotContain("MANDATORY_IN_A_LATER_BUILD")
+        .contains("\"featureCallsEnabled\":{\"value\":true,\"mode\":\"SUGGESTED\"}");
+  }
+
+  @Test
+  void updateControls_Should_keepStoredEntryOfAFeatureUnknownToThisBuild() {
+    String futureEntry = "\"featureFromALaterBuild\":{\"value\":true,\"mode\":\"SUGGESTED\"}";
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{" + futureEntry + "," + VALID_VIDEO_ENTRY + "}}");
+
+    givenUpdateRequestCarrying(null);
+
+    assertThat(capturedSavedControls()).contains(futureEntry);
+  }
+
+  @Test
+  void getControls_Should_stayRestrictiveAndNeverExposeTheRawEntry_afterAnUnrelatedWrite()
+      throws Exception {
+    givenStoredControlsJson(BLOB_WITH_UNREADABLE_ENTRY);
+    tenantAdminControlsService.updateAccountInactivitySettings(
+        new com.vi.tenantservice.api.model.AccountInactivitySettings(12, 12, 12, 0L));
+    givenStoredControlsJson(capturedSavedControls());
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> captor =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(captor.capture());
+    TenantAdminControlsSettings served = captor.getValue();
+    assertThat(served.getPermissionPolicies().get("featureCallsEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+    // anything that serializes the settings object (tenant settings JSON, logs) sees no raw blob
+    assertThat(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(served))
+        .doesNotContain("MANDATORY_IN_A_LATER_BUILD");
+    assertThat(served.toString()).doesNotContain("MANDATORY_IN_A_LATER_BUILD");
+  }
 }
