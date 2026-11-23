@@ -619,7 +619,8 @@ public class TenantSettings {
     }
     if (featureMediaUploadTeamDiscussionsEnabled == null) {
       featureMediaUploadTeamDiscussionsEnabled =
-          BOOLEAN_FIELD_DEFAULTS.get("featureMediaUploadTeamDiscussionsEnabled");
+          !legacyUploadDisabled
+              && BOOLEAN_FIELD_DEFAULTS.get("featureMediaUploadTeamDiscussionsEnabled");
     }
     if (featureMediaInlineDisplayTeamDiscussionsEnabled == null) {
       featureMediaInlineDisplayTeamDiscussionsEnabled =

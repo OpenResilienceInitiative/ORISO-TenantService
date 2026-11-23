@@ -41,6 +41,7 @@ class TenantSettingsTest {
     assertThat(settings.getFeatureMediaUploadOneOnOneChatsEnabled()).isFalse();
     assertThat(settings.getFeatureMediaUploadGroupChatsEnabled()).isFalse();
     assertThat(settings.getFeatureMediaUploadSupervisionChatsEnabled()).isFalse();
+    assertThat(settings.getFeatureMediaUploadTeamDiscussionsEnabled()).isFalse();
     // the other families are not the legacy flag's concern
     assertThat(settings.getFeatureMediaInlineDisplayEnabled()).isTrue();
     assertThat(settings.getFeatureMediaAiScanEnabled()).isFalse();
@@ -55,6 +56,7 @@ class TenantSettingsTest {
 
     var legacyAbsent = JsonConverter.convertFromJson("{}").applyDefaults();
     assertThat(legacyAbsent.getFeatureMediaUploadEnabled()).isTrue();
+    assertThat(legacyAbsent.getFeatureMediaUploadTeamDiscussionsEnabled()).isTrue();
   }
 
   @Test
