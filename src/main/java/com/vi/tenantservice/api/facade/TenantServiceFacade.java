@@ -1074,7 +1074,8 @@ public class TenantServiceFacade {
         tenantPermissionPolicyService.getResolvedPolicies(tenantId),
         tenantPermissionPolicyService.getResolvedCaseHandoverPolicies(tenantId),
         tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(tenantId),
-        tenantPermissionPolicyService.getResolvedCalendarPolicies(tenantId));
+        tenantPermissionPolicyService.getResolvedCalendarPolicies(tenantId),
+        tenantPermissionPolicyService.getResolvedCaseSharingPolicies(tenantId));
   }
 
   public TenantPermissionPolicies updateTenantPermissionPolicies(
@@ -1096,7 +1097,8 @@ public class TenantServiceFacade {
                                 entry.getValue().getMode().name())))),
         request.getCaseHandoverPolicies(),
         request.getInternalGroupChat(),
-        request.getCalendar());
+        request.getCalendar(),
+        request.getCaseSharing());
     return getTenantPermissionPolicies(tenantId);
   }
 
@@ -1105,7 +1107,8 @@ public class TenantServiceFacade {
       Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> policies,
       com.vi.tenantservice.api.model.CaseHandoverPolicies caseHandoverPolicies,
       com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat,
-      com.vi.tenantservice.api.model.CalendarPolicies calendar) {
+      com.vi.tenantservice.api.model.CalendarPolicies calendar,
+      com.vi.tenantservice.api.model.CaseSharingPolicies caseSharing) {
     return new TenantPermissionPolicies(
             tenantId,
             policies.entrySet().stream()
@@ -1120,7 +1123,8 @@ public class TenantServiceFacade {
                                 .inherited(entry.getValue().inherited()))))
         .caseHandoverPolicies(caseHandoverPolicies)
         .internalGroupChat(internalGroupChat)
-        .calendar(calendar);
+        .calendar(calendar)
+        .caseSharing(caseSharing);
   }
 
   private void assertSuperAdmin() {
@@ -1218,9 +1222,12 @@ public class TenantServiceFacade {
             policiesByTenant.keySet());
     Map<Long, com.vi.tenantservice.api.model.CalendarPolicies> calendarByTenant =
         tenantPermissionPolicyService.getResolvedCalendarPolicies(policiesByTenant.keySet());
+    Map<Long, com.vi.tenantservice.api.model.CaseSharingPolicies> caseSharingByTenant =
+        tenantPermissionPolicyService.getResolvedCaseSharingPolicies(policiesByTenant.keySet());
     return tenants.stream()
         .filter(dto -> internalGroupChatByTenant.containsKey(dto.getId()))
         .filter(dto -> calendarByTenant.containsKey(dto.getId()))
+        .filter(dto -> caseSharingByTenant.containsKey(dto.getId()))
         .map(
             dto ->
                 withEffectiveSettings(
@@ -1229,7 +1236,8 @@ public class TenantServiceFacade {
                     platformTheming,
                     policiesByTenant.get(dto.getId()),
                     internalGroupChatByTenant.get(dto.getId()),
-                    calendarByTenant.get(dto.getId())))
+                    calendarByTenant.get(dto.getId()),
+                    caseSharingByTenant.get(dto.getId())))
         .toList();
   }
 
@@ -1261,7 +1269,8 @@ public class TenantServiceFacade {
         getPlatformTheming(lang),
         publicPoliciesForResolvedTenant(dto, resolvedTenantId),
         tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantId),
-        tenantPermissionPolicyService.getResolvedCalendarPolicies(resolvedTenantId));
+        tenantPermissionPolicyService.getResolvedCalendarPolicies(resolvedTenantId),
+        tenantPermissionPolicyService.getResolvedCaseSharingPolicies(resolvedTenantId));
   }
 
   /**
@@ -1308,10 +1317,12 @@ public class TenantServiceFacade {
       Theming platformTheming,
       Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies,
       com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat,
-      com.vi.tenantservice.api.model.CalendarPolicies calendar) {
+      com.vi.tenantservice.api.model.CalendarPolicies calendar,
+      com.vi.tenantservice.api.model.CaseSharingPolicies caseSharing) {
     if (dto != null) {
       dto.setInternalGroupChat(internalGroupChat);
       dto.setCalendar(calendar);
+      dto.setCaseSharing(caseSharing);
       Map<String, BooleanPermissionPolicy> policies =
           resolvedPolicies.entrySet().stream()
               .collect(

@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.AccountInactivitySettings;
+import com.vi.tenantservice.api.model.CaseSharingPolicies;
 import com.vi.tenantservice.api.model.ChatRecoveryMode;
 import com.vi.tenantservice.api.model.ChatRecoverySettings;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
@@ -21,6 +22,7 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.policy.CalendarPolicyRules;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
+import com.vi.tenantservice.api.policy.CaseSharingPolicyRules;
 import com.vi.tenantservice.api.policy.InternalGroupChatPolicyRules;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
 import com.vi.tenantservice.api.policy.LenientPolicyValueMapDeserializer;
@@ -99,6 +101,10 @@ public class TenantAdminControlsService {
       }
       if (controlsSettings.getCalendar() == null) {
         controlsSettings.setCalendar(existingSettings.getCalendar());
+      }
+      if (controlsSettings.getCaseSharing() == null) {
+        controlsSettings.setCaseSharing(
+            caseSharingFromLegacyWrite(existingSettings, controlsSettings.getPermissionPolicies()));
       }
       // the DTO never carries the translation API keys - carry the stored values over verbatim,
       // still encrypted, so this path never decrypts and re-encrypts them for nothing
@@ -493,5 +499,39 @@ public class TenantAdminControlsService {
     settings.setInternalGroupChat(
         InternalGroupChatPolicyRules.normalize(settings.getInternalGroupChat()));
     settings.setCalendar(CalendarPolicyRules.normalize(settings.getCalendar()));
+    // #374: the case sharing mode is the source; caseHandoverEnabled is derived from it
+    var caseSharing =
+        CaseSharingPolicyRules.platformChoice(
+            settings.getCaseSharing(),
+            settings.getPermissionPolicies().get(CaseSharingPolicyRules.CASE_HANDOVER_KEY));
+    settings.setCaseSharing(CaseSharingPolicyRules.toApi(caseSharing));
+    var policies = new java.util.LinkedHashMap<>(settings.getPermissionPolicies());
+    policies.put(
+        CaseSharingPolicyRules.CASE_HANDOVER_KEY,
+        CaseSharingPolicyRules.derivedCaseHandover(caseSharing));
+    settings.setPermissionPolicies(policies);
+  }
+
+  /**
+   * A write without {@code caseSharing} keeps the stored mode, unless it changes {@code
+   * caseHandoverEnabled} (an Admin build before #374): then that change becomes the mode.
+   */
+  private static CaseSharingPolicies caseSharingFromLegacyWrite(
+      TenantAdminControlsSettings existing,
+      java.util.Map<String, com.vi.tenantservice.api.policy.PolicyValue<Boolean>> requested) {
+    var existingPolicies =
+        existing.getPermissionPolicies() == null
+            ? java.util.Map.<String, com.vi.tenantservice.api.policy.PolicyValue<Boolean>>of()
+            : existing.getPermissionPolicies();
+    var stored =
+        CaseSharingPolicyRules.platformChoice(
+            existing.getCaseSharing(),
+            existingPolicies.get(CaseSharingPolicyRules.CASE_HANDOVER_KEY));
+    var written =
+        requested == null ? null : requested.get(CaseSharingPolicyRules.CASE_HANDOVER_KEY);
+    if (written == null || written.equals(CaseSharingPolicyRules.derivedCaseHandover(stored))) {
+      return existing.getCaseSharing();
+    }
+    return CaseSharingPolicyRules.toApi(CaseSharingPolicyRules.fromLegacy(written));
   }
 }

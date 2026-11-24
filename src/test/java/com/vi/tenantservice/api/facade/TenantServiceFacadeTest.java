@@ -1281,6 +1281,13 @@ class TenantServiceFacadeTest {
                 new com.vi.tenantservice.api.model.CalendarPolicies(),
                 2L,
                 new com.vi.tenantservice.api.model.CalendarPolicies()));
+    when(tenantPermissionPolicyService.getResolvedCaseSharingPolicies(Set.of(1L, 2L)))
+        .thenReturn(
+            Map.of(
+                1L,
+                new com.vi.tenantservice.api.model.CaseSharingPolicies(),
+                2L,
+                new com.vi.tenantservice.api.model.CaseSharingPolicies()));
 
     var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
 
@@ -1309,6 +1316,13 @@ class TenantServiceFacadeTest {
     // the calendar policy of tenant 2 could not be read
     when(tenantPermissionPolicyService.getResolvedCalendarPolicies(Set.of(1L, 2L)))
         .thenReturn(Map.of(1L, new com.vi.tenantservice.api.model.CalendarPolicies()));
+    when(tenantPermissionPolicyService.getResolvedCaseSharingPolicies(Set.of(1L, 2L)))
+        .thenReturn(
+            Map.of(
+                1L,
+                new com.vi.tenantservice.api.model.CaseSharingPolicies(),
+                2L,
+                new com.vi.tenantservice.api.model.CaseSharingPolicies()));
 
     var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
 

@@ -88,6 +88,9 @@ public class TenantAdminControlsSettings {
   /** Platform preset for the calendar policies (ADR-032, #365): visibility scope, usernames. */
   CalendarPolicies calendar;
 
+  /** Platform preset for the case sharing mode (ORISO-TenantService#374). */
+  CaseSharingPolicies caseSharing;
+
   /**
    * Platform-global machine-translation provider API keys (provider id -> raw key), e.g.
    * "openrouter"/"mistral". Stored in the same tenant_admin_controls JSON blob as the other
