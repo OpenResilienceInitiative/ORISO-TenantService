@@ -275,8 +275,15 @@ public class TenantPermissionPolicyService {
     overrides.keySet().forEach(this::assertKnownFeature);
     CaseHandoverPolicyRules.validate(caseHandoverOverrides);
     TenantAdminControls platform = platformControls.getControls();
+    // caseHandoverEnabled follows the mode: with an explicit caseSharing a stale legacy value
+    // must not be checked against the platform rule on its own
+    Map<String, PolicyValue<Boolean>> booleanOverrides = overrides;
+    if (caseSharingOverrides != null) {
+      booleanOverrides = new LinkedHashMap<>(overrides);
+      booleanOverrides.remove(CaseSharingPolicyRules.CASE_HANDOVER_KEY);
+    }
     Map<String, PolicyValue<Boolean>> writableOverrides =
-        sanitizeBooleanOverrides(platformPolicies(platform), overrides);
+        sanitizeBooleanOverrides(platformPolicies(platform), booleanOverrides);
     CaseHandoverPolicies parentCaseHandover = platform.getCaseHandoverPolicies();
     if (parentCaseHandover == null) {
       parentCaseHandover = CaseHandoverPolicyDefaults.create();

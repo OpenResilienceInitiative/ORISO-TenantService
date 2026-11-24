@@ -1285,14 +1285,64 @@ class TenantServiceFacadeTest {
         .thenReturn(
             Map.of(
                 1L,
-                new com.vi.tenantservice.api.model.CaseSharingPolicies(),
+                caseSharingPolicies(com.vi.tenantservice.api.model.CaseSharingMode.CASE_HANDOVER),
                 2L,
-                new com.vi.tenantservice.api.model.CaseSharingPolicies()));
+                caseSharingPolicies(
+                    com.vi.tenantservice.api.model.CaseSharingMode.TEAM_COUNSELLING)));
 
     var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
 
     assertThat(result).containsExactly(firstDto, secondDto);
+    assertThat(result.get(0).getCaseSharing().getMode().getValue())
+        .isEqualTo(com.vi.tenantservice.api.model.CaseSharingMode.CASE_HANDOVER);
+    assertThat(result.get(1).getCaseSharing().getMode().getValue())
+        .isEqualTo(com.vi.tenantservice.api.model.CaseSharingMode.TEAM_COUNSELLING);
     verify(tenantAdminControlsService, times(1)).getControls();
+  }
+
+  @Test
+  void findRestrictedTenantsByIds_Should_omitTenant_When_itsCaseSharingPolicyIsUnreadable() {
+    var firstTenant = mock(TenantRestrictedData.class);
+    var secondTenant = mock(TenantRestrictedData.class);
+    var firstDto = new RestrictedTenantDTO().id(1L).settings(new Settings());
+    var secondDto = new RestrictedTenantDTO().id(2L).settings(new Settings());
+    when(tenantService.findRestrictedTenantDataByIds(Set.of(1L, 2L)))
+        .thenReturn(List.of(firstTenant, secondTenant));
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    when(converter.toRestrictedTenantDTO(firstTenant, DE)).thenReturn(firstDto);
+    when(converter.toRestrictedTenantDTO(secondTenant, DE)).thenReturn(secondDto);
+    when(tenantAdminControlsService.getControls()).thenReturn(new TenantAdminControls());
+    when(tenantPermissionPolicyService.getResolvedPolicies(Set.of(1L, 2L)))
+        .thenReturn(Map.of(1L, Map.of(), 2L, Map.of()));
+    when(tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(Set.of(1L, 2L)))
+        .thenReturn(
+            Map.of(1L, new InternalGroupChatPolicies(), 2L, new InternalGroupChatPolicies()));
+    when(tenantPermissionPolicyService.getResolvedCalendarPolicies(Set.of(1L, 2L)))
+        .thenReturn(
+            Map.of(
+                1L,
+                new com.vi.tenantservice.api.model.CalendarPolicies(),
+                2L,
+                new com.vi.tenantservice.api.model.CalendarPolicies()));
+    // the case sharing policy of tenant 2 could not be read
+    when(tenantPermissionPolicyService.getResolvedCaseSharingPolicies(Set.of(1L, 2L)))
+        .thenReturn(
+            Map.of(
+                1L,
+                caseSharingPolicies(com.vi.tenantservice.api.model.CaseSharingMode.CASE_HANDOVER)));
+
+    var result = tenantServiceFacade.findRestrictedTenantsByIds(Set.of(1L, 2L));
+
+    assertThat(result).containsExactly(firstDto);
+  }
+
+  private static com.vi.tenantservice.api.model.CaseSharingPolicies caseSharingPolicies(
+      com.vi.tenantservice.api.model.CaseSharingMode mode) {
+    return new com.vi.tenantservice.api.model.CaseSharingPolicies()
+        .mode(
+            new com.vi.tenantservice.api.model.CaseSharingModePermissionPolicy()
+                .value(mode)
+                .mode(com.vi.tenantservice.api.model.PermissionPolicyMode.SUGGESTED));
   }
 
   @Test
@@ -1846,5 +1896,43 @@ class TenantServiceFacadeTest {
     assertThat(result.getPermissionPolicies().get(key).getValue()).isEqualTo(selectedAllowed);
     assertThat(result.getPermissionPolicies().get("featureVideoCallsEnabled").getValue()).isTrue();
     assertThat(result.getSettings().getFeatureVideoCallsEnabled()).isTrue();
+  }
+
+  @Test
+  void singleDomainCaseHandoverFollowsTheSelectedTenantsCaseSharingMode() {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    when(translationService.getCurrentLanguageContext()).thenReturn(DE);
+    givenSingleDomainWithMainTenant(SINGLE_DOMAIN_SUBDOMAIN_NAME);
+    when(converter.toRestrictedTenantDTO(any(TenantRestrictedData.class), any()))
+        .thenReturn(new RestrictedTenantDTO().id(1L).theming(new Theming()));
+    when(tenantResolverService.tryResolve()).thenReturn(Optional.of(2L));
+    var main = getTenantWithPrivacy("{\"de\":\"main\"}");
+    var actual = getTenantWithPrivacy("{\"de\":\"selected\"}");
+    when(tenantService.findRestrictedTenantDataBySubdomain(SINGLE_DOMAIN_SUBDOMAIN_NAME))
+        .thenReturn(main);
+    when(tenantService.findRestrictedTenantDataById(2L)).thenReturn(actual);
+    when(singleDomainTenantOverrideService.overridePrivacyAndCertainSettings(
+            main.get(), actual.get()))
+        .thenReturn(new RestrictedTenantDTO().id(1L).settings(new Settings()));
+    when(tenantPermissionPolicyService.getResolvedPolicies(1L))
+        .thenReturn(
+            java.util.Map.of(
+                "caseHandoverEnabled",
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    true, com.vi.tenantservice.api.policy.PermissionPolicyMode.SUGGESTED, true)));
+    when(tenantPermissionPolicyService.getResolvedPolicies(2L))
+        .thenReturn(
+            java.util.Map.of(
+                "caseHandoverEnabled",
+                new com.vi.tenantservice.api.policy.ResolvedPolicyValue<>(
+                    false, com.vi.tenantservice.api.policy.PermissionPolicyMode.SUGGESTED, false)));
+    when(tenantPermissionPolicyService.getResolvedCaseSharingPolicies(2L))
+        .thenReturn(caseSharingPolicies(com.vi.tenantservice.api.model.CaseSharingMode.NONE));
+
+    var result = tenantServiceFacade.getRestrictedTenantDataDeterminingTenantContext();
+
+    assertThat(result.getCaseSharing().getMode().getValue())
+        .isEqualTo(com.vi.tenantservice.api.model.CaseSharingMode.NONE);
+    assertThat(result.getPermissionPolicies().get("caseHandoverEnabled").getValue()).isFalse();
   }
 }

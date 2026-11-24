@@ -1291,7 +1291,9 @@ public class TenantServiceFacade {
             com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_AGENCY_COUNSELLING,
             com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_LIVE_CHAT,
             com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_SELF_HELP,
-            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL_COLLECTION_SELF_HELP)) {
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL_COLLECTION_SELF_HELP,
+            // derived from the selected tenant's case sharing mode (#374)
+            com.vi.tenantservice.api.policy.PermissionFeature.CASE_HANDOVER)) {
       // Missing selected authority must never fall back to a permissive main-tenant value.
       var selectedPolicy = selected.get(feature.apiKey());
       if (selectedPolicy == null) combined.remove(feature.apiKey());

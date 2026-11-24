@@ -244,6 +244,28 @@ class CaseSharingPolicyTest {
     assertThat(captureSaved().getCaseSharingPolicies()).isNull();
   }
 
+  @Test
+  void save_shouldIgnoreAStaleCaseHandoverEntry_underAPlatformRequirement() {
+    when(platformControls.getControls())
+        .thenReturn(platform(CaseSharingMode.NONE, PermissionPolicyMode.ENFORCED));
+    when(repository.findByTenantId(TENANT)).thenReturn(Optional.empty());
+
+    service.saveOverrides(
+        TENANT,
+        Map.of(
+            CASE_HANDOVER,
+            new PolicyValue<>(
+                true, com.vi.tenantservice.api.policy.PermissionPolicyMode.SUGGESTED)),
+        null,
+        null,
+        null,
+        caseSharing(CaseSharingMode.NONE, PermissionPolicyMode.ENFORCED));
+
+    TenantPermissionPolicyEntity saved = captureSaved();
+    assertThat(saved.getCaseSharingPolicies()).isNull();
+    assertThat(saved.getPolicies()).doesNotContain(CASE_HANDOVER);
+  }
+
   private TenantPermissionPolicyEntity captureSaved() {
     var captor = ArgumentCaptor.forClass(TenantPermissionPolicyEntity.class);
     verify(repository).saveAndFlush(captor.capture());
