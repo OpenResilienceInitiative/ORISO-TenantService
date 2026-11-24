@@ -2455,6 +2455,11 @@ components:
           type: string
         updateDate:
           type: string
+        deleteDate:
+          type: string
+          description: >-
+            Set while the Träger is being deleted (ORISO-Admin#1525); absent otherwise. The admin
+            interface shows such a Träger as being deleted.
         licensing:
           $ref: '#/components/schemas/Licensing'
     RestrictedTenantDTO:

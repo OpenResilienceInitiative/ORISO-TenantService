@@ -96,7 +96,7 @@ public interface TenantRepository
               + "t.settings, "
               + "t.createDate, "
               + "t.updateDate, "
-              + "t.dataProtectionOfficer, t.active) "
+              + "t.dataProtectionOfficer, t.active, t.deleteDate) "
               + "FROM TenantEntity t WHERE t.id = :id")
   TenantDataView findTenantDataById(@Param("id") Long id);
 
@@ -137,7 +137,7 @@ public interface TenantRepository
               + "t.settings, "
               + "t.createDate, "
               + "t.updateDate, "
-              + "t.dataProtectionOfficer, t.active) "
+              + "t.dataProtectionOfficer, t.active, t.deleteDate) "
               + "FROM TenantEntity t")
   List<TenantDataView> findAllTenantData();
 

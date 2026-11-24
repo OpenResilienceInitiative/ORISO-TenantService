@@ -71,6 +71,30 @@ class TenantRepositoryTest {
         .isEqualTo(1);
   }
 
+  /** The tenant list reads the deletion date from the search projection (ORISO-Admin#1525). */
+  @org.junit.jupiter.api.Test
+  void searchCarriesTheDeleteDateOfATraegerInDeletion() {
+    var tenant = tenantRepository.findById(1L).orElseThrow();
+    tenant.setSubdomain("in-deletion");
+    var marked = java.time.LocalDateTime.of(2026, 11, 24, 9, 30);
+    tenant.setDeleteDate(marked);
+    tenantRepository.saveAndFlush(tenant);
+
+    var found =
+        tenantRepository
+            .findAllTenantDataExceptTechnicalByInfix(
+                "in-deletion", org.springframework.data.domain.PageRequest.of(0, 1))
+            .getContent();
+
+    org.assertj.core.api.Assertions.assertThat(found).hasSize(1);
+    org.assertj.core.api.Assertions.assertThat(found.get(0).getDeleteDate()).isEqualTo(marked);
+    org.assertj.core.api.Assertions.assertThat(
+            tenantRepository.findTenantDataById(1L).getDeleteDate())
+        .isEqualTo(marked);
+    org.assertj.core.api.Assertions.assertThat(tenantRepository.findIdsMarkedForDeletion())
+        .containsExactly(1L);
+  }
+
   private static final long EXISTING_ID = 1L;
 
   @Autowired private TenantRepository tenantRepository;

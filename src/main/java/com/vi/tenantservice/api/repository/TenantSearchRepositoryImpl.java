@@ -58,7 +58,9 @@ public class TenantSearchRepositoryImpl implements TenantSearchRepository {
           "createDate",
           "updateDate",
           "dataProtectionOfficer",
-          "active");
+          "active",
+          // ORISO-Admin#1525: the list shows a Träger in deletion; order matches TenantDataView.
+          "deleteDate");
 
   @Override
   public Page<TenantDataView> searchTenantData(
