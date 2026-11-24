@@ -495,7 +495,9 @@ paths:
         accepted and discarded, a changed value or mode is refused with 400 and nothing is stored.
         The same holds for `calendar` (ADR-032): omitting it keeps the stored override, and an
         ENFORCED platform value of `calendar.visibilityScope` or `calendar.showAskerUsernames`
-        cannot be changed.
+        cannot be changed. The same holds for `caseSharing.mode` (ORISO-TenantService#374); a
+        request that writes `caseSharing` ignores a `caseHandoverEnabled` entry in `policies`,
+        which is derived from the mode.
       operationId: updateTenantPermissionPolicies
       requestBody:
         required: true
@@ -511,7 +513,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TenantPermissionPolicies'
         400:
-          description: BAD REQUEST - the body tries to change an ENFORCED internalGroupChat.recipientScope, calendar.visibilityScope or calendar.showAskerUsernames
+          description: BAD REQUEST - the body tries to change an ENFORCED internalGroupChat.recipientScope, calendar.visibilityScope, calendar.showAskerUsernames or caseSharing.mode
         403:
           description: FORBIDDEN - tenant admins can update only their own tenant
   /tenantadmin/dpia:
@@ -1908,13 +1910,15 @@ components:
       properties:
         sourceLang:
           type: string
-          maxLength: 10
+          description: 'Language code such as "de", "en" or the informal German variant
+            "de@informal".'
+          maxLength: 20
           example: "de"
         targetLangs:
           type: array
           items:
             type: string
-            maxLength: 10
+            maxLength: 20
           minItems: 1
           example: [ "en", "fr" ]
         provider:
@@ -2510,6 +2514,11 @@ components:
             - $ref: '#/components/schemas/CalendarPolicies'
           readOnly: true
           description: Resolved calendar policies (visibility scope, asker usernames) for downstream services.
+        caseSharing:
+          allOf:
+            - $ref: '#/components/schemas/CaseSharingPolicies'
+          readOnly: true
+          description: Resolved case sharing policy (ORISO-TenantService#374) of the Traeger for downstream services.
     Licensing:
       type: object
       required:
@@ -3257,6 +3266,8 @@ components:
           $ref: '#/components/schemas/InternalGroupChatPolicies'
         calendar:
           $ref: '#/components/schemas/CalendarPolicies'
+        caseSharing:
+          $ref: '#/components/schemas/CaseSharingPolicies'
 
     PermissionPolicyMode:
       type: string
@@ -3413,6 +3424,43 @@ components:
           $ref: '#/components/schemas/CalendarVisibilityScopePolicy'
         showAskerUsernames:
           $ref: '#/components/schemas/BooleanPermissionPolicy'
+
+    CaseSharingMode:
+      type: string
+      description: >-
+        How the counsellors of a counselling centre share a Mailberatung case (ORISO-TenantService#374).
+        CASE_HANDOVER = one counsellor owns the case, it can be handed over or briefly shared;
+        TEAM_COUNSELLING = every counsellor of the centre sees every case (team agency);
+        NONE = the case stays with the counsellor who accepted it. Exactly one applies.
+      enum:
+        - CASE_HANDOVER
+        - TEAM_COUNSELLING
+        - NONE
+
+    CaseSharingModePermissionPolicy:
+      type: object
+      required: [value, mode]
+      properties:
+        value:
+          $ref: '#/components/schemas/CaseSharingMode'
+        mode:
+          $ref: '#/components/schemas/PermissionPolicyMode'
+        inherited:
+          type: boolean
+          readOnly: true
+          description: True when the resolved tenant value comes from the platform policy.
+
+    CaseSharingPolicies:
+      type: object
+      description: >-
+        Functionality Access policy "Faelle von Ratsuchenden teilen" (ORISO-TenantService#374).
+        Unset resolves to CASE_HANDOVER (SUGGESTED), or to the stored legacy `caseHandoverEnabled`
+        of that level (true = CASE_HANDOVER, false = NONE). While this release serves it,
+        `caseHandoverEnabled` in the boolean policies is derived: true exactly when mode is
+        CASE_HANDOVER, with the same requirement mode.
+      properties:
+        mode:
+          $ref: '#/components/schemas/CaseSharingModePermissionPolicy'
 
     CaseHandoverReasonPolicy:
       type: object
@@ -3739,6 +3787,8 @@ components:
           $ref: '#/components/schemas/InternalGroupChatPolicies'
         calendar:
           $ref: '#/components/schemas/CalendarPolicies'
+        caseSharing:
+          $ref: '#/components/schemas/CaseSharingPolicies'
 
     TenantAdminAllowedPermissionToggles:
       type: object

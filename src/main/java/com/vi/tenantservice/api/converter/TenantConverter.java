@@ -693,6 +693,7 @@ public class TenantConverter {
         .caseHandoverPolicies(tenantAdminControls.getCaseHandoverPolicies())
         .internalGroupChat(tenantAdminControls.getInternalGroupChat())
         .calendar(tenantAdminControls.getCalendar())
+        .caseSharing(tenantAdminControls.getCaseSharing())
         .chatRecoverySettings(tenantAdminControls.getChatRecoverySettings())
         .accountInactivitySettings(tenantAdminControls.getAccountInactivitySettings())
         .build();
@@ -803,6 +804,7 @@ public class TenantConverter {
         .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies())
         .internalGroupChat(tenantAdminControlsSettings.getInternalGroupChat())
         .calendar(tenantAdminControlsSettings.getCalendar())
+        .caseSharing(tenantAdminControlsSettings.getCaseSharing())
         .chatRecoverySettings(tenantAdminControlsSettings.getChatRecoverySettings())
         .accountInactivitySettings(tenantAdminControlsSettings.getAccountInactivitySettings());
   }
