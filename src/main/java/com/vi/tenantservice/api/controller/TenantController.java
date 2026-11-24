@@ -50,6 +50,7 @@ import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeyUpdateDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeysDTO;
 import com.vi.tenantservice.api.model.TranslationErrorDTO;
+import com.vi.tenantservice.api.model.TranslationKeyTestResultDTO;
 import com.vi.tenantservice.api.model.TranslationRequestDTO;
 import com.vi.tenantservice.api.model.TranslationResponseDTO;
 import com.vi.tenantservice.api.service.BrandingAssetDecoder.DecodedAsset;
@@ -449,6 +450,16 @@ public class TenantController implements TenantApi, TenantadminApi {
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "Invalid group-chat author content");
     }
+  }
+
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<TranslationKeyTestResultDTO> testTranslationApiKey(String provider) {
+    log.info(
+        "Testing translation API key for provider {} by user {}",
+        provider,
+        authorisationService.getUsername());
+    return new ResponseEntity<>(translationFacade.testApiKey(provider), HttpStatus.OK);
   }
 
   @ExceptionHandler(TranslationException.class)

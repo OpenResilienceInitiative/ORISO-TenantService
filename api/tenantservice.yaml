@@ -615,6 +615,53 @@ paths:
           description: FORBIDDEN - only super admin can update translation provider keys
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/translation/keys/{provider}/test:
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Tests the stored machine-translation API key of a provider with one short live call [Authorization: Super admin]'
+      description: 'Sends one short German sentence to the provider with the stored key and returns
+        the English reply, the model and the round-trip time. Nothing is stored. Provider errors use
+        the same typed TranslationErrorDTO as /tenantadmin/translate: 409 TRANSLATION_NOT_CONFIGURED
+        when no key or base URL is set, 502 TRANSLATION_KEY_INVALID / TRANSLATION_NO_CREDIT /
+        TRANSLATION_RATE_LIMITED / TRANSLATION_PROVIDER_UNAVAILABLE.'
+      operationId: testTranslationApiKey
+      parameters:
+        - name: provider
+          in: path
+          description: Translation provider id, one of "openrouter" or "mistral"
+            (unknown providers are rejected with 400)
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: The provider answered with the stored key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationKeyTestResultDTO'
+        400:
+          description: BAD REQUEST - unknown provider
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - only super admin can test translation provider keys
+        409:
+          description: CONFLICT - no API key or base URL configured for this provider (TRANSLATION_NOT_CONFIGURED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationErrorDTO'
+        502:
+          description: BAD GATEWAY - the provider refused or failed (TRANSLATION_KEY_INVALID,
+            TRANSLATION_NO_CREDIT, TRANSLATION_RATE_LIMITED, TRANSLATION_PROVIDER_UNAVAILABLE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationErrorDTO'
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/translate:
     post:
       tags:
@@ -1945,6 +1992,26 @@ components:
         model:
           type: string
           example: "openai/gpt-4o-mini"
+    TranslationKeyTestResultDTO:
+      type: object
+      description: 'Result of a live key test: what was sent, what came back, from which model.'
+      properties:
+        provider:
+          type: string
+          example: "mistral"
+        model:
+          type: string
+          example: "mistral-small-latest"
+        sourceText:
+          type: string
+          example: "Guten Tag! Dies ist ein kurzer Verbindungstest."
+        reply:
+          type: string
+          example: "Good day! This is a short connection test."
+        latencyMs:
+          type: integer
+          format: int64
+          example: 812
     TranslationErrorDTO:
       type: object
       description: 'Typed machine-translation error. errorCode is one of
