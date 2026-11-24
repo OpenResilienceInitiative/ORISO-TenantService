@@ -82,6 +82,16 @@ public class TenantSettings {
   Boolean featureDirectInviteChatEnabled;
   Boolean featureDirectInviteAudioEnabled;
   Boolean featureDirectInviteVideoEnabled;
+  // UserService#1662: guest account modes a counsellor may offer per conversation type, opt-out.
+  Boolean featureGuestAccountTemporaryChatEnabled;
+  Boolean featureGuestAccountGuestChoosesChatEnabled;
+  Boolean featureGuestAccountPermanentChatEnabled;
+  Boolean featureGuestAccountTemporaryAudioEnabled;
+  Boolean featureGuestAccountGuestChoosesAudioEnabled;
+  Boolean featureGuestAccountPermanentAudioEnabled;
+  Boolean featureGuestAccountTemporaryVideoEnabled;
+  Boolean featureGuestAccountGuestChoosesVideoEnabled;
+  Boolean featureGuestAccountPermanentVideoEnabled;
 
   Boolean featureCallsEnabled;
   Boolean featureSupervisionEnabled;
@@ -188,6 +198,15 @@ public class TenantSettings {
               Map.entry("featureDirectInviteChatEnabled", true),
               Map.entry("featureDirectInviteAudioEnabled", true),
               Map.entry("featureDirectInviteVideoEnabled", true),
+              Map.entry("featureGuestAccountTemporaryChatEnabled", true),
+              Map.entry("featureGuestAccountGuestChoosesChatEnabled", true),
+              Map.entry("featureGuestAccountPermanentChatEnabled", true),
+              Map.entry("featureGuestAccountTemporaryAudioEnabled", true),
+              Map.entry("featureGuestAccountGuestChoosesAudioEnabled", true),
+              Map.entry("featureGuestAccountPermanentAudioEnabled", true),
+              Map.entry("featureGuestAccountTemporaryVideoEnabled", true),
+              Map.entry("featureGuestAccountGuestChoosesVideoEnabled", true),
+              Map.entry("featureGuestAccountPermanentVideoEnabled", true),
               Map.entry("featureCallsEnabled", true),
               Map.entry("featureSupervisionEnabled", true),
               Map.entry("featureSupervisionAnonymousChatsEnabled", true),
@@ -440,6 +459,42 @@ public class TenantSettings {
     if (featureDirectInviteVideoEnabled == null) {
       featureDirectInviteVideoEnabled =
           BOOLEAN_FIELD_DEFAULTS.get("featureDirectInviteVideoEnabled");
+    }
+    if (featureGuestAccountTemporaryChatEnabled == null) {
+      featureGuestAccountTemporaryChatEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureGuestAccountTemporaryChatEnabled");
+    }
+    if (featureGuestAccountGuestChoosesChatEnabled == null) {
+      featureGuestAccountGuestChoosesChatEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureGuestAccountGuestChoosesChatEnabled");
+    }
+    if (featureGuestAccountPermanentChatEnabled == null) {
+      featureGuestAccountPermanentChatEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureGuestAccountPermanentChatEnabled");
+    }
+    if (featureGuestAccountTemporaryAudioEnabled == null) {
+      featureGuestAccountTemporaryAudioEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureGuestAccountTemporaryAudioEnabled");
+    }
+    if (featureGuestAccountGuestChoosesAudioEnabled == null) {
+      featureGuestAccountGuestChoosesAudioEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureGuestAccountGuestChoosesAudioEnabled");
+    }
+    if (featureGuestAccountPermanentAudioEnabled == null) {
+      featureGuestAccountPermanentAudioEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureGuestAccountPermanentAudioEnabled");
+    }
+    if (featureGuestAccountTemporaryVideoEnabled == null) {
+      featureGuestAccountTemporaryVideoEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureGuestAccountTemporaryVideoEnabled");
+    }
+    if (featureGuestAccountGuestChoosesVideoEnabled == null) {
+      featureGuestAccountGuestChoosesVideoEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureGuestAccountGuestChoosesVideoEnabled");
+    }
+    if (featureGuestAccountPermanentVideoEnabled == null) {
+      featureGuestAccountPermanentVideoEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureGuestAccountPermanentVideoEnabled");
     }
     applyMediaDefaults();
     if (isVideoCallAllowed == null) {

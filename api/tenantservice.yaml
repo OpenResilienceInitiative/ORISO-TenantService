@@ -488,6 +488,9 @@ paths:
         Omitting `internalGroupChat` keeps the stored override. A platform requirement (ENFORCED)
         of `internalGroupChat.recipientScope` cannot be changed: an unchanged echo of it is
         accepted and discarded, a changed value or mode is refused with 400 and nothing is stored.
+        The same holds for `calendar` (ADR-032): omitting it keeps the stored override, and an
+        ENFORCED platform value of `calendar.visibilityScope` or `calendar.showAskerUsernames`
+        cannot be changed.
       operationId: updateTenantPermissionPolicies
       requestBody:
         required: true
@@ -503,7 +506,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TenantPermissionPolicies'
         400:
-          description: BAD REQUEST - the body tries to change an ENFORCED internalGroupChat.recipientScope
+          description: BAD REQUEST - the body tries to change an ENFORCED internalGroupChat.recipientScope, calendar.visibilityScope or calendar.showAskerUsernames
         403:
           description: FORBIDDEN - tenant admins can update only their own tenant
   /tenantadmin/dpia:
@@ -2370,6 +2373,11 @@ components:
             - $ref: '#/components/schemas/InternalGroupChatPolicies'
           readOnly: true
           description: Resolved internal group chat policies (recipient scope) for downstream services.
+        calendar:
+          allOf:
+            - $ref: '#/components/schemas/CalendarPolicies'
+          readOnly: true
+          description: Resolved calendar policies (visibility scope, asker usernames) for downstream services.
     Licensing:
       type: object
       required:
@@ -2651,6 +2659,33 @@ components:
         featureDirectInviteVideoEnabled:
           type: boolean
           description: "Effective \"Direkteinladung erlauben\" permission for the video call type (TS#331, ADR-029 §6): may counsellors create and may guests redeem direct links. Inherited platform -> Träger -> Beratungsstelle. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountTemporaryChatEnabled:
+          type: boolean
+          description: "Guest account mode TEMPORARY for chat direct and share links (UserService#1662): may a counsellor offer it (delete the guest account after the session)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountGuestChoosesChatEnabled:
+          type: boolean
+          description: "Guest account mode GUEST_CHOOSES for chat direct and share links (UserService#1662): may a counsellor offer it (the guest decides after the session whether to keep the account)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountPermanentChatEnabled:
+          type: boolean
+          description: "Guest account mode PERMANENT for chat direct and share links (UserService#1662): may a counsellor offer it (the guest account stays)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountTemporaryAudioEnabled:
+          type: boolean
+          description: "Guest account mode TEMPORARY for audio call direct and share links (UserService#1662): may a counsellor offer it (delete the guest account after the session)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountGuestChoosesAudioEnabled:
+          type: boolean
+          description: "Guest account mode GUEST_CHOOSES for audio call direct and share links (UserService#1662): may a counsellor offer it (the guest decides after the session whether to keep the account)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountPermanentAudioEnabled:
+          type: boolean
+          description: "Guest account mode PERMANENT for audio call direct and share links (UserService#1662): may a counsellor offer it (the guest account stays)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountTemporaryVideoEnabled:
+          type: boolean
+          description: "Guest account mode TEMPORARY for video call direct and share links (UserService#1662): may a counsellor offer it (delete the guest account after the session)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountGuestChoosesVideoEnabled:
+          type: boolean
+          description: "Guest account mode GUEST_CHOOSES for video call direct and share links (UserService#1662): may a counsellor offer it (the guest decides after the session whether to keep the account)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
+        featureGuestAccountPermanentVideoEnabled:
+          type: boolean
+          description: "Guest account mode PERMANENT for video call direct and share links (UserService#1662): may a counsellor offer it (the guest account stays)? Inherited platform -> Träger. Opt-out: reads true when never stored. Omitted on update = keep the stored value."
         featureCallsEnabled:
           type: boolean
           example: "true"
@@ -3055,6 +3090,8 @@ components:
           $ref: '#/components/schemas/CaseHandoverPolicies'
         internalGroupChat:
           $ref: '#/components/schemas/InternalGroupChatPolicies'
+        calendar:
+          $ref: '#/components/schemas/CalendarPolicies'
 
     PermissionPolicyMode:
       type: string
@@ -3174,6 +3211,44 @@ components:
         recipientScope:
           $ref: '#/components/schemas/RecipientScopePermissionPolicy'
 
+    CalendarVisibilityScope:
+      type: string
+      description: >-
+        Whose calendars a counsellor may see (ADR-032). AGENCY = colleagues of the same counselling
+        centre only, TENANT = colleagues of the same Traeger, PLATFORM = every counsellor of the
+        platform. Unset means AGENCY (the most restrictive).
+      enum:
+        - AGENCY
+        - TENANT
+        - PLATFORM
+
+    CalendarVisibilityScopePolicy:
+      type: object
+      required: [value, mode]
+      properties:
+        value:
+          $ref: '#/components/schemas/CalendarVisibilityScope'
+        mode:
+          $ref: '#/components/schemas/PermissionPolicyMode'
+        inherited:
+          type: boolean
+          readOnly: true
+          description: True when the resolved tenant value comes from the platform policy.
+
+    CalendarPolicies:
+      type: object
+      description: >-
+        Functionality Access policies for the counsellor calendar (ADR-032, ORISO-TenantService#365).
+        visibilityScope = how far a counsellor sees colleagues' calendars (unset = AGENCY);
+        showAskerUsernames = whether colleagues see the advice seeker's username in those
+        calendars (unset = false). ENFORCED = requirement the Traeger admin cannot change,
+        SUGGESTED = recommendation the Traeger admin may override.
+      properties:
+        visibilityScope:
+          $ref: '#/components/schemas/CalendarVisibilityScopePolicy'
+        showAskerUsernames:
+          $ref: '#/components/schemas/BooleanPermissionPolicy'
+
     CaseHandoverReasonPolicy:
       type: object
       required:
@@ -3289,6 +3364,15 @@ components:
         - featureDirectInviteChatEnabled
         - featureDirectInviteAudioEnabled
         - featureDirectInviteVideoEnabled
+        - featureGuestAccountTemporaryChatEnabled
+        - featureGuestAccountGuestChoosesChatEnabled
+        - featureGuestAccountPermanentChatEnabled
+        - featureGuestAccountTemporaryAudioEnabled
+        - featureGuestAccountGuestChoosesAudioEnabled
+        - featureGuestAccountPermanentAudioEnabled
+        - featureGuestAccountTemporaryVideoEnabled
+        - featureGuestAccountGuestChoosesVideoEnabled
+        - featureGuestAccountPermanentVideoEnabled
         - caseHandoverEnabled
 
     TenantLegalDraftDTO:
@@ -3479,6 +3563,8 @@ components:
           $ref: '#/components/schemas/CaseHandoverPolicies'
         internalGroupChat:
           $ref: '#/components/schemas/InternalGroupChatPolicies'
+        calendar:
+          $ref: '#/components/schemas/CalendarPolicies'
 
     TenantAdminAllowedPermissionToggles:
       type: object

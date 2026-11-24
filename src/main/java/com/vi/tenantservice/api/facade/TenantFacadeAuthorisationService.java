@@ -104,6 +104,21 @@ public class TenantFacadeAuthorisationService {
     return !authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT);
   }
 
+  /**
+   * Creating a Träger is the platform administrator's act (TenantService#352). Every Träger admin
+   * holds {@code tenant-admin} and with it CREATE_TENANT, so the authority alone does not decide:
+   * its holder must also come from the platform tenant 0. Callers without CREATE_TENANT (the
+   * technical identity, the config-wizard task) are left to the reservation check in {@link
+   * #mayOnlyCreateReservedTenants()}. The technical identity that still carries {@code
+   * tenant-admin} at tenant 0 keeps its legacy full create right (ORISO-Helm#367 transition).
+   */
+  void assertMayCreateTenants() {
+    if (authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT)
+        && !isSuperAdmin()) {
+      throw new AccessDeniedException("Only the platform administrator may create a Träger");
+    }
+  }
+
   private boolean hasSingleTenantAccessAuthority() {
     return !mayAccessEveryTenant();
   }
@@ -125,6 +140,29 @@ public class TenantFacadeAuthorisationService {
   public boolean mayListEveryTenant() {
     return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
         && isPlatformAdministrator();
+  }
+
+  /**
+   * Träger names for the platform statistics panel (ORISO-UserService#1666): the platform
+   * administrator, or the Statistik-Leser whose token names the platform tenant 0. A reader token
+   * for any other tenant, and every Träger, agency or consultant admin, is refused.
+   */
+  public boolean mayReadStatisticsNames() {
+    if (isTechnicalUser()) {
+      return false;
+    }
+    return isPlatformAdministrator()
+        || (authorisationService.hasAuthority(Authority.AuthorityValue.READ_STATISTICS_NAMES)
+            && namesPlatformTenant());
+  }
+
+  private boolean namesPlatformTenant() {
+    try {
+      return authorisationService.findTenantIdInAccessToken().filter(id -> id == 0L).isPresent();
+    } catch (Exception e) {
+      log.debug("Could not determine tenant id from access token for statistics names", e);
+      return false;
+    }
   }
 
   void assertUserHasSufficientPermissionsToChangeAttributes(

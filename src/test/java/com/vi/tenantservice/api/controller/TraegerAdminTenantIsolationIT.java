@@ -2,6 +2,8 @@ package com.vi.tenantservice.api.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -17,11 +19,16 @@ import com.vi.tenantservice.TenantServiceApplication;
 import com.vi.tenantservice.api.authorisation.RoleAuthorizationAuthorityMapper;
 import com.vi.tenantservice.api.config.apiclient.ApplicationSettingsApiControllerFactory;
 import com.vi.tenantservice.api.config.apiclient.ConsultingTypeServiceApiControllerFactory;
+import com.vi.tenantservice.api.model.TenantIdReservationEntity;
+import com.vi.tenantservice.api.model.TenantIdReservationStatus;
+import com.vi.tenantservice.api.repository.TenantIdReservationRepository;
 import com.vi.tenantservice.api.repository.TenantRepository;
+import com.vi.tenantservice.api.service.TenantIdAllocationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
 import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.service.httpheader.SecurityHeaderSupplier;
+import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -53,9 +60,12 @@ class TraegerAdminTenantIsolationIT {
 
   private static final long OWN_TENANT = 1L;
   private static final long FOREIGN_TENANT = 2L;
+  private static final long RESERVED_ID = 500L;
 
   @Autowired private WebApplicationContext context;
   @Autowired private TenantRepository tenantRepository;
+  @Autowired private TenantIdReservationRepository reservationRepository;
+  @Autowired private TenantIdAllocationService tenantIdAllocationService;
   @Autowired private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
   @MockitoBean private ApplicationSettingsService applicationSettingsService;
@@ -359,6 +369,80 @@ class TraegerAdminTenantIsolationIT {
     mvc.perform(get("/tenant/public/id/" + OWN_TENANT))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.active").value(true));
+  }
+
+  /**
+   * TenantService#352: the Träger admin's tenant-admin role carries CREATE_TENANT, so until now the
+   * call got as far as the consulting-type step and was rolled back there. It must be refused
+   * before anything is written: no tenant row, no ID ledger row, no consulting-type call.
+   */
+  @Test
+  void traegerAdmin_Should_beRefusedBeforeAnyWrite_When_creatingATraeger() throws Exception {
+    long tenantsBefore = tenantRepository.count();
+    long ledgerRowsBefore = reservationRepository.count();
+
+    mvc.perform(
+            post("/tenantadmin")
+                .with(traegerAdminOf(OWN_TENANT))
+                .contentType(APPLICATION_JSON)
+                .content(newTraeger("refused-traeger").jsonify()))
+        .andExpect(status().isForbidden());
+
+    assertThat(tenantRepository.count()).isEqualTo(tenantsBefore);
+    assertThat(reservationRepository.count()).isEqualTo(ledgerRowsBefore);
+    mvc.perform(get("/tenant/public/refused-traeger")).andExpect(status().isNotFound());
+    verifyNoInteractions(consultingTypeService);
+  }
+
+  @Test
+  void traegerAdmin_Should_notConsumeAReservation_When_creatingATraegerWithItsToken()
+      throws Exception {
+    String token = tenantIdAllocationService.reserve(RESERVED_ID, "platform-admin").getToken();
+
+    mvc.perform(
+            post("/tenantadmin")
+                .with(traegerAdminOf(OWN_TENANT))
+                .contentType(APPLICATION_JSON)
+                .content(
+                    newTraeger("reserved-traeger")
+                        .withId(RESERVED_ID)
+                        .withTenantIdReservationToken(token)
+                        .jsonify()))
+        .andExpect(status().isForbidden());
+
+    assertThat(tenantRepository.findById(RESERVED_ID)).isEmpty();
+    assertThat(reservationRepository.findById(RESERVED_ID))
+        .get()
+        .extracting(TenantIdReservationEntity::getStatus)
+        .isEqualTo(TenantIdReservationStatus.RESERVED);
+    verifyNoInteractions(consultingTypeService);
+  }
+
+  @Test
+  void platformAdmin_Should_createATraegerWithItsDefaultConsultingType() throws Exception {
+    String body =
+        mvc.perform(
+                post("/tenantadmin")
+                    .with(platformAdmin())
+                    .contentType(APPLICATION_JSON)
+                    .content(newTraeger("platform-created").jsonify()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.subdomain").value("platform-created"))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    long createdId =
+        new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).get("id").asLong();
+    assertThat(tenantRepository.findById(createdId)).isPresent();
+    verify(consultingTypeService).createDefaultConsultingTypes(createdId);
+  }
+
+  private static MultilingualTenantTestDataBuilder newTraeger(String subdomain) {
+    return new MultilingualTenantTestDataBuilder()
+        .withName("Träger " + subdomain)
+        .withSubdomain(subdomain)
+        .withLicensing();
   }
 
   @Test

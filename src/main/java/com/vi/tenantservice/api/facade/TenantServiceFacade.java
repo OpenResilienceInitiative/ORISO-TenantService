@@ -15,6 +15,7 @@ import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
 import com.vi.tenantservice.api.exception.TenantBadRequestException;
+import com.vi.tenantservice.api.exception.TenantDeletionBlockedException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
@@ -42,6 +43,7 @@ import com.vi.tenantservice.api.model.TenantPermissionPolicies;
 import com.vi.tenantservice.api.model.TenantRestrictedData;
 import com.vi.tenantservice.api.model.TenantSettings;
 import com.vi.tenantservice.api.model.TenantSmtpMode;
+import com.vi.tenantservice.api.model.TenantStatisticsNameDTO;
 import com.vi.tenantservice.api.model.Theming;
 import com.vi.tenantservice.api.service.AssistantIdentityValidator;
 import com.vi.tenantservice.api.service.DeletionAuditReporter;
@@ -69,6 +71,7 @@ import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
+import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -250,11 +253,14 @@ public class TenantServiceFacade {
   }
 
   /**
-   * A caller without the full create right (the technical service identity) may only complete a
-   * public onboarding: the request must name an ID that is currently RESERVED and carry a token.
-   * Whether the token matches is decided atomically when the reservation is consumed.
+   * Runs before anything is written. A Träger admin is refused outright (TenantService#352), so
+   * there is no half-created tenant to roll back. A caller without the full create right (the
+   * technical service identity) may only complete a public onboarding: the request must name an ID
+   * that is currently RESERVED and carry a token. Whether the token matches is decided atomically
+   * when the reservation is consumed.
    */
   private void assertCallerMayCreateThisTenant(MultilingualTenantDTO tenantDTO) {
+    tenantFacadeAuthorisationService.assertMayCreateTenants();
     if (!tenantFacadeAuthorisationService.mayOnlyCreateReservedTenants()) {
       return;
     }
@@ -503,12 +509,45 @@ public class TenantServiceFacade {
             .findTenantById(id)
             .orElseThrow(() -> new TenantNotFoundException("Tenant with id " + id + " not found"));
 
+    assertNothingLeftInTenant(id);
+
     // App-level replacement for the DB cascade dropped in changeset 0030 (#179): the tenant's
     // DPA signature rows (incl. any outstanding sign links) go with the tenant.
     tenantDpaService.deleteSignaturesForTenant(id);
     tenantService.delete(tenant);
     // Reported after the commit and best effort: the log can never undo or fail the deletion.
     deletionAuditReporter.reportTenantExecuted(id);
+  }
+
+  /**
+   * Refuses to delete a Träger that still has agencies, accounts or open invitations
+   * (ORISO-UserService#1466). Deleting it anyway left them pointing at a Träger that no longer
+   * existed ("Unknown Tenant"), where the admin interface could not delete them any more. Fails
+   * closed: when UserService cannot say what is left, nothing is deleted.
+   */
+  private void assertNothingLeftInTenant(Long id) {
+    TenantDeletionBlockersDTO blockers;
+    try {
+      blockers = userAdminService.getTenantDeletionBlockers(id);
+    } catch (RestClientException e) {
+      log.error("Could not check what still belongs to tenant {}; not deleting it", id, e);
+      throw blockerCheckUnavailable(e);
+    }
+    // No answer is no proof that something is left: say the check failed, not 409 (#1466).
+    if (blockers == null || blockers.getDeletable() == null) {
+      log.error("UserService sent no deletion verdict for tenant {}; not deleting it", id);
+      throw blockerCheckUnavailable(null);
+    }
+    if (!blockers.getDeletable()) {
+      throw new TenantDeletionBlockedException(id, blockers);
+    }
+  }
+
+  private static ResponseStatusException blockerCheckUnavailable(Throwable cause) {
+    return new ResponseStatusException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Could not check whether the tenant still has agencies or accounts",
+        cause);
   }
 
   private boolean isAttemptToCreateFirstNonTechnicalTenant(Long tenantId) {
@@ -659,7 +698,7 @@ public class TenantServiceFacade {
     preserveStoredSmtpMode(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     validateSelectedOwnSmtp(updatedEntity, existingSettingsJson, sanitizedTenantDTO);
     preserveStoredGroupChatFormatFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
-    preserveStoredDirectInviteFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
+    preserveStoredOptOutFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     preserveStoredAccountFlags(existingSettingsJson, updatedEntity, sanitizedTenantDTO);
     setContentActivationDates(updatedEntity, sanitizedTenantDTO);
     var entityToSave = updatedEntity;
@@ -801,39 +840,86 @@ public class TenantServiceFacade {
   }
 
   /**
-   * TS#331: the "Direkteinladung erlauben" flags are stored opt-outs. A request that omits them
-   * (any client that predates the fields) must not blank a stored {@code false}, which {@link
-   * TenantSettings#applyDefaults()} would then read back as {@code true}. A non-null request value
-   * still overrides the stored one.
+   * TS#331 / UserService#1662: the "Direkteinladung erlauben" and guest-account-mode flags are
+   * stored opt-outs. A request that omits them (any client that predates the fields) must not blank
+   * a stored {@code false}, which {@link TenantSettings#applyDefaults()} would then read back as
+   * {@code true}. A non-null request value still overrides the stored one.
    */
-  private void preserveStoredDirectInviteFlags(
+  private void preserveStoredOptOutFlags(
       String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
     if (existingSettingsJson == null || updatedEntity.getSettings() == null) {
       return;
     }
     Settings request = tenantDTO.getSettings();
-    boolean chatOmitted = request == null || request.getFeatureDirectInviteChatEnabled() == null;
-    boolean audioOmitted = request == null || request.getFeatureDirectInviteAudioEnabled() == null;
-    boolean videoOmitted = request == null || request.getFeatureDirectInviteVideoEnabled() == null;
-    if (!chatOmitted && !audioOmitted && !videoOmitted) {
+    List<StoredOptOutFlag> omitted =
+        STORED_OPT_OUT_FLAGS.stream()
+            .filter(flag -> request == null || flag.requestValue().apply(request) == null)
+            .toList();
+    if (omitted.isEmpty()) {
       return;
     }
     TenantSettings existingSettings = convertFromJson(existingSettingsJson);
     TenantSettings updatedSettings = convertFromJson(updatedEntity.getSettings());
-    if (chatOmitted) {
-      updatedSettings.setFeatureDirectInviteChatEnabled(
-          existingSettings.getFeatureDirectInviteChatEnabled());
-    }
-    if (audioOmitted) {
-      updatedSettings.setFeatureDirectInviteAudioEnabled(
-          existingSettings.getFeatureDirectInviteAudioEnabled());
-    }
-    if (videoOmitted) {
-      updatedSettings.setFeatureDirectInviteVideoEnabled(
-          existingSettings.getFeatureDirectInviteVideoEnabled());
-    }
+    omitted.forEach(
+        flag -> flag.store().accept(updatedSettings, flag.stored().apply(existingSettings)));
     updatedEntity.setSettings(convertToJson(updatedSettings));
   }
+
+  private record StoredOptOutFlag(
+      java.util.function.Function<Settings, Boolean> requestValue,
+      java.util.function.Function<TenantSettings, Boolean> stored,
+      java.util.function.BiConsumer<TenantSettings, Boolean> store) {}
+
+  private static final List<StoredOptOutFlag> STORED_OPT_OUT_FLAGS =
+      List.of(
+          new StoredOptOutFlag(
+              Settings::getFeatureDirectInviteChatEnabled,
+              TenantSettings::getFeatureDirectInviteChatEnabled,
+              TenantSettings::setFeatureDirectInviteChatEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureDirectInviteAudioEnabled,
+              TenantSettings::getFeatureDirectInviteAudioEnabled,
+              TenantSettings::setFeatureDirectInviteAudioEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureDirectInviteVideoEnabled,
+              TenantSettings::getFeatureDirectInviteVideoEnabled,
+              TenantSettings::setFeatureDirectInviteVideoEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountTemporaryChatEnabled,
+              TenantSettings::getFeatureGuestAccountTemporaryChatEnabled,
+              TenantSettings::setFeatureGuestAccountTemporaryChatEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountGuestChoosesChatEnabled,
+              TenantSettings::getFeatureGuestAccountGuestChoosesChatEnabled,
+              TenantSettings::setFeatureGuestAccountGuestChoosesChatEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountPermanentChatEnabled,
+              TenantSettings::getFeatureGuestAccountPermanentChatEnabled,
+              TenantSettings::setFeatureGuestAccountPermanentChatEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountTemporaryAudioEnabled,
+              TenantSettings::getFeatureGuestAccountTemporaryAudioEnabled,
+              TenantSettings::setFeatureGuestAccountTemporaryAudioEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountGuestChoosesAudioEnabled,
+              TenantSettings::getFeatureGuestAccountGuestChoosesAudioEnabled,
+              TenantSettings::setFeatureGuestAccountGuestChoosesAudioEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountPermanentAudioEnabled,
+              TenantSettings::getFeatureGuestAccountPermanentAudioEnabled,
+              TenantSettings::setFeatureGuestAccountPermanentAudioEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountTemporaryVideoEnabled,
+              TenantSettings::getFeatureGuestAccountTemporaryVideoEnabled,
+              TenantSettings::setFeatureGuestAccountTemporaryVideoEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountGuestChoosesVideoEnabled,
+              TenantSettings::getFeatureGuestAccountGuestChoosesVideoEnabled,
+              TenantSettings::setFeatureGuestAccountGuestChoosesVideoEnabled),
+          new StoredOptOutFlag(
+              Settings::getFeatureGuestAccountPermanentVideoEnabled,
+              TenantSettings::getFeatureGuestAccountPermanentVideoEnabled,
+              TenantSettings::setFeatureGuestAccountPermanentVideoEnabled));
 
   private void preserveStoredAccountFlags(
       String existingSettingsJson, TenantEntity updatedEntity, MultilingualTenantDTO tenantDTO) {
@@ -966,7 +1052,8 @@ public class TenantServiceFacade {
         tenantId,
         tenantPermissionPolicyService.getResolvedPolicies(tenantId),
         tenantPermissionPolicyService.getResolvedCaseHandoverPolicies(tenantId),
-        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(tenantId));
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(tenantId),
+        tenantPermissionPolicyService.getResolvedCalendarPolicies(tenantId));
   }
 
   public TenantPermissionPolicies updateTenantPermissionPolicies(
@@ -987,7 +1074,8 @@ public class TenantServiceFacade {
                             com.vi.tenantservice.api.policy.PermissionPolicyMode.valueOf(
                                 entry.getValue().getMode().name())))),
         request.getCaseHandoverPolicies(),
-        request.getInternalGroupChat());
+        request.getInternalGroupChat(),
+        request.getCalendar());
     return getTenantPermissionPolicies(tenantId);
   }
 
@@ -995,7 +1083,8 @@ public class TenantServiceFacade {
       Long tenantId,
       Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> policies,
       com.vi.tenantservice.api.model.CaseHandoverPolicies caseHandoverPolicies,
-      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat) {
+      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat,
+      com.vi.tenantservice.api.model.CalendarPolicies calendar) {
     return new TenantPermissionPolicies(
             tenantId,
             policies.entrySet().stream()
@@ -1009,7 +1098,8 @@ public class TenantServiceFacade {
                                         entry.getValue().mode().name()))
                                 .inherited(entry.getValue().inherited()))))
         .caseHandoverPolicies(caseHandoverPolicies)
-        .internalGroupChat(internalGroupChat);
+        .internalGroupChat(internalGroupChat)
+        .calendar(calendar);
   }
 
   private void assertSuperAdmin() {
@@ -1108,8 +1198,11 @@ public class TenantServiceFacade {
     Map<Long, com.vi.tenantservice.api.model.InternalGroupChatPolicies> internalGroupChatByTenant =
         tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(
             policiesByTenant.keySet());
+    Map<Long, com.vi.tenantservice.api.model.CalendarPolicies> calendarByTenant =
+        tenantPermissionPolicyService.getResolvedCalendarPolicies(policiesByTenant.keySet());
     return tenants.stream()
         .filter(dto -> internalGroupChatByTenant.containsKey(dto.getId()))
+        .filter(dto -> calendarByTenant.containsKey(dto.getId()))
         .map(
             dto ->
                 withEffectiveSettings(
@@ -1117,7 +1210,8 @@ public class TenantServiceFacade {
                     controls,
                     platformTheming,
                     policiesByTenant.get(dto.getId()),
-                    internalGroupChatByTenant.get(dto.getId())))
+                    internalGroupChatByTenant.get(dto.getId()),
+                    calendarByTenant.get(dto.getId())))
         .toList();
   }
 
@@ -1133,8 +1227,9 @@ public class TenantServiceFacade {
   /**
    * Same as {@link #withEffectivePermissions(RestrictedTenantDTO)} for the single-domain override
    * paths, where the DTO keeps the main tenant's id although its settings belong to the resolved
-   * tenant. The recipient scope of internal group chats is a privacy boundary, so it is resolved
-   * for {@code resolvedTenantId}, never for the main tenant (#319).
+   * tenant. The recipient scope of internal group chats and the calendar visibility are privacy
+   * boundaries, so they are resolved for {@code resolvedTenantId}, never for the main tenant (#319,
+   * #365).
    */
   private RestrictedTenantDTO withEffectivePermissions(
       RestrictedTenantDTO dto, Long resolvedTenantId) {
@@ -1147,7 +1242,8 @@ public class TenantServiceFacade {
         tenantAdminControlsService.getControls(),
         getPlatformTheming(lang),
         publicPoliciesForResolvedTenant(dto, resolvedTenantId),
-        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantId));
+        tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantId),
+        tenantPermissionPolicyService.getResolvedCalendarPolicies(resolvedTenantId));
   }
 
   /**
@@ -1193,9 +1289,11 @@ public class TenantServiceFacade {
       TenantAdminControls controls,
       Theming platformTheming,
       Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies,
-      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat) {
+      com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat,
+      com.vi.tenantservice.api.model.CalendarPolicies calendar) {
     if (dto != null) {
       dto.setInternalGroupChat(internalGroupChat);
+      dto.setCalendar(calendar);
       Map<String, BooleanPermissionPolicy> policies =
           resolvedPolicies.entrySet().stream()
               .collect(
@@ -1487,6 +1585,11 @@ public class TenantServiceFacade {
     }
     var tenantPage = tenantService.searchTenantData(tokens, emailMatches, pageRequest);
     return mapOf(tenantPage, emailsByTenant);
+  }
+
+  /** Träger names for the platform statistics panel; never the technical tenant 0. */
+  public List<TenantStatisticsNameDTO> getStatisticsNamesExceptTechnical() {
+    return tenantService.findStatisticsNamesExceptTechnical();
   }
 
   public List<AdminTenantDTO> getAllAdminTenantsExceptTechnical() {

@@ -45,6 +45,7 @@ import com.vi.tenantservice.api.model.TenantMediaResponseDTO;
 import com.vi.tenantservice.api.model.TenantOperationalStatusDTO;
 import com.vi.tenantservice.api.model.TenantOperationalStatusUpdateDTO;
 import com.vi.tenantservice.api.model.TenantPermissionPolicies;
+import com.vi.tenantservice.api.model.TenantStatisticsNameDTO;
 import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeyUpdateDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeysDTO;
@@ -94,6 +95,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.NativeWebRequest;
@@ -129,8 +131,7 @@ public class TenantController implements TenantApi, TenantadminApi {
    * viewing the agreement never consumes the token.
    */
   @Override
-  public ResponseEntity<DpaSignPreviewDTO> getDataProcessingAgreementPreview(
-      @NotNull String token) {
+  public ResponseEntity<DpaSignPreviewDTO> getDataProcessingAgreementPreview(String token) {
     var preview = tenantDpaService.getSignPreview(token);
     return ResponseEntity.ok(
         new DpaSignPreviewDTO()
@@ -146,7 +147,7 @@ public class TenantController implements TenantApi, TenantadminApi {
    */
   @Override
   public ResponseEntity<DpaSignatureDTO> confirmDataProcessingAgreement(
-      @NotNull String token, @Valid DpaSignatureRequestDTO request) {
+      String token, @Valid DpaSignatureRequestDTO request) {
     if (!Boolean.TRUE.equals(request.getAccepted())) {
       return ResponseEntity.badRequest().build();
     }
@@ -225,8 +226,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @PreAuthorize(
       "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')"
           + " or @taskServiceIdentity.allows(authentication, 'NOTIFICATION_DISPATCH')")
-  public ResponseEntity<List<DpaSignatureDTO>> getDataProcessingAgreementSignatures(
-      @NotNull Long id) {
+  public ResponseEntity<List<DpaSignatureDTO>> getDataProcessingAgreementSignatures(Long id) {
     return new ResponseEntity<>(tenantDpaFacade.getSignatures(id), HttpStatus.OK);
   }
 
@@ -234,37 +234,34 @@ public class TenantController implements TenantApi, TenantadminApi {
   @PreAuthorize(
       "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')"
           + " or @taskServiceIdentity.allows(authentication, 'RUNTIME_POLICY')")
-  public ResponseEntity<DpaGateStatusDTO> getDataProcessingAgreementGate(@NotNull Long id) {
+  public ResponseEntity<DpaGateStatusDTO> getDataProcessingAgreementGate(Long id) {
     return new ResponseEntity<>(tenantDpaFacade.getGateStatus(id), HttpStatus.OK);
   }
 
   @Override
   @PreAuthorize(
       "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT') or @taskServiceIdentity.allowsOperatorDpa(authentication, #id)")
-  public ResponseEntity<List<DpaVersionDTO>> getDataProcessingAgreementVersions(@NotNull Long id) {
+  public ResponseEntity<List<DpaVersionDTO>> getDataProcessingAgreementVersions(Long id) {
     return new ResponseEntity<>(tenantDpaFacade.getVersions(id), HttpStatus.OK);
   }
 
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
-  public ResponseEntity<DpaSignInviteDTO> createDataProcessingAgreementSignInvite(
-      @NotNull Long id) {
+  public ResponseEntity<DpaSignInviteDTO> createDataProcessingAgreementSignInvite(Long id) {
     return new ResponseEntity<>(tenantDpaFacade.createSignInvite(id), HttpStatus.OK);
   }
 
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<DpaGateStatusDTO> publishDataProcessingAgreement(
-      @NotNull Long id, @Valid Map<String, String> requestBody) {
+      Long id, Map<String, String> requestBody) {
     return new ResponseEntity<>(tenantDpaFacade.publishLegacyDpa(id, requestBody), HttpStatus.OK);
   }
 
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<DpaGateStatusDTO> publishDataProcessingAgreementV2(
-      @NotNull Long id,
-      @NotNull @Valid String signingDeadlineAt,
-      @Valid Map<String, String> requestBody) {
+      Long id, @NotNull @Valid String signingDeadlineAt, Map<String, String> requestBody) {
     return new ResponseEntity<>(
         tenantDpaFacade.publishDpa(id, requestBody, signingDeadlineAt), HttpStatus.OK);
   }
@@ -281,7 +278,7 @@ public class TenantController implements TenantApi, TenantadminApi {
    */
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_GET_TENANT')")
-  public ResponseEntity<DpaStatusDTO> getDataProcessingAgreementStatus(@NotNull Long id) {
+  public ResponseEntity<DpaStatusDTO> getDataProcessingAgreementStatus(Long id) {
     return new ResponseEntity<>(tenantDpaFacade.getDpaStatus(id), HttpStatus.OK);
   }
 
@@ -292,7 +289,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<DpaStatusDTO> signDataProcessingAgreement(
-      @NotNull Long id, @Valid DpaAdminSignRequestDTO request) {
+      Long id, @Valid DpaAdminSignRequestDTO request) {
     if (!Boolean.TRUE.equals(request.getAccepted())) {
       return ResponseEntity.badRequest().build();
     }
@@ -302,7 +299,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<DpaStatusDTO> signDataProcessingAgreementV2(
-      @NotNull Long id, @Valid DpaVersionedAdminSignRequestDTO request) {
+      Long id, @Valid DpaVersionedAdminSignRequestDTO request) {
     if (!Boolean.TRUE.equals(request.getAccepted())) {
       return ResponseEntity.badRequest().build();
     }
@@ -322,7 +319,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @PreAuthorize(
       "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')"
           + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
-  public ResponseEntity<TenantDTO> getTenantById(@NotNull Long id) {
+  public ResponseEntity<TenantDTO> getTenantById(Long id) {
 
     var tenantById = tenantServiceFacade.findTenantById(id);
     return tenantById.isEmpty()
@@ -385,14 +382,14 @@ public class TenantController implements TenantApi, TenantadminApi {
   @PreAuthorize(
       "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')"
           + " or @taskServiceIdentity.allows(authentication, 'RUNTIME_POLICY')")
-  public ResponseEntity<TenantPermissionPolicies> getTenantPermissionPolicies(@NotNull Long id) {
+  public ResponseEntity<TenantPermissionPolicies> getTenantPermissionPolicies(Long id) {
     return ResponseEntity.ok(tenantServiceFacade.getTenantPermissionPolicies(id));
   }
 
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<TenantPermissionPolicies> updateTenantPermissionPolicies(
-      @NotNull Long id, @Valid TenantPermissionPolicies tenantPermissionPolicies) {
+      Long id, @Valid TenantPermissionPolicies tenantPermissionPolicies) {
     return ResponseEntity.ok(
         tenantServiceFacade.updateTenantPermissionPolicies(id, tenantPermissionPolicies));
   }
@@ -473,7 +470,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize(
       "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')")
-  public ResponseEntity<MultilingualTenantDTO> getMultilingualTenantById(@NotNull Long id) {
+  public ResponseEntity<MultilingualTenantDTO> getMultilingualTenantById(Long id) {
     var tenantById = tenantServiceFacade.findMultilingualTenantById(id);
     return tenantById.isEmpty()
         ? new ResponseEntity<>(HttpStatus.NOT_FOUND)
@@ -552,14 +549,14 @@ public class TenantController implements TenantApi, TenantadminApi {
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<TenantOperationalStatusDTO> updateTenantOperationalStatus(
-      @NotNull @Min(1) Long id, @Valid TenantOperationalStatusUpdateDTO request) {
+      @Min(1) Long id, @Valid TenantOperationalStatusUpdateDTO request) {
     return ResponseEntity.ok(tenantServiceFacade.updateOperationalStatus(id, request.getActive()));
   }
 
   @Override
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<MultilingualTenantDTO> updateTenant(
-      @NotNull Long id, @Valid MultilingualTenantDTO tenantDTO) {
+      Long id, @Valid MultilingualTenantDTO tenantDTO) {
     log.info("Updating tenant with id {} by user {} ", id, authorisationService.getUsername());
     var updatedTenantDTO = tenantServiceFacade.updateTenant(id, tenantDTO);
     return new ResponseEntity<>(updatedTenantDTO, HttpStatus.OK);
@@ -652,6 +649,16 @@ public class TenantController implements TenantApi, TenantadminApi {
     return ResponseEntity.ok(tenantLegalVersionFacade.list(id, kind));
   }
 
+  /**
+   * Träger names for the platform statistics panel (ORISO-UserService#1666). Ingress exposes it as
+   * {@code /service/tenantadmin/statistics/names}.
+   */
+  @GetMapping("/tenantadmin/statistics/names")
+  @PreAuthorize("@tenantFacadeAuthorisationService.mayReadStatisticsNames()")
+  public ResponseEntity<List<TenantStatisticsNameDTO>> getTenantStatisticsNames() {
+    return ResponseEntity.ok(tenantServiceFacade.getStatisticsNamesExceptTechnical());
+  }
+
   @DeleteMapping("/tenant/{id}")
   @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
   public ResponseEntity<Void> deleteTenant(@PathVariable("id") Long id) {
@@ -662,7 +669,7 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   public ResponseEntity<RestrictedTenantDTO> getRestrictedTenantDataBySubdomain(
-      @NotNull String subdomain, @Valid Long tenantId) {
+      String subdomain, @Valid Long tenantId) {
     var tenantById = tenantServiceFacade.findTenantBySubdomain(subdomain, tenantId);
     return tenantById.isEmpty()
         ? new ResponseEntity<>(HttpStatus.NOT_FOUND)
@@ -670,8 +677,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  public ResponseEntity<RestrictedTenantDTO> getRestrictedTenantDataByTenantId(
-      @NotNull Long tenantId) {
+  public ResponseEntity<RestrictedTenantDTO> getRestrictedTenantDataByTenantId(Long tenantId) {
     var tenantById = tenantServiceFacade.findRestrictedTenantById(tenantId);
     return tenantById.isEmpty()
         ? new ResponseEntity<>(HttpStatus.NOT_FOUND)
