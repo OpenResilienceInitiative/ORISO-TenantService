@@ -1910,13 +1910,15 @@ components:
       properties:
         sourceLang:
           type: string
-          maxLength: 10
+          description: 'Language code such as "de", "en" or the informal German variant
+            "de@informal".'
+          maxLength: 20
           example: "de"
         targetLangs:
           type: array
           items:
             type: string
-            maxLength: 10
+            maxLength: 20
           minItems: 1
           example: [ "en", "fr" ]
         provider:
