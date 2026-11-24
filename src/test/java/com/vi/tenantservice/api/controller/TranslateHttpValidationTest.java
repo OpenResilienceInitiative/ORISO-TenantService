@@ -63,8 +63,20 @@ class TranslateHttpValidationTest {
   }
 
   @Test
-  void languageCodesLongerThanTheContractAreStillRejected() throws Exception {
+  void languageCodesOfExactlyTwentyCharactersAreAcceptedInBothPositions() throws Exception {
+    postTranslate("x".repeat(20), "en", 200);
+    postTranslate("de", "x".repeat(20), 200);
+  }
+
+  @Test
+  void targetLanguageCodesLongerThanTheContractAreStillRejected() throws Exception {
     postTranslate("de", "x".repeat(21), 400);
+    verifyNoInteractions(translationFacade);
+  }
+
+  @Test
+  void sourceLanguageCodesLongerThanTheContractAreStillRejected() throws Exception {
+    postTranslate("x".repeat(21), "en", 400);
     verifyNoInteractions(translationFacade);
   }
 }
