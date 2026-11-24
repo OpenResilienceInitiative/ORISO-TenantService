@@ -49,6 +49,7 @@ import com.vi.tenantservice.api.service.DeletionAuditReporter;
 import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
+import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
@@ -161,6 +162,7 @@ public class TenantServiceFacade {
 
   private final @NonNull TenantResolverService tenantResolverService;
 
+  private final @NonNull TenantDpaService tenantDpaService;
   private final @NonNull TenantDpaStatusService tenantDpaStatusService;
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
@@ -530,6 +532,36 @@ public class TenantServiceFacade {
           "The Träger is marked for deletion; its accounts and agencies could not be marked yet",
           e);
     }
+  }
+
+  /** Träger waiting for their final deletion; read by UserService's nightly job (#1525). */
+  public List<Long> findTenantIdsMarkedForDeletion() {
+    return tenantService.findTenantIdsMarkedForDeletion();
+  }
+
+  /**
+   * The final step of a Träger deletion (ORISO-Admin#1525): removes the row together with its DPA
+   * signature evidence. UserService's nightly job calls it only once nothing references the Träger
+   * any more. Refuses a Träger that is not marked, so this route can never delete a Träger in use.
+   * Transactional on purpose: the database cascade between the two was dropped (#179), so this
+   * boundary is the only thing preventing a surviving Träger without its signature evidence.
+   *
+   * @throws TenantNotFoundException when the Träger is already gone, which the caller counts as
+   *     done
+   */
+  @Transactional
+  public void purgeTenantMarkedForDeletion(Long id) {
+    TenantEntity tenant =
+        tenantService
+            .findTenantById(id)
+            .orElseThrow(() -> new TenantNotFoundException("Tenant with id " + id + " not found"));
+    if (tenant.getDeleteDate() == null || id == TECHNICAL_TENANT_ID) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "Only a Träger marked for deletion can be purged");
+    }
+    tenantDpaService.deleteSignaturesForTenant(id);
+    tenantService.delete(tenant);
+    log.info("Träger {} purged after its deletion was completed", id);
   }
 
   /**

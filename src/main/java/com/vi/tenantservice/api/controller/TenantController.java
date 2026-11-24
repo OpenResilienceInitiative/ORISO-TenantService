@@ -712,6 +712,27 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   /**
+   * Träger in deletion, for UserService's nightly job that finishes them (ORISO-Admin#1525). Only
+   * the RUNTIME task actor with the {@code tenant-deletion} role.
+   */
+  @GetMapping("/tenant/deletions")
+  @PreAuthorize("@taskServiceIdentity.allows(authentication, 'TENANT_DELETION')")
+  public ResponseEntity<List<Long>> getTenantsMarkedForDeletion() {
+    return ResponseEntity.ok(tenantServiceFacade.findTenantIdsMarkedForDeletion());
+  }
+
+  /**
+   * The last step of a Träger deletion: UserService's nightly job calls it once nothing references
+   * the Träger any more (ORISO-Admin#1525). Only a marked Träger; only the RUNTIME task actor.
+   */
+  @DeleteMapping("/tenant/{id}/deletion")
+  @PreAuthorize("@taskServiceIdentity.allows(authentication, 'TENANT_DELETION')")
+  public ResponseEntity<Void> purgeTenantMarkedForDeletion(@PathVariable("id") Long id) {
+    tenantServiceFacade.purgeTenantMarkedForDeletion(id);
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
    * Marks the Träger and everything in it for deletion (ORISO-Admin#1525). 202: the nightly jobs
    * remove the rows, the Träger last. The body says what was marked and what could not be.
    */

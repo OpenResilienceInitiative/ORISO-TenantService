@@ -49,6 +49,10 @@ public interface TenantRepository
   @Query("SELECT t.id FROM TenantEntity t")
   List<Long> findAllIds();
 
+  /** Träger waiting for their final deletion (ORISO-Admin#1525). */
+  @Query("SELECT t.id FROM TenantEntity t WHERE t.deleteDate IS NOT NULL ORDER BY t.id")
+  List<Long> findIdsMarkedForDeletion();
+
   /** Id and name of every tenant except the technical tenant 0, in one query, sorted by name. */
   @Query(
       "SELECT new com.vi.tenantservice.api.model.TenantStatisticsNameDTO(t.id, t.name) "

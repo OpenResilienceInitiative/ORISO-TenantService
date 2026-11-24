@@ -310,6 +310,43 @@ class TenantServiceFacadeTest {
   }
 
   @Test
+  void purgeTenantMarkedForDeletion_Should_removeTheRowWithItsSignatureEvidence() {
+    tenantEntity.setDeleteDate(java.time.LocalDateTime.of(2026, 11, 20, 3, 0));
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+
+    tenantServiceFacade.purgeTenantMarkedForDeletion(ID);
+
+    var order = org.mockito.Mockito.inOrder(tenantDpaService, tenantService);
+    order.verify(tenantDpaService).deleteSignaturesForTenant(ID);
+    order.verify(tenantService).delete(tenantEntity);
+  }
+
+  @Test
+  void purgeTenantMarkedForDeletion_Should_refuse_When_theTraegerIsNotMarked() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            org.springframework.web.server.ResponseStatusException.class,
+            () -> tenantServiceFacade.purgeTenantMarkedForDeletion(ID));
+
+    assertThat(thrown.getStatusCode().value()).isEqualTo(409);
+    verify(tenantService, never()).delete(any());
+    verifyNoInteractions(tenantDpaService);
+  }
+
+  @Test
+  void purgeTenantMarkedForDeletion_Should_answerNotFound_When_theTraegerIsAlreadyGone() {
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.empty());
+
+    org.junit.jupiter.api.Assertions.assertThrows(
+        com.vi.tenantservice.api.exception.TenantNotFoundException.class,
+        () -> tenantServiceFacade.purgeTenantMarkedForDeletion(ID));
+
+    verifyNoInteractions(tenantDpaService);
+  }
+
+  @Test
   void deleteTenant_Should_markTheTraegerThenCascade_AndReportItAsScheduled() {
     when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
     when(tenantService.markForDeletion(tenantEntity)).thenReturn(true);

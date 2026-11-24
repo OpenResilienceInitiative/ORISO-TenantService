@@ -136,6 +136,10 @@ public class TenantService {
     return true;
   }
 
+  public List<Long> findTenantIdsMarkedForDeletion() {
+    return tenantRepository.findIdsMarkedForDeletion();
+  }
+
   public TenantEntity update(TenantEntity tenantEntity) {
     validateTenant(tenantEntity);
     overrideSubdomainIfNeededForSingleDomainMultitenancy(tenantEntity);
