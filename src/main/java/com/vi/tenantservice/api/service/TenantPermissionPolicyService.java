@@ -13,6 +13,8 @@ import com.vi.tenantservice.api.model.CalendarVisibilityScopePolicy;
 import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
 import com.vi.tenantservice.api.model.CaseHandoverPolicies;
 import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
+import com.vi.tenantservice.api.model.CaseSharingMode;
+import com.vi.tenantservice.api.model.CaseSharingPolicies;
 import com.vi.tenantservice.api.model.ConsentPermissionPolicy;
 import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
 import com.vi.tenantservice.api.model.InternalGroupChatPolicies;
@@ -26,6 +28,7 @@ import com.vi.tenantservice.api.model.TenantPermissionPolicyEntity;
 import com.vi.tenantservice.api.policy.CalendarPolicyRules;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
+import com.vi.tenantservice.api.policy.CaseSharingPolicyRules;
 import com.vi.tenantservice.api.policy.InternalGroupChatPolicyRules;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
 import com.vi.tenantservice.api.policy.PermissionFeature;
@@ -76,14 +79,17 @@ public class TenantPermissionPolicyService {
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   public Map<String, ResolvedPolicyValue<Boolean>> getResolvedPolicies(Long tenantId) {
-    Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platformControls.getControls());
-    Map<String, PolicyValue<Boolean>> overrides =
-        repository.findByTenantId(tenantId).map(this::deserialize).orElse(Map.of());
+    TenantAdminControls platform = platformControls.getControls();
+    Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platform);
+    var entity = repository.findByTenantId(tenantId);
+    Map<String, PolicyValue<Boolean>> overrides = entity.map(this::deserialize).orElse(Map.of());
     var unreadable = new LinkedHashSet<Long>();
     var optOuts = accountOptOuts(Set.of(tenantId), unreadable);
     if (unreadable.contains(tenantId)) throw new TenantSettingsUnavailableException();
-    return resolvePolicies(
-        inherited, withAccountOptOuts(overrides, optOuts.getOrDefault(tenantId, Map.of())));
+    return CaseSharingPolicyRules.withDerivedCaseHandover(
+        resolvePolicies(
+            inherited, withAccountOptOuts(overrides, optOuts.getOrDefault(tenantId, Map.of()))),
+        resolveCaseSharing(platformCaseSharing(platform), localCaseSharing(entity.orElse(null))));
   }
 
   public Map<Long, Map<String, ResolvedPolicyValue<Boolean>>> getResolvedPolicies(
@@ -91,9 +97,15 @@ public class TenantPermissionPolicyService {
     if (tenantIds.isEmpty()) {
       return Map.of();
     }
-    Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platformControls.getControls());
+    TenantAdminControls platform = platformControls.getControls();
+    Map<String, PolicyValue<Boolean>> inherited = platformPolicies(platform);
     var unreadable = new LinkedHashSet<Long>();
-    var overridesByTenant = deserializeBatch(tenantIds, unreadable, this::deserialize);
+    var storedByTenant =
+        deserializeBatch(
+            tenantIds,
+            unreadable,
+            entity -> new StoredOverrides(deserialize(entity), localCaseSharing(entity)));
+    var platformCaseSharing = platformCaseSharing(platform);
     var optOutsByTenant = accountOptOuts(tenantIds, unreadable);
     Map<Long, Map<String, ResolvedPolicyValue<Boolean>>> resolvedByTenant = new LinkedHashMap<>();
     tenantIds.stream()
@@ -102,13 +114,25 @@ public class TenantPermissionPolicyService {
             tenantId ->
                 resolvedByTenant.put(
                     tenantId,
-                    resolvePolicies(
-                        inherited,
-                        withAccountOptOuts(
-                            overridesByTenant.getOrDefault(tenantId, Map.of()),
-                            optOutsByTenant.getOrDefault(tenantId, Map.of())))));
+                    CaseSharingPolicyRules.withDerivedCaseHandover(
+                        resolvePolicies(
+                            inherited,
+                            withAccountOptOuts(
+                                storedByTenant.containsKey(tenantId)
+                                    ? storedByTenant.get(tenantId).policies()
+                                    : Map.of(),
+                                optOutsByTenant.getOrDefault(tenantId, Map.of()))),
+                        resolveCaseSharing(
+                            platformCaseSharing,
+                            storedByTenant.containsKey(tenantId)
+                                ? storedByTenant.get(tenantId).caseSharing()
+                                : null))));
     return Map.copyOf(resolvedByTenant);
   }
+
+  /** One Traeger row read once: boolean overrides and its own case sharing choice (#374). */
+  private record StoredOverrides(
+      Map<String, PolicyValue<Boolean>> policies, PolicyValue<CaseSharingMode> caseSharing) {}
 
   /** Raw FALSE remains a restrictive preference until an explicit typed choice supersedes it. */
   private Map<String, PolicyValue<Boolean>> withAccountOptOuts(
@@ -212,11 +236,6 @@ public class TenantPermissionPolicyService {
     saveOverrides(tenantId, overrides, caseHandoverOverrides, internalGroupChatOverrides, null);
   }
 
-  /**
-   * Saves the Traeger's overrides. A {@code null} {@code caseHandoverOverrides}, {@code
-   * internalGroupChatOverrides} or {@code calendarOverrides} leaves what is stored untouched (#319,
-   * #365); a platform requirement (ENFORCED) rejects any change and discards an unchanged echo.
-   */
   @Transactional
   public void saveOverrides(
       Long tenantId,
@@ -224,12 +243,47 @@ public class TenantPermissionPolicyService {
       CaseHandoverPolicies caseHandoverOverrides,
       InternalGroupChatPolicies internalGroupChatOverrides,
       CalendarPolicies calendarOverrides) {
+    saveOverrides(
+        tenantId,
+        overrides,
+        caseHandoverOverrides,
+        internalGroupChatOverrides,
+        calendarOverrides,
+        null);
+  }
+
+  /**
+   * Saves the Traeger's overrides. A {@code null} {@code caseHandoverOverrides}, {@code
+   * internalGroupChatOverrides}, {@code calendarOverrides} or {@code caseSharingOverrides} leaves
+   * what is stored untouched (#319, #365, #374); a platform requirement (ENFORCED) rejects any
+   * change and discards an unchanged echo.
+   *
+   * <p>{@code caseHandoverEnabled} is derived from the case sharing mode (#374). A request with
+   * {@code caseSharing} stores the derived value with it; a request without it that changes {@code
+   * caseHandoverEnabled} (an Admin build before #374) changes the mode instead, and an unchanged
+   * echo of the derived value is ignored.
+   */
+  @Transactional
+  public void saveOverrides(
+      Long tenantId,
+      Map<String, PolicyValue<Boolean>> overrides,
+      CaseHandoverPolicies caseHandoverOverrides,
+      InternalGroupChatPolicies internalGroupChatOverrides,
+      CalendarPolicies calendarOverrides,
+      CaseSharingPolicies caseSharingOverrides) {
     overrides = withoutRetiredPolicy(overrides);
     overrides.keySet().forEach(this::assertKnownFeature);
     CaseHandoverPolicyRules.validate(caseHandoverOverrides);
     TenantAdminControls platform = platformControls.getControls();
+    // caseHandoverEnabled follows the mode: with an explicit caseSharing a stale legacy value
+    // must not be checked against the platform rule on its own
+    Map<String, PolicyValue<Boolean>> booleanOverrides = overrides;
+    if (caseSharingOverrides != null) {
+      booleanOverrides = new LinkedHashMap<>(overrides);
+      booleanOverrides.remove(CaseSharingPolicyRules.CASE_HANDOVER_KEY);
+    }
     Map<String, PolicyValue<Boolean>> writableOverrides =
-        sanitizeBooleanOverrides(platformPolicies(platform), overrides);
+        sanitizeBooleanOverrides(platformPolicies(platform), booleanOverrides);
     CaseHandoverPolicies parentCaseHandover = platform.getCaseHandoverPolicies();
     if (parentCaseHandover == null) {
       parentCaseHandover = CaseHandoverPolicyDefaults.create();
@@ -243,12 +297,35 @@ public class TenantPermissionPolicyService {
         sanitizeCalendarOverrides(platformCalendar(platform), calendarOverrides);
     TenantPermissionPolicyEntity entity =
         repository.findByTenantId(tenantId).orElseGet(TenantPermissionPolicyEntity::new);
+    PolicyValue<CaseSharingMode> parentCaseSharing = platformCaseSharing(platform);
+    CaseSharingPolicies requestedCaseSharing =
+        caseSharingOverrides != null
+            ? caseSharingOverrides
+            : caseSharingFromLegacyWrite(
+                overrides, resolveCaseSharing(parentCaseSharing, localCaseSharing(entity)));
+    PolicyValue<CaseSharingMode> writableCaseSharing =
+        sanitizeCaseSharing(parentCaseSharing, requestedCaseSharing);
+    writableOverrides = new LinkedHashMap<>(writableOverrides);
+    // caseHandoverEnabled is never written on its own; it follows the mode
+    writableOverrides.remove(CaseSharingPolicyRules.CASE_HANDOVER_KEY);
     entity.setTenantId(tenantId);
     Map<String, PolicyValue<Boolean>> merged =
         entity.getPolicies() == null
             ? new LinkedHashMap<>()
             : new LinkedHashMap<>(deserialize(entity));
     merged.putAll(writableOverrides);
+    if (writableCaseSharing != null) {
+      // kept in step so a rollback to a build before #374 still reads the same choice
+      merged.put(
+          CaseSharingPolicyRules.CASE_HANDOVER_KEY,
+          CaseSharingPolicyRules.derivedCaseHandover(writableCaseSharing));
+      entity.setCaseSharingPolicies(
+          serializeCaseSharing(CaseSharingPolicyRules.toApi(writableCaseSharing)));
+    } else if (requestedCaseSharing != null) {
+      // an unchanged echo of a platform requirement: no own choice remains
+      merged.remove(CaseSharingPolicyRules.CASE_HANDOVER_KEY);
+      entity.setCaseSharingPolicies(null);
+    }
     entity.setPolicies(serialize(merged));
     if (caseHandoverOverrides != null) {
       entity.setCaseHandoverPolicies(serializeCaseHandover(writableCaseHandoverOverrides));
@@ -312,6 +389,113 @@ public class TenantPermissionPolicyService {
                 resolvedByTenant.put(
                     tenantId, resolveInternalGroupChat(parent, localByTenant.get(tenantId))));
     return Map.copyOf(resolvedByTenant);
+  }
+
+  /** The Traeger's case sharing mode (#374): platform preset, Traeger choice on top. */
+  public CaseSharingPolicies getResolvedCaseSharingPolicies(Long tenantId) {
+    return CaseSharingPolicyRules.toApi(
+        resolveCaseSharing(
+            platformCaseSharing(platformControls.getControls()),
+            localCaseSharing(repository.findByTenantId(tenantId).orElse(null))));
+  }
+
+  public Map<Long, CaseSharingPolicies> getResolvedCaseSharingPolicies(Set<Long> tenantIds) {
+    if (tenantIds.isEmpty()) {
+      return Map.of();
+    }
+    var parent = platformCaseSharing(platformControls.getControls());
+    var unreadable = new LinkedHashSet<Long>();
+    var localByTenant = deserializeBatch(tenantIds, unreadable, this::localCaseSharing);
+    Map<Long, CaseSharingPolicies> resolvedByTenant = new LinkedHashMap<>();
+    tenantIds.stream()
+        .filter(id -> !unreadable.contains(id))
+        .forEach(
+            tenantId ->
+                resolvedByTenant.put(
+                    tenantId,
+                    CaseSharingPolicyRules.toApi(
+                        resolveCaseSharing(parent, localByTenant.get(tenantId)))));
+    return Map.copyOf(resolvedByTenant);
+  }
+
+  private PolicyValue<CaseSharingMode> platformCaseSharing(TenantAdminControls platform) {
+    return CaseSharingPolicyRules.platformChoice(
+        platform.getCaseSharing(),
+        platformPolicies(platform).get(CaseSharingPolicyRules.CASE_HANDOVER_KEY));
+  }
+
+  /** The Traeger's own choice: stored mode, else its stored {@code caseHandoverEnabled}. */
+  private PolicyValue<CaseSharingMode> localCaseSharing(TenantPermissionPolicyEntity entity) {
+    if (entity == null) {
+      return null;
+    }
+    CaseSharingPolicies stored = deserializeCaseSharing(entity);
+    PolicyValue<Boolean> legacy =
+        entity.getPolicies() == null
+            ? null
+            : deserialize(entity).get(CaseSharingPolicyRules.CASE_HANDOVER_KEY);
+    return CaseSharingPolicyRules.ownChoice(stored, legacy);
+  }
+
+  private static ResolvedPolicyValue<CaseSharingMode> resolveCaseSharing(
+      PolicyValue<CaseSharingMode> parent, PolicyValue<CaseSharingMode> local) {
+    return PermissionPolicyResolver.resolveWithOrigin(parent, local);
+  }
+
+  /** The legacy write as a mode change, or null when it leaves the current mode as it is. */
+  private static CaseSharingPolicies caseSharingFromLegacyWrite(
+      Map<String, PolicyValue<Boolean>> overrides, ResolvedPolicyValue<CaseSharingMode> current) {
+    PolicyValue<Boolean> written = overrides.get(CaseSharingPolicyRules.CASE_HANDOVER_KEY);
+    if (written == null
+        || written.equals(CaseSharingPolicyRules.derivedCaseHandover(current.asPolicyValue()))) {
+      return null;
+    }
+    return CaseSharingPolicyRules.toApi(CaseSharingPolicyRules.fromLegacy(written));
+  }
+
+  /** The Traeger's choice to store; null for an unchanged echo of a platform requirement. */
+  private static PolicyValue<CaseSharingMode> sanitizeCaseSharing(
+      PolicyValue<CaseSharingMode> parent, CaseSharingPolicies requested) {
+    if (requested == null) {
+      return null;
+    }
+    PolicyValue<CaseSharingMode> local = CaseSharingPolicyRules.toDomain(requested.getMode());
+    if (local == null) {
+      throw new TenantBadRequestException("caseSharing.mode needs a value and a mode");
+    }
+    if (parent.mode() == com.vi.tenantservice.api.policy.PermissionPolicyMode.ENFORCED) {
+      if (!Objects.equals(parent, local)) {
+        throw new TenantBadRequestException("Cannot override enforced policy: caseSharing.mode");
+      }
+      return null;
+    }
+    return local;
+  }
+
+  private CaseSharingPolicies deserializeCaseSharing(TenantPermissionPolicyEntity entity) {
+    String json = entity.getCaseSharingPolicies();
+    if (json == null || json.isBlank()) {
+      return null;
+    }
+    try {
+      var stored = objectMapper.readValue(json, CaseSharingPolicies.class);
+      if (stored == null
+          || (stored.getMode() != null
+              && CaseSharingPolicyRules.toDomain(stored.getMode()) == null)) {
+        throw new TenantSettingsUnavailableException();
+      }
+      return stored;
+    } catch (JsonProcessingException | IllegalArgumentException exception) {
+      throw new TenantSettingsUnavailableException();
+    }
+  }
+
+  private String serializeCaseSharing(CaseSharingPolicies policies) {
+    try {
+      return objectMapper.writeValueAsString(policies);
+    } catch (JsonProcessingException exception) {
+      throw mappingFailure("serialize case sharing policies", exception);
+    }
   }
 
   /** The Traeger's calendar policies (ADR-032): platform preset, Traeger override on top. */

@@ -102,7 +102,12 @@ public abstract class OpenAiCompatibleChatClient implements TranslationProviderC
             "messages",
             List.of(
                 Map.of(
-                    "role", "system", "content", SYSTEM_PROMPT.formatted(sourceLang, targetLang)),
+                    "role",
+                    "system",
+                    "content",
+                    SYSTEM_PROMPT.formatted(
+                        TranslationLanguage.describe(sourceLang),
+                        TranslationLanguage.describe(targetLang))),
                 Map.of("role", "user", "content", html)));
     try {
       var response =

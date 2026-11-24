@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api.service.translation;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.containing;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
@@ -104,6 +105,26 @@ class OpenAiCompatibleChatClientTest {
             .withRequestBody(matchingJsonPath("$.messages[0].content"))
             .withRequestBody(
                 matchingJsonPath("$.messages[1].content", equalTo("<p>Hallo Welt</p>"))));
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("providers")
+  void translateHtml_Should_describeInformalGermanExplicitly_When_targetIsDeInformal(
+      String providerId, Function<String, TranslationProviderClient> factory) {
+    stubSuccess("<p>Hallo, schön, dass du da bist</p>");
+
+    client(factory).translateHtml("test-key", "de", "de@informal", "<p>Hallo</p>");
+
+    wireMock.verify(
+        postRequestedFor(urlEqualTo(CHAT_COMPLETIONS))
+            .withRequestBody(
+                matchingJsonPath(
+                    "$.messages[0].content",
+                    containing("to German, informal form of address (use \"du\""))));
+    wireMock.verify(
+        0,
+        postRequestedFor(urlEqualTo(CHAT_COMPLETIONS))
+            .withRequestBody(matchingJsonPath("$.messages[0].content", containing("de@informal"))));
   }
 
   @ParameterizedTest(name = "{0}")

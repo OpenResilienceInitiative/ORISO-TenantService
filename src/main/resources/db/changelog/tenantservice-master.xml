@@ -78,4 +78,5 @@
   <include file="db/changelog/changeset/0047_dpa_admin_notice_staging/0047-changeSet.xml"/>
   <include file="db/changelog/changeset/0048_dpa_admin_notice_handoff_provenance/0048-changeSet.xml"/>
   <include file="db/changelog/changeset/0049_dpa_admin_notice_pending_index/0049-changeSet.xml"/>
+  <include file="db/changelog/changeset/0050_tenant_case_sharing_policies/0050-changeSet.xml"/>
 </databaseChangeLog>

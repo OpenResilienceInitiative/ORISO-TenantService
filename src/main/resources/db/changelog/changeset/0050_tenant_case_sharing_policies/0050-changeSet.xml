@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd">
+ <!-- ORISO-TenantService#374: Traeger override of the case sharing mode (case handover / team counselling / none). Null = no override; the stored caseHandoverEnabled override, else the platform preset, applies. -->
+ <changeSet id="tenant-permission-policy-case-sharing" author="oriso">
+  <preConditions onFail="CONTINUE"><not><columnExists tableName="tenant_permission_policy" columnName="case_sharing_policies"/></not></preConditions>
+  <addColumn tableName="tenant_permission_policy"><column name="case_sharing_policies" type="LONGTEXT"/></addColumn>
+  <rollback><dropColumn tableName="tenant_permission_policy" columnName="case_sharing_policies"/></rollback>
+ </changeSet>
+</databaseChangeLog>
