@@ -1133,6 +1133,47 @@ paths:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
       security:
         - Bearer: []
+  /useradmin/tenants/{tenantId}/deletion:
+    post:
+      tags:
+        - admin-user-controller
+      summary: >-
+        Marks everything that belongs to a Träger for deletion. [Authorization: the platform
+        administrator only]
+      description: >-
+        Called by TenantService when the platform administrator deletes a Träger (ORISO-Admin#1525),
+        and again by its nightly run while the Träger waits for its final deletion. Revokes the
+        open invitations, marks the counsellors and advice seekers for deletion (their logins stop
+        at once), deletes the Beratungsstelle and Träger admins and marks the Beratungsstellen in
+        AgencyService. The nightly jobs then remove them for real. Every step skips what is already
+        marked, so the call can be repeated; a child that could not be marked is listed with the
+        kind of failure and marked again on the next call.
+      operationId: markTenantContentsForDeletion
+      parameters:
+        - name: tenantId
+          in: path
+          description: Träger (tenant) id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        200:
+          description: OK - what was marked now, and what could not be
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/TenantDeletionResultDTO'
+        400:
+          description: BAD REQUEST - the platform's own tenant or an invalid id
+        401:
+          description: UNAUTHORIZED - no/invalid role/authorization
+        403:
+          description: FORBIDDEN - the caller is not the platform administrator
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
   /useradmin/tenants/{tenantId}/deletion-blockers:
     get:
       tags:
@@ -1181,6 +1222,66 @@ components:
           nullable: true
           items:
             type: string
+
+    TenantDeletionResultDTO:
+      type: object
+      required:
+        - complete
+        - invites
+        - consultants
+        - adviceSeekers
+        - agencyAdmins
+        - tenantAdmins
+        - agencies
+        - failures
+      properties:
+        complete:
+          type: boolean
+          description: true when every child of the Träger is now marked or gone
+        invites:
+          type: integer
+          format: int64
+          description: invitations revoked and invite links switched off by this call
+        consultants:
+          type: integer
+          format: int64
+          description: counsellors marked for deletion by this call
+        adviceSeekers:
+          type: integer
+          format: int64
+          description: advice seekers marked for deletion by this call
+        agencyAdmins:
+          type: integer
+          format: int64
+          description: Beratungsstelle admins deleted by this call
+        tenantAdmins:
+          type: integer
+          format: int64
+          description: Träger admins deleted by this call
+        agencies:
+          type: integer
+          format: int64
+          description: Beratungsstellen marked for deletion by this call
+        failures:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantDeletionFailureDTO'
+
+    TenantDeletionFailureDTO:
+      type: object
+      required:
+        - kind
+        - reason
+      properties:
+        kind:
+          type: string
+          enum: [ INVITES, CONSULTANT, ADVICE_SEEKER, AGENCY_ADMIN, TENANT_ADMIN, AGENCY ]
+        id:
+          type: string
+          description: the child that could not be marked; empty when its kind could not be listed
+        reason:
+          type: string
+          description: the kind of failure (exception type), never personal data
 
     TenantDeletionBlockersDTO:
       type: object

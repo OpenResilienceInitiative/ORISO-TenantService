@@ -67,6 +67,7 @@ import com.vi.tenantservice.api.service.translation.TranslationException;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.generated.api.controller.TenantApi;
 import com.vi.tenantservice.generated.api.controller.TenantadminApi;
+import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionResultDTO;
 import io.swagger.annotations.Api;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -710,12 +711,15 @@ public class TenantController implements TenantApi, TenantadminApi {
     return ResponseEntity.ok(tenantServiceFacade.getStatisticsNamesExceptTechnical());
   }
 
+  /**
+   * Marks the Träger and everything in it for deletion (ORISO-Admin#1525). 202: the nightly jobs
+   * remove the rows, the Träger last. The body says what was marked and what could not be.
+   */
   @DeleteMapping("/tenant/{id}")
-  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
-  public ResponseEntity<Void> deleteTenant(@PathVariable("id") Long id) {
-    log.info("Deleting tenant with id {} by user {} ", id, authorisationService.getUsername());
-    tenantServiceFacade.deleteTenant(id);
-    return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+  @PreAuthorize("@tenantFacadeAuthorisationService.isPlatformAdministrator()")
+  public ResponseEntity<TenantDeletionResultDTO> deleteTenant(@PathVariable("id") Long id) {
+    log.info("Marking tenant {} for deletion by user {}", id, authorisationService.getUsername());
+    return new ResponseEntity<>(tenantServiceFacade.deleteTenant(id), HttpStatus.ACCEPTED);
   }
 
   @Override

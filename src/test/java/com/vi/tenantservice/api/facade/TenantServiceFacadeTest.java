@@ -310,38 +310,47 @@ class TenantServiceFacadeTest {
   }
 
   @Test
-  void deleteTenant_Should_ReportTheDeletionToTheDeletionLog_AfterTheTenantWasDeleted() {
+  void deleteTenant_Should_markTheTraegerThenCascade_AndReportItAsScheduled() {
     when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
-    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(nothingLeft());
+    when(tenantService.markForDeletion(tenantEntity)).thenReturn(true);
+    var cascaded = cascadeResult(true);
+    when(userAdminService.markTenantContentsForDeletion(ID)).thenReturn(cascaded);
 
-    tenantServiceFacade.deleteTenant(ID);
+    var result = tenantServiceFacade.deleteTenant(ID);
 
-    var order = org.mockito.Mockito.inOrder(tenantService, deletionAuditReporter);
-    order.verify(tenantService).delete(tenantEntity);
-    order.verify(deletionAuditReporter).reportTenantExecuted(ID);
+    assertThat(result).isSameAs(cascaded);
+    var order =
+        org.mockito.Mockito.inOrder(
+            tenantFacadeAuthorisationService,
+            tenantService,
+            deletionAuditReporter,
+            userAdminService);
+    order.verify(tenantFacadeAuthorisationService).assertCanDeleteTenant();
+    order.verify(tenantService).markForDeletion(tenantEntity);
+    order.verify(deletionAuditReporter).reportTenantScheduled(ID);
+    order.verify(userAdminService).markTenantContentsForDeletion(ID);
+    // The row stays until the nightly jobs have removed everything in it (ORISO-Admin#1525).
+    verify(tenantService, never()).delete(any());
+    verify(deletionAuditReporter, never()).reportTenantExecuted(any());
   }
 
   @Test
-  void deleteTenant_Should_RefuseAndDeleteNothing_When_theTenantStillHasAgenciesOrAccounts() {
+  void deleteTenant_Should_repeatOnlyTheCascade_When_theTraegerIsAlreadyInDeletion() {
     when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
-    var blockers = nothingLeft().deletable(false).agencies(2L).consultants(4L);
-    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(blockers);
+    when(tenantService.markForDeletion(tenantEntity)).thenReturn(false);
+    when(userAdminService.markTenantContentsForDeletion(ID)).thenReturn(cascadeResult(true));
 
-    var thrown =
-        org.junit.jupiter.api.Assertions.assertThrows(
-            com.vi.tenantservice.api.exception.TenantDeletionBlockedException.class,
-            () -> tenantServiceFacade.deleteTenant(ID));
+    tenantServiceFacade.deleteTenant(ID);
 
-    org.assertj.core.api.Assertions.assertThat(thrown.getBlockers()).isSameAs(blockers);
-    verify(tenantService, never()).delete(any());
-    verify(tenantDpaService, never()).deleteSignaturesForTenant(any());
+    verify(userAdminService).markTenantContentsForDeletion(ID);
     verifyNoInteractions(deletionAuditReporter);
   }
 
   @Test
-  void deleteTenant_Should_DeleteNothing_When_UserServiceCannotSayWhatIsLeft() {
+  void deleteTenant_Should_keepTheMarkAndAnswerServiceUnavailable_When_UserServiceIsDown() {
     when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
-    when(userAdminService.getTenantDeletionBlockers(ID))
+    when(tenantService.markForDeletion(tenantEntity)).thenReturn(true);
+    when(userAdminService.markTenantContentsForDeletion(ID))
         .thenThrow(new org.springframework.web.client.ResourceAccessException("down"));
 
     var thrown =
@@ -349,85 +358,120 @@ class TenantServiceFacadeTest {
             org.springframework.web.server.ResponseStatusException.class,
             () -> tenantServiceFacade.deleteTenant(ID));
 
-    org.assertj.core.api.Assertions.assertThat(thrown.getStatusCode().value()).isEqualTo(503);
+    assertThat(thrown.getStatusCode().value()).isEqualTo(503);
+    verify(deletionAuditReporter).reportTenantScheduled(ID);
     verify(tenantService, never()).delete(any());
-    verify(tenantDpaService, never()).deleteSignaturesForTenant(any());
-    verifyNoInteractions(deletionAuditReporter);
+  }
+
+  @Test
+  void deleteTenant_Should_refuseEverything_When_theCallerIsNotThePlatformAdministrator() {
+    org.mockito.Mockito.doThrow(
+            new org.springframework.security.access.AccessDeniedException("Träger admin"))
+        .when(tenantFacadeAuthorisationService)
+        .assertCanDeleteTenant();
+
+    org.junit.jupiter.api.Assertions.assertThrows(
+        org.springframework.security.access.AccessDeniedException.class,
+        () -> tenantServiceFacade.deleteTenant(ID));
+
+    verify(tenantService, never()).markForDeletion(any());
+    verifyNoInteractions(userAdminService, deletionAuditReporter);
+  }
+
+  @Test
+  void deleteTenant_Should_refuseTheMainTenant_When_singleDomainMultitenancyRunsUnderIt() {
+    givenMainTenantSetting("Main");
+    tenantEntity.setSubdomain("main");
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            com.vi.tenantservice.api.exception.TenantValidationException.class,
+            () -> tenantServiceFacade.deleteTenant(ID));
+
+    assertThat(thrown.getStatusExceptionReason())
+        .isEqualTo(
+            com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason
+                .MAIN_TENANT_NOT_DELETABLE);
+    verify(tenantService, never()).markForDeletion(any());
+    verifyNoInteractions(userAdminService, deletionAuditReporter);
   }
 
   @Test
   void
-      deleteTenant_Should_DeleteNothingAndAnswerServiceUnavailable_When_UserServiceSendsNoAnswer() {
+      deleteTenant_Should_deleteAnotherTraeger_When_singleDomainMultitenancyRunsUnderAMainTenant() {
+    givenMainTenantSetting("main");
+    tenantEntity.setSubdomain("other");
     when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
-    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(null);
+    when(tenantService.markForDeletion(tenantEntity)).thenReturn(true);
+    when(userAdminService.markTenantContentsForDeletion(ID)).thenReturn(cascadeResult(true));
+
+    tenantServiceFacade.deleteTenant(ID);
+
+    verify(tenantService).markForDeletion(tenantEntity);
+  }
+
+  @Test
+  void deleteTenant_Should_markNothing_When_theMainTenantSettingCannotBeRead() {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    when(applicationSettingsService.getApplicationSettings())
+        .thenThrow(new org.springframework.web.client.ResourceAccessException("down"));
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
 
     var thrown =
         org.junit.jupiter.api.Assertions.assertThrows(
             org.springframework.web.server.ResponseStatusException.class,
             () -> tenantServiceFacade.deleteTenant(ID));
 
-    org.assertj.core.api.Assertions.assertThat(thrown.getStatusCode().value()).isEqualTo(503);
-    verify(tenantService, never()).delete(any());
-    verify(tenantDpaService, never()).deleteSignaturesForTenant(any());
-    verifyNoInteractions(deletionAuditReporter);
+    assertThat(thrown.getStatusCode().value()).isEqualTo(503);
+    verify(tenantService, never()).markForDeletion(any());
+    verifyNoInteractions(userAdminService);
   }
 
   @Test
-  void deleteTenant_Should_DeleteNothingAndAnswerServiceUnavailable_When_theAnswerHasNoVerdict() {
-    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
-    when(userAdminService.getTenantDeletionBlockers(ID)).thenReturn(nothingLeft().deletable(null));
-
-    var thrown =
-        org.junit.jupiter.api.Assertions.assertThrows(
-            org.springframework.web.server.ResponseStatusException.class,
-            () -> tenantServiceFacade.deleteTenant(ID));
-
-    org.assertj.core.api.Assertions.assertThat(thrown.getStatusCode().value()).isEqualTo(503);
-    verify(tenantService, never()).delete(any());
-    verifyNoInteractions(deletionAuditReporter);
-  }
-
-  @Test
-  void deleteTenant_Should_NotAskUserService_When_theTenantDoesNotExist() {
+  void deleteTenant_Should_markNothing_When_theTenantDoesNotExist() {
     when(tenantService.findTenantById(ID)).thenReturn(Optional.empty());
 
     org.junit.jupiter.api.Assertions.assertThrows(
         com.vi.tenantservice.api.exception.TenantNotFoundException.class,
         () -> tenantServiceFacade.deleteTenant(ID));
 
-    verify(userAdminService, never()).getTenantDeletionBlockers(any());
-  }
-
-  private static com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO
-      nothingLeft() {
-    return new com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO()
-        .deletable(true)
-        .agencies(0L)
-        .consultants(0L)
-        .adviceSeekers(0L)
-        .agencyAdmins(0L)
-        .tenantAdmins(0L)
-        .openInvites(0L);
+    verify(tenantService, never()).markForDeletion(any());
+    verifyNoInteractions(userAdminService, deletionAuditReporter);
   }
 
   @Test
-  void deleteTenant_Should_NotReport_WhenTheTenantIsNotFound() {
-    when(tenantService.findTenantById(ID)).thenReturn(Optional.empty());
-
-    org.junit.jupiter.api.Assertions.assertThrows(
-        com.vi.tenantservice.api.exception.TenantNotFoundException.class,
-        () -> tenantServiceFacade.deleteTenant(ID));
-
-    org.mockito.Mockito.verifyNoInteractions(deletionAuditReporter);
-  }
-
-  @Test
-  void deleteTenant_Should_NotReport_WhenTheTechnicalTenantIsRefused() {
+  void deleteTenant_Should_markNothing_When_theTechnicalTenantIsRefused() {
     org.junit.jupiter.api.Assertions.assertThrows(
         com.vi.tenantservice.api.exception.TenantBadRequestException.class,
         () -> tenantServiceFacade.deleteTenant(0L));
 
-    org.mockito.Mockito.verifyNoInteractions(deletionAuditReporter);
+    verify(tenantService, never()).markForDeletion(any());
+    verifyNoInteractions(userAdminService, deletionAuditReporter);
+  }
+
+  private void givenMainTenantSetting(String subdomain) {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    var settings =
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+            .ApplicationSettingsDTO();
+    settings.setMainTenantSubdomainForSingleDomainMultitenancy(
+        new com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO()
+            .value(subdomain));
+    when(applicationSettingsService.getApplicationSettings()).thenReturn(settings);
+  }
+
+  private static com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionResultDTO
+      cascadeResult(boolean complete) {
+    return new com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionResultDTO()
+        .complete(complete)
+        .invites(0L)
+        .consultants(0L)
+        .adviceSeekers(0L)
+        .agencyAdmins(0L)
+        .tenantAdmins(0L)
+        .agencies(0L)
+        .failures(List.of());
   }
 
   @Test

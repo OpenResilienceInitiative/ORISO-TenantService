@@ -1,0 +1,25 @@
+<?xml version="1.1" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.6.xsd">
+
+    <!--
+      Deleting a Träger marks it first (ORISO-Admin#1525, deletion epic ORISO-Admin#1520 rule 2):
+      the row stays, so its agencies and accounts never point at a Träger that no longer exists,
+      until the nightly jobs have removed them and the Träger goes last. NULL = not in deletion.
+      Additive and nullable; guarded like 0037 so a column added by hand is marked as run.
+    -->
+    <changeSet author="oriso" id="tenantAddDeleteDate">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="tenant" columnName="delete_date"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="tenant">
+            <column name="delete_date" type="DATETIME(6)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+        <rollback>
+            <dropColumn tableName="tenant" columnName="delete_date"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

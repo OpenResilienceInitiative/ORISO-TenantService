@@ -15,7 +15,6 @@ import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
 import com.vi.tenantservice.api.exception.TenantBadRequestException;
-import com.vi.tenantservice.api.exception.TenantDeletionBlockedException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
@@ -50,7 +49,6 @@ import com.vi.tenantservice.api.service.DeletionAuditReporter;
 import com.vi.tenantservice.api.service.NewTenantPresetService;
 import com.vi.tenantservice.api.service.SingleDomainTenantOverrideService;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
-import com.vi.tenantservice.api.service.TenantDpaService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService;
 import com.vi.tenantservice.api.service.TenantDpaStatusService.AdminSignatureForm;
 import com.vi.tenantservice.api.service.TenantIdAllocationService;
@@ -73,7 +71,7 @@ import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
-import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO;
+import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionResultDTO;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -164,8 +162,6 @@ public class TenantServiceFacade {
   private final @NonNull TenantResolverService tenantResolverService;
 
   private final @NonNull TenantDpaStatusService tenantDpaStatusService;
-
-  private final @NonNull TenantDpaService tenantDpaService;
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
@@ -495,63 +491,69 @@ public class TenantServiceFacade {
   }
 
   /**
-   * Deletes the tenant together with its DPA signature evidence. Transactional on purpose: the
-   * database cascade that used to tie the two together was dropped so sign links could be minted
-   * for a still-reserved id (#179), so this boundary is now the only thing preventing a half
-   * deletion — a surviving tenant whose append-only signature evidence is already gone.
+   * Deletes a Träger the way every deletion works (ORISO-Admin#1525, epic ORISO-Admin#1520): the
+   * Träger is marked and switched off at once, and everything that belongs to it is marked in
+   * UserService and AgencyService, so logins stop and invite links die now. The rows go with the
+   * nightly jobs, and the Träger itself last, so nothing ever points at a Träger that no longer
+   * exists.
+   *
+   * <p>Only the platform administrator in person may do this. The technical tenant and the main
+   * tenant of single-domain multitenancy can never be deleted. Calling it again for a Träger
+   * already in deletion repeats only the cascade, which picks up what was not marked before.
+   *
+   * @return what the cascade marked, and what it could not
    */
-  @Transactional
-  public void deleteTenant(Long id) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
+  public TenantDeletionResultDTO deleteTenant(Long id) {
+    tenantFacadeAuthorisationService.assertCanDeleteTenant();
 
     if (id == TECHNICAL_TENANT_ID) {
       throw new TenantBadRequestException("Technical tenant cannot be deleted.");
     }
-
     TenantEntity tenant =
         tenantService
             .findTenantById(id)
             .orElseThrow(() -> new TenantNotFoundException("Tenant with id " + id + " not found"));
+    assertNotMainTenant(tenant);
 
-    assertNothingLeftInTenant(id);
+    // Committed before UserService is called: a failing cascade leaves the Träger marked and
+    // switched off, and the next call (or the nightly run) picks up the rest.
+    if (tenantService.markForDeletion(tenant)) {
+      deletionAuditReporter.reportTenantScheduled(id);
+    }
 
-    // App-level replacement for the DB cascade dropped in changeset 0030 (#179): the tenant's
-    // DPA signature rows (incl. any outstanding sign links) go with the tenant.
-    tenantDpaService.deleteSignaturesForTenant(id);
-    tenantService.delete(tenant);
-    // Reported after the commit and best effort: the log can never undo or fail the deletion.
-    deletionAuditReporter.reportTenantExecuted(id);
+    try {
+      return userAdminService.markTenantContentsForDeletion(id);
+    } catch (RestClientException e) {
+      log.error("Träger {} is marked, but its accounts could not be marked yet", id, e);
+      throw new ResponseStatusException(
+          HttpStatus.SERVICE_UNAVAILABLE,
+          "The Träger is marked for deletion; its accounts and agencies could not be marked yet",
+          e);
+    }
   }
 
   /**
-   * Refuses to delete a Träger that still has agencies, accounts or open invitations
-   * (ORISO-UserService#1466). Deleting it anyway left them pointing at a Träger that no longer
-   * existed ("Unknown Tenant"), where the admin interface could not delete them any more. Fails
-   * closed: when UserService cannot say what is left, nothing is deleted.
+   * In single-domain multitenancy the platform runs under its main tenant; deleting it would take
+   * the platform down. Fails closed: when the setting cannot be read, nothing is deleted.
    */
-  private void assertNothingLeftInTenant(Long id) {
-    TenantDeletionBlockersDTO blockers;
+  private void assertNotMainTenant(TenantEntity tenant) {
+    if (!multitenancyWithSingleDomain) {
+      return;
+    }
+    String mainSubdomain;
     try {
-      blockers = userAdminService.getTenantDeletionBlockers(id);
-    } catch (RestClientException e) {
-      log.error("Could not check what still belongs to tenant {}; not deleting it", id, e);
-      throw blockerCheckUnavailable(e);
+      var settings = applicationSettingsService.getApplicationSettings();
+      var setting =
+          settings == null ? null : settings.getMainTenantSubdomainForSingleDomainMultitenancy();
+      mainSubdomain = setting == null ? null : setting.getValue();
+    } catch (RuntimeException e) {
+      log.error("Main tenant setting unavailable; not deleting tenant {}", tenant.getId(), e);
+      throw new ResponseStatusException(
+          HttpStatus.SERVICE_UNAVAILABLE, "Could not check whether this is the main tenant", e);
     }
-    // No answer is no proof that something is left: say the check failed, not 409 (#1466).
-    if (blockers == null || blockers.getDeletable() == null) {
-      log.error("UserService sent no deletion verdict for tenant {}; not deleting it", id);
-      throw blockerCheckUnavailable(null);
+    if (mainSubdomain != null && mainSubdomain.equalsIgnoreCase(tenant.getSubdomain())) {
+      throw new TenantValidationException(HttpStatusExceptionReason.MAIN_TENANT_NOT_DELETABLE);
     }
-    if (!blockers.getDeletable()) {
-      throw new TenantDeletionBlockedException(id, blockers);
-    }
-  }
-
-  private static ResponseStatusException blockerCheckUnavailable(Throwable cause) {
-    return new ResponseStatusException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "Could not check whether the tenant still has agencies or accounts",
-        cause);
   }
 
   private boolean isAttemptToCreateFirstNonTechnicalTenant(Long tenantId) {

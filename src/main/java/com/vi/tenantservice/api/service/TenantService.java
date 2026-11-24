@@ -117,6 +117,25 @@ public class TenantService {
         .orElseThrow(() -> new TenantNotFoundException("Tenant not found: " + id));
   }
 
+  /**
+   * Marks the Träger for deletion and switches it off (ORISO-Admin#1525). Idempotent: a Träger
+   * already in deletion keeps its first date.
+   *
+   * @return true when the Träger was marked by this call
+   */
+  @Transactional
+  public boolean markForDeletion(TenantEntity tenant) {
+    if (tenant.getDeleteDate() != null) {
+      return false;
+    }
+    var now = LocalDateTime.now(ZoneOffset.UTC);
+    tenant.setDeleteDate(now);
+    tenant.setActive(false);
+    tenant.setUpdateDate(now);
+    tenantRepository.save(tenant);
+    return true;
+  }
+
   public TenantEntity update(TenantEntity tenantEntity) {
     validateTenant(tenantEntity);
     overrideSubdomainIfNeededForSingleDomainMultitenancy(tenantEntity);
