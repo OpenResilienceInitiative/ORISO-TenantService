@@ -349,7 +349,7 @@ class TenantServiceFacadeTest {
   @Test
   void deleteTenant_Should_markTheTraegerThenCascade_AndReportItAsScheduled() {
     when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
-    when(tenantService.markForDeletion(tenantEntity)).thenReturn(true);
+    when(tenantService.markForDeletion(ID)).thenReturn(true);
     var cascaded = cascadeResult(true);
     when(userAdminService.markTenantContentsForDeletion(ID)).thenReturn(cascaded);
 
@@ -363,7 +363,7 @@ class TenantServiceFacadeTest {
             deletionAuditReporter,
             userAdminService);
     order.verify(tenantFacadeAuthorisationService).assertCanDeleteTenant();
-    order.verify(tenantService).markForDeletion(tenantEntity);
+    order.verify(tenantService).markForDeletion(ID);
     order.verify(deletionAuditReporter).reportTenantScheduled(ID);
     order.verify(userAdminService).markTenantContentsForDeletion(ID);
     // The row stays until the nightly jobs have removed everything in it (ORISO-Admin#1525).
@@ -374,7 +374,7 @@ class TenantServiceFacadeTest {
   @Test
   void deleteTenant_Should_repeatOnlyTheCascade_When_theTraegerIsAlreadyInDeletion() {
     when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
-    when(tenantService.markForDeletion(tenantEntity)).thenReturn(false);
+    when(tenantService.markForDeletion(ID)).thenReturn(false);
     when(userAdminService.markTenantContentsForDeletion(ID)).thenReturn(cascadeResult(true));
 
     tenantServiceFacade.deleteTenant(ID);
@@ -386,7 +386,7 @@ class TenantServiceFacadeTest {
   @Test
   void deleteTenant_Should_keepTheMarkAndAnswerServiceUnavailable_When_UserServiceIsDown() {
     when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
-    when(tenantService.markForDeletion(tenantEntity)).thenReturn(true);
+    when(tenantService.markForDeletion(ID)).thenReturn(true);
     when(userAdminService.markTenantContentsForDeletion(ID))
         .thenThrow(new org.springframework.web.client.ResourceAccessException("down"));
 
@@ -440,12 +440,12 @@ class TenantServiceFacadeTest {
     givenMainTenantSetting("main");
     tenantEntity.setSubdomain("other");
     when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
-    when(tenantService.markForDeletion(tenantEntity)).thenReturn(true);
+    when(tenantService.markForDeletion(ID)).thenReturn(true);
     when(userAdminService.markTenantContentsForDeletion(ID)).thenReturn(cascadeResult(true));
 
     tenantServiceFacade.deleteTenant(ID);
 
-    verify(tenantService).markForDeletion(tenantEntity);
+    verify(tenantService).markForDeletion(ID);
   }
 
   @Test
@@ -463,6 +463,42 @@ class TenantServiceFacadeTest {
     assertThat(thrown.getStatusCode().value()).isEqualTo(503);
     verify(tenantService, never()).markForDeletion(any());
     verifyNoInteractions(userAdminService);
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.NullAndEmptySource
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"  "})
+  void deleteTenant_Should_markNothing_When_theMainTenantSettingHasNoValue(String value) {
+    tenantEntity.setSubdomain("any");
+    givenMainTenantSetting(value);
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            org.springframework.web.server.ResponseStatusException.class,
+            () -> tenantServiceFacade.deleteTenant(ID));
+
+    assertThat(thrown.getStatusCode().value()).isEqualTo(503);
+    verify(tenantService, never()).markForDeletion(any());
+    verifyNoInteractions(userAdminService, deletionAuditReporter);
+  }
+
+  @Test
+  void deleteTenant_Should_markNothing_When_theMainTenantSettingIsMissing() {
+    ReflectionTestUtils.setField(tenantServiceFacade, "multitenancyWithSingleDomain", true);
+    when(applicationSettingsService.getApplicationSettings())
+        .thenReturn(
+            new com.vi.tenantservice.applicationsettingsservice.generated.web.model
+                .ApplicationSettingsDTO());
+    when(tenantService.findTenantById(ID)).thenReturn(Optional.of(tenantEntity));
+
+    var thrown =
+        org.junit.jupiter.api.Assertions.assertThrows(
+            org.springframework.web.server.ResponseStatusException.class,
+            () -> tenantServiceFacade.deleteTenant(ID));
+
+    assertThat(thrown.getStatusCode().value()).isEqualTo(503);
+    verify(tenantService, never()).markForDeletion(any());
   }
 
   @Test

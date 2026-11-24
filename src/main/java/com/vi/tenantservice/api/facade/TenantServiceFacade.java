@@ -519,7 +519,7 @@ public class TenantServiceFacade {
 
     // Committed before UserService is called: a failing cascade leaves the Träger marked and
     // switched off, and the next call (or the nightly run) picks up the rest.
-    if (tenantService.markForDeletion(tenant)) {
+    if (tenantService.markForDeletion(id)) {
       deletionAuditReporter.reportTenantScheduled(id);
     }
 
@@ -583,7 +583,14 @@ public class TenantServiceFacade {
       throw new ResponseStatusException(
           HttpStatus.SERVICE_UNAVAILABLE, "Could not check whether this is the main tenant", e);
     }
-    if (mainSubdomain != null && mainSubdomain.equalsIgnoreCase(tenant.getSubdomain())) {
+    // A missing or blank setting cannot tell the main tenant apart: fail closed as when it cannot
+    // be read at all.
+    if (mainSubdomain == null || mainSubdomain.isBlank()) {
+      log.error("Main tenant setting is not configured; not deleting tenant {}", tenant.getId());
+      throw new ResponseStatusException(
+          HttpStatus.SERVICE_UNAVAILABLE, "Could not check whether this is the main tenant");
+    }
+    if (mainSubdomain.equalsIgnoreCase(tenant.getSubdomain())) {
       throw new TenantValidationException(HttpStatusExceptionReason.MAIN_TENANT_NOT_DELETABLE);
     }
   }

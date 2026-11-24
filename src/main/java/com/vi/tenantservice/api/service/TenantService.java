@@ -1,6 +1,7 @@
 package com.vi.tenantservice.api.service;
 
 import static com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason.SUBDOMAIN_NOT_UNIQUE;
+import static com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason.TENANT_MARKED_FOR_DELETION;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
@@ -106,10 +107,21 @@ public class TenantService {
     return existingTenantId != null && !existingTenantId.equals(tenantEntity.getId());
   }
 
+  /**
+   * Switches a Träger on or off. A Träger marked for deletion stays off (ORISO-Admin#1525): its
+   * accounts are already being deleted, so switching it on again is refused with 409.
+   */
   @Transactional
   public TenantEntity updateOperationalStatus(Long id, boolean active) {
     if (tenantRepository.updateOperationalStatus(id, active, LocalDateTime.now(ZoneOffset.UTC))
         == 0) {
+      var tenant =
+          tenantRepository
+              .findById(id)
+              .orElseThrow(() -> new TenantNotFoundException("Tenant not found: " + id));
+      if (tenant.getDeleteDate() != null) {
+        throw new TenantValidationException(TENANT_MARKED_FOR_DELETION);
+      }
       throw new TenantNotFoundException("Tenant not found: " + id);
     }
     return tenantRepository
@@ -118,22 +130,20 @@ public class TenantService {
   }
 
   /**
-   * Marks the Träger for deletion and switches it off (ORISO-Admin#1525). Idempotent: a Träger
-   * already in deletion keeps its first date.
+   * Marks the Träger for deletion and switches it off (ORISO-Admin#1525). Idempotent and safe
+   * against overlapping requests: one conditional update sets the date, so a Träger already in
+   * deletion keeps its first date and is only switched off again.
    *
    * @return true when the Träger was marked by this call
    */
   @Transactional
-  public boolean markForDeletion(TenantEntity tenant) {
-    if (tenant.getDeleteDate() != null) {
-      return false;
-    }
+  public boolean markForDeletion(Long tenantId) {
     var now = LocalDateTime.now(ZoneOffset.UTC);
-    tenant.setDeleteDate(now);
-    tenant.setActive(false);
-    tenant.setUpdateDate(now);
-    tenantRepository.save(tenant);
-    return true;
+    if (tenantRepository.markForDeletion(tenantId, now) == 1) {
+      return true;
+    }
+    tenantRepository.deactivateMarkedForDeletion(tenantId, now);
+    return false;
   }
 
   public List<Long> findTenantIdsMarkedForDeletion() {
@@ -141,6 +151,10 @@ public class TenantService {
   }
 
   public TenantEntity update(TenantEntity tenantEntity) {
+    // The edit form can carry "active" as well: a Träger in deletion must stay off (#1525).
+    if (tenantEntity.getDeleteDate() != null && Boolean.TRUE.equals(tenantEntity.getActive())) {
+      throw new TenantValidationException(TENANT_MARKED_FOR_DELETION);
+    }
     validateTenant(tenantEntity);
     overrideSubdomainIfNeededForSingleDomainMultitenancy(tenantEntity);
     tenantEntity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));

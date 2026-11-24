@@ -204,4 +204,59 @@ class TenantRepositoryTest {
                 .getLegalName())
         .isEqualTo("Caritasverband für die Erzdiözese Musterstadt e.V.");
   }
+
+  /** Two overlapping deletions: only the first sets the date (ORISO-Admin#1525). */
+  @Test
+  void markForDeletion_Should_setTheDateOnlyOnce_And_switchTheTraegerOff() {
+    var first = LocalDateTime.of(2026, 11, 24, 9, 0);
+
+    org.assertj.core.api.Assertions.assertThat(tenantRepository.markForDeletion(EXISTING_ID, first))
+        .isEqualTo(1);
+    org.assertj.core.api.Assertions.assertThat(
+            tenantRepository.markForDeletion(EXISTING_ID, first.plusMinutes(5)))
+        .isZero();
+
+    var tenant = tenantRepository.findById(EXISTING_ID).orElseThrow();
+    assertThat(tenant.getDeleteDate()).isEqualTo(first);
+    assertThat(tenant.getActive()).isEqualTo(false);
+  }
+
+  /** A Träger in deletion cannot be switched on again (ORISO-Admin#1525). */
+  @Test
+  void updateOperationalStatus_Should_leaveATraegerInDeletionOff() {
+    var first = LocalDateTime.of(2026, 11, 24, 9, 0);
+    tenantRepository.markForDeletion(EXISTING_ID, first);
+
+    org.assertj.core.api.Assertions.assertThat(
+            tenantRepository.updateOperationalStatus(EXISTING_ID, true, first.plusHours(1)))
+        .isZero();
+
+    assertThat(tenantRepository.findById(EXISTING_ID).orElseThrow().getActive()).isEqualTo(false);
+  }
+
+  /** A repeated deletion switches the Träger off again and keeps its first date. */
+  @Test
+  void deactivateMarkedForDeletion_Should_switchOffWithoutTouchingTheFirstDate() {
+    var first = LocalDateTime.of(2026, 11, 24, 9, 0);
+    var tenant = tenantRepository.findById(EXISTING_ID).orElseThrow();
+    tenant.setDeleteDate(first);
+    tenant.setActive(true);
+    tenantRepository.saveAndFlush(tenant);
+
+    org.assertj.core.api.Assertions.assertThat(
+            tenantRepository.deactivateMarkedForDeletion(EXISTING_ID, first.plusDays(1)))
+        .isEqualTo(1);
+
+    var reloaded = tenantRepository.findById(EXISTING_ID).orElseThrow();
+    assertThat(reloaded.getActive()).isEqualTo(false);
+    assertThat(reloaded.getDeleteDate()).isEqualTo(first);
+  }
+
+  /** Never touches a Träger that is not in deletion. */
+  @Test
+  void deactivateMarkedForDeletion_Should_ignoreATraegerNotInDeletion() {
+    org.assertj.core.api.Assertions.assertThat(
+            tenantRepository.deactivateMarkedForDeletion(EXISTING_ID, LocalDateTime.now()))
+        .isZero();
+  }
 }

@@ -44,5 +44,11 @@ public enum HttpStatusExceptionReason {
    */
   MAIN_TENANT_NOT_DELETABLE,
 
+  /**
+   * The Träger is marked for deletion: its accounts are already being deleted, so it cannot be
+   * switched on again (ORISO-Admin#1525). Answers 409.
+   */
+  TENANT_MARKED_FOR_DELETION,
+
   CONSULTING_SETTINGS_OUTCOME_UNKNOWN,
 }
