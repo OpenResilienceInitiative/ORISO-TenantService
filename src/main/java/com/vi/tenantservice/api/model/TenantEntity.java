@@ -43,6 +43,13 @@ public class TenantEntity implements TenantData {
   @Column(name = "active", nullable = false)
   private Boolean active = true;
 
+  /**
+   * Set when the platform administrator deletes the Träger (ORISO-Admin#1525). The row stays until
+   * the nightly jobs have removed everything that belongs to it; NULL means not in deletion.
+   */
+  @Column(name = "delete_date")
+  private LocalDateTime deleteDate;
+
   @Column(name = "name", nullable = false)
   private String name;
 

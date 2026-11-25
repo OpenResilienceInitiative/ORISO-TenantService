@@ -50,6 +50,7 @@ import com.vi.tenantservice.api.model.TenantsSearchResultDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeyUpdateDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeysDTO;
 import com.vi.tenantservice.api.model.TranslationErrorDTO;
+import com.vi.tenantservice.api.model.TranslationKeyTestResultDTO;
 import com.vi.tenantservice.api.model.TranslationRequestDTO;
 import com.vi.tenantservice.api.model.TranslationResponseDTO;
 import com.vi.tenantservice.api.service.BrandingAssetDecoder.DecodedAsset;
@@ -67,6 +68,7 @@ import com.vi.tenantservice.api.service.translation.TranslationException;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.generated.api.controller.TenantApi;
 import com.vi.tenantservice.generated.api.controller.TenantadminApi;
+import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionResultDTO;
 import io.swagger.annotations.Api;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -451,6 +453,16 @@ public class TenantController implements TenantApi, TenantadminApi {
     }
   }
 
+  @Override
+  @PreAuthorize("hasAuthority('AUTHORIZATION_GET_ALL_TENANTS')")
+  public ResponseEntity<TranslationKeyTestResultDTO> testTranslationApiKey(String provider) {
+    log.info(
+        "Testing translation API key for provider {} by user {}",
+        provider,
+        authorisationService.getUsername());
+    return new ResponseEntity<>(translationFacade.testApiKey(provider), HttpStatus.OK);
+  }
+
   @ExceptionHandler(TranslationException.class)
   ResponseEntity<TranslationErrorDTO> handleTranslationException(TranslationException e) {
     log.warn("Machine translation failed: {} ({})", e.getErrorCode(), e.getMessage());
@@ -469,6 +481,37 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   @PreAuthorize(
+      "(hasAuthority('AUTHORIZATION_CREATE_TENANT')"
+          + " and @tenantFacadeAuthorisationService.isPlatformAdministrator())"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
+  public ResponseEntity<Void> checkTenantIdReservationProof(Long id, String reservationToken) {
+    if (reservationToken == null || reservationToken.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reservation proof is required");
+    }
+    HttpStatus status =
+        tenantIdAllocationService.hasMatchingOpenReservation(id, reservationToken)
+            ? HttpStatus.NO_CONTENT
+            : HttpStatus.NOT_FOUND;
+    return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).build();
+  }
+
+  @Override
+  @PreAuthorize(
+      "(hasAuthority('AUTHORIZATION_CREATE_TENANT')"
+          + " and @tenantFacadeAuthorisationService.isPlatformAdministrator())"
+          + " or hasAuthority('AUTHORIZATION_TECHNICAL_RELEASE_TENANT_ID_RESERVATION')"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
+  public ResponseEntity<Void> releaseTenantIdReservationWithProof(
+      Long id, String reservationToken) {
+    if (reservationToken == null || reservationToken.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reservation proof is required");
+    }
+    tenantIdAllocationService.releaseMatchingReservation(id, reservationToken);
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  @PreAuthorize(
       "hasAnyAuthority('AUTHORIZATION_GET_TENANT', 'AUTHORIZATION_TECHNICAL_READ_TENANT')")
   public ResponseEntity<MultilingualTenantDTO> getMultilingualTenantById(Long id) {
     var tenantById = tenantServiceFacade.findMultilingualTenantById(id);
@@ -479,7 +522,8 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   @PreAuthorize(
-      "hasAuthority('AUTHORIZATION_CREATE_TENANT') or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
+      "@tenantFacadeAuthorisationService.mayManageTenantIdReservations()"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
   public ResponseEntity<TenantIdAvailabilityDTO> getTenantIdAvailability(Long id) {
     var status = tenantIdAllocationService.getStatus(id);
     return ResponseEntity.ok(
@@ -489,7 +533,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  @PreAuthorize("@tenantFacadeAuthorisationService.mayManageTenantIdReservations()")
   public ResponseEntity<NextFreeTenantIdDTO> getNextFreeTenantId(Long from, String direction) {
     boolean upwards = "UP".equalsIgnoreCase(direction);
     if (!upwards && !"DOWN".equalsIgnoreCase(direction)) {
@@ -502,7 +546,7 @@ public class TenantController implements TenantApi, TenantadminApi {
   }
 
   @Override
-  @PreAuthorize("hasAuthority('AUTHORIZATION_CREATE_TENANT')")
+  @PreAuthorize("@tenantFacadeAuthorisationService.mayManageTenantIdReservations()")
   public ResponseEntity<TenantIdReservationDTO> reserveTenantId(
       TenantIdReservationRequestDTO tenantIdReservationRequestDTO) {
     var requestedId =
@@ -522,8 +566,9 @@ public class TenantController implements TenantApi, TenantadminApi {
 
   @Override
   @PreAuthorize(
-      "hasAnyAuthority('AUTHORIZATION_CREATE_TENANT',"
-          + " 'AUTHORIZATION_TECHNICAL_RELEASE_TENANT_ID_RESERVATION') or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
+      "@tenantFacadeAuthorisationService.mayManageTenantIdReservations()"
+          + " or hasAuthority('AUTHORIZATION_TECHNICAL_RELEASE_TENANT_ID_RESERVATION')"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')")
   public ResponseEntity<Void> releaseTenantIdReservation(Long id, String reservationToken) {
     log.info(
         "Releasing tenant ID reservation {} by user {}", id, authorisationService.getUsername());
@@ -544,6 +589,24 @@ public class TenantController implements TenantApi, TenantadminApi {
     log.info("Creating tenant by user {} ", authorisationService.getUsername());
     var tenant = tenantServiceFacade.createTenant(tenantMultilingualDTO);
     return new ResponseEntity<>(tenant, HttpStatus.OK);
+  }
+
+  @Override
+  @PreAuthorize(
+      "(hasAuthority('AUTHORIZATION_CREATE_TENANT')"
+          + " and @tenantFacadeAuthorisationService.isPlatformAdministrator())"
+          + " or hasAuthority('AUTHORIZATION_TECHNICAL_READ_TENANT')"
+          + " or @taskServiceIdentity.allows(authentication, 'INVITE_RESERVATIONS')"
+          + " or @taskServiceIdentity.allows(authentication, 'CONFIG_WIZARD')")
+  public ResponseEntity<Void> checkTenantIdAssignmentProof(Long id, String reservationToken) {
+    if (reservationToken == null || reservationToken.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reservation proof is required");
+    }
+    HttpStatus status =
+        tenantIdAllocationService.hasMatchingAssignment(id, reservationToken)
+            ? HttpStatus.NO_CONTENT
+            : HttpStatus.NOT_FOUND;
+    return ResponseEntity.status(status).cacheControl(CacheControl.noStore()).build();
   }
 
   @Override
@@ -659,12 +722,36 @@ public class TenantController implements TenantApi, TenantadminApi {
     return ResponseEntity.ok(tenantServiceFacade.getStatisticsNamesExceptTechnical());
   }
 
+  /**
+   * Träger in deletion, for UserService's nightly job that finishes them (ORISO-Admin#1525). Only
+   * the RUNTIME task actor with the {@code tenant-deletion} role.
+   */
+  @GetMapping("/tenant/deletions")
+  @PreAuthorize("@taskServiceIdentity.allows(authentication, 'TENANT_DELETION')")
+  public ResponseEntity<List<Long>> getTenantsMarkedForDeletion() {
+    return ResponseEntity.ok(tenantServiceFacade.findTenantIdsMarkedForDeletion());
+  }
+
+  /**
+   * The last step of a Träger deletion: UserService's nightly job calls it once nothing references
+   * the Träger any more (ORISO-Admin#1525). Only a marked Träger; only the RUNTIME task actor.
+   */
+  @DeleteMapping("/tenant/{id}/deletion")
+  @PreAuthorize("@taskServiceIdentity.allows(authentication, 'TENANT_DELETION')")
+  public ResponseEntity<Void> purgeTenantMarkedForDeletion(@PathVariable("id") Long id) {
+    tenantServiceFacade.purgeTenantMarkedForDeletion(id);
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * Marks the Träger and everything in it for deletion (ORISO-Admin#1525). 202: the nightly jobs
+   * remove the rows, the Träger last. The body says what was marked and what could not be.
+   */
   @DeleteMapping("/tenant/{id}")
-  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
-  public ResponseEntity<Void> deleteTenant(@PathVariable("id") Long id) {
-    log.info("Deleting tenant with id {} by user {} ", id, authorisationService.getUsername());
-    tenantServiceFacade.deleteTenant(id);
-    return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+  @PreAuthorize("@tenantFacadeAuthorisationService.isPlatformAdministrator()")
+  public ResponseEntity<TenantDeletionResultDTO> deleteTenant(@PathVariable("id") Long id) {
+    log.info("Marking tenant {} for deletion by user {}", id, authorisationService.getUsername());
+    return new ResponseEntity<>(tenantServiceFacade.deleteTenant(id), HttpStatus.ACCEPTED);
   }
 
   @Override

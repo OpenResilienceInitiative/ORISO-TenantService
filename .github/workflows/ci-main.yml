@@ -11,6 +11,7 @@ on:
 env:
   REGISTRY: ghcr.io
   ORG: openresilienceinitiative
+  IMAGE_NAME: oriso-tenantservice
 
 jobs:
   build:
@@ -19,6 +20,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
 
     steps:
     - name: Checkout repository
@@ -34,18 +38,35 @@ jobs:
       uses: ./.github/actions/docker-build-push
       with:
         push_to_ghcr: true
-        image_name: oriso-tenantservice
+        image_name: ${{ env.IMAGE_NAME }}
         github_token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Reject fixable high or critical image vulnerabilities
-      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+  attest-dev:
+    name: Sign the published Dev image
+    if: github.ref == 'refs/heads/dev'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+
+    steps:
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v4
       with:
-        image-ref: ${{ env.REGISTRY }}/${{ env.ORG }}/oriso-tenantservice@${{ steps.image.outputs.digest }}
-        format: table
-        exit-code: '1'
-        ignore-unfixed: true
-        vuln-type: os,library
-        severity: CRITICAL,HIGH
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Sign and publish the image provenance attestation
+      uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
+      with:
+        subject-name: ${{ env.REGISTRY }}/${{ env.ORG }}/${{ env.IMAGE_NAME }}
+        subject-digest: ${{ needs.build.outputs.digest }}
+        push-to-registry: true
+        create-storage-record: false
 
   # The former non-blocking `integration-tests` burn-in job was folded into the
   # blocking `build` job above: `maven-build` now runs `mvnw -B verify`, so the

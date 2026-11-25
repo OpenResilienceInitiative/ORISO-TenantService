@@ -12,21 +12,25 @@ jobs:
     name: test, build and Docker validation
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v6
-      
+      with:
+        persist-credentials: false
+
     - name: Compile and Package Java application
       uses: ./.github/actions/maven-build
       with:
         java_version: '21'
 
-    - name: Create Docker image
+    - name: Build and scan Docker image without publishing
       uses: ./.github/actions/docker-build-push
       with:
         push_to_ghcr: false
         image_name: oriso-tenantservice
-        github_token: ${{ secrets.GITHUB_TOKEN }}
 
   # The former non-blocking `integration-tests` burn-in job was folded into the
   # blocking `validate` job above: `maven-build` now runs `mvnw -B verify`, so the

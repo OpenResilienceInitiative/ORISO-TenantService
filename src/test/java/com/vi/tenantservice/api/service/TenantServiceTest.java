@@ -15,6 +15,7 @@ import com.vi.tenantservice.applicationsettingsservice.generated.web.model.Appli
 import com.vi.tenantservice.applicationsettingsservice.generated.web.model.SettingDTO;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Optional;
 import org.jeasy.random.EasyRandom;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -43,7 +44,7 @@ class TenantServiceTest {
   @Test
   void searchCandidatesExcludeTechnicalTenantBeforeOwnerLookups() {
     when(tenantRepository.findAllIds()).thenReturn(java.util.List.of(0L, 1L, 2L));
-    assertThat(tenantService.searchableTenantIds()).containsExactly(1L, 2L);
+    assertThat(tenantService.searchableTenantIds(Optional.empty())).containsExactly(1L, 2L);
   }
 
   @Test
@@ -124,6 +125,7 @@ class TenantServiceTest {
     // given
     EasyRandom random = new EasyRandom();
     TenantEntity tenantEntity = random.nextObject(TenantEntity.class);
+    tenantEntity.setDeleteDate(null);
     LocalDateTime previousUpdateDate = tenantEntity.getUpdateDate();
     when(tenantRepository.findIdBySubdomain(tenantEntity.getSubdomain())).thenReturn(null);
 
@@ -144,6 +146,7 @@ class TenantServiceTest {
     ReflectionTestUtils.setField(tenantService, "multitenancyWithSingleDomain", true);
     EasyRandom random = new EasyRandom();
     TenantEntity tenantEntity = random.nextObject(TenantEntity.class);
+    tenantEntity.setDeleteDate(null);
     LocalDateTime previousUpdateDate = tenantEntity.getUpdateDate();
     givenApplicationSettingsWithMainTenantSubdomain("subdomain");
 
@@ -164,6 +167,7 @@ class TenantServiceTest {
     ReflectionTestUtils.setField(tenantService, "multitenancyWithSingleDomain", true);
     EasyRandom random = new EasyRandom();
     TenantEntity tenantEntity = random.nextObject(TenantEntity.class);
+    tenantEntity.setDeleteDate(null);
     LocalDateTime previousUpdateDate = tenantEntity.getUpdateDate();
     tenantEntity.setSubdomain(MAIN_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY);
     givenApplicationSettingsWithMainTenantSubdomain(MAIN_SUBDOMAIN_FOR_SINGLE_DOMAIN_MULTITENANCY);
@@ -237,5 +241,69 @@ class TenantServiceTest {
     tenantService.getAllTenantData();
     // then
     verify(tenantRepository).findAllTenantData();
+  }
+
+  @Test
+  void update_Should_refuseSwitchingOnATraegerMarkedForDeletion() {
+    var tenant = new TenantEntity();
+    tenant.setId(7L);
+    tenant.setActive(true);
+    tenant.setDeleteDate(LocalDateTime.of(2026, 11, 24, 9, 0));
+
+    var thrown = assertThrows(TenantValidationException.class, () -> tenantService.update(tenant));
+
+    assertThat(thrown.getStatusExceptionReason())
+        .isEqualTo(
+            com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason
+                .TENANT_MARKED_FOR_DELETION);
+    verify(tenantRepository, org.mockito.Mockito.never()).save(org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void updateOperationalStatus_Should_refuseATraegerMarkedForDeletion() {
+    var tenant = new TenantEntity();
+    tenant.setId(7L);
+    tenant.setDeleteDate(LocalDateTime.of(2026, 11, 24, 9, 0));
+    when(tenantRepository.updateOperationalStatus(
+            org.mockito.ArgumentMatchers.eq(7L),
+            org.mockito.ArgumentMatchers.eq(true),
+            org.mockito.ArgumentMatchers.any()))
+        .thenReturn(0);
+    when(tenantRepository.findById(7L)).thenReturn(java.util.Optional.of(tenant));
+
+    var thrown =
+        assertThrows(
+            TenantValidationException.class, () -> tenantService.updateOperationalStatus(7L, true));
+
+    assertThat(thrown.getStatusExceptionReason())
+        .isEqualTo(
+            com.vi.tenantservice.api.exception.httpresponse.HttpStatusExceptionReason
+                .TENANT_MARKED_FOR_DELETION);
+  }
+
+  @Test
+  void markForDeletion_Should_onlySwitchOffAgain_When_anotherRequestMarkedTheTraegerFirst() {
+    when(tenantRepository.markForDeletion(
+            org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any()))
+        .thenReturn(0);
+
+    assertThat(tenantService.markForDeletion(7L)).isFalse();
+
+    verify(tenantRepository)
+        .deactivateMarkedForDeletion(
+            org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void markForDeletion_Should_reportTheMark_When_thisCallSetTheDate() {
+    when(tenantRepository.markForDeletion(
+            org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any()))
+        .thenReturn(1);
+
+    assertThat(tenantService.markForDeletion(7L)).isTrue();
+
+    verify(tenantRepository, org.mockito.Mockito.never())
+        .deactivateMarkedForDeletion(
+            org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
   }
 }

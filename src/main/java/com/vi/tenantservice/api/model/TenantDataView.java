@@ -47,4 +47,7 @@ public class TenantDataView implements TenantData {
   private final LocalDateTime updateDate;
   private final String dataProtectionOfficer;
   private final Boolean active;
+
+  /** Set while the Träger waits for its final deletion (ORISO-Admin#1525). */
+  private final LocalDateTime deleteDate;
 }

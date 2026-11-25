@@ -1,13 +1,19 @@
 package com.vi.tenantservice.api.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.vi.tenantservice.api.policy.LenientPolicyValueMapDeserializer;
 import com.vi.tenantservice.api.policy.PolicyValue;
 import java.util.Map;
 import java.util.Set;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 /**
  * Deserialized from the single {@code tenant_admin_controls.controls} JSON blob.
@@ -46,8 +52,24 @@ public class TenantAdminControlsSettings {
    */
   TenantAdminAllowedPermissionTogglesSettings enforcedPermissionToggles;
 
-  /** Canonical four-state policies. Legacy boolean maps remain readable during migration. */
+  /**
+   * Canonical four-state policies. Legacy boolean maps remain readable during migration.
+   *
+   * <p>Read through {@link LenientPolicyValueMapDeserializer}: an entry a newer build wrote and
+   * this one cannot parse is dropped to the platform default rather than failing the whole blob.
+   */
+  @JsonDeserialize(using = LenientPolicyValueMapDeserializer.class)
   Map<String, PolicyValue<Boolean>> permissionPolicies;
+
+  /**
+   * The stored {@code permissionPolicies} entries this build could not read, as raw JSON. Filled on
+   * read, never serialized with this object: the controls writer puts each one back unchanged
+   * unless that feature was saved with a new value, so an unrelated save does not destroy it
+   * (#386). Kept out of {@code toString} and equality because it is opaque stored data, not a
+   * setting.
+   */
+  @JsonIgnore @ToString.Exclude @EqualsAndHashCode.Exclude
+  Map<String, JsonNode> unreadablePermissionPolicies;
 
   /**
    * #251 — the policy keys the platform admin set <em>explicitly</em>, as opposed to entries that
@@ -65,6 +87,9 @@ public class TenantAdminControlsSettings {
 
   /** Platform preset for the calendar policies (ADR-032, #365): visibility scope, usernames. */
   CalendarPolicies calendar;
+
+  /** Platform preset for the case sharing mode (ORISO-TenantService#374). */
+  CaseSharingPolicies caseSharing;
 
   /**
    * Platform-global machine-translation provider API keys (provider id -> raw key), e.g.

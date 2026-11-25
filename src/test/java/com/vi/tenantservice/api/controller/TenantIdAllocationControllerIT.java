@@ -12,6 +12,7 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -241,6 +242,65 @@ class TenantIdAllocationControllerIT {
   }
 
   @Test
+  void reservationProofCheck_Should_confirmOnlyTheMatchingOpenReservation() throws Exception {
+    String proof = reserveViaApi(21L);
+    String reservation = RESERVATIONS + "/21";
+
+    mockMvc
+        .perform(get(reservation).with(platformAdmin()).header("X-Reservation-Token", proof))
+        .andExpect(status().isNoContent())
+        .andExpect(header().string("Cache-Control", "no-store"));
+    mockMvc.perform(delete(reservation).with(platformAdmin())).andExpect(status().isNoContent());
+    String replacementProof = reserveViaApi(21L);
+
+    mockMvc
+        .perform(get(reservation).with(platformAdmin()).header("X-Reservation-Token", proof))
+        .andExpect(status().isNotFound())
+        .andExpect(header().string("Cache-Control", "no-store"));
+    mockMvc
+        .perform(
+            get(reservation).with(platformAdmin()).header("X-Reservation-Token", replacementProof))
+        .andExpect(status().isNoContent());
+  }
+
+  @Test
+  void reservationReleaseRetry_Should_leaveAReplacementReservationIntact() throws Exception {
+    String originalProof = reserveViaApi(21L);
+
+    mockMvc
+        .perform(
+            post(RESERVATIONS + "/21/release")
+                .with(platformAdmin())
+                .header("X-Reservation-Token", originalProof))
+        .andExpect(status().isNoContent());
+    reserveViaApi(21L);
+
+    mockMvc
+        .perform(
+            post(RESERVATIONS + "/21/release")
+                .with(platformAdmin())
+                .header("X-Reservation-Token", originalProof))
+        .andExpect(status().isNoContent());
+    mockMvc
+        .perform(get(AVAILABILITY.formatted(21)).with(platformAdmin()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("status", is("RESERVED")));
+  }
+
+  @Test
+  void reservationReleaseRetry_Should_requireANonBlankProofHeader() throws Exception {
+    mockMvc
+        .perform(post(RESERVATIONS + "/21/release").with(platformAdmin()))
+        .andExpect(status().isBadRequest());
+    mockMvc
+        .perform(
+            post(RESERVATIONS + "/21/release")
+                .with(platformAdmin())
+                .header("X-Reservation-Token", " "))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void allocationEndpoints_Should_returnForbidden_When_userLacksPlatformAdminAuthority()
       throws Exception {
     mockMvc
@@ -344,6 +404,10 @@ class TenantIdAllocationControllerIT {
         .perform(get(AVAILABILITY.formatted(21)).with(platformAdmin()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("status", is("ASSIGNED")));
+    mockMvc
+        .perform(
+            get(RESERVATIONS + "/21").with(platformAdmin()).header("X-Reservation-Token", token))
+        .andExpect(status().isNotFound());
   }
 
   @Test

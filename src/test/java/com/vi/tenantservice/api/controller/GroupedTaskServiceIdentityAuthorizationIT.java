@@ -37,7 +37,7 @@ import org.springframework.web.context.WebApplicationContext;
     properties = {
       "spring.profiles.active=testing",
       "TASK_IDENTITY_MODEL=FIVE_ACTORS",
-      "TASK_IDENTITY_REQUIRED_TASKS=CONFIG_WIZARD,INVITE_RESERVATIONS,NOTIFICATION_DISPATCH,RUNTIME_POLICY",
+      "TASK_IDENTITY_REQUIRED_TASKS=CONFIG_WIZARD,INVITE_RESERVATIONS,NOTIFICATION_DISPATCH,RUNTIME_POLICY,TENANT_DELETION",
       "TASK_IDENTITY_AUDIENCE=tenantservice",
       "IDENTITY_SETUP_CLIENT_ID=backend-setup",
       "IDENTITY_SETUP_SERVICE_SUBJECT=setup-subject",
@@ -64,12 +64,14 @@ class GroupedTaskServiceIdentityAuthorizationIT {
           "matrix-agency-provision",
           "appointment-sync",
           "appointment-participant-cleanup",
-          "deletion-audit-read");
+          "deletion-audit-read",
+          "tenant-deletion");
 
   @Autowired private WebApplicationContext context;
   @Autowired private JwtAuthConverter converter;
   @Autowired private TenantIdAllocationService allocation;
   @Autowired private TenantIdReservationRepository reservations;
+  @Autowired private org.springframework.jdbc.core.JdbcTemplate jdbc;
 
   @MockitoBean
   private com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService settings;
@@ -163,6 +165,33 @@ class GroupedTaskServiceIdentityAuthorizationIT {
     mvc.perform(get("/internal/tenants/2/system-email-context").with(runtime))
         .andExpect(status().isForbidden());
     mvc.perform(get("/tenant/2").with(mail)).andExpect(status().isForbidden());
+  }
+
+  /**
+   * UserService's nightly job finishes Träger deletions as the RUNTIME actor (ORISO-Admin#1525): it
+   * lists the Träger in deletion and removes a marked one. Nobody else may, and an unmarked Träger
+   * is never removed.
+   */
+  @Test
+  void runtimeActorListsAndPurgesOnlyTraegerMarkedForDeletion() throws Exception {
+    var runtime = actor("runtime-subject", "backend-runtime", RUNTIME_ROLES, "tenantservice");
+    var mail = actor("mail-subject", "backend-mail", MAIL_ROLES, "tenantservice");
+    jdbc.update("UPDATE tenant SET delete_date = CURRENT_TIMESTAMP WHERE id = 2");
+
+    mvc.perform(get("/tenant/deletions").with(runtime))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.length()").value(1))
+        .andExpect(jsonPath("$[0]").value(2));
+    mvc.perform(get("/tenant/deletions").with(mail)).andExpect(status().isForbidden());
+    mvc.perform(delete("/tenant/1/deletion").with(runtime)).andExpect(status().isConflict());
+    mvc.perform(delete("/tenant/2/deletion").with(mail)).andExpect(status().isForbidden());
+
+    mvc.perform(delete("/tenant/2/deletion").with(runtime)).andExpect(status().isNoContent());
+
+    org.assertj.core.api.Assertions.assertThat(
+            jdbc.queryForObject("SELECT COUNT(*) FROM tenant WHERE id IN (1, 2)", Integer.class))
+        .isEqualTo(1);
+    mvc.perform(delete("/tenant/2/deletion").with(runtime)).andExpect(status().isNotFound());
   }
 
   @Test

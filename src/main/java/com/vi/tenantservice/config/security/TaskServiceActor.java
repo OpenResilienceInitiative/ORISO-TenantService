@@ -19,7 +19,12 @@ enum TaskServiceActor {
           "notification-dispatch",
           "notifications-technical")),
   RUNTIME(
-      Set.of("RUNTIME_POLICY", "MATRIX_AGENCY", "APPOINTMENT_SYNC", "APPOINTMENT_CLEANUP"),
+      Set.of(
+          "RUNTIME_POLICY",
+          "MATRIX_AGENCY",
+          "APPOINTMENT_SYNC",
+          "APPOINTMENT_CLEANUP",
+          "TENANT_DELETION"),
       Set.of(
           "runtime-policy",
           "matrix-agency",
@@ -27,7 +32,9 @@ enum TaskServiceActor {
           "appointment-sync",
           "appointment-participant-cleanup",
           // AgencyService deletion-log outbox (OBP 2.1 #130); exact-union check only here.
-          "deletion-audit-read"));
+          "deletion-audit-read",
+          // UserService's nightly job finishes Träger deletions (ORISO-Admin#1525).
+          "tenant-deletion"));
 
   private final Set<String> purposes;
   private final Set<String> roles;

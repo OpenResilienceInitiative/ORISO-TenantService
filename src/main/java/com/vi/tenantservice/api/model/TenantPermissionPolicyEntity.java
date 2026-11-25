@@ -51,6 +51,10 @@ public class TenantPermissionPolicyEntity {
   @Column(name = "calendar_policies", columnDefinition = "TEXT")
   private String calendarPolicies;
 
+  /** JSON of the Traeger's {@link CaseSharingPolicies} override (#374); null = none set. */
+  @Column(name = "case_sharing_policies", columnDefinition = "TEXT")
+  private String caseSharingPolicies;
+
   @Column(name = "update_date", nullable = false)
   private LocalDateTime updateDate;
 }

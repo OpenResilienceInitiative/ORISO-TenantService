@@ -1,9 +1,9 @@
 package com.vi.tenantservice.api.controller;
 
+import com.vi.tenantservice.api.exception.ConsultingSettingsOutcomeUnknownException;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.exception.TenantAuthorisationException;
 import com.vi.tenantservice.api.exception.TenantBadRequestException;
-import com.vi.tenantservice.api.exception.TenantDeletionBlockedException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantValidationException;
 import com.vi.tenantservice.api.exception.httpresponse.CustomHttpHeader;
@@ -13,7 +13,6 @@ import java.util.EnumSet;
 import java.util.Set;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -34,6 +33,7 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
   private static final Set<HttpStatusExceptionReason> BAD_REQUEST_REASONS =
       EnumSet.of(
           HttpStatusExceptionReason.LANGUAGE_KEY_NOT_VALID,
+          HttpStatusExceptionReason.ERSTANTWORT_WHO_READS_ALONG_REQUIRED,
           HttpStatusExceptionReason.SUBDOMAIN_INVALID);
 
   @ExceptionHandler(value = {TenantValidationException.class})
@@ -48,19 +48,6 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
     return handleExceptionInternal(ex, "", customHttpHeader, HttpStatus.CONFLICT, request);
   }
 
-  /**
-   * The Träger still has agencies, accounts or open invitations (#1466). The body lists how many of
-   * each kind are left, so the admin interface can say what has to be deleted first.
-   */
-  @ExceptionHandler(value = {TenantDeletionBlockedException.class})
-  protected ResponseEntity<Object> handle(TenantDeletionBlockedException ex, WebRequest request) {
-    logger.info("Returning HTTP 409 Conflict: " + ex.getMessage());
-    var headers =
-        new CustomHttpHeader(HttpStatusExceptionReason.TENANT_HAS_DEPENDENTS).buildHeader();
-    headers.setContentType(MediaType.APPLICATION_JSON);
-    return handleExceptionInternal(ex, ex.getBlockers(), headers, HttpStatus.CONFLICT, request);
-  }
-
   @ExceptionHandler(value = {TenantIdAllocationConflictException.class})
   @ResponseStatus(HttpStatus.CONFLICT)
   protected void handleTenantIdAllocationConflict(TenantIdAllocationConflictException e) {
@@ -71,6 +58,16 @@ public class ExceptionHandlerAdvice extends ResponseEntityExceptionHandler {
   @ResponseStatus(HttpStatus.CONFLICT)
   protected void handleSettingsUpdateConflict(SettingsUpdateConflictException e) {
     logger.info("Returning HTTP 409 Conflict for concurrent settings update: " + e.getMessage());
+  }
+
+  @ExceptionHandler(ConsultingSettingsOutcomeUnknownException.class)
+  protected ResponseEntity<Object> handle(
+      ConsultingSettingsOutcomeUnknownException ex, WebRequest request) {
+    logger.warn(ex.getMessage() + ": " + ex.getCause().getClass().getSimpleName());
+    var headers =
+        new CustomHttpHeader(HttpStatusExceptionReason.CONSULTING_SETTINGS_OUTCOME_UNKNOWN)
+            .buildHeader();
+    return handleExceptionInternal(ex, null, headers, HttpStatus.BAD_GATEWAY, request);
   }
 
   @ExceptionHandler(value = {TenantAuthorisationException.class})

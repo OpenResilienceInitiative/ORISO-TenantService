@@ -20,6 +20,9 @@ public interface TenantData extends TenantRestrictedData {
 
   LocalDateTime getUpdateDate();
 
+  /** Set while the Träger waits for its final deletion (ORISO-Admin#1525); null otherwise. */
+  LocalDateTime getDeleteDate();
+
   /* ORISO-Admin#601: the Träger-authored Erstantwort Bausteine, so the Admin editor
   can read back what it wrote. Same `<lang>` → HTML JSON map as the legal texts. */
   String getContentErstantwortGreeting();

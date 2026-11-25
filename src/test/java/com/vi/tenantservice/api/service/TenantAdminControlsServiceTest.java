@@ -169,6 +169,7 @@ class TenantAdminControlsServiceTest {
     givenStoredControlsJson(
         "{\"permissionsPageEnabled\":true,"
             + "\"permissionPolicies\":{\"featureVideoCall\":{\"value\":true,\"mode\":\"ENFORCED\"}},"
+            + "\"allowedPermissionToggles\":{\"videoCalls\":false,\"futureToggle\":true},"
             + "\"someBrandNewTopLevelField\":\"future-value\"}");
 
     tenantAdminControlsService.getControls();
@@ -179,6 +180,68 @@ class TenantAdminControlsServiceTest {
         ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
     verify(tenantConverter).toTenantAdminControls(captor.capture());
     assertThat(captor.getValue().isPermissionsPageEnabled()).isTrue();
+    assertThat(captor.getValue().getAllowedPermissionToggles().getVideoCalls()).isFalse();
+  }
+
+  @Test
+  void getControls_Should_useDefaults_When_storedRootIsAnArray() {
+    givenStoredControlsJson("[]");
+    TenantAdminControlsSettings defaults =
+        TenantAdminControlsSettings.builder().permissionsPageEnabled(true).build();
+    when(tenantConverter.toTenantAdminControlsSettings(any(TenantAdminControls.class)))
+        .thenReturn(defaults);
+
+    tenantAdminControlsService.getControls();
+
+    verify(tenantConverter).toTenantAdminControls(defaults);
+    assertThat(defaults.getCaseHandoverPolicies()).isNotNull();
+  }
+
+  @Test
+  void updateControls_Should_replaceArrayRootWithRequestedControls() {
+    givenStoredControlsJson("[]");
+    when(tenantConverter.toTenantAdminControlsSettings(any(TenantAdminControls.class)))
+        .thenAnswer(
+            call -> TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+
+    tenantAdminControlsService.updateControls(
+        new TenantAdminControls().permissionsPageEnabled(false));
+
+    assertThat(capturedSavedControls())
+        .startsWith("{")
+        .contains("\"permissionsPageEnabled\":false");
+  }
+
+  @Test
+  void setTranslationApiKey_Should_storeEncryptedKey_When_storedRootIsAnArray() {
+    givenStoredControlsJson("[]");
+    givenEncryptingCipher();
+    when(tenantConverter.toTenantAdminControlsSettings(any(TenantAdminControls.class)))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(true).build());
+
+    tenantAdminControlsService.setTranslationApiKey("openrouter", "new-key");
+
+    assertThat(capturedSavedControls())
+        .startsWith("{")
+        .contains("\"openrouter\":\"ENC(new-key)\"")
+        .contains("\"permissionsPageEnabled\":true");
+  }
+
+  @Test
+  void getControls_Should_applyRestrictiveDefault_When_enforcedPolicyEntryIsUnreadable() {
+    // The stored ENFORCED entry carries a mode this build does not know. Dropping it would let the
+    // legacy toggles (all on, SUGGESTED) fill the gap and silently lift the platform restriction.
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{"
+            + "\"featureCallsEnabled\":{\"value\":false,\"mode\":\"MANDATORY_IN_A_LATER_BUILD\"}}}");
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> captor =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(captor.capture());
+    assertThat(captor.getValue().getPermissionPolicies().get("featureCallsEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
   }
 
   @Test
@@ -257,6 +320,138 @@ class TenantAdminControlsServiceTest {
     tenantAdminControlsService.updateControls(request);
 
     assertThat(capturedSavedControls()).contains("\"openrouter\":\"sk-or-key\"");
+  }
+
+  // --- version skew: the controls blob is shared with builds that know more fields than this one
+  // ---
+
+  /**
+   * A top-level key no build in this tree knows. {@code permissionPolicies} and {@code
+   * caseHandoverPolicies} are deliberately NOT used here any more: since #192 landed they are
+   * fields this build owns, so they are rewritten on purpose and prove nothing about preservation.
+   */
+  private static final String BLOB_FROM_A_NEWER_BUILD =
+      "{\"permissionsPageEnabled\":true,"
+          + "\"aFieldOnlyANewerBuildKnows\":{\"nested\":true},"
+          + "\"anotherFutureTopLevelField\":\"kept\"}";
+
+  /**
+   * The blob is read leniently on purpose (see {@link TenantAdminControlsSettings}) because a
+   * strict read turns version skew into HTTP 500 on every session bootstrap - that is what took
+   * Pre-Dev down on 2026-08-18. Writing the narrower type back is the same skew from the other
+   * side: it deletes whatever a newer build wrote. Unlike the read failure this one is silent, and
+   * it happens on the ordinary admin path, not only at startup.
+   */
+  @Test
+  void updateControls_Should_keepFieldsWrittenByANewerBuild() {
+    givenStoredControlsJson(BLOB_FROM_A_NEWER_BUILD);
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    assertThat(capturedSavedControls())
+        .contains("\"aFieldOnlyANewerBuildKnows\"")
+        .contains("\"nested\":true")
+        .contains("\"anotherFutureTopLevelField\":\"kept\"")
+        // and the field this build does own is still the one it just wrote
+        .contains("\"permissionsPageEnabled\":false");
+  }
+
+  /** Same defect, reached through the other write on the ordinary admin path. */
+  @Test
+  void setTranslationApiKey_Should_keepFieldsWrittenByANewerBuild() {
+    givenEncryptingCipher();
+    givenStoredControlsJson(BLOB_FROM_A_NEWER_BUILD);
+
+    tenantAdminControlsService.setTranslationApiKey("openrouter", "sk-or-new-key");
+
+    assertThat(capturedSavedControls())
+        .contains("\"aFieldOnlyANewerBuildKnows\"")
+        .contains("\"anotherFutureTopLevelField\":\"kept\"")
+        .contains("\"openrouter\":\"ENC(sk-or-new-key)\"")
+        .contains("\"permissionsPageEnabled\":true");
+  }
+
+  /**
+   * The merge is top-level only, and that is a decision, not an omission: a stale key nested inside
+   * an object this build owns must NOT survive, otherwise a value an admin just cleared would keep
+   * being merged back in from the stored document. A recursive merge would pass the two tests above
+   * and fail this one.
+   */
+  @Test
+  void updateControls_Should_replaceOwnedObjectsWholesale_NotMergeThemRecursively() {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"aFieldOnlyANewerBuildKnows\":{\"nested\":true},"
+            + "\"allowedPermissionToggles\":{\"staleNestedKey\":true}}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(
+            TenantAdminControlsSettings.builder()
+                .permissionsPageEnabled(false)
+                .allowedPermissionToggles(
+                    TenantAdminAllowedPermissionTogglesSettings.builder().videoCalls(false).build())
+                .build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    assertThat(capturedSavedControls())
+        // the object this build owns is replaced, not deep-merged
+        .doesNotContain("staleNestedKey")
+        .contains("\"videoCalls\":false")
+        // while the top-level key it does not own is still untouched
+        .contains("\"aFieldOnlyANewerBuildKnows\"");
+  }
+
+  @Test
+  void updateControls_Should_keepDecimalValuesOfUnknownFieldsExact() throws Exception {
+    givenStoredControlsJson("{\"permissionsPageEnabled\":true,\"futureLimit\":9007199254740993.0}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(TenantAdminControlsSettings.builder().permissionsPageEnabled(false).build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    // a double would round this to 9007199254740992.0
+    var saved =
+        new com.fasterxml.jackson.databind.ObjectMapper()
+            .reader()
+            .with(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
+            .readTree(capturedSavedControls());
+    assertThat(saved.get("futureLimit").decimalValue())
+        .isEqualByComparingTo(new java.math.BigDecimal("9007199254740993.0"));
+  }
+
+  @Test
+  void updateControls_Should_overwriteOwnedObjectWithNull_AndKeepUnknownFields() throws Exception {
+    givenStoredControlsJson(
+        "{\"permissionsPageEnabled\":true,"
+            + "\"aFieldOnlyANewerBuildKnows\":{\"nested\":true},"
+            + "\"allowedPermissionToggles\":{\"videoCalls\":false}}");
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(
+            TenantAdminControlsSettings.builder()
+                .permissionsPageEnabled(false)
+                .allowedPermissionToggles(null)
+                .build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+
+    tenantAdminControlsService.updateControls(request);
+
+    var saved = new com.fasterxml.jackson.databind.ObjectMapper().readTree(capturedSavedControls());
+    assertThat(saved.has("allowedPermissionToggles")).isTrue();
+    assertThat(saved.get("allowedPermissionToggles").isNull()).isTrue();
+    assertThat(saved.has("aFieldOnlyANewerBuildKnows")).isTrue();
   }
 
   @Test
@@ -411,5 +606,116 @@ class TenantAdminControlsServiceTest {
         .containsEntry(
             "featureCallsEnabled", new PolicyValue<>(true, PermissionPolicyMode.SUGGESTED))
         .doesNotContainKey("someFutureFeatureEnabled");
+  }
+
+  // --- #386: unreadable stored policy entries survive unrelated writes ---
+
+  private static final String UNREADABLE_CALLS_ENTRY =
+      "\"featureCallsEnabled\":{\"value\":false,\"mode\":\"MANDATORY_IN_A_LATER_BUILD\"}";
+  private static final String VALID_VIDEO_ENTRY =
+      "\"featureVideoCallsEnabled\":{\"value\":true,\"mode\":\"SUGGESTED\"}";
+  private static final String BLOB_WITH_UNREADABLE_ENTRY =
+      "{\"permissionsPageEnabled\":true,\"permissionPolicies\":{"
+          + UNREADABLE_CALLS_ENTRY
+          + ","
+          + VALID_VIDEO_ENTRY
+          + "}}";
+
+  private void givenUpdateRequestCarrying(Map<String, PolicyValue<Boolean>> policies) {
+    TenantAdminControls request = new TenantAdminControls().permissionsPageEnabled(false);
+    when(tenantConverter.toTenantAdminControlsSettings(request))
+        .thenReturn(
+            TenantAdminControlsSettings.builder()
+                .permissionsPageEnabled(false)
+                .permissionPolicies(policies == null ? null : new java.util.HashMap<>(policies))
+                .build());
+    when(tenantConverter.toTenantAdminControls(any(TenantAdminControlsSettings.class)))
+        .thenReturn(request);
+    tenantAdminControlsService.updateControls(request);
+  }
+
+  @Test
+  void updateAccountInactivitySettings_Should_keepUnreadablePolicyEntryVerbatim() {
+    givenStoredControlsJson(BLOB_WITH_UNREADABLE_ENTRY);
+
+    tenantAdminControlsService.updateAccountInactivitySettings(
+        new com.vi.tenantservice.api.model.AccountInactivitySettings(12, 12, 12, 0L));
+
+    assertThat(capturedSavedControls())
+        .contains(UNREADABLE_CALLS_ENTRY)
+        .contains(VALID_VIDEO_ENTRY)
+        .contains("\"askerMonths\":12");
+  }
+
+  @Test
+  void updateControls_Should_keepUnreadablePolicyEntryVerbatim_When_requestOmitsPolicies() {
+    givenStoredControlsJson(BLOB_WITH_UNREADABLE_ENTRY);
+
+    givenUpdateRequestCarrying(null);
+
+    assertThat(capturedSavedControls())
+        .contains(UNREADABLE_CALLS_ENTRY)
+        .contains(VALID_VIDEO_ENTRY);
+  }
+
+  @Test
+  void updateControls_Should_keepUnreadableEntry_When_requestEchoesServedValue() {
+    // The admin UI sends the whole map back. For the unreadable feature it echoes what it was
+    // served: the restrictive default. That is not a decision about this feature.
+    givenStoredControlsJson(BLOB_WITH_UNREADABLE_ENTRY);
+
+    givenUpdateRequestCarrying(
+        Map.of(
+            "featureCallsEnabled", new PolicyValue<>(false, PermissionPolicyMode.ENFORCED),
+            "featureVideoCallsEnabled", new PolicyValue<>(false, PermissionPolicyMode.SUGGESTED)));
+
+    assertThat(capturedSavedControls())
+        .contains(UNREADABLE_CALLS_ENTRY)
+        .contains("\"featureVideoCallsEnabled\":{\"value\":false,\"mode\":\"SUGGESTED\"}");
+  }
+
+  @Test
+  void updateControls_Should_replaceUnreadablePolicyEntry_When_thatFeatureIsSavedExplicitly() {
+    givenStoredControlsJson(BLOB_WITH_UNREADABLE_ENTRY);
+
+    givenUpdateRequestCarrying(
+        Map.of("featureCallsEnabled", new PolicyValue<>(true, PermissionPolicyMode.SUGGESTED)));
+
+    assertThat(capturedSavedControls())
+        .doesNotContain("MANDATORY_IN_A_LATER_BUILD")
+        .contains("\"featureCallsEnabled\":{\"value\":true,\"mode\":\"SUGGESTED\"}");
+  }
+
+  @Test
+  void updateControls_Should_keepStoredEntryOfAFeatureUnknownToThisBuild() {
+    String futureEntry = "\"featureFromALaterBuild\":{\"value\":true,\"mode\":\"SUGGESTED\"}";
+    givenStoredControlsJson(
+        "{\"permissionPolicies\":{" + futureEntry + "," + VALID_VIDEO_ENTRY + "}}");
+
+    givenUpdateRequestCarrying(null);
+
+    assertThat(capturedSavedControls()).contains(futureEntry);
+  }
+
+  @Test
+  void getControls_Should_stayRestrictiveAndNeverExposeTheRawEntry_afterAnUnrelatedWrite()
+      throws Exception {
+    givenStoredControlsJson(BLOB_WITH_UNREADABLE_ENTRY);
+    tenantAdminControlsService.updateAccountInactivitySettings(
+        new com.vi.tenantservice.api.model.AccountInactivitySettings(12, 12, 12, 0L));
+    givenStoredControlsJson(capturedSavedControls());
+
+    tenantAdminControlsService.getControls();
+
+    ArgumentCaptor<TenantAdminControlsSettings> captor =
+        ArgumentCaptor.forClass(TenantAdminControlsSettings.class);
+    verify(tenantConverter).toTenantAdminControls(captor.capture());
+    TenantAdminControlsSettings served = captor.getValue();
+    assertThat(served.getPermissionPolicies().get("featureCallsEnabled"))
+        .isEqualTo(new PolicyValue<>(false, PermissionPolicyMode.ENFORCED));
+    // anything that serializes the settings object (tenant settings JSON, logs) sees no raw blob
+    assertThat(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(served))
+        .doesNotContain("MANDATORY_IN_A_LATER_BUILD");
+    assertThat(served.toString()).doesNotContain("MANDATORY_IN_A_LATER_BUILD");
   }
 }

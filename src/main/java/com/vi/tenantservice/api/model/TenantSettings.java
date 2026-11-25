@@ -135,6 +135,14 @@ public class TenantSettings {
   Boolean featureMediaAiScanOneOnOneChatsEnabled;
   Boolean featureMediaAiScanGroupChatsEnabled;
   Boolean featureMediaAiScanSupervisionChatsEnabled;
+  Boolean featureTeamDiscussionAfterAcceptEnabled;
+  Boolean featureVideoCallsTeamDiscussionsEnabled;
+  Boolean featureAudioCallsTeamDiscussionsEnabled;
+  Boolean featureVoiceMessagesTeamDiscussionsEnabled;
+  Boolean featureThreadsTeamDiscussionsEnabled;
+  Boolean featureMediaUploadTeamDiscussionsEnabled;
+  Boolean featureMediaInlineDisplayTeamDiscussionsEnabled;
+  Boolean featureMediaAiScanTeamDiscussionsEnabled;
 
   /**
    * Retired key, superseded by the featureMediaUpload* family (ADR-015). Still read from stored
@@ -247,6 +255,14 @@ public class TenantSettings {
               Map.entry("featureMediaAiScanOneOnOneChatsEnabled", false),
               Map.entry("featureMediaAiScanGroupChatsEnabled", false),
               Map.entry("featureMediaAiScanSupervisionChatsEnabled", false),
+              Map.entry("featureTeamDiscussionAfterAcceptEnabled", false),
+              Map.entry("featureVideoCallsTeamDiscussionsEnabled", true),
+              Map.entry("featureAudioCallsTeamDiscussionsEnabled", true),
+              Map.entry("featureVoiceMessagesTeamDiscussionsEnabled", true),
+              Map.entry("featureThreadsTeamDiscussionsEnabled", true),
+              Map.entry("featureMediaUploadTeamDiscussionsEnabled", true),
+              Map.entry("featureMediaInlineDisplayTeamDiscussionsEnabled", true),
+              Map.entry("featureMediaAiScanTeamDiscussionsEnabled", false),
               Map.entry("isVideoCallAllowed", false),
               Map.entry("showAskerProfile", false),
               Map.entry("featureCentralDataProtectionTemplateEnabled", false),
@@ -586,6 +602,39 @@ public class TenantSettings {
     if (featureMediaAiScanSupervisionChatsEnabled == null) {
       featureMediaAiScanSupervisionChatsEnabled =
           BOOLEAN_FIELD_DEFAULTS.get("featureMediaAiScanSupervisionChatsEnabled");
+    }
+    if (featureTeamDiscussionAfterAcceptEnabled == null) {
+      featureTeamDiscussionAfterAcceptEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureTeamDiscussionAfterAcceptEnabled");
+    }
+    if (featureVideoCallsTeamDiscussionsEnabled == null) {
+      featureVideoCallsTeamDiscussionsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureVideoCallsTeamDiscussionsEnabled");
+    }
+    if (featureAudioCallsTeamDiscussionsEnabled == null) {
+      featureAudioCallsTeamDiscussionsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureAudioCallsTeamDiscussionsEnabled");
+    }
+    if (featureVoiceMessagesTeamDiscussionsEnabled == null) {
+      featureVoiceMessagesTeamDiscussionsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureVoiceMessagesTeamDiscussionsEnabled");
+    }
+    if (featureThreadsTeamDiscussionsEnabled == null) {
+      featureThreadsTeamDiscussionsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureThreadsTeamDiscussionsEnabled");
+    }
+    if (featureMediaUploadTeamDiscussionsEnabled == null) {
+      featureMediaUploadTeamDiscussionsEnabled =
+          !legacyUploadDisabled
+              && BOOLEAN_FIELD_DEFAULTS.get("featureMediaUploadTeamDiscussionsEnabled");
+    }
+    if (featureMediaInlineDisplayTeamDiscussionsEnabled == null) {
+      featureMediaInlineDisplayTeamDiscussionsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureMediaInlineDisplayTeamDiscussionsEnabled");
+    }
+    if (featureMediaAiScanTeamDiscussionsEnabled == null) {
+      featureMediaAiScanTeamDiscussionsEnabled =
+          BOOLEAN_FIELD_DEFAULTS.get("featureMediaAiScanTeamDiscussionsEnabled");
     }
   }
 }

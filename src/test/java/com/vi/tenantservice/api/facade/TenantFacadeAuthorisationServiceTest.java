@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -711,6 +712,47 @@ class TenantFacadeAuthorisationServiceTest {
     when(authorisationService.hasRole("tenant-admin")).thenReturn(true);
 
     assertThat(tenantFacadeAuthorisationService.isPlatformAdministrator()).isTrue();
+  }
+
+  @Test
+  void mayManageTenantIdReservations_Should_allowThePlatformAdministratorWithCreateAuthority() {
+    when(authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT))
+        .thenReturn(true);
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
+
+    assertThat(tenantFacadeAuthorisationService.mayManageTenantIdReservations()).isTrue();
+  }
+
+  @Test
+  void mayManageTenantIdReservations_Should_requireCreateAuthority() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
+
+    assertThat(tenantFacadeAuthorisationService.mayManageTenantIdReservations()).isFalse();
+  }
+
+  @Test
+  void mayManageTenantIdReservations_Should_refuseATraegerAdministrator() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(ID));
+    lenient().when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
+    lenient()
+        .when(authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT))
+        .thenReturn(true);
+
+    assertThat(tenantFacadeAuthorisationService.mayManageTenantIdReservations()).isFalse();
+  }
+
+  @Test
+  void mayManageTenantIdReservations_Should_refuseTheLegacyTechnicalIdentity() {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(0L));
+    when(authorisationService.hasRole(TENANT_ADMIN.getValue())).thenReturn(true);
+    when(technicalServiceIdentity.isCurrentCaller()).thenReturn(true);
+    lenient()
+        .when(authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT))
+        .thenReturn(true);
+
+    assertThat(tenantFacadeAuthorisationService.mayManageTenantIdReservations()).isFalse();
   }
 
   @Test

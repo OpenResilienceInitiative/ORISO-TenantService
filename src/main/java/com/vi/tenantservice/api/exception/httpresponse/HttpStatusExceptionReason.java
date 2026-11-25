@@ -25,6 +25,8 @@ public enum HttpStatusExceptionReason {
 
   LANGUAGE_KEY_NOT_VALID,
 
+  ERSTANTWORT_WHO_READS_ALONG_REQUIRED,
+
   ID_MUST_BE_NULL_WHEN_CREATING_TENANT,
   SUBDOMAIN_IN_REQUEST_BODY_NOT_EQUAL_TO_SUBDOMAIN_IN_URL,
 
@@ -37,9 +39,16 @@ public enum HttpStatusExceptionReason {
   SMTP_PASSWORD_ENCRYPTION_NOT_CONFIGURED,
 
   /**
-   * The Träger still has agencies, accounts or open invitations. Deleting it would leave them
-   * pointing at a Träger that no longer exists, where the admin interface can no longer delete them
-   * (ORISO-UserService#1466). Answers 409; the body says how many of each kind are left.
+   * The main tenant of single-domain multitenancy: the platform runs under it, so it can never be
+   * deleted (ORISO-Admin#1525). Answers 409.
    */
-  TENANT_HAS_DEPENDENTS,
+  MAIN_TENANT_NOT_DELETABLE,
+
+  /**
+   * The Träger is marked for deletion: its accounts are already being deleted, so it cannot be
+   * switched on again (ORISO-Admin#1525). Answers 409.
+   */
+  TENANT_MARKED_FOR_DELETION,
+
+  CONSULTING_SETTINGS_OUTCOME_UNKNOWN,
 }

@@ -4,11 +4,14 @@ import java.net.URI;
 import java.util.Base64;
 import java.util.regex.Pattern;
 import org.owasp.html.HtmlPolicyBuilder;
+import org.owasp.html.PolicyFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.HtmlUtils;
 
 @Component
 public class InputSanitizer {
+
+  private static final PolicyFactory NO_MARKUP = new HtmlPolicyBuilder().toFactory();
 
   private static final String[] HEADING_ELEMENTS = {"h1", "h2", "h3", "h4", "h5", "h6"};
 
@@ -34,8 +37,7 @@ public class InputSanitizer {
       Pattern.compile("^https?://[^\\s\"'<>]+$", Pattern.CASE_INSENSITIVE);
 
   public String sanitize(String input) {
-    var sanitizer = new HtmlPolicyBuilder().toFactory();
-    return sanitizer.sanitize(input);
+    return NO_MARKUP.sanitize(input);
   }
 
   /**
@@ -51,7 +53,11 @@ public class InputSanitizer {
     if (input == null) {
       return null;
     }
-    return HtmlUtils.htmlUnescape(sanitize(input)).replace("<", "").replace(">", "");
+    return visibleText(input).replace("<", "").replace(">", "");
+  }
+
+  static String visibleText(String html) {
+    return html == null ? "" : HtmlUtils.htmlUnescape(NO_MARKUP.sanitize(html));
   }
 
   /**

@@ -2,6 +2,7 @@ package com.vi.tenantservice.api.facade;
 
 import com.vi.tenantservice.api.model.TranslationApiKeyUpdateDTO;
 import com.vi.tenantservice.api.model.TranslationApiKeysDTO;
+import com.vi.tenantservice.api.model.TranslationKeyTestResultDTO;
 import com.vi.tenantservice.api.model.TranslationRequestDTO;
 import com.vi.tenantservice.api.model.TranslationResponseDTO;
 import com.vi.tenantservice.api.service.TenantAdminControlsService;
@@ -70,6 +71,38 @@ public class TranslationFacade {
     }
     tenantAdminControlsService.setTranslationApiKey(provider, update.getApiKey().trim());
     return maskedKeys();
+  }
+
+  static final String KEY_TEST_TEXT = "Guten Tag! Dies ist ein kurzer Verbindungstest.";
+
+  /**
+   * Live test of one provider's stored key (super admin only): one short German sentence goes to
+   * the provider and its English reply comes back. Nothing is stored; failures are the typed {@link
+   * TranslationException}s of a normal translation.
+   */
+  public TranslationKeyTestResultDTO testApiKey(String provider) {
+    assertSuperAdmin();
+    var client =
+        clientFor(provider)
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "Unknown translation provider: " + provider));
+    var apiKey = tenantAdminControlsService.getTranslationApiKeys().get(client.getProviderId());
+    if (StringUtils.isBlank(apiKey)) {
+      throw new TranslationException(
+          TranslationErrorCode.TRANSLATION_NOT_CONFIGURED,
+          client.getProviderId(),
+          "No API key configured for provider " + client.getProviderId());
+    }
+    var started = System.nanoTime();
+    var reply = client.translateHtml(apiKey, "de", "en", KEY_TEST_TEXT);
+    return new TranslationKeyTestResultDTO()
+        .provider(client.getProviderId())
+        .model(client.getModel())
+        .sourceText(KEY_TEST_TEXT)
+        .reply(reply)
+        .latencyMs((System.nanoTime() - started) / 1_000_000);
   }
 
   /**

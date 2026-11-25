@@ -170,6 +170,73 @@ class TranslationFacadeTest {
   }
 
   @Test
+  void testApiKey_Should_sendOneShortSentence_andReturnTheProvidersReply() {
+    givenSuperAdmin(true);
+    when(tenantAdminControlsService.getTranslationApiKeys())
+        .thenReturn(Map.of("mistral", MISTRAL_KEY));
+    when(mistralClient.getModel()).thenReturn("mistral-small-latest");
+    when(mistralClient.translateHtml(MISTRAL_KEY, "de", "en", TranslationFacade.KEY_TEST_TEXT))
+        .thenReturn("Good day! This is a short connection test.");
+
+    var result = translationFacade.testApiKey("mistral");
+
+    assertThat(result.getProvider()).isEqualTo("mistral");
+    assertThat(result.getModel()).isEqualTo("mistral-small-latest");
+    assertThat(result.getSourceText()).isEqualTo(TranslationFacade.KEY_TEST_TEXT);
+    assertThat(result.getReply()).isEqualTo("Good day! This is a short connection test.");
+    assertThat(result.getLatencyMs()).isNotNegative();
+    verify(openRouterClient, never()).translateHtml(any(), any(), any(), any());
+  }
+
+  @Test
+  void testApiKey_Should_throwNotConfigured_When_thatProviderHasNoKey() {
+    givenSuperAdmin(true);
+    when(tenantAdminControlsService.getTranslationApiKeys())
+        .thenReturn(Map.of("mistral", MISTRAL_KEY));
+
+    assertThatThrownBy(() -> translationFacade.testApiKey("openrouter"))
+        .isInstanceOf(TranslationException.class)
+        .satisfies(
+            e ->
+                assertThat(((TranslationException) e).getErrorCode())
+                    .isEqualTo(TranslationErrorCode.TRANSLATION_NOT_CONFIGURED));
+    verify(openRouterClient, never()).translateHtml(any(), any(), any(), any());
+  }
+
+  @Test
+  void testApiKey_Should_passTheProvidersTypedError_When_keyIsRejected() {
+    givenSuperAdmin(true);
+    when(tenantAdminControlsService.getTranslationApiKeys())
+        .thenReturn(Map.of("openrouter", OPENROUTER_KEY));
+    when(openRouterClient.translateHtml(any(), any(), any(), any()))
+        .thenThrow(
+            new TranslationException(
+                TranslationErrorCode.TRANSLATION_KEY_INVALID, "openrouter", "HTTP 401"));
+
+    assertThatThrownBy(() -> translationFacade.testApiKey("openrouter"))
+        .isInstanceOf(TranslationException.class)
+        .satisfies(
+            e ->
+                assertThat(((TranslationException) e).getErrorCode())
+                    .isEqualTo(TranslationErrorCode.TRANSLATION_KEY_INVALID));
+  }
+
+  @Test
+  void testApiKey_Should_rejectUnknownProvider() {
+    givenSuperAdmin(true);
+    assertThatThrownBy(() -> translationFacade.testApiKey("deepl"))
+        .isInstanceOf(ResponseStatusException.class);
+  }
+
+  @Test
+  void testApiKey_Should_denyAccess_When_notSuperAdmin() {
+    givenSuperAdmin(false);
+    assertThatThrownBy(() -> translationFacade.testApiKey("mistral"))
+        .isInstanceOf(AccessDeniedException.class);
+    verify(mistralClient, never()).translateHtml(any(), any(), any(), any());
+  }
+
+  @Test
   void translate_Should_useExplicitProvider_andAssembleResponse() {
     givenProviderIds();
     when(tenantAdminControlsService.getTranslationApiKeys())

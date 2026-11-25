@@ -15,7 +15,6 @@ import com.vi.tenantservice.api.converter.InheritedBrandingEchoStripper;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.ConsultingTypeCreationException;
 import com.vi.tenantservice.api.exception.TenantBadRequestException;
-import com.vi.tenantservice.api.exception.TenantDeletionBlockedException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationConflictException;
 import com.vi.tenantservice.api.exception.TenantIdAllocationExhaustedException;
 import com.vi.tenantservice.api.exception.TenantNotFoundException;
@@ -61,17 +60,19 @@ import com.vi.tenantservice.api.service.TenantPermissionPolicyService;
 import com.vi.tenantservice.api.service.TenantService;
 import com.vi.tenantservice.api.service.TranslationService;
 import com.vi.tenantservice.api.service.consultingtype.ApplicationSettingsService;
+import com.vi.tenantservice.api.service.consultingtype.ConsultingSettingsTelemetry;
 import com.vi.tenantservice.api.service.consultingtype.ConsultingTypeService;
 import com.vi.tenantservice.api.service.consultingtype.UserAdminService;
 import com.vi.tenantservice.api.service.search.TenantSearchText;
 import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
+import com.vi.tenantservice.api.validation.ErstantwortPublication;
 import com.vi.tenantservice.api.validation.SubdomainValidator;
 import com.vi.tenantservice.api.validation.TenantInputSanitizer;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
-import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO;
+import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionResultDTO;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -136,6 +137,7 @@ public class TenantServiceFacade {
   private final @NonNull AuthorisationService authorisationService;
   private final @NonNull TranslationService translationService;
   private final @NonNull ConsultingTypeService consultingTypeService;
+  private final @NonNull ConsultingSettingsTelemetry settingsTelemetry;
   private final @NonNull SubdomainExtractor subdomainExtractor;
   private final @NonNull ApplicationSettingsService applicationSettingsService;
 
@@ -160,9 +162,8 @@ public class TenantServiceFacade {
 
   private final @NonNull TenantResolverService tenantResolverService;
 
-  private final @NonNull TenantDpaStatusService tenantDpaStatusService;
-
   private final @NonNull TenantDpaService tenantDpaService;
+  private final @NonNull TenantDpaStatusService tenantDpaStatusService;
 
   private final @NonNull SingleDomainTenantOverrideService singleDomainTenantOverrideService;
 
@@ -204,6 +205,7 @@ public class TenantServiceFacade {
         sanitizedTenantDTO);
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     var entity = tenantConverter.toEntity(sanitizedTenantDTO);
+    ErstantwortPublication.of(entity).requireDisclosureForChangeFrom(ErstantwortPublication.EMPTY);
     populateTenantSettingsAndActivationDates(entity, tenantDTO);
     validateSelectedOwnSmtp(entity, null, sanitizedTenantDTO);
     if (taskIdentity != null && taskIdentity.current("CONFIG_WIZARD")) {
@@ -491,63 +493,106 @@ public class TenantServiceFacade {
   }
 
   /**
-   * Deletes the tenant together with its DPA signature evidence. Transactional on purpose: the
-   * database cascade that used to tie the two together was dropped so sign links could be minted
-   * for a still-reserved id (#179), so this boundary is now the only thing preventing a half
-   * deletion — a surviving tenant whose append-only signature evidence is already gone.
+   * Deletes a Träger the way every deletion works (ORISO-Admin#1525, epic ORISO-Admin#1520): the
+   * Träger is marked and switched off at once, and everything that belongs to it is marked in
+   * UserService and AgencyService, so logins stop and invite links die now. The rows go with the
+   * nightly jobs, and the Träger itself last, so nothing ever points at a Träger that no longer
+   * exists.
+   *
+   * <p>Only the platform administrator in person may do this. The technical tenant and the main
+   * tenant of single-domain multitenancy can never be deleted. Calling it again for a Träger
+   * already in deletion repeats only the cascade, which picks up what was not marked before.
+   *
+   * @return what the cascade marked, and what it could not
    */
-  @Transactional
-  public void deleteTenant(Long id) {
-    tenantFacadeAuthorisationService.assertUserIsAuthorizedToAccessTenant(id);
+  public TenantDeletionResultDTO deleteTenant(Long id) {
+    tenantFacadeAuthorisationService.assertCanDeleteTenant();
 
     if (id == TECHNICAL_TENANT_ID) {
       throw new TenantBadRequestException("Technical tenant cannot be deleted.");
     }
-
     TenantEntity tenant =
         tenantService
             .findTenantById(id)
             .orElseThrow(() -> new TenantNotFoundException("Tenant with id " + id + " not found"));
+    assertNotMainTenant(tenant);
 
-    assertNothingLeftInTenant(id);
+    // Committed before UserService is called: a failing cascade leaves the Träger marked and
+    // switched off, and the next call (or the nightly run) picks up the rest.
+    if (tenantService.markForDeletion(id)) {
+      deletionAuditReporter.reportTenantScheduled(id);
+    }
 
-    // App-level replacement for the DB cascade dropped in changeset 0030 (#179): the tenant's
-    // DPA signature rows (incl. any outstanding sign links) go with the tenant.
-    tenantDpaService.deleteSignaturesForTenant(id);
-    tenantService.delete(tenant);
-    // Reported after the commit and best effort: the log can never undo or fail the deletion.
-    deletionAuditReporter.reportTenantExecuted(id);
+    try {
+      return userAdminService.markTenantContentsForDeletion(id);
+    } catch (RestClientException e) {
+      log.error("Träger {} is marked, but its accounts could not be marked yet", id, e);
+      throw new ResponseStatusException(
+          HttpStatus.SERVICE_UNAVAILABLE,
+          "The Träger is marked for deletion; its accounts and agencies could not be marked yet",
+          e);
+    }
+  }
+
+  /** Träger waiting for their final deletion; read by UserService's nightly job (#1525). */
+  public List<Long> findTenantIdsMarkedForDeletion() {
+    return tenantService.findTenantIdsMarkedForDeletion();
   }
 
   /**
-   * Refuses to delete a Träger that still has agencies, accounts or open invitations
-   * (ORISO-UserService#1466). Deleting it anyway left them pointing at a Träger that no longer
-   * existed ("Unknown Tenant"), where the admin interface could not delete them any more. Fails
-   * closed: when UserService cannot say what is left, nothing is deleted.
+   * The final step of a Träger deletion (ORISO-Admin#1525): removes the row together with its DPA
+   * signature evidence. UserService's nightly job calls it only once nothing references the Träger
+   * any more. Refuses a Träger that is not marked, so this route can never delete a Träger in use.
+   * Transactional on purpose: the database cascade between the two was dropped (#179), so this
+   * boundary is the only thing preventing a surviving Träger without its signature evidence.
+   *
+   * @throws TenantNotFoundException when the Träger is already gone, which the caller counts as
+   *     done
    */
-  private void assertNothingLeftInTenant(Long id) {
-    TenantDeletionBlockersDTO blockers;
-    try {
-      blockers = userAdminService.getTenantDeletionBlockers(id);
-    } catch (RestClientException e) {
-      log.error("Could not check what still belongs to tenant {}; not deleting it", id, e);
-      throw blockerCheckUnavailable(e);
+  @Transactional
+  public void purgeTenantMarkedForDeletion(Long id) {
+    TenantEntity tenant =
+        tenantService
+            .findTenantById(id)
+            .orElseThrow(() -> new TenantNotFoundException("Tenant with id " + id + " not found"));
+    if (tenant.getDeleteDate() == null || id == TECHNICAL_TENANT_ID) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "Only a Träger marked for deletion can be purged");
     }
-    // No answer is no proof that something is left: say the check failed, not 409 (#1466).
-    if (blockers == null || blockers.getDeletable() == null) {
-      log.error("UserService sent no deletion verdict for tenant {}; not deleting it", id);
-      throw blockerCheckUnavailable(null);
-    }
-    if (!blockers.getDeletable()) {
-      throw new TenantDeletionBlockedException(id, blockers);
-    }
+    tenantDpaService.deleteSignaturesForTenant(id);
+    tenantService.delete(tenant);
+    log.info("Träger {} purged after its deletion was completed", id);
   }
 
-  private static ResponseStatusException blockerCheckUnavailable(Throwable cause) {
-    return new ResponseStatusException(
-        HttpStatus.SERVICE_UNAVAILABLE,
-        "Could not check whether the tenant still has agencies or accounts",
-        cause);
+  /**
+   * In single-domain multitenancy the platform runs under its main tenant; deleting it would take
+   * the platform down. Fails closed: when the setting cannot be read, nothing is deleted.
+   */
+  private void assertNotMainTenant(TenantEntity tenant) {
+    if (!multitenancyWithSingleDomain) {
+      return;
+    }
+    String mainSubdomain;
+    try {
+      var settings = applicationSettingsService.getApplicationSettings();
+      var setting =
+          settings == null ? null : settings.getMainTenantSubdomainForSingleDomainMultitenancy();
+      mainSubdomain = setting == null ? null : setting.getValue();
+    } catch (RuntimeException e) {
+      log.error("Main tenant setting unavailable; not deleting tenant {}", tenant.getId(), e);
+      throw new ResponseStatusException(
+          HttpStatus.SERVICE_UNAVAILABLE, "Could not check whether this is the main tenant", e);
+    }
+    // A missing or blank setting cannot tell the main tenant apart: fail closed as when it cannot
+    // be read at all.
+    if (mainSubdomain == null || mainSubdomain.isBlank()) {
+      log.error("Main tenant setting is not configured; not deleting tenant {}", tenant.getId());
+      throw new ResponseStatusException(
+          HttpStatus.SERVICE_UNAVAILABLE, "Could not check whether this is the main tenant");
+    }
+    if (mainSubdomain.equalsIgnoreCase(tenant.getSubdomain())) {
+      throw new TenantValidationException(HttpStatusExceptionReason.MAIN_TENANT_NOT_DELETABLE);
+    }
   }
 
   private boolean isAttemptToCreateFirstNonTechnicalTenant(Long tenantId) {
@@ -641,7 +686,7 @@ public class TenantServiceFacade {
     }
   }
 
-  private void updateExtendedSettingsAsConsultingType(
+  private Optional<FullConsultingTypeResponseDTO> updateExtendedSettingsAsConsultingType(
       MultilingualTenantDTO sanitizedTenantDTO, Long tenantId) {
     FullConsultingTypeResponseDTO consultingTypesByTenantId =
         consultingTypeService.getConsultingTypesByTenantId(tenantId.intValue());
@@ -650,15 +695,17 @@ public class TenantServiceFacade {
         && sanitizedTenantDTO.getSettings().getExtendedSettings() != null) {
       if (extendedTenantSettingsChanged(
           consultingTypesByTenantId, sanitizedTenantDTO.getSettings().getExtendedSettings())) {
-        consultingTypeService.patchConsultingType(
-            consultingTypesByTenantId.getId(),
-            consultingTypePatchDTOConverter.convertToConsultingTypeServiceModel(
-                sanitizedTenantDTO.getSettings().getExtendedSettings()));
+        return Optional.ofNullable(
+            consultingTypeService.patchConsultingType(
+                consultingTypesByTenantId.getId(),
+                consultingTypePatchDTOConverter.convertToConsultingTypeServiceModel(
+                    sanitizedTenantDTO.getSettings().getExtendedSettings())));
       } else {
         log.debug(
             "Skipping consulting types update during tenant update, these settings did not change");
       }
     }
+    return Optional.empty();
   }
 
   private boolean extendedTenantSettingsChanged(
@@ -684,13 +731,16 @@ public class TenantServiceFacade {
     }
     tenantFacadeAuthorisationService.assertUserHasSufficientPermissionsToChangeAttributes(
         sanitizedTenantDTO, existingTenantEntity);
+    settingsTelemetry.recordSave();
     tenantFacadeDependentSettingsOverrideService.overrideDependentSettingsOnUpdate(
         sanitizedTenantDTO, existingTenantEntity);
     tenantAdminControlsService.stripTenantAdminControlsFromTenantDto(sanitizedTenantDTO);
     // toEntity mutates existingTenantEntity, so capture the stored settings first
     var existingSettingsJson = existingTenantEntity.getSettings();
     var publishedBefore = PublishedLegalTexts.of(existingTenantEntity);
+    var firstReplyBefore = ErstantwortPublication.of(existingTenantEntity);
     var updatedEntity = tenantConverter.toEntity(existingTenantEntity, sanitizedTenantDTO);
+    ErstantwortPublication.of(updatedEntity).requireDisclosureForChangeFrom(firstReplyBefore);
     if (sanitizedTenantDTO.getSettings() == null) {
       updatedEntity.setSettings(existingSettingsJson);
     }
@@ -705,9 +755,10 @@ public class TenantServiceFacade {
     updatedEntity =
         tenantLegalVersionService.saveRecordingPublications(
             publishedBefore, () -> tenantService.update(entityToSave));
-    updateExtendedSettingsAsConsultingType(sanitizedTenantDTO, existingTenantEntity.getId());
+    var confirmedConsultingType =
+        updateExtendedSettingsAsConsultingType(sanitizedTenantDTO, existingTenantEntity.getId());
     log.info("Tenant with id {} updated", existingTenantEntity.getId());
-    return getConvertedAndEnrichedTenant(updatedEntity);
+    return getConvertedAndEnrichedTenant(updatedEntity, confirmedConsultingType);
   }
 
   /**
@@ -1008,10 +1059,21 @@ public class TenantServiceFacade {
   }
 
   private MultilingualTenantDTO getConvertedAndEnrichedTenant(TenantData tenantEntity) {
+    return getConvertedAndEnrichedTenant(tenantEntity, Optional.empty());
+  }
+
+  private MultilingualTenantDTO getConvertedAndEnrichedTenant(
+      TenantData tenantEntity, Optional<FullConsultingTypeResponseDTO> confirmedConsultingType) {
     var multilingualTenantDTO = tenantConverter.toMultilingualDTO(tenantEntity);
     tenantAdminControlsService.enrichTenantDtoWithTenantAdminControls(multilingualTenantDTO);
     enrichWithAdminDataIfSuperadmin(multilingualTenantDTO);
-    enrichWithConsultingTypeSettings(multilingualTenantDTO, tenantEntity.getId());
+    // A confirmed PATCH already has the same response shape as the readback.
+    var consultingType =
+        confirmedConsultingType.orElseGet(
+            () ->
+                consultingTypeService.getConsultingTypesByTenantId(
+                    tenantEntity.getId().intValue()));
+    enrichWithConsultingTypeSettings(multilingualTenantDTO, consultingType);
     return multilingualTenantDTO;
   }
 
@@ -1053,7 +1115,8 @@ public class TenantServiceFacade {
         tenantPermissionPolicyService.getResolvedPolicies(tenantId),
         tenantPermissionPolicyService.getResolvedCaseHandoverPolicies(tenantId),
         tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(tenantId),
-        tenantPermissionPolicyService.getResolvedCalendarPolicies(tenantId));
+        tenantPermissionPolicyService.getResolvedCalendarPolicies(tenantId),
+        tenantPermissionPolicyService.getResolvedCaseSharingPolicies(tenantId));
   }
 
   public TenantPermissionPolicies updateTenantPermissionPolicies(
@@ -1075,7 +1138,8 @@ public class TenantServiceFacade {
                                 entry.getValue().getMode().name())))),
         request.getCaseHandoverPolicies(),
         request.getInternalGroupChat(),
-        request.getCalendar());
+        request.getCalendar(),
+        request.getCaseSharing());
     return getTenantPermissionPolicies(tenantId);
   }
 
@@ -1084,7 +1148,8 @@ public class TenantServiceFacade {
       Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> policies,
       com.vi.tenantservice.api.model.CaseHandoverPolicies caseHandoverPolicies,
       com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat,
-      com.vi.tenantservice.api.model.CalendarPolicies calendar) {
+      com.vi.tenantservice.api.model.CalendarPolicies calendar,
+      com.vi.tenantservice.api.model.CaseSharingPolicies caseSharing) {
     return new TenantPermissionPolicies(
             tenantId,
             policies.entrySet().stream()
@@ -1099,7 +1164,8 @@ public class TenantServiceFacade {
                                 .inherited(entry.getValue().inherited()))))
         .caseHandoverPolicies(caseHandoverPolicies)
         .internalGroupChat(internalGroupChat)
-        .calendar(calendar);
+        .calendar(calendar)
+        .caseSharing(caseSharing);
   }
 
   private void assertSuperAdmin() {
@@ -1109,15 +1175,12 @@ public class TenantServiceFacade {
   }
 
   private void enrichWithConsultingTypeSettings(
-      MultilingualTenantDTO multilingualTenantDTO, Long tenantId) {
-    FullConsultingTypeResponseDTO consultingTypesByTenantId =
-        consultingTypeService.getConsultingTypesByTenantId(tenantId.intValue());
-    if (consultingTypesByTenantId != null) {
+      MultilingualTenantDTO multilingualTenantDTO, FullConsultingTypeResponseDTO consultingType) {
+    if (consultingType != null) {
       multilingualTenantDTO
           .getSettings()
           .setExtendedSettings(
-              consultingTypePatchDTOConverter.convertConsultingTypePatchDTO(
-                  consultingTypesByTenantId));
+              consultingTypePatchDTOConverter.convertConsultingTypePatchDTO(consultingType));
     }
   }
 
@@ -1200,9 +1263,12 @@ public class TenantServiceFacade {
             policiesByTenant.keySet());
     Map<Long, com.vi.tenantservice.api.model.CalendarPolicies> calendarByTenant =
         tenantPermissionPolicyService.getResolvedCalendarPolicies(policiesByTenant.keySet());
+    Map<Long, com.vi.tenantservice.api.model.CaseSharingPolicies> caseSharingByTenant =
+        tenantPermissionPolicyService.getResolvedCaseSharingPolicies(policiesByTenant.keySet());
     return tenants.stream()
         .filter(dto -> internalGroupChatByTenant.containsKey(dto.getId()))
         .filter(dto -> calendarByTenant.containsKey(dto.getId()))
+        .filter(dto -> caseSharingByTenant.containsKey(dto.getId()))
         .map(
             dto ->
                 withEffectiveSettings(
@@ -1211,7 +1277,8 @@ public class TenantServiceFacade {
                     platformTheming,
                     policiesByTenant.get(dto.getId()),
                     internalGroupChatByTenant.get(dto.getId()),
-                    calendarByTenant.get(dto.getId())))
+                    calendarByTenant.get(dto.getId()),
+                    caseSharingByTenant.get(dto.getId())))
         .toList();
   }
 
@@ -1243,7 +1310,8 @@ public class TenantServiceFacade {
         getPlatformTheming(lang),
         publicPoliciesForResolvedTenant(dto, resolvedTenantId),
         tenantPermissionPolicyService.getResolvedInternalGroupChatPolicies(resolvedTenantId),
-        tenantPermissionPolicyService.getResolvedCalendarPolicies(resolvedTenantId));
+        tenantPermissionPolicyService.getResolvedCalendarPolicies(resolvedTenantId),
+        tenantPermissionPolicyService.getResolvedCaseSharingPolicies(resolvedTenantId));
   }
 
   /**
@@ -1264,7 +1332,9 @@ public class TenantServiceFacade {
             com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_AGENCY_COUNSELLING,
             com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_LIVE_CHAT,
             com.vi.tenantservice.api.policy.PermissionFeature.ASKER_DISPLAY_NAME_SELF_HELP,
-            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL_COLLECTION_SELF_HELP)) {
+            com.vi.tenantservice.api.policy.PermissionFeature.ASKER_EMAIL_COLLECTION_SELF_HELP,
+            // derived from the selected tenant's case sharing mode (#374)
+            com.vi.tenantservice.api.policy.PermissionFeature.CASE_HANDOVER)) {
       // Missing selected authority must never fall back to a permissive main-tenant value.
       var selectedPolicy = selected.get(feature.apiKey());
       if (selectedPolicy == null) combined.remove(feature.apiKey());
@@ -1290,10 +1360,12 @@ public class TenantServiceFacade {
       Theming platformTheming,
       Map<String, com.vi.tenantservice.api.policy.ResolvedPolicyValue<Boolean>> resolvedPolicies,
       com.vi.tenantservice.api.model.InternalGroupChatPolicies internalGroupChat,
-      com.vi.tenantservice.api.model.CalendarPolicies calendar) {
+      com.vi.tenantservice.api.model.CalendarPolicies calendar,
+      com.vi.tenantservice.api.model.CaseSharingPolicies caseSharing) {
     if (dto != null) {
       dto.setInternalGroupChat(internalGroupChat);
       dto.setCalendar(calendar);
+      dto.setCaseSharing(caseSharing);
       Map<String, BooleanPermissionPolicy> policies =
           resolvedPolicies.entrySet().stream()
               .collect(
@@ -1565,15 +1637,34 @@ public class TenantServiceFacade {
     var direction = isAscending ? Direction.ASC : Direction.DESC;
     var pageRequest = PageRequest.of(pageNumber, pageSize, direction, fieldName);
     var tokens = TenantSearchText.tokens(infix);
+    var tenantRestriction = tenantFacadeAuthorisationService.tenantRestrictionForSearch();
+    boolean mayBatchEmails =
+        tenantRestriction.isEmpty() && tenantFacadeAuthorisationService.mayBatchTenantAdminEmails();
     if (tokens.isEmpty()) {
-      return mapOf(tenantService.findAllTenantDataExceptTechnicalByInfix(infix, pageRequest));
+      var tenantPage =
+          tenantService.searchTenantData(tokens, Map.of(), pageRequest, tenantRestriction);
+      Map<Long, List<String>> emailsByTenant =
+          mayBatchEmails
+              ? lookupAdminEmailsForDisplay(
+                  tenantPage.getContent().stream().map(TenantData::getId).toList())
+              : Map.of();
+      return mapOf(tenantPage, emailsByTenant);
     }
     // Owner lookups are mandatory for matching. Do not hide an outage as an empty result.
+    var tenantIds = tenantService.searchableTenantIds(tenantRestriction);
     var emailsByTenant = new HashMap<Long, List<String>>();
+    if (mayBatchEmails) {
+      emailsByTenant.putAll(userAdminService.getTenantAdminLoginEmails(tenantIds));
+    } else {
+      for (var id : tenantIds) {
+        emailsByTenant.put(
+            id, getAdminEmails(userAdminService.getTenantAdmins(Math.toIntExact(id))));
+      }
+    }
     var emailMatches = new HashMap<String, Set<Long>>();
-    for (var id : tenantService.searchableTenantIds()) {
-      var emails = getAdminEmails(userAdminService.getTenantAdmins(Math.toIntExact(id)));
-      emailsByTenant.put(id, emails);
+    for (var entry : emailsByTenant.entrySet()) {
+      var id = entry.getKey();
+      var emails = entry.getValue();
       for (var token : tokens) {
         if (emails.stream()
             .filter(Objects::nonNull)
@@ -1583,7 +1674,8 @@ public class TenantServiceFacade {
         }
       }
     }
-    var tenantPage = tenantService.searchTenantData(tokens, emailMatches, pageRequest);
+    var tenantPage =
+        tenantService.searchTenantData(tokens, emailMatches, pageRequest, tenantRestriction);
     return mapOf(tenantPage, emailsByTenant);
   }
 
@@ -1597,9 +1689,20 @@ public class TenantServiceFacade {
     excludeTechnicalTenantFrom(tenantEntities);
     List<AdminTenantDTO> adminTenantDTOS =
         tenantEntities.stream().map(tenantConverter::toAdminTenantDTO).toList();
+    Map<Long, List<String>> emailsByTenant =
+        tenantFacadeAuthorisationService.mayBatchTenantAdminEmails()
+            ? lookupAdminEmailsForDisplay(
+                adminTenantDTOS.stream().map(AdminTenantDTO::getId).toList())
+            : Map.of();
     adminTenantDTOS.forEach(
-        adminTenantDTO ->
-            enrichWithAdminData(adminTenantDTO.getId().intValue(), adminTenantDTO::setAdminEmails));
+        tenant -> {
+          var emails = emailsByTenant.get(tenant.getId());
+          if (emails == null) {
+            enrichWithAdminData(tenant.getId().intValue(), tenant::setAdminEmails);
+          } else if (!emails.isEmpty()) {
+            tenant.setAdminEmails(emails);
+          }
+        });
     return adminTenantDTOS;
   }
 
@@ -1607,8 +1710,18 @@ public class TenantServiceFacade {
     emptyIfNull(tenants).removeIf(tenant -> tenant.getId() == TECHNICAL_TENANT_ID);
   }
 
-  private Map<String, Object> mapOf(Page<TenantData> tenantPage) {
-    return mapOf(tenantPage, Map.of());
+  private Map<Long, List<String>> lookupAdminEmailsForDisplay(List<Long> tenantIds) {
+    if (tenantIds.isEmpty()) {
+      return Map.of();
+    }
+    try {
+      return userAdminService.getTenantAdminLoginEmails(tenantIds);
+    } catch (RestClientException | ResponseStatusException ex) {
+      // Display enrichment is optional. An empty map lets callers enrich each visible tenant.
+      log.warn(
+          "Could not resolve tenant-admin emails in a batch. Retrying for each visible tenant.");
+      return Map.of();
+    }
   }
 
   private Map<String, Object> mapOf(

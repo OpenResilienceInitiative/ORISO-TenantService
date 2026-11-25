@@ -11,6 +11,7 @@ import jakarta.persistence.criteria.Selection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -57,17 +58,23 @@ public class TenantSearchRepositoryImpl implements TenantSearchRepository {
           "createDate",
           "updateDate",
           "dataProtectionOfficer",
-          "active");
+          "active",
+          // ORISO-Admin#1525: the list shows a Träger in deletion; order matches TenantDataView.
+          "deleteDate");
 
+  @Override
   public Page<TenantDataView> searchTenantData(
-      List<String> tokens, Map<String, Set<Long>> emailMatches, Pageable pageable) {
+      List<String> tokens,
+      Map<String, Set<Long>> emailMatches,
+      Pageable pageable,
+      Optional<Long> tenantRestriction) {
     var cb = entityManager.getCriteriaBuilder();
     var query = cb.createQuery(TenantDataView.class);
     var root = query.from(TenantEntity.class);
     query.select(
         cb.construct(
             TenantDataView.class, FIELDS.stream().map(root::get).toArray(Selection[]::new)));
-    query.where(predicate(cb, root, tokens, emailMatches));
+    query.where(predicate(cb, root, tokens, emailMatches, tenantRestriction));
     query.orderBy(
         pageable.getSort().stream()
             .map(
@@ -78,7 +85,9 @@ public class TenantSearchRepositoryImpl implements TenantSearchRepository {
             .toList());
     var count = cb.createQuery(Long.class);
     var countRoot = count.from(TenantEntity.class);
-    count.select(cb.count(countRoot)).where(predicate(cb, countRoot, tokens, emailMatches));
+    count
+        .select(cb.count(countRoot))
+        .where(predicate(cb, countRoot, tokens, emailMatches, tenantRestriction));
     var rows =
         entityManager
             .createQuery(query)
@@ -92,9 +101,11 @@ public class TenantSearchRepositoryImpl implements TenantSearchRepository {
       CriteriaBuilder cb,
       Root<TenantEntity> root,
       List<String> tokens,
-      Map<String, Set<Long>> emailMatches) {
+      Map<String, Set<Long>> emailMatches,
+      Optional<Long> tenantRestriction) {
     var predicates = new ArrayList<Predicate>();
     predicates.add(cb.notEqual(root.get("id"), 0L));
+    tenantRestriction.ifPresent(id -> predicates.add(cb.equal(root.get("id"), id)));
     for (var token : tokens) {
       String pattern = "%" + token.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
       var matches = new ArrayList<Predicate>();

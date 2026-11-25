@@ -1,11 +1,16 @@
 package com.vi.tenantservice.api.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.RuntimeJsonMappingException;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.vi.tenantservice.api.converter.TenantConverter;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.AccountInactivitySettings;
+import com.vi.tenantservice.api.model.CaseSharingPolicies;
 import com.vi.tenantservice.api.model.ChatRecoveryMode;
 import com.vi.tenantservice.api.model.ChatRecoverySettings;
 import com.vi.tenantservice.api.model.MultilingualTenantDTO;
@@ -17,8 +22,10 @@ import com.vi.tenantservice.api.model.TenantDTO;
 import com.vi.tenantservice.api.policy.CalendarPolicyRules;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyDefaults;
 import com.vi.tenantservice.api.policy.CaseHandoverPolicyRules;
+import com.vi.tenantservice.api.policy.CaseSharingPolicyRules;
 import com.vi.tenantservice.api.policy.InternalGroupChatPolicyRules;
 import com.vi.tenantservice.api.policy.LegacyPermissionPolicyMapper;
+import com.vi.tenantservice.api.policy.LenientPolicyValueMapDeserializer;
 import com.vi.tenantservice.api.policy.PermissionFeature;
 import com.vi.tenantservice.api.policy.PolicyValue;
 import com.vi.tenantservice.api.repository.TenantAdminControlsRepository;
@@ -35,6 +42,7 @@ import java.util.Optional;
 import java.util.Set;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -43,9 +51,23 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TenantAdminControlsService {
+
+  /**
+   * Lenient at every depth, not only at the top level. {@code TenantAdminControlsSettings} carries
+   * {@code @JsonIgnoreProperties(ignoreUnknown = true)}, but the objects nested inside it do not -
+   * so a key a newer build wrote inside, say, {@code allowedPermissionToggles} still threw and
+   * turned into HTTP 500 on every session bootstrap, exactly like the top-level field did on
+   * 2026-08-18. The write path is unaffected: this flag only governs deserialization.
+   */
+  private static final ObjectMapper OBJECT_MAPPER =
+      new ObjectMapper().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+
+  private static final ObjectReader STORED_TREE_READER =
+      new ObjectMapper().reader().with(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
 
   private final @NonNull TenantAdminControlsRepository tenantAdminControlsRepository;
   private final @NonNull TenantConverter tenantConverter;
@@ -80,9 +102,16 @@ public class TenantAdminControlsService {
       if (controlsSettings.getCalendar() == null) {
         controlsSettings.setCalendar(existingSettings.getCalendar());
       }
+      if (controlsSettings.getCaseSharing() == null) {
+        controlsSettings.setCaseSharing(
+            caseSharingFromLegacyWrite(existingSettings, controlsSettings.getPermissionPolicies()));
+      }
       // the DTO never carries the translation API keys - carry the stored values over verbatim,
       // still encrypted, so this path never decrypts and re-encrypts them for nothing
       controlsSettings.setTranslationApiKeys(existingSettings.getTranslationApiKeys());
+      // unreadable stored policy entries ride along until their feature is saved (#386)
+      controlsSettings.setUnreadablePermissionPolicies(
+          existingSettings.getUnreadablePermissionPolicies());
       // Only versioned subresources can change account creation defaults.
       controlsSettings.setChatRecoverySettings(existingSettings.getChatRecoverySettings());
       controlsSettings.setAccountInactivitySettings(
@@ -317,15 +346,65 @@ public class TenantAdminControlsService {
         .orElseGet(this::createDefaultControlsSettings);
   }
 
+  /**
+   * Writes the settings back into the stored blob <b>without dropping fields this build does not
+   * know</b>.
+   *
+   * <p>{@link TenantAdminControlsSettings} ignores unknown fields on purpose (see its javadoc):
+   * reading leniently is what keeps a rollback from turning into HTTP 500 on every session
+   * bootstrap. Serializing that narrower type back over the column is the same version skew from
+   * the other side - every key a newer build wrote would be silently deleted by the next ordinary
+   * admin save. So the stored document is edited as a JSON tree: the fields this build owns are
+   * overwritten, every other byte is left alone. Same reasoning as {@code
+   * TranslationApiKeyEncryptionMigration}.
+   *
+   * <p>The merge is deliberately top-level only. Going deeper would preserve unknown nested keys
+   * but would also make clearing a known nested field impossible, because a value this build
+   * intentionally removed would keep being merged back in from the stored document.
+   *
+   * <p><b>Known, accepted loss (decision 2026-11-20):</b> a field that a newer build added
+   * <i>inside an object this build owns</i> (for example {@code
+   * allowedPermissionToggles.futureToggle}) is replaced together with that object on the next save
+   * by a rolled-back build. Only unknown top-level fields survive. Pinned by {@code
+   * updateControls_Should_replaceOwnedObjectsWholesale_NotMergeThemRecursively}.
+   */
   private void saveControlsSettings(
       TenantAdminControlsSettings controlsSettings, TenantAdminControlsEntity entity) {
-    entity.setControls(serializeControlsSettings(controlsSettings));
+    entity.setControls(mergeIntoStoredControls(entity.getControls(), controlsSettings));
     entity.setUpdateDate(LocalDateTime.now(ZoneOffset.UTC));
     try {
       tenantAdminControlsRepository.saveAndFlush(entity);
     } catch (OptimisticLockingFailureException | DataIntegrityViolationException exception) {
       throw new SettingsUpdateConflictException(exception);
     }
+  }
+
+  private String mergeIntoStoredControls(
+      String storedControlsJson, TenantAdminControlsSettings controlsSettings) {
+    ObjectNode controls = readControlsTree(storedControlsJson);
+    controls.setAll(serializeControlsSettingsToTree(controlsSettings));
+    return controls.toString();
+  }
+
+  private ObjectNode readControlsTree(String controlsJson) {
+    if (StringUtils.isBlank(controlsJson)) {
+      return OBJECT_MAPPER.createObjectNode();
+    }
+    try {
+      // Decimals stay exact: a double would round the value of an unknown field on the way through.
+      JsonNode tree = STORED_TREE_READER.readTree(controlsJson);
+      // A blob that is not a JSON object is not something this service wrote, and there is nothing
+      // in it to preserve. The read path uses defaults for these roots as well.
+      return tree.isObject() ? (ObjectNode) tree : OBJECT_MAPPER.createObjectNode();
+    } catch (JsonProcessingException unreadableBlob) {
+      return OBJECT_MAPPER.createObjectNode();
+    }
+  }
+
+  private ObjectNode serializeControlsSettingsToTree(TenantAdminControlsSettings controlsSettings) {
+    ObjectNode serialized = OBJECT_MAPPER.valueToTree(controlsSettings);
+    restoreUnreadablePolicyEntries(controlsSettings, serialized);
+    return serialized;
   }
 
   private Optional<TenantAdminControlsEntity> findExistingControls() {
@@ -337,11 +416,16 @@ public class TenantAdminControlsService {
       return createDefaultControlsSettings();
     }
     try {
-      TenantAdminControlsSettings settings =
-          new ObjectMapper().readValue(controlsJson, TenantAdminControlsSettings.class);
-      if (settings == null) {
+      JsonNode tree = OBJECT_MAPPER.readTree(controlsJson);
+      if (!tree.isObject()) {
         return createDefaultControlsSettings();
       }
+      TenantAdminControlsSettings settings =
+          OBJECT_MAPPER.treeToValue(tree, TenantAdminControlsSettings.class);
+      // kept raw with exact decimals, like the rest of the stored document (#225, #386)
+      settings.setUnreadablePermissionPolicies(
+          LenientPolicyValueMapDeserializer.unreadableEntries(
+              STORED_TREE_READER.readTree(controlsJson).get("permissionPolicies")));
       hydrateCanonicalPolicies(settings);
       return settings;
     } catch (JsonProcessingException exception) {
@@ -349,11 +433,39 @@ public class TenantAdminControlsService {
     }
   }
 
-  private String serializeControlsSettings(TenantAdminControlsSettings controlsSettings) {
-    try {
-      return new ObjectMapper().writeValueAsString(controlsSettings);
-    } catch (JsonProcessingException exception) {
-      throw new RuntimeJsonMappingException(exception.getMessage());
+  /**
+   * Writes each stored policy entry this build could not read back verbatim, unless its feature is
+   * being saved with a value other than the one it was served ({@link
+   * LenientPolicyValueMapDeserializer#UNREADABLE_ENTRY_POLICY}, or nothing for an unknown feature).
+   * Echoing the served value is how the admin UI sends untouched features, so it counts as no
+   * decision — the same rule {@link #explicitPolicyKeys} applies (#386).
+   */
+  private static void restoreUnreadablePolicyEntries(
+      TenantAdminControlsSettings settings, ObjectNode serialized) {
+    Map<String, JsonNode> unreadable = settings.getUnreadablePermissionPolicies();
+    if (unreadable == null || unreadable.isEmpty()) {
+      return;
+    }
+    Map<String, PolicyValue<Boolean>> written =
+        settings.getPermissionPolicies() == null ? Map.of() : settings.getPermissionPolicies();
+    JsonNode existing = serialized.get("permissionPolicies");
+    ObjectNode policies =
+        existing instanceof ObjectNode object ? object : serialized.putObject("permissionPolicies");
+    Set<String> kept = new LinkedHashSet<>();
+    unreadable.forEach(
+        (feature, raw) -> {
+          PolicyValue<Boolean> policy = written.get(feature);
+          if (policy == null
+              || policy.equals(LenientPolicyValueMapDeserializer.UNREADABLE_ENTRY_POLICY)) {
+            policies.set(feature, raw);
+            kept.add(feature);
+          }
+        });
+    if (!kept.isEmpty()) {
+      log.warn(
+          "Kept unreadable stored permission policies {} unchanged in the platform controls. They"
+              + " read as off and enforced until a platform admin saves them again.",
+          kept);
     }
   }
 
@@ -387,5 +499,39 @@ public class TenantAdminControlsService {
     settings.setInternalGroupChat(
         InternalGroupChatPolicyRules.normalize(settings.getInternalGroupChat()));
     settings.setCalendar(CalendarPolicyRules.normalize(settings.getCalendar()));
+    // #374: the case sharing mode is the source; caseHandoverEnabled is derived from it
+    var caseSharing =
+        CaseSharingPolicyRules.platformChoice(
+            settings.getCaseSharing(),
+            settings.getPermissionPolicies().get(CaseSharingPolicyRules.CASE_HANDOVER_KEY));
+    settings.setCaseSharing(CaseSharingPolicyRules.toApi(caseSharing));
+    var policies = new java.util.LinkedHashMap<>(settings.getPermissionPolicies());
+    policies.put(
+        CaseSharingPolicyRules.CASE_HANDOVER_KEY,
+        CaseSharingPolicyRules.derivedCaseHandover(caseSharing));
+    settings.setPermissionPolicies(policies);
+  }
+
+  /**
+   * A write without {@code caseSharing} keeps the stored mode, unless it changes {@code
+   * caseHandoverEnabled} (an Admin build before #374): then that change becomes the mode.
+   */
+  private static CaseSharingPolicies caseSharingFromLegacyWrite(
+      TenantAdminControlsSettings existing,
+      java.util.Map<String, com.vi.tenantservice.api.policy.PolicyValue<Boolean>> requested) {
+    var existingPolicies =
+        existing.getPermissionPolicies() == null
+            ? java.util.Map.<String, com.vi.tenantservice.api.policy.PolicyValue<Boolean>>of()
+            : existing.getPermissionPolicies();
+    var stored =
+        CaseSharingPolicyRules.platformChoice(
+            existing.getCaseSharing(),
+            existingPolicies.get(CaseSharingPolicyRules.CASE_HANDOVER_KEY));
+    var written =
+        requested == null ? null : requested.get(CaseSharingPolicyRules.CASE_HANDOVER_KEY);
+    if (written == null || written.equals(CaseSharingPolicyRules.derivedCaseHandover(stored))) {
+      return existing.getCaseSharing();
+    }
+    return CaseSharingPolicyRules.toApi(CaseSharingPolicyRules.fromLegacy(written));
   }
 }

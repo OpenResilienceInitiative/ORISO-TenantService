@@ -55,6 +55,9 @@ public class TenantFacadeAuthorisationService {
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
 
+  @Value("${keycloak.config.app-client-id:app}")
+  private String appClientId;
+
   private boolean userHasAnyRoleOf(List<UserRole> roles) {
     return roles.stream().anyMatch(userRole -> authorisationService.hasRole(userRole.getValue()));
   }
@@ -140,6 +143,31 @@ public class TenantFacadeAuthorisationService {
   public boolean mayListEveryTenant() {
     return authorisationService.hasAuthority(Authority.AuthorityValue.GET_ALL_TENANTS)
         && isPlatformAdministrator();
+  }
+
+  boolean mayBatchTenantAdminEmails() {
+    return mayListEveryTenant()
+        && authorisationService.hasRole("agency-admin")
+        && authorisationService.isAuthorizedParty(appClientId);
+  }
+
+  /** Empty means the human platform administrator may search across organisations. */
+  Optional<Long> tenantRestrictionForSearch() {
+    if (mayListEveryTenant()) {
+      return Optional.empty();
+    }
+    if (isTechnicalUser()) {
+      throw new AccessDeniedException("Technical callers cannot search organisations");
+    }
+    try {
+      var tenantId = authorisationService.findTenantIdInAccessToken().filter(id -> id > 0);
+      if (tenantId.isPresent()) {
+        return tenantId;
+      }
+    } catch (NumberFormatException invalidTenantId) {
+      throw new AccessDeniedException("Invalid tenant id in access token", invalidTenantId);
+    }
+    throw new AccessDeniedException("Organisation search requires a concrete tenant");
   }
 
   /**
@@ -412,6 +440,22 @@ public class TenantFacadeAuthorisationService {
    */
   public boolean isPlatformAdministrator() {
     return isSuperAdmin() && !isTechnicalUser();
+  }
+
+  /**
+   * Deleting a Träger empties it of every agency and account, so it is the platform administrator's
+   * act alone (ORISO-Admin#1525). A Träger admin is refused even for their own Träger, and so is
+   * the technical identity.
+   */
+  public void assertCanDeleteTenant() {
+    if (!isPlatformAdministrator()) {
+      throw new AccessDeniedException("Only the platform administrator may delete a Träger");
+    }
+  }
+
+  public boolean mayManageTenantIdReservations() {
+    return isPlatformAdministrator()
+        && authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT);
   }
 
   /**
