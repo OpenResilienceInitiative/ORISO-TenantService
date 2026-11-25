@@ -47,7 +47,7 @@ import com.vi.tenantservice.api.service.TemplateRenderer;
 import com.vi.tenantservice.api.service.TemplateService;
 import com.vi.tenantservice.api.service.legal.PlatformLegalTextTokens;
 import com.vi.tenantservice.api.util.JsonConverter;
-import com.vi.tenantservice.api.util.TranslationMetaUtil;
+import com.vi.tenantservice.api.validation.ErstantwortPublication;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.NonNull;
@@ -222,6 +222,21 @@ public class TenantConverter {
         .featureMediaAiScanGroupChatsEnabled(settings.getFeatureMediaAiScanGroupChatsEnabled())
         .featureMediaAiScanSupervisionChatsEnabled(
             settings.getFeatureMediaAiScanSupervisionChatsEnabled())
+        .featureTeamDiscussionAfterAcceptEnabled(
+            settings.getFeatureTeamDiscussionAfterAcceptEnabled())
+        .featureVideoCallsTeamDiscussionsEnabled(
+            settings.getFeatureVideoCallsTeamDiscussionsEnabled())
+        .featureAudioCallsTeamDiscussionsEnabled(
+            settings.getFeatureAudioCallsTeamDiscussionsEnabled())
+        .featureVoiceMessagesTeamDiscussionsEnabled(
+            settings.getFeatureVoiceMessagesTeamDiscussionsEnabled())
+        .featureThreadsTeamDiscussionsEnabled(settings.getFeatureThreadsTeamDiscussionsEnabled())
+        .featureMediaUploadTeamDiscussionsEnabled(
+            settings.getFeatureMediaUploadTeamDiscussionsEnabled())
+        .featureMediaInlineDisplayTeamDiscussionsEnabled(
+            settings.getFeatureMediaInlineDisplayTeamDiscussionsEnabled())
+        .featureMediaAiScanTeamDiscussionsEnabled(
+            settings.getFeatureMediaAiScanTeamDiscussionsEnabled())
         .activeLanguages(nullAsGerman(settings.getActiveLanguages()))
         .isVideoCallAllowed(settings.getIsVideoCallAllowed())
         .showAskerProfile(settings.getShowAskerProfile())
@@ -308,28 +323,7 @@ public class TenantConverter {
     if (incoming == null || incoming.isEmpty()) {
       return stored;
     }
-    var kept = new java.util.LinkedHashMap<String, String>();
-    incoming.forEach(
-        (key, value) -> {
-          if (key != null
-              && !TranslationMetaUtil.isMetaKey(key)
-              && value != null
-              && !value.isBlank()) {
-            kept.put(key, value);
-          }
-        });
-    // Meta is kept only for retained languages: an orphan meta of a cleared language is dropped.
-    incoming.forEach(
-        (key, value) -> {
-          if (key != null
-              && TranslationMetaUtil.isMetaKey(key)
-              && value != null
-              && !value.isBlank()
-              && kept.containsKey(TranslationMetaUtil.languageOf(key))) {
-            kept.put(key, value);
-          }
-        });
-    return convertToJson(kept);
+    return convertToJson(ErstantwortPublication.retainedTranslations(incoming));
   }
 
   private static boolean hasJson(String json) {
@@ -657,6 +651,22 @@ public class TenantConverter {
             tenantSettings.getFeatureMediaAiScanGroupChatsEnabled())
         .featureMediaAiScanSupervisionChatsEnabled(
             tenantSettings.getFeatureMediaAiScanSupervisionChatsEnabled())
+        .featureTeamDiscussionAfterAcceptEnabled(
+            tenantSettings.getFeatureTeamDiscussionAfterAcceptEnabled())
+        .featureVideoCallsTeamDiscussionsEnabled(
+            tenantSettings.getFeatureVideoCallsTeamDiscussionsEnabled())
+        .featureAudioCallsTeamDiscussionsEnabled(
+            tenantSettings.getFeatureAudioCallsTeamDiscussionsEnabled())
+        .featureVoiceMessagesTeamDiscussionsEnabled(
+            tenantSettings.getFeatureVoiceMessagesTeamDiscussionsEnabled())
+        .featureThreadsTeamDiscussionsEnabled(
+            tenantSettings.getFeatureThreadsTeamDiscussionsEnabled())
+        .featureMediaUploadTeamDiscussionsEnabled(
+            tenantSettings.getFeatureMediaUploadTeamDiscussionsEnabled())
+        .featureMediaInlineDisplayTeamDiscussionsEnabled(
+            tenantSettings.getFeatureMediaInlineDisplayTeamDiscussionsEnabled())
+        .featureMediaAiScanTeamDiscussionsEnabled(
+            tenantSettings.getFeatureMediaAiScanTeamDiscussionsEnabled())
         .isVideoCallAllowed(tenantSettings.getIsVideoCallAllowed())
         .showAskerProfile(tenantSettings.getShowAskerProfile())
         .emailVisible(tenantSettings.getEmailVisible())
@@ -683,6 +693,7 @@ public class TenantConverter {
         .caseHandoverPolicies(tenantAdminControls.getCaseHandoverPolicies())
         .internalGroupChat(tenantAdminControls.getInternalGroupChat())
         .calendar(tenantAdminControls.getCalendar())
+        .caseSharing(tenantAdminControls.getCaseSharing())
         .chatRecoverySettings(tenantAdminControls.getChatRecoverySettings())
         .accountInactivitySettings(tenantAdminControls.getAccountInactivitySettings())
         .build();
@@ -757,6 +768,22 @@ public class TenantConverter {
         .mediaAiScanGroupChats(nullAsTrue(allowedPermissionToggles.getMediaAiScanGroupChats()))
         .mediaAiScanSupervisionChats(
             nullAsTrue(allowedPermissionToggles.getMediaAiScanSupervisionChats()))
+        .teamDiscussionAfterAccept(
+            nullAsTrue(allowedPermissionToggles.getTeamDiscussionAfterAccept()))
+        .teamDiscussion(nullAsTrue(allowedPermissionToggles.getTeamDiscussion()))
+        .videoCallsTeamDiscussions(
+            nullAsTrue(allowedPermissionToggles.getVideoCallsTeamDiscussions()))
+        .audioCallsTeamDiscussions(
+            nullAsTrue(allowedPermissionToggles.getAudioCallsTeamDiscussions()))
+        .voiceMessagesTeamDiscussions(
+            nullAsTrue(allowedPermissionToggles.getVoiceMessagesTeamDiscussions()))
+        .threadsTeamDiscussions(nullAsTrue(allowedPermissionToggles.getThreadsTeamDiscussions()))
+        .mediaUploadTeamDiscussions(
+            nullAsTrue(allowedPermissionToggles.getMediaUploadTeamDiscussions()))
+        .mediaInlineDisplayTeamDiscussions(
+            nullAsTrue(allowedPermissionToggles.getMediaInlineDisplayTeamDiscussions()))
+        .mediaAiScanTeamDiscussions(
+            nullAsTrue(allowedPermissionToggles.getMediaAiScanTeamDiscussions()))
         .build();
   }
 
@@ -777,6 +804,7 @@ public class TenantConverter {
         .caseHandoverPolicies(tenantAdminControlsSettings.getCaseHandoverPolicies())
         .internalGroupChat(tenantAdminControlsSettings.getInternalGroupChat())
         .calendar(tenantAdminControlsSettings.getCalendar())
+        .caseSharing(tenantAdminControlsSettings.getCaseSharing())
         .chatRecoverySettings(tenantAdminControlsSettings.getChatRecoverySettings())
         .accountInactivitySettings(tenantAdminControlsSettings.getAccountInactivitySettings());
   }
@@ -898,7 +926,24 @@ public class TenantConverter {
         .mediaAiScanGroupChats(
             nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanGroupChats()))
         .mediaAiScanSupervisionChats(
-            nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()));
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()))
+        .teamDiscussionAfterAccept(
+            nullAsTrue(allowedPermissionTogglesSettings.getTeamDiscussionAfterAccept()))
+        .teamDiscussion(nullAsTrue(allowedPermissionTogglesSettings.getTeamDiscussion()))
+        .videoCallsTeamDiscussions(
+            nullAsTrue(allowedPermissionTogglesSettings.getVideoCallsTeamDiscussions()))
+        .audioCallsTeamDiscussions(
+            nullAsTrue(allowedPermissionTogglesSettings.getAudioCallsTeamDiscussions()))
+        .voiceMessagesTeamDiscussions(
+            nullAsTrue(allowedPermissionTogglesSettings.getVoiceMessagesTeamDiscussions()))
+        .threadsTeamDiscussions(
+            nullAsTrue(allowedPermissionTogglesSettings.getThreadsTeamDiscussions()))
+        .mediaUploadTeamDiscussions(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaUploadTeamDiscussions()))
+        .mediaInlineDisplayTeamDiscussions(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaInlineDisplayTeamDiscussions()))
+        .mediaAiScanTeamDiscussions(
+            nullAsTrue(allowedPermissionTogglesSettings.getMediaAiScanTeamDiscussions()));
   }
 
   private TenantAdminAllowedPermissionTogglesSettings toEnforcedPermissionTogglesSettings(
@@ -970,6 +1015,22 @@ public class TenantConverter {
         .mediaAiScanGroupChats(nullAsFalse(allowedPermissionToggles.getMediaAiScanGroupChats()))
         .mediaAiScanSupervisionChats(
             nullAsFalse(allowedPermissionToggles.getMediaAiScanSupervisionChats()))
+        .teamDiscussionAfterAccept(
+            nullAsFalse(allowedPermissionToggles.getTeamDiscussionAfterAccept()))
+        .teamDiscussion(nullAsFalse(allowedPermissionToggles.getTeamDiscussion()))
+        .videoCallsTeamDiscussions(
+            nullAsFalse(allowedPermissionToggles.getVideoCallsTeamDiscussions()))
+        .audioCallsTeamDiscussions(
+            nullAsFalse(allowedPermissionToggles.getAudioCallsTeamDiscussions()))
+        .voiceMessagesTeamDiscussions(
+            nullAsFalse(allowedPermissionToggles.getVoiceMessagesTeamDiscussions()))
+        .threadsTeamDiscussions(nullAsFalse(allowedPermissionToggles.getThreadsTeamDiscussions()))
+        .mediaUploadTeamDiscussions(
+            nullAsFalse(allowedPermissionToggles.getMediaUploadTeamDiscussions()))
+        .mediaInlineDisplayTeamDiscussions(
+            nullAsFalse(allowedPermissionToggles.getMediaInlineDisplayTeamDiscussions()))
+        .mediaAiScanTeamDiscussions(
+            nullAsFalse(allowedPermissionToggles.getMediaAiScanTeamDiscussions()))
         .build();
   }
 
@@ -1069,7 +1130,24 @@ public class TenantConverter {
         .mediaAiScanGroupChats(
             nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanGroupChats()))
         .mediaAiScanSupervisionChats(
-            nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()));
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanSupervisionChats()))
+        .teamDiscussionAfterAccept(
+            nullAsFalse(allowedPermissionTogglesSettings.getTeamDiscussionAfterAccept()))
+        .teamDiscussion(nullAsFalse(allowedPermissionTogglesSettings.getTeamDiscussion()))
+        .videoCallsTeamDiscussions(
+            nullAsFalse(allowedPermissionTogglesSettings.getVideoCallsTeamDiscussions()))
+        .audioCallsTeamDiscussions(
+            nullAsFalse(allowedPermissionTogglesSettings.getAudioCallsTeamDiscussions()))
+        .voiceMessagesTeamDiscussions(
+            nullAsFalse(allowedPermissionTogglesSettings.getVoiceMessagesTeamDiscussions()))
+        .threadsTeamDiscussions(
+            nullAsFalse(allowedPermissionTogglesSettings.getThreadsTeamDiscussions()))
+        .mediaUploadTeamDiscussions(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaUploadTeamDiscussions()))
+        .mediaInlineDisplayTeamDiscussions(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaInlineDisplayTeamDiscussions()))
+        .mediaAiScanTeamDiscussions(
+            nullAsFalse(allowedPermissionTogglesSettings.getMediaAiScanTeamDiscussions()));
   }
 
   /** Placeholder some clients send back instead of a real password; never a stored value. */
@@ -1168,6 +1246,9 @@ public class TenantConverter {
     }
     if (tenant.getUpdateDate() != null) {
       basicTenantLicensingDTO.setUpdateDate(tenant.getUpdateDate().toString());
+    }
+    if (tenant.getDeleteDate() != null) {
+      basicTenantLicensingDTO.setDeleteDate(tenant.getDeleteDate().toString());
     }
     return basicTenantLicensingDTO;
   }

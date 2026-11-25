@@ -9,7 +9,12 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -37,11 +42,14 @@ import com.vi.tenantservice.api.tenant.SubdomainExtractor;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.api.util.MultilingualTenantTestDataBuilder;
 import com.vi.tenantservice.config.security.AuthorisationService;
+import com.vi.tenantservice.consultingtypeservice.generated.web.model.FullConsultingTypeResponseDTO;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -55,6 +63,8 @@ import org.springframework.test.context.jdbc.Sql.ExecutionPhase;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.context.WebApplicationContext;
 
 @SpringBootTest(classes = TenantServiceApplication.class)
@@ -370,6 +380,71 @@ class TenantControllerIT {
             .andExpect(jsonPath("$.settings.topicsInRegistrationEnabled").value("true"))
             .andExpect(jsonPath("$.settings.activeLanguages").value(Lists.newArrayList("fr", "pl")))
             .andReturn();
+  }
+
+  @ParameterizedTest(name = "PATCH response body present: {0}")
+  @ValueSource(booleans = {true, false})
+  void updateTenantShouldUseConfirmedConsultingTypeSettingsInResponse(boolean hasPatchBody)
+      throws Exception {
+    var requestedName = "Settings transaction fixture";
+    var currentCtsSettings =
+        new FullConsultingTypeResponseDTO().id(CONSULTING_TYPE_ID).languageFormal(false);
+    var savedCtsSettings =
+        new FullConsultingTypeResponseDTO()
+            .id(CONSULTING_TYPE_ID)
+            .languageFormal(true)
+            .isVideoCallAllowed(true)
+            .sendFurtherStepsMessage(true);
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+    var ctsRead = when(consultingTypeService.getConsultingTypesByTenantId(1));
+    if (hasPatchBody) {
+      ctsRead
+          .thenReturn(currentCtsSettings)
+          .thenThrow(new ResourceAccessException("Synthetic CTS read failed after PATCH"));
+    } else {
+      ctsRead.thenReturn(currentCtsSettings, savedCtsSettings);
+    }
+    when(consultingTypeService.patchConsultingType(eq(CONSULTING_TYPE_ID), any()))
+        .thenAnswer(
+            call -> {
+              assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+              assertThat(tenantRepository.findById(1L).orElseThrow().getName())
+                  .isEqualTo(requestedName);
+              return hasPatchBody ? savedCtsSettings : null;
+            });
+    var request =
+        multilingualTenantTestDataBuilder
+            .tenantDTO()
+            .withId(1L)
+            .withName(requestedName)
+            .withSubdomain("happylife")
+            .withLicensing(5)
+            .withSettings();
+    request
+        .build()
+        .getSettings()
+        .setExtendedSettings(
+            new com.vi.tenantservice.api.model.ConsultingTypePatchDTO().languageFormal(true));
+    var actor = new AuthenticationMockBuilder().withUserRole(TENANT_ADMIN.getValue()).build();
+
+    mockMvc
+        .perform(
+            put(EXISTING_TENANT_VIA_ADMIN)
+                .with(authentication(actor))
+                .contentType(APPLICATION_JSON)
+                .content(request.jsonify()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.extendedSettings.languageFormal").value(true))
+        .andExpect(jsonPath("$.settings.extendedSettings.isVideoCallAllowed").value(true))
+        .andExpect(jsonPath("$.settings.extendedSettings.sendFurtherStepsMessage").value(true));
+
+    assertThat(jdbcTemplate.queryForObject("SELECT name FROM tenant WHERE id = 1", String.class))
+        .isEqualTo(requestedName);
+    verify(consultingTypeService)
+        .patchConsultingType(
+            eq(CONSULTING_TYPE_ID),
+            argThat(patch -> patch != null && Boolean.TRUE.equals(patch.getLanguageFormal())));
+    verify(consultingTypeService, times(hasPatchBody ? 1 : 2)).getConsultingTypesByTenantId(1);
   }
 
   @Test
@@ -1852,6 +1927,159 @@ class TenantControllerIT {
                 .contentType(APPLICATION_JSON)
                 .content("{\"apiKey\":\"sk-or-v1-0123456789abcd\"}"))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void testTranslationApiKey_Should_returnForbidden_When_tokenIsNotSuperAdmin() throws Exception {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(1L));
+    var builder = new AuthenticationMockBuilder();
+
+    mockMvc
+        .perform(
+            post("/tenantadmin/translation/keys/mistral/test")
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void updateTenant_Should_rejectFirstReplyChangesWhenTheDisclosureIsMissing() throws Exception {
+    expectRejectedFirstReplyDisclosure(null);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"", "<p>&nbsp;\u200B<br></p>"})
+  void updateTenant_Should_rejectFirstReplyChangesWhenTheDisclosureIsEmpty(String disclosure)
+      throws Exception {
+    expectRejectedFirstReplyDisclosure(disclosure);
+  }
+
+  private void expectRejectedFirstReplyDisclosure(String disclosure) throws Exception {
+    var request = tenant1FirstReplyRequest();
+    request.build().getContent().setErstantwortClosing(java.util.Map.of("de", "Bis bald."));
+    if (disclosure != null) {
+      request
+          .build()
+          .getContent()
+          .setErstantwortWhoReadsAlong(
+              java.util.Map.of(
+                  "de", disclosure,
+                  "en", "An earlier English translation.",
+                  "en__meta", "{\"mt\":true,\"src\":\"de\"}"));
+    }
+
+    putTenant1AsTenantAdmin(request.jsonify())
+        .andExpect(status().isBadRequest())
+        .andExpect(header().string("X-Reason", "ERSTANTWORT_WHO_READS_ALONG_REQUIRED"));
+
+    var stored = tenantRepository.findById(1L).orElseThrow();
+    assertThat(stored.getContentErstantwortClosing()).isNull();
+    assertThat(stored.getContentErstantwortWhoReadsAlong()).isNull();
+    assertThat(stored.getName()).isEqualTo("Happylife Gmbh");
+  }
+
+  @Test
+  void updateTenant_Should_keepTheAuthoredDisclosure_WhenOnlyAnotherFirstReplyFieldChanges()
+      throws Exception {
+    String disclosure = "<p>Unser Beratungsteam liest deine Nachrichten.</p>";
+    String disclosurePath = "$.content.erstantwortWhoReadsAlong['de@informal']";
+    var authored = tenant1FirstReplyRequest();
+    authored
+        .build()
+        .getContent()
+        .setErstantwortWhoReadsAlong(java.util.Map.of("de@informal", disclosure));
+
+    putTenant1AsTenantAdmin(authored.jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(disclosurePath, is(disclosure)));
+
+    var closingOnly = tenant1FirstReplyRequest();
+    closingOnly.build().getContent().setErstantwortClosing(java.util.Map.of("de", "Bis bald."));
+
+    putTenant1AsTenantAdmin(closingOnly.jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content.erstantwortClosing.de", is("Bis bald.")))
+        .andExpect(jsonPath(disclosurePath, is(disclosure)));
+  }
+
+  @Test
+  void updateTenant_Should_acceptTheAuthoredLanguageDeclaredByTranslationMetadata()
+      throws Exception {
+    String disclosure = "Our counselling team reads along.";
+    var request = tenant1FirstReplyRequest();
+    request
+        .build()
+        .getContent()
+        .setErstantwortWhoReadsAlong(
+            java.util.Map.of(
+                "en", disclosure,
+                "fr", "Notre équipe de conseil lit les messages.",
+                "fr__meta", "{\"mt\":true,\"src\":\"en\"}"));
+
+    putTenant1AsTenantAdmin(request.jsonify())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.content.erstantwortWhoReadsAlong.en", is(disclosure)))
+        .andExpect(jsonPath("$.content.erstantwortWhoReadsAlong.de").doesNotExist());
+  }
+
+  @Test
+  void updateTenant_Should_allowAnUnrelatedSettingChange_WhenFullPutEchoesLegacyFirstReply()
+      throws Exception {
+    var legacy = tenantRepository.findById(1L).orElseThrow();
+    legacy.setContentErstantwortGreeting("{\"de\":\"Willkommen.\"}");
+    tenantRepository.saveAndFlush(legacy);
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+    var caller = new AuthenticationMockBuilder().withUserRole(TENANT_ADMIN.getValue());
+    var current =
+        mockMvc
+            .perform(get(EXISTING_TENANT_VIA_ADMIN).with(authentication(caller.build())))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.settings.topicsInRegistrationEnabled", is(true)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var echoed = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(current);
+    var settings = (com.fasterxml.jackson.databind.node.ObjectNode) echoed.get("settings");
+    settings.put("topicsInRegistrationEnabled", false);
+
+    putTenant1AsTenantAdmin(mapper.writeValueAsString(echoed))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.topicsInRegistrationEnabled", is(false)))
+        .andExpect(jsonPath("$.content.erstantwortGreeting.de", is("Willkommen.")))
+        .andExpect(jsonPath("$.content.erstantwortWhoReadsAlong").isEmpty());
+  }
+
+  @Test
+  void createTenant_Should_rejectFirstReplyPublicationWithoutSourceDisclosure() throws Exception {
+    long tenantCount = tenantRepository.count();
+    var request =
+        new MultilingualTenantTestDataBuilder()
+            .withName("First reply tenant")
+            .withSubdomain("firstreplytenant")
+            .withLicensing()
+            .withContent();
+    request.build().getContent().setErstantwortResponseDeadlineDays(3);
+    giveAuthorisationServiceReturnProperAuthoritiesForRole(TENANT_ADMIN);
+    var caller = new AuthenticationMockBuilder().withUserRole(TENANT_ADMIN.getValue());
+
+    mockMvc
+        .perform(
+            post(TENANTADMIN_RESOURCE)
+                .with(authentication(caller.build()))
+                .contentType(APPLICATION_JSON)
+                .content(request.jsonify()))
+        .andExpect(status().isBadRequest())
+        .andExpect(header().string("X-Reason", "ERSTANTWORT_WHO_READS_ALONG_REQUIRED"));
+
+    assertThat(tenantRepository.count()).isEqualTo(tenantCount);
+  }
+
+  private MultilingualTenantTestDataBuilder tenant1FirstReplyRequest() {
+    return multilingualTenantTestDataBuilder
+        .tenantDTO()
+        .withSubdomain("happylife")
+        .withLicensing(5)
+        .withContent();
   }
 
   // --- Träger legal name and contact (Frank, 2026-09-23): the mail footer names the Träger's own

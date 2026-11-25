@@ -22,12 +22,40 @@ import org.springframework.data.repository.query.Param;
 public interface TenantRepository
     extends JpaRepository<TenantEntity, Long>, TenantSearchRepository {
 
+  /**
+   * Leaves a Träger marked for deletion untouched (ORISO-Admin#1525): it must stay switched off
+   * until its final deletion, so 0 rows means "not found" or "in deletion".
+   */
   @Modifying(clearAutomatically = true, flushAutomatically = true)
-  @Query("UPDATE TenantEntity t SET t.active = :active, t.updateDate = :updatedAt WHERE t.id = :id")
+  @Query(
+      "UPDATE TenantEntity t SET t.active = :active, t.updateDate = :updatedAt "
+          + "WHERE t.id = :id AND t.deleteDate IS NULL")
   int updateOperationalStatus(
       @Param("id") Long id,
       @Param("active") Boolean active,
       @Param("updatedAt") LocalDateTime updatedAt);
+
+  /**
+   * Marks a Träger for deletion and switches it off in one conditional update, so of two
+   * overlapping deletions only the first sets the date (ORISO-Admin#1525).
+   *
+   * @return 1 when this call marked the Träger, 0 when it was already marked or does not exist
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE TenantEntity t SET t.deleteDate = :now, t.active = false, t.updateDate = :now "
+          + "WHERE t.id = :id AND t.deleteDate IS NULL")
+  int markForDeletion(@Param("id") Long id, @Param("now") LocalDateTime now);
+
+  /**
+   * Switches a Träger already in deletion off again without touching its first deletion date
+   * (ORISO-Admin#1525).
+   */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      "UPDATE TenantEntity t SET t.active = false, t.updateDate = :now "
+          + "WHERE t.id = :id AND t.deleteDate IS NOT NULL AND t.active <> false")
+  int deactivateMarkedForDeletion(@Param("id") Long id, @Param("now") LocalDateTime now);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("SELECT t FROM TenantEntity t WHERE t.id = :id")
@@ -48,6 +76,10 @@ public interface TenantRepository
 
   @Query("SELECT t.id FROM TenantEntity t")
   List<Long> findAllIds();
+
+  /** Träger waiting for their final deletion (ORISO-Admin#1525). */
+  @Query("SELECT t.id FROM TenantEntity t WHERE t.deleteDate IS NOT NULL ORDER BY t.id")
+  List<Long> findIdsMarkedForDeletion();
 
   /** Id and name of every tenant except the technical tenant 0, in one query, sorted by name. */
   @Query(
@@ -92,7 +124,7 @@ public interface TenantRepository
               + "t.settings, "
               + "t.createDate, "
               + "t.updateDate, "
-              + "t.dataProtectionOfficer, t.active) "
+              + "t.dataProtectionOfficer, t.active, t.deleteDate) "
               + "FROM TenantEntity t WHERE t.id = :id")
   TenantDataView findTenantDataById(@Param("id") Long id);
 
@@ -133,7 +165,7 @@ public interface TenantRepository
               + "t.settings, "
               + "t.createDate, "
               + "t.updateDate, "
-              + "t.dataProtectionOfficer, t.active) "
+              + "t.dataProtectionOfficer, t.active, t.deleteDate) "
               + "FROM TenantEntity t")
   List<TenantDataView> findAllTenantData();
 

@@ -93,6 +93,12 @@ public class SingleDomainTenantOverrideService {
         actualSettings.getFeatureMediaAiScanGroupChatsEnabled());
     mainSettings.setFeatureMediaAiScanSupervisionChatsEnabled(
         actualSettings.getFeatureMediaAiScanSupervisionChatsEnabled());
+    mainSettings.setFeatureMediaUploadTeamDiscussionsEnabled(
+        actualSettings.getFeatureMediaUploadTeamDiscussionsEnabled());
+    mainSettings.setFeatureMediaInlineDisplayTeamDiscussionsEnabled(
+        actualSettings.getFeatureMediaInlineDisplayTeamDiscussionsEnabled());
+    mainSettings.setFeatureMediaAiScanTeamDiscussionsEnabled(
+        actualSettings.getFeatureMediaAiScanTeamDiscussionsEnabled());
   }
 
   private RestrictedTenantDTO getRestrictedTenantDTO(TenantRestrictedData mainTenant, String lang) {

@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -288,6 +289,19 @@ class TechnicalServiceIdentityAuthorizationIT {
         .andExpect(status().isNoContent());
   }
 
+  @Test
+  void technicalOnly_Should_releaseTheOriginalReservationWithProof() throws Exception {
+    String proof = reserve(RESERVED_ID);
+
+    mvc.perform(
+            post("/tenantadmin/tenant-ids/reservations/{id}/release", RESERVED_ID)
+                .with(technicalOnly())
+                .header("X-Reservation-Token", proof))
+        .andExpect(status().isNoContent());
+
+    assertThat(reservationRepository.findById(RESERVED_ID)).isEmpty();
+  }
+
   // ---- the role alone is not the service identity ----
 
   @Test
@@ -371,6 +385,8 @@ class TechnicalServiceIdentityAuthorizationIT {
     mvc.perform(get("/tenantadmin/controls").with(caller)).andExpect(status().isForbidden());
     mvc.perform(get("/tenantadmin/translation/keys").with(caller))
         .andExpect(status().isForbidden());
+    mvc.perform(post("/tenantadmin/translation/keys/mistral/test").with(caller))
+        .andExpect(status().isForbidden());
     mvc.perform(delete("/tenant/1").with(caller)).andExpect(status().isForbidden());
   }
 
@@ -386,6 +402,83 @@ class TechnicalServiceIdentityAuthorizationIT {
     mvc.perform(get("/tenant").with(wizard)).andExpect(status().isForbidden());
     mvc.perform(delete("/tenantadmin/tenant-ids/reservations/501").with(wizard))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void assignmentProofCheck_Should_confirmOnlyTheOriginalReservationOfAnExistingTenant()
+      throws Exception {
+    var wizard = task("wizard-subject", "backend-config-wizard", "config-wizard", "tenantservice");
+    String proof = reserve(RESERVED_ID);
+    String assignment = "/tenantadmin/tenant-ids/reservations/{id}/assignment";
+
+    mvc.perform(get(assignment, RESERVED_ID).with(wizard).header("X-Reservation-Token", proof))
+        .andExpect(status().isNotFound())
+        .andExpect(header().string("Cache-Control", "no-store"));
+    mvc.perform(createTenant(wizard, RESERVED_ID, proof, "assignmentproof"))
+        .andExpect(status().isOk());
+
+    var worker =
+        task(
+            "reservation-subject",
+            "backend-invite-reservations",
+            "invitation-reservations",
+            "tenantservice");
+    var platformAdmin = caller("platform-admin", Set.of("tenant-admin"));
+    for (RequestPostProcessor verifier : List.of(wizard, worker, technicalOnly(), platformAdmin)) {
+      mvc.perform(get(assignment, RESERVED_ID).with(verifier).header("X-Reservation-Token", proof))
+          .andExpect(status().isNoContent())
+          .andExpect(header().string("Cache-Control", "no-store"));
+    }
+
+    String retainedProof = reserve(FREE_ID);
+    var retainedAssignment = reservationRepository.findById(FREE_ID).orElseThrow();
+    retainedAssignment.setStatus(TenantIdReservationStatus.ASSIGNED);
+    reservationRepository.saveAndFlush(retainedAssignment);
+    mvc.perform(
+            get(assignment, RESERVED_ID).with(worker).header("X-Reservation-Token", retainedProof))
+        .andExpect(status().isNotFound())
+        .andExpect(header().string("Cache-Control", "no-store"));
+    mvc.perform(get(assignment, FREE_ID).with(worker).header("X-Reservation-Token", retainedProof))
+        .andExpect(status().isNotFound())
+        .andExpect(header().string("Cache-Control", "no-store"));
+
+    var wrongWorkerSubject =
+        task(
+            "foreign-subject",
+            "backend-invite-reservations",
+            "invitation-reservations",
+            "tenantservice");
+    var wrongWorkerClient =
+        task("reservation-subject", "wrong-client", "invitation-reservations", "tenantservice");
+    for (RequestPostProcessor unauthorized :
+        List.of(foreignSubjectWithTechnicalRole(), wrongWorkerSubject, wrongWorkerClient)) {
+      mvc.perform(
+              get(assignment, RESERVED_ID).with(unauthorized).header("X-Reservation-Token", proof))
+          .andExpect(status().isForbidden());
+    }
+  }
+
+  @Test
+  void assignmentProofCheck_Should_requireAssignedStatusWhenTenantExists() throws Exception {
+    var wizard = task("wizard-subject", "backend-config-wizard", "config-wizard", "tenantservice");
+    String proof = reserve(RESERVED_ID);
+    String assignment = "/tenantadmin/tenant-ids/reservations/{id}/assignment";
+    mvc.perform(createTenant(wizard, RESERVED_ID, proof, "assignmentstatus"))
+        .andExpect(status().isOk());
+
+    var reservation = reservationRepository.findById(RESERVED_ID).orElseThrow();
+    assertThat(reservation.getStatus()).isEqualTo(TenantIdReservationStatus.ASSIGNED);
+    reservation.setStatus(TenantIdReservationStatus.RESERVED);
+    reservationRepository.saveAndFlush(reservation);
+    mvc.perform(get(assignment, RESERVED_ID).with(wizard).header("X-Reservation-Token", proof))
+        .andExpect(status().isNotFound())
+        .andExpect(header().string("Cache-Control", "no-store"));
+
+    reservation.setStatus(TenantIdReservationStatus.ASSIGNED);
+    reservationRepository.saveAndFlush(reservation);
+    mvc.perform(get(assignment, RESERVED_ID).with(wizard).header("X-Reservation-Token", proof))
+        .andExpect(status().isNoContent())
+        .andExpect(header().string("Cache-Control", "no-store"));
   }
 
   @Test
@@ -449,6 +542,25 @@ class TechnicalServiceIdentityAuthorizationIT {
         .andExpect(status().isForbidden());
     mvc.perform(createTenant(caller, FREE_ID, own, "invalidworker"))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void reservationWorker_Should_repeatReleaseOfTheSameReservation() throws Exception {
+    String proof = reserve(RESERVED_ID);
+    var caller =
+        task(
+            "reservation-subject",
+            "backend-invite-reservations",
+            "invitation-reservations",
+            "tenantservice");
+    String path = "/tenantadmin/tenant-ids/reservations/{id}/release";
+
+    mvc.perform(post(path, RESERVED_ID).with(caller).header("X-Reservation-Token", proof))
+        .andExpect(status().isNoContent());
+    mvc.perform(post(path, RESERVED_ID).with(caller).header("X-Reservation-Token", proof))
+        .andExpect(status().isNoContent());
+
+    assertThat(reservationRepository.findById(RESERVED_ID)).isEmpty();
   }
 
   @Test

@@ -70,6 +70,23 @@ public enum PermissionFeature {
   MEDIA_AI_SCAN_GROUP_CHATS("featureMediaAiScanGroupChatsEnabled", "mediaAiScanGroupChats"),
   MEDIA_AI_SCAN_SUPERVISION_CHATS(
       "featureMediaAiScanSupervisionChatsEnabled", "mediaAiScanSupervisionChats"),
+  TEAM_DISCUSSION_AFTER_ACCEPT(
+      "featureTeamDiscussionAfterAcceptEnabled", "teamDiscussionAfterAccept"),
+  // ORISO-Frontend#2491: team chat on an open enquiry, governed like supervision.
+  TEAM_DISCUSSION("featureTeamDiscussionEnabled", "teamDiscussion"),
+  VIDEO_CALLS_TEAM_DISCUSSIONS(
+      "featureVideoCallsTeamDiscussionsEnabled", "videoCallsTeamDiscussions"),
+  AUDIO_CALLS_TEAM_DISCUSSIONS(
+      "featureAudioCallsTeamDiscussionsEnabled", "audioCallsTeamDiscussions"),
+  VOICE_MESSAGES_TEAM_DISCUSSIONS(
+      "featureVoiceMessagesTeamDiscussionsEnabled", "voiceMessagesTeamDiscussions"),
+  THREADS_TEAM_DISCUSSIONS("featureThreadsTeamDiscussionsEnabled", "threadsTeamDiscussions"),
+  MEDIA_UPLOAD_TEAM_DISCUSSIONS(
+      "featureMediaUploadTeamDiscussionsEnabled", "mediaUploadTeamDiscussions"),
+  MEDIA_INLINE_DISPLAY_TEAM_DISCUSSIONS(
+      "featureMediaInlineDisplayTeamDiscussionsEnabled", "mediaInlineDisplayTeamDiscussions"),
+  MEDIA_AI_SCAN_TEAM_DISCUSSIONS(
+      "featureMediaAiScanTeamDiscussionsEnabled", "mediaAiScanTeamDiscussions"),
   ASKER_DISPLAY_NAME("featureDisplayNameEditable", null),
   ASKER_EMAIL("featureAskerEmailEnabled", null),
   ASKER_EMAIL_COLLECTION_AGENCY_COUNSELLING(
@@ -116,7 +133,8 @@ public enum PermissionFeature {
   }
 
   public boolean defaultValue() {
-    return this != ASKER_EMAIL_LIVE_CHAT;
+    // ORISO-Frontend#2491: the team chat is archived at accept unless a policy says otherwise.
+    return this != ASKER_EMAIL_LIVE_CHAT && this != TEAM_DISCUSSION_AFTER_ACCEPT;
   }
 
   public String apiKey() {

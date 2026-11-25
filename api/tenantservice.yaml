@@ -26,6 +26,11 @@ paths:
                 $ref: '#/components/schemas/MultilingualTenantDTO'
         400:
           description: BAD REQUEST - invalid/incomplete request or body object
+          headers:
+            X-Reason:
+              description: ERSTANTWORT_WHO_READS_ALONG_REQUIRED when a first reply has no disclosure in its source language
+              schema:
+                type: string
         401:
           description: UNAUTHORIZED - no/invalid Keycloak token
         409:
@@ -490,7 +495,9 @@ paths:
         accepted and discarded, a changed value or mode is refused with 400 and nothing is stored.
         The same holds for `calendar` (ADR-032): omitting it keeps the stored override, and an
         ENFORCED platform value of `calendar.visibilityScope` or `calendar.showAskerUsernames`
-        cannot be changed.
+        cannot be changed. The same holds for `caseSharing.mode` (ORISO-TenantService#374); a
+        request that writes `caseSharing` ignores a `caseHandoverEnabled` entry in `policies`,
+        which is derived from the mode.
       operationId: updateTenantPermissionPolicies
       requestBody:
         required: true
@@ -506,7 +513,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TenantPermissionPolicies'
         400:
-          description: BAD REQUEST - the body tries to change an ENFORCED internalGroupChat.recipientScope, calendar.visibilityScope or calendar.showAskerUsernames
+          description: BAD REQUEST - the body tries to change an ENFORCED internalGroupChat.recipientScope, calendar.visibilityScope, calendar.showAskerUsernames or caseSharing.mode
         403:
           description: FORBIDDEN - tenant admins can update only their own tenant
   /tenantadmin/dpia:
@@ -608,6 +615,53 @@ paths:
           description: UNAUTHORIZED - no/invalid Keycloak token
         403:
           description: FORBIDDEN - only super admin can update translation provider keys
+        500:
+          description: INTERNAL SERVER ERROR - server encountered unexpected condition
+  /tenantadmin/translation/keys/{provider}/test:
+    post:
+      tags:
+        - tenant-controller
+      summary: 'Tests the stored machine-translation API key of a provider with one short live call [Authorization: Super admin]'
+      description: 'Sends one short German sentence to the provider with the stored key and returns
+        the English reply, the model and the round-trip time. Nothing is stored. Provider errors use
+        the same typed TranslationErrorDTO as /tenantadmin/translate: 409 TRANSLATION_NOT_CONFIGURED
+        when no key or base URL is set, 502 TRANSLATION_KEY_INVALID / TRANSLATION_NO_CREDIT /
+        TRANSLATION_RATE_LIMITED / TRANSLATION_PROVIDER_UNAVAILABLE.'
+      operationId: testTranslationApiKey
+      parameters:
+        - name: provider
+          in: path
+          description: Translation provider id, one of "openrouter" or "mistral"
+            (unknown providers are rejected with 400)
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: The provider answered with the stored key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationKeyTestResultDTO'
+        400:
+          description: BAD REQUEST - unknown provider
+        401:
+          description: UNAUTHORIZED - no/invalid Keycloak token
+        403:
+          description: FORBIDDEN - only super admin can test translation provider keys
+        409:
+          description: CONFLICT - no API key or base URL configured for this provider (TRANSLATION_NOT_CONFIGURED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationErrorDTO'
+        502:
+          description: BAD GATEWAY - the provider refused or failed (TRANSLATION_KEY_INVALID,
+            TRANSLATION_NO_CREDIT, TRANSLATION_RATE_LIMITED, TRANSLATION_PROVIDER_UNAVAILABLE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationErrorDTO'
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
   /tenantadmin/translate:
@@ -755,12 +809,29 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MultilingualTenantDTO'
+        400:
+          description: Bad request, including a changed first reply without a disclosure in its source language
+          headers:
+            X-Reason:
+              description: Validation reason, for example ERSTANTWORT_WHO_READS_ALONG_REQUIRED
+              schema:
+                type: string
         401:
           description: UNAUTHORIZED - no/invalid Keycloak token
         409:
           description: CONFLICT - unique constraint validation fails
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+        502:
+          description: >-
+            ConsultingTypeService did not confirm the update. TenantService rolled back its
+            changes. Check the current consulting settings before retrying.
+          headers:
+            X-Reason:
+              description: The outcome of the consulting settings write is unknown.
+              schema:
+                type: string
+                enum: [CONSULTING_SETTINGS_OUTCOME_UNKNOWN]
     get:
       tags:
         - tenant-controller
@@ -819,6 +890,42 @@ paths:
           description: FORBIDDEN - no platform admin authority
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
+  /tenantadmin/tenant-ids/reservations/{id}/assignment:
+    get:
+      tags:
+        - tenant-controller
+      summary: Check whether the original reservation became an existing tenant
+      operationId: checkTenantIdAssignmentProof
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: X-Reservation-Token
+          in: header
+          required: true
+          description: Proof issued for the original reservation.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        204:
+          description: The proof matches the assignment of an existing tenant.
+        400:
+          description: Missing or blank reservation proof or invalid tenant ID.
+        401:
+          description: Missing or invalid access token.
+        403:
+          description: Caller is not authorized to check tenant ID assignments.
+        404:
+          description: No existing tenant has an assignment matching the proof.
+        500:
+          description: Assignment check could not be completed.
       security:
         - Bearer: [ ]
   /tenantadmin/tenant-ids/next-free:
@@ -898,6 +1005,41 @@ paths:
       security:
         - Bearer: [ ]
   /tenantadmin/tenant-ids/reservations/{id}:
+    get:
+      tags:
+        - tenant-controller
+      summary: Check whether the original reservation is still open
+      operationId: checkTenantIdReservationProof
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: X-Reservation-Token
+          in: header
+          required: true
+          description: Proof issued for the original reservation.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        204:
+          description: The proof matches the current open reservation.
+        400:
+          description: Missing or blank reservation proof or invalid tenant ID.
+        401:
+          description: Missing or invalid access token.
+        403:
+          description: Caller is not authorized to check tenant ID reservations.
+        404:
+          description: No open reservation matches the proof.
+        500:
+          description: Reservation check could not be completed.
+      security:
+        - Bearer: [ ]
     delete:
       tags:
         - tenant-controller
@@ -930,6 +1072,40 @@ paths:
           description: NOT FOUND - no open reservation exists for this ID
         500:
           description: INTERNAL SERVER ERROR - server encountered unexpected condition
+      security:
+        - Bearer: [ ]
+  /tenantadmin/tenant-ids/reservations/{id}/release:
+    post:
+      tags:
+        - tenant-controller
+      summary: Release the original open reservation using its proof
+      operationId: releaseTenantIdReservationWithProof
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: X-Reservation-Token
+          in: header
+          required: true
+          description: Proof issued for the original reservation.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        204:
+          description: The original reservation has been released or is already gone.
+        400:
+          description: Missing or blank reservation proof or invalid tenant ID.
+        401:
+          description: Missing or invalid access token.
+        403:
+          description: Caller is not authorized to release tenant ID reservations.
+        500:
+          description: Reservation release could not be completed.
       security:
         - Bearer: [ ]
   /tenant:
@@ -1781,13 +1957,15 @@ components:
       properties:
         sourceLang:
           type: string
-          maxLength: 10
+          description: 'Language code such as "de", "en" or the informal German variant
+            "de@informal".'
+          maxLength: 20
           example: "de"
         targetLangs:
           type: array
           items:
             type: string
-            maxLength: 10
+            maxLength: 20
           minItems: 1
           example: [ "en", "fr" ]
         provider:
@@ -1818,6 +1996,26 @@ components:
         model:
           type: string
           example: "openai/gpt-4o-mini"
+    TranslationKeyTestResultDTO:
+      type: object
+      description: 'Result of a live key test: what was sent, what came back, from which model.'
+      properties:
+        provider:
+          type: string
+          example: "mistral"
+        model:
+          type: string
+          example: "mistral-small-latest"
+        sourceText:
+          type: string
+          example: "Guten Tag! Dies ist ein kurzer Verbindungstest."
+        reply:
+          type: string
+          example: "Good day! This is a short connection test."
+        latencyMs:
+          type: integer
+          format: int64
+          example: 812
     TranslationErrorDTO:
       type: object
       description: 'Typed machine-translation error. errorCode is one of
@@ -2328,6 +2526,11 @@ components:
           type: string
         updateDate:
           type: string
+        deleteDate:
+          type: string
+          description: >-
+            Set while the Träger is being deleted (ORISO-Admin#1525); absent otherwise. The admin
+            interface shows such a Träger as being deleted.
         licensing:
           $ref: '#/components/schemas/Licensing'
     RestrictedTenantDTO:
@@ -2378,6 +2581,11 @@ components:
             - $ref: '#/components/schemas/CalendarPolicies'
           readOnly: true
           description: Resolved calendar policies (visibility scope, asker usernames) for downstream services.
+        caseSharing:
+          allOf:
+            - $ref: '#/components/schemas/CaseSharingPolicies'
+          readOnly: true
+          description: Resolved case sharing policy (ORISO-TenantService#374) of the Traeger for downstream services.
     Licensing:
       type: object
       required:
@@ -2589,6 +2797,7 @@ components:
         featureTeamDiscussionEnabled:
           type: boolean
           example: "false"
+          description: "Master toggle for the team chat on an open enquiry (team discussion, ORISO-Frontend#2491). Governed by the permission policy featureTeamDiscussionEnabled like featureSupervisionEnabled. A Traeger value stored before the policy existed reads as the Traeger's own policy value."
         featureToolsEnabled:
           type: boolean
           example: "false"
@@ -2841,6 +3050,38 @@ components:
           type: boolean
           example: "false"
           description: "AI media scan when a user is in supervision mode."
+        featureTeamDiscussionAfterAcceptEnabled:
+          type: boolean
+          example: "false"
+          description: "May the team chat on an enquiry continue after the enquiry is accepted? Off = archived read-only at accept (ADR-016). Group teamDiscussion. ORISO-Frontend#2491."
+        featureVideoCallsTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable the video call button in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureAudioCallsTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable the audio call button in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureVoiceMessagesTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable voice messages in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureThreadsTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable threads in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureMediaUploadTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Enable media upload in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureMediaInlineDisplayTeamDiscussionsEnabled:
+          type: boolean
+          example: "true"
+          description: "Inline media display in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
+        featureMediaAiScanTeamDiscussionsEnabled:
+          type: boolean
+          example: "false"
+          description: "AI media scan in team discussions (team chat on an open enquiry). ORISO-Frontend#2491."
         featureToolsOICDToken:
           type: string
           example: "1234-1234-1234-1234"
@@ -3092,6 +3333,8 @@ components:
           $ref: '#/components/schemas/InternalGroupChatPolicies'
         calendar:
           $ref: '#/components/schemas/CalendarPolicies'
+        caseSharing:
+          $ref: '#/components/schemas/CaseSharingPolicies'
 
     PermissionPolicyMode:
       type: string
@@ -3249,6 +3492,43 @@ components:
         showAskerUsernames:
           $ref: '#/components/schemas/BooleanPermissionPolicy'
 
+    CaseSharingMode:
+      type: string
+      description: >-
+        How the counsellors of a counselling centre share a Mailberatung case (ORISO-TenantService#374).
+        CASE_HANDOVER = one counsellor owns the case, it can be handed over or briefly shared;
+        TEAM_COUNSELLING = every counsellor of the centre sees every case (team agency);
+        NONE = the case stays with the counsellor who accepted it. Exactly one applies.
+      enum:
+        - CASE_HANDOVER
+        - TEAM_COUNSELLING
+        - NONE
+
+    CaseSharingModePermissionPolicy:
+      type: object
+      required: [value, mode]
+      properties:
+        value:
+          $ref: '#/components/schemas/CaseSharingMode'
+        mode:
+          $ref: '#/components/schemas/PermissionPolicyMode'
+        inherited:
+          type: boolean
+          readOnly: true
+          description: True when the resolved tenant value comes from the platform policy.
+
+    CaseSharingPolicies:
+      type: object
+      description: >-
+        Functionality Access policy "Faelle von Ratsuchenden teilen" (ORISO-TenantService#374).
+        Unset resolves to CASE_HANDOVER (SUGGESTED), or to the stored legacy `caseHandoverEnabled`
+        of that level (true = CASE_HANDOVER, false = NONE). While this release serves it,
+        `caseHandoverEnabled` in the boolean policies is derived: true exactly when mode is
+        CASE_HANDOVER, with the same requirement mode.
+      properties:
+        mode:
+          $ref: '#/components/schemas/CaseSharingModePermissionPolicy'
+
     CaseHandoverReasonPolicy:
       type: object
       required:
@@ -3346,6 +3626,15 @@ components:
         - featureMediaAiScanOneOnOneChatsEnabled
         - featureMediaAiScanGroupChatsEnabled
         - featureMediaAiScanSupervisionChatsEnabled
+        - featureTeamDiscussionAfterAcceptEnabled
+        - featureTeamDiscussionEnabled
+        - featureVideoCallsTeamDiscussionsEnabled
+        - featureAudioCallsTeamDiscussionsEnabled
+        - featureVoiceMessagesTeamDiscussionsEnabled
+        - featureThreadsTeamDiscussionsEnabled
+        - featureMediaUploadTeamDiscussionsEnabled
+        - featureMediaInlineDisplayTeamDiscussionsEnabled
+        - featureMediaAiScanTeamDiscussionsEnabled
         - featureDisplayNameEditable
         - featureAskerEmailEnabled
         - featureAskerEmailCollectionAgencyCounsellingEnabled
@@ -3565,6 +3854,8 @@ components:
           $ref: '#/components/schemas/InternalGroupChatPolicies'
         calendar:
           $ref: '#/components/schemas/CalendarPolicies'
+        caseSharing:
+          $ref: '#/components/schemas/CaseSharingPolicies'
 
     TenantAdminAllowedPermissionToggles:
       type: object
@@ -3699,6 +3990,33 @@ components:
           type: boolean
           example: "true"
         mediaAiScanSupervisionChats:
+          type: boolean
+          example: "true"
+        teamDiscussionAfterAccept:
+          type: boolean
+          example: "true"
+        teamDiscussion:
+          type: boolean
+          example: "true"
+        videoCallsTeamDiscussions:
+          type: boolean
+          example: "true"
+        audioCallsTeamDiscussions:
+          type: boolean
+          example: "true"
+        voiceMessagesTeamDiscussions:
+          type: boolean
+          example: "true"
+        threadsTeamDiscussions:
+          type: boolean
+          example: "true"
+        mediaUploadTeamDiscussions:
+          type: boolean
+          example: "true"
+        mediaInlineDisplayTeamDiscussions:
+          type: boolean
+          example: "true"
+        mediaAiScanTeamDiscussions:
           type: boolean
           example: "true"
 

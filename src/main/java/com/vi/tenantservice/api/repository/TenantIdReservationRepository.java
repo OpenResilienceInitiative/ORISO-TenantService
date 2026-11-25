@@ -21,6 +21,15 @@ public interface TenantIdReservationRepository
   @Query("SELECT r.tenantId FROM TenantIdReservationEntity r")
   List<Long> findAllLedgerIds();
 
+  @Query(
+      "SELECT r.token FROM TenantIdReservationEntity r"
+          + " WHERE r.tenantId = :tenantId AND r.status = :status AND r.token = :token"
+          + " AND EXISTS (SELECT t.id FROM TenantEntity t WHERE t.id = r.tenantId)")
+  Optional<String> findMatchingAssignmentProof(
+      @Param("tenantId") long tenantId,
+      @Param("status") TenantIdReservationStatus status,
+      @Param("token") String token);
+
   /**
    * Loads the ledger row under a write lock. The public DPA forward uses this to serialise
    * concurrent link creation for one onboarding: the reservation row is the natural per-onboarding
@@ -80,6 +89,14 @@ public interface TenantIdReservationRepository
   @Query(
       "DELETE FROM TenantIdReservationEntity r WHERE r.tenantId = :tenantId AND r.status = :status AND r.token = :token")
   int deleteWithProof(
+      @Param("tenantId") long tenantId,
+      @Param("status") TenantIdReservationStatus status,
+      @Param("token") String token);
+
+  @Query(
+      "SELECT r.token FROM TenantIdReservationEntity r"
+          + " WHERE r.tenantId = :tenantId AND r.status = :status AND r.token = :token")
+  Optional<String> findMatchingReservationProof(
       @Param("tenantId") long tenantId,
       @Param("status") TenantIdReservationStatus status,
       @Param("token") String token);
