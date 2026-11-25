@@ -285,10 +285,48 @@ class TaskServiceIdentityTest {
             "matrix-agency-provision",
             "appointment-sync",
             "appointment-participant-cleanup",
-            "deletion-audit-read");
+            "deletion-audit-read",
+            "tenant-deletion");
 
     assertThat(identity.allows(runtimeToken(current), "RUNTIME_POLICY")).isTrue();
     assertThat(identity.allows(runtimeToken(current.subList(0, 5)), "RUNTIME_POLICY")).isFalse();
+    assertThat(identity.allows(runtimeToken(current.subList(0, 6)), "RUNTIME_POLICY")).isFalse();
+  }
+
+  /**
+   * UserService's nightly job finishes Träger deletions as the RUNTIME actor with the
+   * tenant-deletion role (ORISO-Admin#1525), and only where TenantService requires that purpose.
+   */
+  @Test
+  void runtimeActorMayFinishTraegerDeletionsOnlyWhenThePurposeIsRequired() {
+    var roles =
+        List.of(
+            "runtime-policy",
+            "matrix-agency",
+            "matrix-agency-provision",
+            "appointment-sync",
+            "appointment-participant-cleanup",
+            "deletion-audit-read",
+            "tenant-deletion");
+    var required =
+        new TaskServiceIdentity(
+            new MockEnvironment()
+                .withProperty("TASK_IDENTITY_MODEL", "FIVE_ACTORS")
+                .withProperty("TASK_IDENTITY_REQUIRED_TASKS", "RUNTIME_POLICY,TENANT_DELETION")
+                .withProperty("TASK_IDENTITY_AUDIENCE", "receiver")
+                .withProperty("IDENTITY_RUNTIME_CLIENT_ID", "backend-runtime")
+                .withProperty("IDENTITY_RUNTIME_SERVICE_SUBJECT", "runtime-subject"));
+    var notRequired =
+        new TaskServiceIdentity(
+            new MockEnvironment()
+                .withProperty("TASK_IDENTITY_MODEL", "FIVE_ACTORS")
+                .withProperty("TASK_IDENTITY_REQUIRED_TASKS", "RUNTIME_POLICY")
+                .withProperty("TASK_IDENTITY_AUDIENCE", "receiver")
+                .withProperty("IDENTITY_RUNTIME_CLIENT_ID", "backend-runtime")
+                .withProperty("IDENTITY_RUNTIME_SERVICE_SUBJECT", "runtime-subject"));
+
+    assertThat(required.allows(runtimeToken(roles), "TENANT_DELETION")).isTrue();
+    assertThat(notRequired.allows(runtimeToken(roles), "TENANT_DELETION")).isFalse();
   }
 
   private static JwtAuthenticationToken runtimeToken(List<String> roles) {

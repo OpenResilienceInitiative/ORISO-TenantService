@@ -67,6 +67,7 @@ import com.vi.tenantservice.api.service.translation.TranslationException;
 import com.vi.tenantservice.config.security.AuthorisationService;
 import com.vi.tenantservice.generated.api.controller.TenantApi;
 import com.vi.tenantservice.generated.api.controller.TenantadminApi;
+import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionResultDTO;
 import io.swagger.annotations.Api;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
@@ -710,12 +711,36 @@ public class TenantController implements TenantApi, TenantadminApi {
     return ResponseEntity.ok(tenantServiceFacade.getStatisticsNamesExceptTechnical());
   }
 
+  /**
+   * Träger in deletion, for UserService's nightly job that finishes them (ORISO-Admin#1525). Only
+   * the RUNTIME task actor with the {@code tenant-deletion} role.
+   */
+  @GetMapping("/tenant/deletions")
+  @PreAuthorize("@taskServiceIdentity.allows(authentication, 'TENANT_DELETION')")
+  public ResponseEntity<List<Long>> getTenantsMarkedForDeletion() {
+    return ResponseEntity.ok(tenantServiceFacade.findTenantIdsMarkedForDeletion());
+  }
+
+  /**
+   * The last step of a Träger deletion: UserService's nightly job calls it once nothing references
+   * the Träger any more (ORISO-Admin#1525). Only a marked Träger; only the RUNTIME task actor.
+   */
+  @DeleteMapping("/tenant/{id}/deletion")
+  @PreAuthorize("@taskServiceIdentity.allows(authentication, 'TENANT_DELETION')")
+  public ResponseEntity<Void> purgeTenantMarkedForDeletion(@PathVariable("id") Long id) {
+    tenantServiceFacade.purgeTenantMarkedForDeletion(id);
+    return ResponseEntity.noContent().build();
+  }
+
+  /**
+   * Marks the Träger and everything in it for deletion (ORISO-Admin#1525). 202: the nightly jobs
+   * remove the rows, the Träger last. The body says what was marked and what could not be.
+   */
   @DeleteMapping("/tenant/{id}")
-  @PreAuthorize("hasAuthority('AUTHORIZATION_UPDATE_TENANT')")
-  public ResponseEntity<Void> deleteTenant(@PathVariable("id") Long id) {
-    log.info("Deleting tenant with id {} by user {} ", id, authorisationService.getUsername());
-    tenantServiceFacade.deleteTenant(id);
-    return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+  @PreAuthorize("@tenantFacadeAuthorisationService.isPlatformAdministrator()")
+  public ResponseEntity<TenantDeletionResultDTO> deleteTenant(@PathVariable("id") Long id) {
+    log.info("Marking tenant {} for deletion by user {}", id, authorisationService.getUsername());
+    return new ResponseEntity<>(tenantServiceFacade.deleteTenant(id), HttpStatus.ACCEPTED);
   }
 
   @Override

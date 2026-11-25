@@ -1247,6 +1247,9 @@ public class TenantConverter {
     if (tenant.getUpdateDate() != null) {
       basicTenantLicensingDTO.setUpdateDate(tenant.getUpdateDate().toString());
     }
+    if (tenant.getDeleteDate() != null) {
+      basicTenantLicensingDTO.setDeleteDate(tenant.getDeleteDate().toString());
+    }
     return basicTenantLicensingDTO;
   }
 

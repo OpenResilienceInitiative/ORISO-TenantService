@@ -442,6 +442,17 @@ public class TenantFacadeAuthorisationService {
     return isSuperAdmin() && !isTechnicalUser();
   }
 
+  /**
+   * Deleting a Träger empties it of every agency and account, so it is the platform administrator's
+   * act alone (ORISO-Admin#1525). A Träger admin is refused even for their own Träger, and so is
+   * the technical identity.
+   */
+  public void assertCanDeleteTenant() {
+    if (!isPlatformAdministrator()) {
+      throw new AccessDeniedException("Only the platform administrator may delete a Träger");
+    }
+  }
+
   public boolean mayManageTenantIdReservations() {
     return isPlatformAdministrator()
         && authorisationService.hasAuthority(Authority.AuthorityValue.CREATE_TENANT);

@@ -854,6 +854,19 @@ class TenantConverterTest {
     assertThat(basicTenantLicensingDTO.getLicensing()).isEqualTo(tenantDTO.getLicensing());
   }
 
+  /** The tenant list shows a Träger in deletion as such (ORISO-Admin#1525). */
+  @Test
+  void toBasicLicensingTenantDTO_should_carryTheDeleteDate_onlyWhileTheTraegerIsBeingDeleted() {
+    TenantEntity entity =
+        tenantConverter.toEntity(new MultilingualTenantTestDataBuilder().tenantDTO().build());
+
+    assertThat(tenantConverter.toBasicLicensingTenantDTO(entity).getDeleteDate()).isNull();
+
+    entity.setDeleteDate(java.time.LocalDateTime.of(2026, 11, 24, 9, 30));
+    assertThat(tenantConverter.toBasicLicensingTenantDTO(entity).getDeleteDate())
+        .isEqualTo("2026-11-24T09:30");
+  }
+
   /**
    * The theming a reader gets back for a given input theming.
    *

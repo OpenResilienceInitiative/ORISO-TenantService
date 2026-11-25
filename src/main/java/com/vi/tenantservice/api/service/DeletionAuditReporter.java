@@ -13,7 +13,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * Tells the UserService deletion log (Admin &gt; Logs) that a Traeger was deleted.
+ * Tells the UserService deletion log (Admin &gt; Logs) that a Traeger was marked or deleted.
  *
  * <p>Best effort by contract. Inside a transaction the call is made only after it commits, so a
  * rolled-back deletion leaves no entry; a failing log call is logged and swallowed and can never
@@ -28,21 +28,30 @@ public class DeletionAuditReporter {
   private final @NonNull UserAdminServiceApiControllerFactory userAdminServiceApiControllerFactory;
   private final @NonNull SecurityHeaderSupplier securityHeaderSupplier;
 
+  /** The Träger was marked for deletion; the nightly jobs remove it (ORISO-Admin#1525). */
+  public void reportTenantScheduled(Long tenantId) {
+    report(tenantId, OutcomeEnum.SCHEDULED);
+  }
+
   public void reportTenantExecuted(Long tenantId) {
+    report(tenantId, OutcomeEnum.EXECUTED);
+  }
+
+  private void report(Long tenantId, OutcomeEnum outcome) {
     if (TransactionSynchronizationManager.isSynchronizationActive()) {
       TransactionSynchronizationManager.registerSynchronization(
           new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-              send(tenantId);
+              send(tenantId, outcome);
             }
           });
     } else {
-      send(tenantId);
+      send(tenantId, outcome);
     }
   }
 
-  private void send(Long tenantId) {
+  private void send(Long tenantId, OutcomeEnum outcome) {
     try {
       var api = userAdminServiceApiControllerFactory.createDeletionAuditApi();
       var headers = securityHeaderSupplier.getKeycloakAndCsrfHttpHeaders();
@@ -53,7 +62,7 @@ public class DeletionAuditReporter {
               .targetType(TargetTypeEnum.TENANT)
               .targetId(String.valueOf(tenantId))
               .tenantId(tenantId)
-              .outcome(OutcomeEnum.EXECUTED));
+              .outcome(outcome));
     } catch (RuntimeException e) {
       log.warn("Could not write deletion log entry for tenant {}: {}", tenantId, e.toString());
     }

@@ -6,6 +6,7 @@ import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.useradminservice.generated.ApiClient;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO;
+import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionResultDTO;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -79,6 +80,17 @@ public class UserAdminService {
     var controllerApi = userAdminServiceApiControllerFactory.createControllerApi();
     addDefaultHeadersWithKeycloak(controllerApi.getApiClient());
     return controllerApi.getTenantDeletionBlockers(tenantId);
+  }
+
+  /**
+   * Marks everything that belongs to the Träger for deletion, as the deleting platform
+   * administrator (ORISO-Admin#1525). UserService skips what is already marked, so this can be
+   * repeated.
+   */
+  public TenantDeletionResultDTO markTenantContentsForDeletion(Long tenantId) {
+    var controllerApi = userAdminServiceApiControllerFactory.createControllerApi();
+    addDefaultHeadersWithKeycloak(controllerApi.getApiClient());
+    return controllerApi.markTenantContentsForDeletion(tenantId);
   }
 
   private void addDefaultHeadersWithKeycloak(ApiClient apiClient) {

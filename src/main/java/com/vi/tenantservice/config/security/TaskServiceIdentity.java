@@ -29,7 +29,10 @@ public class TaskServiceIdentity {
           "SMTP_SYNC",
           "smtp-sync",
           "RUNTIME_POLICY",
-          "runtime-policy");
+          "runtime-policy",
+          // Finishing a Träger deletion once nothing references it (ORISO-Admin#1525).
+          "TENANT_DELETION",
+          "tenant-deletion");
   private static final Set<String> FORBIDDEN =
       Set.of(
           "technical",
