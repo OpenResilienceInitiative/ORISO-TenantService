@@ -385,6 +385,8 @@ class TechnicalServiceIdentityAuthorizationIT {
     mvc.perform(get("/tenantadmin/controls").with(caller)).andExpect(status().isForbidden());
     mvc.perform(get("/tenantadmin/translation/keys").with(caller))
         .andExpect(status().isForbidden());
+    mvc.perform(post("/tenantadmin/translation/keys/mistral/test").with(caller))
+        .andExpect(status().isForbidden());
     mvc.perform(delete("/tenant/1").with(caller)).andExpect(status().isForbidden());
   }
 

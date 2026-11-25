@@ -1930,6 +1930,18 @@ class TenantControllerIT {
   }
 
   @Test
+  void testTranslationApiKey_Should_returnForbidden_When_tokenIsNotSuperAdmin() throws Exception {
+    when(authorisationService.findTenantIdInAccessToken()).thenReturn(Optional.of(1L));
+    var builder = new AuthenticationMockBuilder();
+
+    mockMvc
+        .perform(
+            post("/tenantadmin/translation/keys/mistral/test")
+                .with(authentication(builder.withUserRole(TENANT_ADMIN.getValue()).build())))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void updateTenant_Should_rejectFirstReplyChangesWhenTheDisclosureIsMissing() throws Exception {
     expectRejectedFirstReplyDisclosure(null);
   }
