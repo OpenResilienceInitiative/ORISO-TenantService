@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vi.tenantservice.api.exception.SettingsUpdateConflictException;
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
+import com.vi.tenantservice.api.model.CaseHandoverPolicies;
 import com.vi.tenantservice.api.model.ConsentPermissionPolicy;
 import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
 import com.vi.tenantservice.api.model.PermissionPolicyMode;
@@ -404,6 +405,138 @@ class TenantPermissionPolicyServiceTest {
     assertThat(advice.getEnabled().getInherited()).isTrue();
     assertThat(advice.getMaxAccessDurationMinutes().getValue()).isEqualTo(1500);
     assertThat(advice.getMaxAccessDurationMinutes().getInherited()).isFalse();
+  }
+
+  @Test
+  void resolveCaseHandover_shouldDefaultExplanationLevelToOffAndApplyTenantOverride()
+      throws Exception {
+    var parent = CaseHandoverPolicyDefaults.create();
+    // Platform policy stored before FE#2040: no explanation level at all.
+    parent.getReasons().values().forEach(reason -> reason.setExplanationLevel(null));
+    var local = CaseHandoverPolicyDefaults.create();
+    local.getReasons().values().forEach(reason -> reason.setExplanationLevel(null));
+    local
+        .getReasons()
+        .get("COUNSELLOR_ON_HOLIDAY")
+        .setExplanationLevel(
+            new com.vi.tenantservice.api.model.ExplanationLevelPermissionPolicy(
+                com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.REQUIRED,
+                PermissionPolicyMode.SUGGESTED));
+    when(platformControls.getControls())
+        .thenReturn(new TenantAdminControls().caseHandoverPolicies(parent));
+    when(repository.findByTenantId(42L))
+        .thenReturn(
+            Optional.of(
+                TenantPermissionPolicyEntity.builder()
+                    .tenantId(42L)
+                    .policies("{}")
+                    .caseHandoverPolicies(new ObjectMapper().writeValueAsString(local))
+                    .build()));
+
+    var reasons = service.getResolvedCaseHandoverPolicies(42L).getReasons();
+
+    assertThat(reasons.get("COUNSELLOR_ON_HOLIDAY").getExplanationLevel().getValue())
+        .isEqualTo(com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.REQUIRED);
+    assertThat(reasons.get("COUNSELLOR_ON_HOLIDAY").getExplanationLevel().getInherited()).isFalse();
+    assertThat(reasons.get("COUNSELLOR_IS_ILL").getExplanationLevel().getValue())
+        .isEqualTo(com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.OFF);
+    assertThat(reasons.get("COUNSELLOR_IS_ILL").getExplanationLevel().getInherited()).isTrue();
+  }
+
+  private static com.vi.tenantservice.api.model.ExplanationLevelPermissionPolicy explanationLevel(
+      com.vi.tenantservice.api.model.CaseHandoverExplanationLevel value,
+      PermissionPolicyMode mode) {
+    return new com.vi.tenantservice.api.model.ExplanationLevelPermissionPolicy(value, mode);
+  }
+
+  /** Saves through {@code saveOverrides}, then serves the saved row to the next read. */
+  private CaseHandoverPolicies saveAndReadBack(CaseHandoverPolicies local) {
+    when(repository.findByTenantId(42L)).thenReturn(Optional.empty());
+    service.saveOverrides(42L, Map.of(), local);
+    org.mockito.ArgumentCaptor<TenantPermissionPolicyEntity> saved =
+        org.mockito.ArgumentCaptor.forClass(TenantPermissionPolicyEntity.class);
+    verify(repository).saveAndFlush(saved.capture());
+    when(repository.findByTenantId(42L)).thenReturn(Optional.of(saved.getValue()));
+    return service.getResolvedCaseHandoverPolicies(42L);
+  }
+
+  @Test
+  void saveCaseHandover_shouldPersistTheExplanationLevelAndReadItBack() {
+    when(platformControls.getControls())
+        .thenReturn(
+            new TenantAdminControls().caseHandoverPolicies(CaseHandoverPolicyDefaults.create()));
+    var local = CaseHandoverPolicyDefaults.create();
+    local
+        .getReasons()
+        .get("COUNSELLOR_ON_HOLIDAY")
+        .setExplanationLevel(
+            explanationLevel(
+                com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.REQUIRED,
+                PermissionPolicyMode.ENFORCED));
+
+    var level =
+        saveAndReadBack(local).getReasons().get("COUNSELLOR_ON_HOLIDAY").getExplanationLevel();
+
+    assertThat(level.getValue())
+        .isEqualTo(com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.REQUIRED);
+    assertThat(level.getMode()).isEqualTo(PermissionPolicyMode.ENFORCED);
+    assertThat(level.getInherited()).isFalse();
+  }
+
+  @Test
+  void saveCaseHandover_shouldRejectAChangedExplanationLevelUnderAnEnforcedParent() {
+    var parent = CaseHandoverPolicyDefaults.create();
+    parent
+        .getReasons()
+        .get("COUNSELLOR_ON_HOLIDAY")
+        .setExplanationLevel(
+            explanationLevel(
+                com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.OPTIONAL,
+                PermissionPolicyMode.ENFORCED));
+    when(platformControls.getControls())
+        .thenReturn(new TenantAdminControls().caseHandoverPolicies(parent));
+    var local = CaseHandoverPolicyDefaults.create();
+    local
+        .getReasons()
+        .get("COUNSELLOR_ON_HOLIDAY")
+        .setExplanationLevel(
+            explanationLevel(
+                com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.REQUIRED,
+                PermissionPolicyMode.SUGGESTED));
+
+    assertThatThrownBy(() -> service.saveOverrides(42L, Map.of(), local))
+        .hasMessageContaining("COUNSELLOR_ON_HOLIDAY.explanationLevel");
+    verify(repository, never()).saveAndFlush(any());
+  }
+
+  @Test
+  void saveCaseHandover_shouldDiscardAnExactEchoOfAnEnforcedExplanationLevel() {
+    var parent = CaseHandoverPolicyDefaults.create();
+    parent
+        .getReasons()
+        .get("COUNSELLOR_ON_HOLIDAY")
+        .setExplanationLevel(
+            explanationLevel(
+                com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.OPTIONAL,
+                PermissionPolicyMode.ENFORCED));
+    when(platformControls.getControls())
+        .thenReturn(new TenantAdminControls().caseHandoverPolicies(parent));
+    var local = CaseHandoverPolicyDefaults.create();
+    local
+        .getReasons()
+        .get("COUNSELLOR_ON_HOLIDAY")
+        .setExplanationLevel(
+            explanationLevel(
+                com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.OPTIONAL,
+                PermissionPolicyMode.ENFORCED));
+
+    var level =
+        saveAndReadBack(local).getReasons().get("COUNSELLOR_ON_HOLIDAY").getExplanationLevel();
+
+    assertThat(level.getValue())
+        .isEqualTo(com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.OPTIONAL);
+    assertThat(level.getMode()).isEqualTo(PermissionPolicyMode.ENFORCED);
+    assertThat(level.getInherited()).isTrue();
   }
 
   @Test

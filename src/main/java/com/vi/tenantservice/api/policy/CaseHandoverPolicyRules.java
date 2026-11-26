@@ -2,9 +2,11 @@ package com.vi.tenantservice.api.policy;
 
 import com.vi.tenantservice.api.model.BooleanPermissionPolicy;
 import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
+import com.vi.tenantservice.api.model.CaseHandoverExplanationLevel;
 import com.vi.tenantservice.api.model.CaseHandoverPolicies;
 import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
 import com.vi.tenantservice.api.model.ConsentPermissionPolicy;
+import com.vi.tenantservice.api.model.ExplanationLevelPermissionPolicy;
 import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
 import com.vi.tenantservice.api.model.PermissionPolicyMode;
 import java.util.LinkedHashMap;
@@ -40,9 +42,25 @@ public final class CaseHandoverPolicyRules {
                 reason.setClientConsent(consent);
                 reason.setClientConsentRequired(legacyConsentMirror(consent));
               }
+              reason.setExplanationLevel(effectiveExplanationLevel(reason));
               normalized.put(code, reason);
             });
     return new CaseHandoverPolicies(Map.copyOf(normalized));
+  }
+
+  /** Platform default for every reason: no explanation field (Frank, 25 Nov 2026, FE#2040). */
+  public static ExplanationLevelPermissionPolicy defaultExplanationLevel() {
+    return new ExplanationLevelPermissionPolicy(
+        CaseHandoverExplanationLevel.OFF, PermissionPolicyMode.SUGGESTED);
+  }
+
+  /** Policies stored before FE#2040 carry no level; they read as the default OFF. */
+  public static ExplanationLevelPermissionPolicy effectiveExplanationLevel(
+      CaseHandoverReasonPolicy reason) {
+    ExplanationLevelPermissionPolicy level = reason == null ? null : reason.getExplanationLevel();
+    return level == null || level.getValue() == null || level.getMode() == null
+        ? defaultExplanationLevel()
+        : level;
   }
 
   public static void validate(CaseHandoverPolicies policies) {
