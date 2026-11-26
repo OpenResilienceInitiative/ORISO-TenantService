@@ -3408,6 +3408,28 @@ components:
         - OPT_OUT
         - NONE
 
+    CaseHandoverExplanationLevel:
+      type: string
+      description: >-
+        Whether a counsellor writes an explanation for this reason. OFF = no text field,
+        OPTIONAL = a field that may stay empty, REQUIRED = text must be entered (FE#2040).
+      enum:
+        - 'OFF'
+        - 'OPTIONAL'
+        - 'REQUIRED'
+
+    ExplanationLevelPermissionPolicy:
+      type: object
+      required: [value, mode]
+      properties:
+        value:
+          $ref: '#/components/schemas/CaseHandoverExplanationLevel'
+        mode:
+          $ref: '#/components/schemas/PermissionPolicyMode'
+        inherited:
+          type: boolean
+          readOnly: true
+
     ConsentPermissionPolicy:
       type: object
       required: [value, mode]
@@ -3569,6 +3591,9 @@ components:
           allOf:
             - $ref: '#/components/schemas/IntegerPermissionPolicy'
           description: Required only for COUNSELLOR_ASKED_FOR_ADVICE; absent for non-expiring takeover reasons.
+        explanationLevel:
+          $ref: '#/components/schemas/ExplanationLevelPermissionPolicy'
+          description: Explanation text level for this reason. Absent means OFF (FE#2040).
 
     CaseHandoverPolicies:
       type: object

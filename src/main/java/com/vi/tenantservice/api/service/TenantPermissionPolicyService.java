@@ -11,11 +11,13 @@ import com.vi.tenantservice.api.model.CalendarPolicies;
 import com.vi.tenantservice.api.model.CalendarVisibilityScope;
 import com.vi.tenantservice.api.model.CalendarVisibilityScopePolicy;
 import com.vi.tenantservice.api.model.CaseHandoverConsentValue;
+import com.vi.tenantservice.api.model.CaseHandoverExplanationLevel;
 import com.vi.tenantservice.api.model.CaseHandoverPolicies;
 import com.vi.tenantservice.api.model.CaseHandoverReasonPolicy;
 import com.vi.tenantservice.api.model.CaseSharingMode;
 import com.vi.tenantservice.api.model.CaseSharingPolicies;
 import com.vi.tenantservice.api.model.ConsentPermissionPolicy;
+import com.vi.tenantservice.api.model.ExplanationLevelPermissionPolicy;
 import com.vi.tenantservice.api.model.IntegerPermissionPolicy;
 import com.vi.tenantservice.api.model.InternalGroupChatPolicies;
 import com.vi.tenantservice.api.model.InternalGroupChatRecipientScope;
@@ -834,7 +836,12 @@ public class TenantPermissionPolicyService {
                           sanitizePolicy(
                               parentReason.getMaxAccessDurationMinutes(),
                               localReason.getMaxAccessDurationMinutes(),
-                              code + ".maxAccessDurationMinutes")));
+                              code + ".maxAccessDurationMinutes"))
+                      .explanationLevel(
+                          sanitizePolicy(
+                              CaseHandoverPolicyRules.effectiveExplanationLevel(parentReason),
+                              localReason.getExplanationLevel(),
+                              code + ".explanationLevel")));
             });
     return new CaseHandoverPolicies(Map.copyOf(writableReasons));
   }
@@ -851,6 +858,13 @@ public class TenantPermissionPolicyService {
 
   private ConsentPermissionPolicy sanitizePolicy(
       ConsentPermissionPolicy parent, ConsentPermissionPolicy local, String field) {
+    return sanitizePolicy(parent, local, field, this::toDomain);
+  }
+
+  private ExplanationLevelPermissionPolicy sanitizePolicy(
+      ExplanationLevelPermissionPolicy parent,
+      ExplanationLevelPermissionPolicy local,
+      String field) {
     return sanitizePolicy(parent, local, field, this::toDomain);
   }
 
@@ -909,7 +923,20 @@ public class TenantPermissionPolicyService {
                 ? null
                 : resolveInteger(
                     parent.getMaxAccessDurationMinutes(),
-                    local == null ? null : local.getMaxAccessDurationMinutes()));
+                    local == null ? null : local.getMaxAccessDurationMinutes()))
+        .explanationLevel(
+            resolveExplanationLevel(
+                CaseHandoverPolicyRules.effectiveExplanationLevel(parent),
+                local == null ? null : local.getExplanationLevel()));
+  }
+
+  private ExplanationLevelPermissionPolicy resolveExplanationLevel(
+      ExplanationLevelPermissionPolicy parent, ExplanationLevelPermissionPolicy local) {
+    ResolvedPolicyValue<CaseHandoverExplanationLevel> resolved =
+        PermissionPolicyResolver.resolveWithOrigin(toDomain(parent), toDomain(local));
+    return new ExplanationLevelPermissionPolicy(
+            resolved.value(), PermissionPolicyMode.valueOf(resolved.mode().name()))
+        .inherited(resolved.inherited());
   }
 
   private BooleanPermissionPolicy resolveBoolean(
@@ -970,6 +997,11 @@ public class TenantPermissionPolicyService {
   }
 
   private PolicyValue<CaseHandoverConsentValue> toDomain(ConsentPermissionPolicy policy) {
+    return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
+  }
+
+  private PolicyValue<CaseHandoverExplanationLevel> toDomain(
+      ExplanationLevelPermissionPolicy policy) {
     return policy == null ? null : toDomain(policy.getMode(), policy.getValue());
   }
 

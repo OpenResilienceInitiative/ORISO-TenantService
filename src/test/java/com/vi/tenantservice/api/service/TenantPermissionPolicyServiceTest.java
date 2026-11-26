@@ -407,6 +407,42 @@ class TenantPermissionPolicyServiceTest {
   }
 
   @Test
+  void resolveCaseHandover_shouldDefaultExplanationLevelToOffAndApplyTenantOverride()
+      throws Exception {
+    var parent = CaseHandoverPolicyDefaults.create();
+    // Platform policy stored before FE#2040: no explanation level at all.
+    parent.getReasons().values().forEach(reason -> reason.setExplanationLevel(null));
+    var local = CaseHandoverPolicyDefaults.create();
+    local.getReasons().values().forEach(reason -> reason.setExplanationLevel(null));
+    local
+        .getReasons()
+        .get("COUNSELLOR_ON_HOLIDAY")
+        .setExplanationLevel(
+            new com.vi.tenantservice.api.model.ExplanationLevelPermissionPolicy(
+                com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.REQUIRED,
+                PermissionPolicyMode.SUGGESTED));
+    when(platformControls.getControls())
+        .thenReturn(new TenantAdminControls().caseHandoverPolicies(parent));
+    when(repository.findByTenantId(42L))
+        .thenReturn(
+            Optional.of(
+                TenantPermissionPolicyEntity.builder()
+                    .tenantId(42L)
+                    .policies("{}")
+                    .caseHandoverPolicies(new ObjectMapper().writeValueAsString(local))
+                    .build()));
+
+    var reasons = service.getResolvedCaseHandoverPolicies(42L).getReasons();
+
+    assertThat(reasons.get("COUNSELLOR_ON_HOLIDAY").getExplanationLevel().getValue())
+        .isEqualTo(com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.REQUIRED);
+    assertThat(reasons.get("COUNSELLOR_ON_HOLIDAY").getExplanationLevel().getInherited()).isFalse();
+    assertThat(reasons.get("COUNSELLOR_IS_ILL").getExplanationLevel().getValue())
+        .isEqualTo(com.vi.tenantservice.api.model.CaseHandoverExplanationLevel.OFF);
+    assertThat(reasons.get("COUNSELLOR_IS_ILL").getExplanationLevel().getInherited()).isTrue();
+  }
+
+  @Test
   void resolveCaseHandover_shouldPreferLegacyEnforcedOptInDuringDualRead() throws Exception {
     var local = CaseHandoverPolicyDefaults.create();
     var localAdvice = local.getReasons().get(CaseHandoverPolicyDefaults.ADVICE_NEEDED);
