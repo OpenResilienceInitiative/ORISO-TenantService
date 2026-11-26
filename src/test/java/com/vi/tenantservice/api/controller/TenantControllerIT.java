@@ -832,6 +832,30 @@ class TenantControllerIT {
   }
 
   @Test
+  void updateTenant_Should_keepStoredAgencyLinkLabelOptOut_When_updateOmitsIt() throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    var request =
+        (com.fasterxml.jackson.databind.node.ObjectNode)
+            mapper.readTree(multilingualTenantTestDataBuilder.tenantDTO().withSettings().jsonify());
+    var settings = (com.fasterxml.jackson.databind.node.ObjectNode) request.get("settings");
+
+    settings.put("featureAgencyLinkLabelEnabled", false);
+    putTenant1AsTenantAdmin(request.toString())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureAgencyLinkLabelEnabled", is(false)));
+
+    settings.remove("featureAgencyLinkLabelEnabled");
+    putTenant1AsTenantAdmin(request.toString())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureAgencyLinkLabelEnabled", is(false)));
+
+    settings.put("featureAgencyLinkLabelEnabled", true);
+    putTenant1AsTenantAdmin(request.toString())
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.settings.featureAgencyLinkLabelEnabled", is(true)));
+  }
+
+  @Test
   void collectionOptOutSurvivesAnOlderClientUpdateAndAgreesWithPublicPolicies() throws Exception {
     var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
     var keys =
