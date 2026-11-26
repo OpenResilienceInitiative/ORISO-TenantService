@@ -2801,6 +2801,10 @@ components:
         featureToolsEnabled:
           type: boolean
           example: "false"
+        featureAgencyLinkLabelEnabled:
+          type: boolean
+          example: "true"
+          description: "Shows counsellors a small label on Erstanfragen that came in through the agency link (?aid=), ORISO-Frontend#1870. Only the channel is stored, no personal data. Defaults to true when no value is stored."
         featureAnonymousChatEnabled:
           type: boolean
           example: "true"

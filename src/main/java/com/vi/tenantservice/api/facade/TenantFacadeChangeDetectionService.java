@@ -132,6 +132,10 @@ public class TenantFacadeChangeDetectionService {
         existingSettingsToCompare.getFeatureToolsEnabled())) {
       resultList.add(TenantSetting.FEATURE_TOOLS_ENABLED);
     }
+    if (nullAsTrue(inputSettings.getFeatureAgencyLinkLabelEnabled())
+        != nullAsTrue(existingSettingsToCompare.getFeatureAgencyLinkLabelEnabled())) {
+      resultList.add(TenantSetting.FEATURE_AGENCY_LINK_LABEL_ENABLED);
+    }
     if (nullAsTrue(inputSettings.getFeatureAnonymousChatEnabled())
         != nullAsTrue(existingSettingsToCompare.getFeatureAnonymousChatEnabled())) {
       resultList.add(TenantSetting.FEATURE_ANONYMOUS_CHAT_ENABLED);

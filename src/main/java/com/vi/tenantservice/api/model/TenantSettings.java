@@ -38,6 +38,9 @@ public class TenantSettings {
 
   Boolean featureTeamDiscussionEnabled;
   Boolean featureToolsEnabled;
+
+  /** ORISO-Frontend#1870: label on Erstanfragen that came through the agency link. Opt-out. */
+  Boolean featureAgencyLinkLabelEnabled;
   Boolean featureAnonymousChatEnabled;
 
   /**
@@ -186,6 +189,7 @@ public class TenantSettings {
               Map.entry("featureGroupChatV2Enabled", false),
               Map.entry("featureTeamDiscussionEnabled", false),
               Map.entry("featureToolsEnabled", false),
+              Map.entry("featureAgencyLinkLabelEnabled", true),
               Map.entry("featureAnonymousChatEnabled", true),
               // ORISO-Admin#602: opt-out, so every existing tenant keeps today's behaviour.
               Map.entry("featureDisplayNameEditable", true),
@@ -310,6 +314,9 @@ public class TenantSettings {
     }
     if (featureToolsEnabled == null) {
       featureToolsEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureToolsEnabled");
+    }
+    if (featureAgencyLinkLabelEnabled == null) {
+      featureAgencyLinkLabelEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureAgencyLinkLabelEnabled");
     }
     if (featureAnonymousChatEnabled == null) {
       featureAnonymousChatEnabled = BOOLEAN_FIELD_DEFAULTS.get("featureAnonymousChatEnabled");
