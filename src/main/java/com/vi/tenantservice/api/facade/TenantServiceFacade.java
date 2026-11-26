@@ -891,9 +891,9 @@ public class TenantServiceFacade {
   }
 
   /**
-   * TS#331 / UserService#1662 / Frontend#1870: the "Direkteinladung erlauben",
-   * guest-account-mode and agency-link-label flags are stored opt-outs. A request that omits them
-   * (any client that predates the fields) must not blank a stored {@code false}, which {@link
+   * TS#331 / UserService#1662 / Frontend#1870: the "Direkteinladung erlauben", guest-account-mode
+   * and agency-link-label flags are stored opt-outs. A request that omits them (any client that
+   * predates the fields) must not blank a stored {@code false}, which {@link
    * TenantSettings#applyDefaults()} would then read back as {@code true}. A non-null request value
    * still overrides the stored one.
    */
