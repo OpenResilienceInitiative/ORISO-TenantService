@@ -41,6 +41,7 @@ public class TenantSettings {
 
   /** ORISO-Frontend#1870: label on Erstanfragen that came through the agency link. Opt-out. */
   Boolean featureAgencyLinkLabelEnabled;
+
   Boolean featureAnonymousChatEnabled;
 
   /**
