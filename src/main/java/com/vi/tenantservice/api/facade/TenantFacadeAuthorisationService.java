@@ -55,7 +55,7 @@ public class TenantFacadeAuthorisationService {
   @Value("${feature.multitenancy.with.single.domain.enabled}")
   private boolean multitenancyWithSingleDomain;
 
-  @Value("${keycloak.config.app-client-id:app}")
+  @Value("${keycloak.config.app-client-id}")
   private String appClientId;
 
   private boolean userHasAnyRoleOf(List<UserRole> roles) {

@@ -4,7 +4,9 @@ import com.vi.tenantservice.api.config.apiclient.UserAdminServiceApiControllerFa
 import com.vi.tenantservice.api.service.httpheader.SecurityHeaderSupplier;
 import com.vi.tenantservice.api.tenant.TenantResolverService;
 import com.vi.tenantservice.useradminservice.generated.ApiClient;
+import com.vi.tenantservice.useradminservice.generated.web.AdminUserControllerApi;
 import com.vi.tenantservice.useradminservice.generated.web.model.AdminResponseDTO;
+import com.vi.tenantservice.useradminservice.generated.web.model.TenantAdminLoginEmailsDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionBlockersDTO;
 import com.vi.tenantservice.useradminservice.generated.web.model.TenantDeletionResultDTO;
 import java.util.HashMap;
@@ -18,6 +20,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.server.ResponseStatusException;
 
 /** Service class to communicate with the ConsultingTypeService. */
@@ -48,7 +53,7 @@ public class UserAdminService {
     for (int start = 0; start < tenantIds.size(); start += LOGIN_EMAIL_BATCH_LIMIT) {
       int end = Math.min(start + LOGIN_EMAIL_BATCH_LIMIT, tenantIds.size());
       var batchIds = tenantIds.subList(start, end);
-      var batch = controllerApi.getTenantAdminLoginEmails(batchIds);
+      var batch = requestLoginEmails(controllerApi, batchIds);
       if (batch == null || batch.size() != batchIds.size()) {
         throw invalidLoginEmailResponse();
       }
@@ -67,9 +72,37 @@ public class UserAdminService {
     return emailsByTenant;
   }
 
-  private static ResponseStatusException invalidLoginEmailResponse() {
-    return new ResponseStatusException(
-        HttpStatus.BAD_GATEWAY, "Invalid tenant-admin email response");
+  private static InvalidLoginEmailResponseException invalidLoginEmailResponse() {
+    return new InvalidLoginEmailResponseException();
+  }
+
+  /**
+   * Status and transport failures pass through: the caller may fall back to per-tenant lookups. A
+   * response UserService did send but that does not decode is a broken contract instead.
+   */
+  private static List<TenantAdminLoginEmailsDTO> requestLoginEmails(
+      AdminUserControllerApi controllerApi, List<Long> batchIds) {
+    try {
+      return controllerApi.getTenantAdminLoginEmails(batchIds);
+    } catch (ResourceAccessException | HttpStatusCodeException upstreamFailure) {
+      throw upstreamFailure;
+    } catch (RestClientException undecodableResponse) {
+      throw new InvalidLoginEmailResponseException(undecodableResponse);
+    }
+  }
+
+  /**
+   * UserService answered, but the answer breaks the batch contract. Unlike an unreachable or
+   * missing endpoint this is not something a per-tenant retry should paper over.
+   */
+  public static class InvalidLoginEmailResponseException extends ResponseStatusException {
+    InvalidLoginEmailResponseException() {
+      this(null);
+    }
+
+    InvalidLoginEmailResponseException(Throwable cause) {
+      super(HttpStatus.BAD_GATEWAY, "Invalid tenant-admin email response", cause);
+    }
   }
 
   /**

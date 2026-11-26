@@ -1653,14 +1653,8 @@ public class TenantServiceFacade {
     // Owner lookups are mandatory for matching. Do not hide an outage as an empty result.
     var tenantIds = tenantService.searchableTenantIds(tenantRestriction);
     var emailsByTenant = new HashMap<Long, List<String>>();
-    if (mayBatchEmails) {
-      emailsByTenant.putAll(userAdminService.getTenantAdminLoginEmails(tenantIds));
-    } else {
-      for (var id : tenantIds) {
-        emailsByTenant.put(
-            id, getAdminEmails(userAdminService.getTenantAdmins(Math.toIntExact(id))));
-      }
-    }
+    emailsByTenant.putAll(
+        mayBatchEmails ? lookupAdminEmailsInBatches(tenantIds) : lookupEachAdminEmails(tenantIds));
     var emailMatches = new HashMap<String, Set<Long>>();
     for (var entry : emailsByTenant.entrySet()) {
       var id = entry.getKey();
@@ -1708,6 +1702,37 @@ public class TenantServiceFacade {
 
   private void excludeTechnicalTenantFrom(List<? extends TenantData> tenants) {
     emptyIfNull(tenants).removeIf(tenant -> tenant.getId() == TECHNICAL_TENANT_ID);
+  }
+
+  /**
+   * The batch endpoint is newer than this lookup: a UserService rolled out after TenantService
+   * answers 404, a struggling one 5xx. Both fall back to the per-tenant lookup used before the
+   * batch existed, so matching stays complete. That fallback still fails loudly if UserService is
+   * really down, and a batch answer that breaks the contract (wrong IDs, missing lists) still fails
+   * as 502 - neither may turn into a silently incomplete result.
+   */
+  private Map<Long, List<String>> lookupAdminEmailsInBatches(List<Long> tenantIds) {
+    try {
+      return userAdminService.getTenantAdminLoginEmails(tenantIds);
+    } catch (UserAdminService.InvalidLoginEmailResponseException brokenContract) {
+      throw brokenContract;
+    } catch (RestClientException | ResponseStatusException batchUnavailable) {
+      log.warn(
+          "Tenant-admin login-email batch lookup failed ({}); looking up {} tenants one by one."
+              + " Roll out a UserService with /useradmin/tenantadmins/login-emails for the"
+              + " batched lookup.",
+          batchUnavailable.getClass().getSimpleName(),
+          tenantIds.size());
+      return lookupEachAdminEmails(tenantIds);
+    }
+  }
+
+  private Map<Long, List<String>> lookupEachAdminEmails(List<Long> tenantIds) {
+    var emailsByTenant = new HashMap<Long, List<String>>();
+    for (var id : tenantIds) {
+      emailsByTenant.put(id, getAdminEmails(userAdminService.getTenantAdmins(Math.toIntExact(id))));
+    }
+    return emailsByTenant;
   }
 
   private Map<Long, List<String>> lookupAdminEmailsForDisplay(List<Long> tenantIds) {

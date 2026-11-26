@@ -312,14 +312,47 @@ class TenantSearchBatchIT {
     assertThat(owners.requests).isEmpty();
   }
 
+  /**
+   * A UserService without the batch endpoint (older build, rolled out after TenantService) answers
+   * 404; an overloaded one 5xx. Either way the search falls back to the per-tenant lookup it used
+   * before the batch existed, so owner matching stays complete instead of failing the search.
+   */
+  @ParameterizedTest
+  @ValueSource(ints = {404, 405, 500, 503})
+  void batchFailureFallsBackToSingleLookupsWithTheSameResult(int batchStatus) throws Exception {
+    seedTenants(12);
+    String expected =
+        search(CROSS_FIELD_QUERY, 0L, APP, 1)
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    owners.reset();
+    owners.batchStatus = batchStatus;
+
+    String actual =
+        search(CROSS_FIELD_QUERY, 0L, APP, 1)
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(actual).isEqualTo(expected);
+    assertThat(owners.requests).extracting(OwnerRequest::path).first().isEqualTo(BATCH);
+    assertThat(owners.requests)
+        .extracting(OwnerRequest::path)
+        .filteredOn(OWNERS::equals)
+        .hasSize(12);
+  }
+
   @Test
-  void batchFailureRetainsTheUpstreamStatusAndSkipsSingleLookups() throws Exception {
+  void ownerLookupOutageStillFailsTheSearch_When_theFallbackFailsToo() throws Exception {
+    // Owner lookups are mandatory for matching: an outage must not look like "no match".
     seedTenants(12);
     owners.batchStatus = 503;
+    owners.unavailableOwner = 2L;
 
-    search(CROSS_FIELD_QUERY, 0L, APP, 1).andExpect(status().isServiceUnavailable());
-
-    assertThat(owners.requests).extracting(OwnerRequest::path).containsExactly(BATCH);
+    search(CROSS_FIELD_QUERY, 0L, APP, 1).andExpect(status().is5xxServerError());
   }
 
   @ParameterizedTest
@@ -329,7 +362,9 @@ class TenantSearchBatchIT {
         "[{\"tenantId\":2,\"emails\":[]}]",
         "[{\"tenantId\":1}]",
         "[{\"tenantId\":1,\"emails\":null}]",
-        "[{\"tenantId\":1,\"emails\":[null]}]"
+        "[{\"tenantId\":1,\"emails\":[null]}]",
+        "{\"tenantId\":1,\"emails\":[]}",
+        "not json"
       })
   void invalidBatchPayloadFailsRatherThanReturningIncompleteResults(String body) throws Exception {
     seedTenants(1);
